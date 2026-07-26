@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    --font-sans: var(--font-inter);
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Neutral ink + electric blue emphasis (blue-600) */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 221 83% 53%;
+    --chart-1: 221 83% 53%;
+    --chart-2: 0 0% 40%;
+    --chart-3: 0 0% 55%;
+    --chart-4: 215 16% 47%;
+    --chart-5: 215 20% 65%;
+    --radius: 0.625rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 221 83% 53%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 217 91% 60%;
+    --chart-1: 217 91% 60%;
+    --chart-2: 0 0% 70%;
+    --chart-3: 0 0% 50%;
+    --chart-4: 215 16% 55%;
+    --chart-5: 215 20% 40%;
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  .prose-article {
+    @apply mx-auto max-w-2xl text-[15px] leading-relaxed text-foreground;
+  }
+  .prose-article h1 {
+    @apply mt-8 mb-3 text-3xl font-semibold tracking-tight;
+  }
+  .prose-article h2 {
+    @apply mt-7 mb-2 text-2xl font-semibold tracking-tight;
+  }
+  .prose-article h3 {
+    @apply mt-6 mb-2 text-lg font-semibold;
+  }
+  .prose-article h4 {
+    @apply mt-4 mb-1 text-base font-medium;
+  }
+  .prose-article p {
+    @apply mb-4;
+  }
+  .prose-article img {
+    @apply my-5 h-auto max-w-full rounded-xl;
+  }
+  .prose-article ul {
+    @apply mb-4 list-disc pl-6;
+  }
+  .prose-article ol {
+    @apply mb-4 list-decimal pl-6;
+  }
+  .prose-article li {
+    @apply mb-1;
+  }
+  .prose-article blockquote {
+    @apply my-4 border-l-4 border-border pl-4 italic text-muted-foreground;
+  }
+  .prose-article a {
+    @apply text-foreground underline underline-offset-2 hover:text-muted-foreground;
+  }
+  .prose-article strong {
+    @apply font-semibold;
+  }
+  .prose-article em {
+    @apply italic;
+  }
+
+  .prose-article mark.source-highlight {
+    @apply rounded-sm bg-muted px-0.5 text-foreground;
+    scroll-margin-top: 80px;
+  }
+
+  .cover-fallback {
+    background: linear-gradient(145deg, hsl(0 0% 92%), hsl(0 0% 28%));
+  }
+}
