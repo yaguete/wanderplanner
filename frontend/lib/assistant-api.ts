@@ -1,6 +1,8 @@
 /**
  * Cliente SSE del asistente: POST /assistant/chat
  */
+import { authHeaders } from "@/lib/api-auth"
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export type AssistantChatMessage = {
@@ -96,6 +98,10 @@ export async function streamAssistant(
     trip_briefing: string
     countries: string[]
     messages: AssistantChatMessage[]
+    /** Perfil de viajero en markdown (tipos, notas y referencias favoritas). */
+    user_profile?: string | null
+    /** Dominios de las referencias del usuario: Tavily los prioriza. */
+    preferred_domains?: string[]
   },
   handlers: AssistantStreamHandlers,
   signal?: AbortSignal,
@@ -107,6 +113,7 @@ export async function streamAssistant(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
+        ...(await authHeaders()),
       },
       body: JSON.stringify(body),
       signal,

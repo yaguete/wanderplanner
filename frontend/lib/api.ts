@@ -1,4 +1,5 @@
 import type { Itinerary } from "@/types/itinerary"
+import { authHeaders } from "@/lib/api-auth"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -7,7 +8,7 @@ export async function fetchItinerary(url: string): Promise<Itinerary> {
   try {
     response = await fetch(`${API_BASE}/itinerary`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ url }),
     })
   } catch (e) {

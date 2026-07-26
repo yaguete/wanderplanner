@@ -373,3 +373,53 @@ export function collectCountryCodesFromHint(hint: string | null | undefined): st
 
   return [...found]
 }
+
+/**
+ * Códigos ISO (mayúsculas) para el asistente / fichas MAE.
+ * Usa `trip.countries` si hay; si no, infiere del nombre del viaje, `source.area` y regiones.
+ * (Hoy `createTrip` guarda `countries: []`, así que sin esto la ficha país no se precarga.)
+ */
+export function resolveTripCountryCodes(
+  trip: { name: string; countries?: string[] | null; days?: { items: { region?: string | null }[] }[] },
+  sources: { area?: string | null; items?: { region?: string | null }[] }[] = [],
+): string[] {
+  const explicit = (trip.countries ?? [])
+    .map((c) => c.trim().toUpperCase())
+    .filter((c) => c.length === 2)
+  if (explicit.length > 0) return [...new Set(explicit)]
+
+  const found = new Set<string>()
+  const hints: string[] = [trip.name]
+  for (const s of sources) {
+    if (s.area) hints.push(s.area)
+    for (const it of s.items ?? []) {
+      if (it.region) hints.push(it.region)
+    }
+  }
+  for (const day of trip.days ?? []) {
+    for (const it of day.items) {
+      if (it.region) hints.push(it.region)
+    }
+  }
+  for (const hint of hints) {
+    for (const code of collectCountryCodesFromHint(hint)) {
+      found.add(code.toUpperCase())
+    }
+  }
+
+  // Nombre suelto en texto largo: "viaje a Uganda", "Uganda 2026"…
+  if (found.size === 0) {
+    const blob = hints.join(" ").toLowerCase()
+    for (const c of COUNTRIES) {
+      const n = c.name.toLowerCase()
+      if (n.length < 4) continue
+      if (blob.includes(n)) found.add(c.code.toUpperCase())
+    }
+    for (const [word, code] of Object.entries(COUNTRY_EXONYM_TO_CODE)) {
+      if (word.length < 4) continue
+      if (blob.includes(word)) found.add(code.toUpperCase())
+    }
+  }
+
+  return [...found]
+}

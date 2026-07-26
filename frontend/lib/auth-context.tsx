@@ -1,0 +1,395 @@
+"use client"
+
+/**
+ * Sesión de Supabase + perfil de viajero.
+ *
+ * El modo invitado usa sesiones anónimas: el invitado ya es un `user_id` real, así que al
+ * registrarse solo se le añaden email y contraseña (`upgradeGuest`) y conserva sus viajes
+ * sin migración. `isGuest` es lo que consulta el RegistrationGate.
+ */
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import type { Session, User } from "@supabase/supabase-js"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import {
+  loadFavoriteReferences,
+  loadProfile,
+  replaceFavoriteReferences,
+  saveProfile,
+  type FavoriteReference,
+  type FavoriteReferenceInput,
+  type TravelerProfile,
+} from "@/lib/db/profile-repo"
+
+export type AuthResult = { ok: true } | { ok: false; error: string }
+
+type ProfileInput = {
+  displayName: string | null
+  travelerTypes: string[]
+  travelerNotes: string | null
+  favoriteReferences: FavoriteReferenceInput[]
+}
+
+interface AuthContextValue {
+  user: User | null
+  session: Session | null
+  profile: TravelerProfile | null
+  favoriteReferences: FavoriteReference[]
+  /** Sesión aún sin resolver (primer arranque). */
+  isLoading: boolean
+  /** Hay sesión pero es anónima: puede planificar, no puede persistir su cuenta. */
+  isGuest: boolean
+  signIn: (email: string, password: string) => Promise<AuthResult>
+  signUp: (
+    data: { email: string; password: string } & Partial<ProfileInput>,
+  ) => Promise<AuthResult>
+  /** Convierte la sesión anónima en cuenta real conservando el `user_id`. */
+  upgradeGuest: (
+    data: { email: string; password: string } & Partial<ProfileInput>,
+  ) => Promise<AuthResult>
+  signInAnonymously: (
+    options?: { referrer?: string | null; captchaToken?: string },
+  ) => Promise<AuthResult>
+  sendMagicLink: (email: string) => Promise<AuthResult>
+  /**
+   * Invitado → cuenta real por email: `updateUser({ email })` sobre el mismo `user_id`
+   * (envía confirmación). No usar `signInWithOtp` aquí: crearía otro usuario y perdería el viaje.
+   */
+  linkGuestEmail: (email: string, displayName?: string | null) => Promise<AuthResult>
+  signOut: () => Promise<void>
+  updateProfile: (data: ProfileInput) => Promise<AuthResult>
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message
+  return "Algo ha fallado. Inténtalo de nuevo."
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const configured = isSupabaseConfigured()
+  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<TravelerProfile | null>(null)
+  const [favoriteReferences, setFavoriteReferences] = useState<FavoriteReference[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const loadedProfileFor = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!configured) {
+      setIsLoading(false)
+      return
+    }
+    const supabase = createClient()
+    let active = true
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return
+      setSession(data.session)
+      setUser(data.session?.user ?? null)
+      setIsLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setUser(nextSession?.user ?? null)
+      setIsLoading(false)
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [configured])
+
+  // Perfil y referencias: se recargan al cambiar de usuario, no en cada refresco de token.
+  useEffect(() => {
+    if (!configured) return
+    const userId = user?.id ?? null
+    if (!userId) {
+      loadedProfileFor.current = null
+      setProfile(null)
+      setFavoriteReferences([])
+      return
+    }
+    if (loadedProfileFor.current === userId) return
+    loadedProfileFor.current = userId
+
+    const supabase = createClient()
+    let active = true
+    void (async () => {
+      try {
+        const [p, refs] = await Promise.all([
+          loadProfile(supabase, userId),
+          loadFavoriteReferences(supabase, userId),
+        ])
+        if (!active) return
+        setProfile(p)
+        setFavoriteReferences(refs)
+      } catch {
+        if (active) {
+          setProfile(null)
+          setFavoriteReferences([])
+        }
+      }
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [configured, user?.id])
+
+  const persistProfile = useCallback(
+    async (userId: string, data: Partial<ProfileInput>) => {
+      const supabase = createClient()
+      const hasProfileFields =
+        data.displayName !== undefined ||
+        data.travelerTypes !== undefined ||
+        data.travelerNotes !== undefined
+
+      if (hasProfileFields) {
+        const saved = await saveProfile(supabase, userId, {
+          displayName: data.displayName ?? null,
+          travelerTypes: data.travelerTypes ?? [],
+          travelerNotes: data.travelerNotes ?? null,
+        })
+        setProfile(saved)
+      }
+      if (data.favoriteReferences !== undefined) {
+        const refs = await replaceFavoriteReferences(
+          supabase,
+          userId,
+          data.favoriteReferences,
+        )
+        setFavoriteReferences(refs)
+      }
+    },
+    [],
+  )
+
+  const signIn = useCallback<AuthContextValue["signIn"]>(async (email, password) => {
+    if (!configured) return { ok: false, error: "Supabase no está configurado." }
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { ok: false, error: error.message }
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) }
+    }
+  }, [configured])
+
+  const signUp = useCallback<AuthContextValue["signUp"]>(
+    async ({ email, password, ...profileData }) => {
+      if (!configured) return { ok: false, error: "Supabase no está configurado." }
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: profileData.displayName
+              ? { display_name: profileData.displayName }
+              : undefined,
+            emailRedirectTo:
+              typeof window !== "undefined"
+                ? `${window.location.origin}/auth/callback`
+                : undefined,
+          },
+        })
+        if (error) return { ok: false, error: error.message }
+        // Sin confirmación por email hay sesión inmediata y podemos guardar el perfil.
+        if (data.user && data.session) {
+          await persistProfile(data.user.id, profileData)
+        }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [configured, persistProfile],
+  )
+
+  const upgradeGuest = useCallback<AuthContextValue["upgradeGuest"]>(
+    async ({ email, password, ...profileData }) => {
+      if (!configured) return { ok: false, error: "Supabase no está configurado." }
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase.auth.updateUser({
+          email,
+          password,
+          data: profileData.displayName
+            ? { display_name: profileData.displayName }
+            : undefined,
+        })
+        if (error) return { ok: false, error: error.message }
+        if (data.user) {
+          await persistProfile(data.user.id, profileData)
+          setUser(data.user)
+        }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [configured, persistProfile],
+  )
+
+  const signInAnonymously = useCallback<AuthContextValue["signInAnonymously"]>(
+    async (options) => {
+      if (!configured) return { ok: false, error: "Supabase no está configurado." }
+      try {
+        const supabase = createClient()
+        const { error } = await supabase.auth.signInAnonymously({
+          options: {
+            ...(options?.referrer ? { data: { signup_referrer: options.referrer } } : {}),
+            ...(options?.captchaToken ? { captchaToken: options.captchaToken } : {}),
+          },
+        })
+        if (error) return { ok: false, error: error.message }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [configured],
+  )
+
+  const sendMagicLink = useCallback<AuthContextValue["sendMagicLink"]>(
+    async (email) => {
+      if (!configured) return { ok: false, error: "Supabase no está configurado." }
+      try {
+        const supabase = createClient()
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo:
+              typeof window !== "undefined"
+                ? `${window.location.origin}/auth/callback`
+                : undefined,
+          },
+        })
+        if (error) return { ok: false, error: error.message }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [configured],
+  )
+
+  const linkGuestEmail = useCallback<AuthContextValue["linkGuestEmail"]>(
+    async (email, displayName) => {
+      if (!configured) return { ok: false, error: "Supabase no está configurado." }
+      try {
+        const supabase = createClient()
+        const trimmedName = displayName?.trim() || null
+        const { data, error } = await supabase.auth.updateUser({
+          email,
+          data: trimmedName ? { display_name: trimmedName } : undefined,
+        })
+        if (error) return { ok: false, error: error.message }
+        if (data.user && trimmedName) {
+          // Solo el nombre: no pisar traveler_types / notes / favoritos ya guardados.
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .upsert({ id: data.user.id, display_name: trimmedName }, { onConflict: "id" })
+          if (!profileError) {
+            setProfile((prev) =>
+              prev
+                ? { ...prev, displayName: trimmedName }
+                : {
+                    id: data.user!.id,
+                    displayName: trimmedName,
+                    travelerTypes: [],
+                    travelerNotes: null,
+                    signupReferrer: null,
+                  },
+            )
+          }
+          setUser(data.user)
+        } else if (data.user) {
+          setUser(data.user)
+        }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [configured],
+  )
+
+  const signOut = useCallback(async () => {
+    if (!configured) return
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    setProfile(null)
+    setFavoriteReferences([])
+    loadedProfileFor.current = null
+  }, [configured])
+
+  const updateProfile = useCallback<AuthContextValue["updateProfile"]>(
+    async (data) => {
+      if (!user) return { ok: false, error: "No hay sesión." }
+      try {
+        await persistProfile(user.id, data)
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [persistProfile, user],
+  )
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      session,
+      profile,
+      favoriteReferences,
+      isLoading,
+      isGuest: Boolean(user?.is_anonymous),
+      signIn,
+      signUp,
+      upgradeGuest,
+      signInAnonymously,
+      sendMagicLink,
+      linkGuestEmail,
+      signOut,
+      updateProfile,
+    }),
+    [
+      user,
+      session,
+      profile,
+      favoriteReferences,
+      isLoading,
+      signIn,
+      signUp,
+      upgradeGuest,
+      signInAnonymously,
+      sendMagicLink,
+      linkGuestEmail,
+      signOut,
+      updateProfile,
+    ],
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider")
+  return ctx
+}

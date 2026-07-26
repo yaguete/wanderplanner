@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useTrips } from "@/lib/trip-context"
 import { NewTripDialog } from "@/components/new-trip-dialog"
+import { useRegistrationGate } from "@/components/auth/registration-gate"
 
 export function AppSidebar({
   className,
@@ -21,6 +22,7 @@ export function AppSidebar({
   const pathname = usePathname()
   const router = useRouter()
   const { trips, createTrip } = useTrips()
+  const { requireAccount } = useRegistrationGate()
   const [newTripOpen, setNewTripOpen] = useState(false)
 
   const isHome = pathname === "/trips" || pathname === "/trips/"
@@ -37,7 +39,13 @@ export function AppSidebar({
         <div className="space-y-0.5 p-2">
           <Link
             href="/trips"
-            onClick={onNavigate}
+            onClick={(e) => {
+              if (!requireAccount("home")) {
+                e.preventDefault()
+                return
+              }
+              onNavigate?.()
+            }}
             className={cn(
               "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
               isHome
@@ -95,7 +103,13 @@ export function AppSidebar({
       </ScrollArea>
 
       <div className="shrink-0 border-t border-sidebar-border p-2">
-        <Button className="w-full" size="sm" onClick={() => setNewTripOpen(true)}>
+        <Button
+          className="w-full"
+          size="sm"
+          onClick={() => {
+            if (requireAccount("new-trip")) setNewTripOpen(true)
+          }}
+        >
           <Plus className="h-4 w-4" />
           Nuevo viaje
         </Button>

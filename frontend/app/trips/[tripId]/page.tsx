@@ -1,7 +1,7 @@
 "use client"
 
-import { use, useEffect, useState, type CSSProperties } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, use, useEffect, useRef, useState, type CSSProperties } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { PanelRightClose, PanelRightOpen, Plus, Sparkles, X } from "lucide-react"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -11,6 +11,7 @@ import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer, PLAN_PANEL_RIGHT_OFFSET } from "@/components/assistant-dock"
 import { TripBreadcrumb } from "@/components/trip-breadcrumb"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 
 const PLAN_OPEN_KEY = "wp-plan-open"
 
@@ -23,11 +24,14 @@ function readPlanOpen(): boolean {
   }
 }
 
-export default function TripDetailPage({ params }: { params: Promise<{ tripId: string }> }) {
+function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip } = useTrips()
+  const { getTrip, isLoading, addSourceToTrip } = useTrips()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const trip = getTrip(tripId)
+  const pendingSourceUrl = searchParams.get("source")
+  const autoSourceRequested = useRef(false)
   const isMobile = useIsMobile()
   /** Lectura síncrona: evita true→false tras hidratar y el flash de cierre. */
   const [planOpen, setPlanOpen] = useState(readPlanOpen)
@@ -39,9 +43,21 @@ export default function TripDetailPage({ params }: { params: Promise<{ tripId: s
    */
   const [planAnimEnabled, setPlanAnimEnabled] = useState(false)
 
+  // Solo se concluye que el viaje no existe cuando la carga ha terminado.
   useEffect(() => {
-    if (!trip) router.replace("/trips")
-  }, [trip, router])
+    if (!isLoading && !trip) router.replace("/trips")
+  }, [isLoading, trip, router])
+
+  // Viaje llegado desde el CTA de un blog (`/start`): se extrae su fuente una sola vez.
+  useEffect(() => {
+    if (!pendingSourceUrl || !trip || autoSourceRequested.current) return
+    autoSourceRequested.current = true
+    router.replace(`/trips/${tripId}`)
+    if (trip.sourceIds.length > 0) return
+    void addSourceToTrip(tripId, pendingSourceUrl).catch(() => {
+      setAddSourceOpen(true)
+    })
+  }, [pendingSourceUrl, trip, tripId, addSourceToTrip, router])
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -80,6 +96,14 @@ export default function TripDetailPage({ params }: { params: Promise<{ tripId: s
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [planOpen, assistantOpen])
+
+  if (isLoading && !trip) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center">
+        <Spinner className="size-5 text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (!trip) return null
 
@@ -255,5 +279,13 @@ export default function TripDetailPage({ params }: { params: Promise<{ tripId: s
         />
       </div>
     </div>
+  )
+}
+
+export default function TripDetailPage({ params }: { params: Promise<{ tripId: string }> }) {
+  return (
+    <Suspense fallback={null}>
+      <TripDetailView params={params} />
+    </Suspense>
   )
 }

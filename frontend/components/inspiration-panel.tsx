@@ -21,6 +21,7 @@ import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
+import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { getDayUserDescription } from "@/lib/day-heading"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
 
@@ -47,9 +48,12 @@ export default function InspirationPanel({
     refetchSource,
     removeSourceFromTrip,
     isLoadingSource,
+    ensureArticleHtml,
+    isArticleHtmlLoading,
     addItemToDay,
     addBasicToTrip,
   } = useTrips()
+  const { requireAccount } = useRegistrationGate()
   const trip = getTrip(tripId)
   const sources = getTripSources(tripId)
   const isMobile = useIsMobile()
@@ -78,6 +82,12 @@ export default function InspirationPanel({
   }
 
   const currentSource = sources.find((s) => s.id === activeSourceId) ?? sources[0] ?? null
+
+  // El HTML del artículo no viene en la carga inicial: se pide al abrir la Crónica.
+  useEffect(() => {
+    if (sourceTab !== "source" || !currentSource || currentSource.articleHtml) return
+    void ensureArticleHtml(currentSource.id)
+  }, [sourceTab, currentSource, ensureArticleHtml])
 
   const addedItemIds = new Set([
     ...(trip?.days.flatMap((d) => d.items.map((i) => i.sourceItemId)) ?? []),
@@ -138,6 +148,11 @@ export default function InspirationPanel({
 
   const handleExtract = async () => {
     if (!urlInput.trim()) return
+    // Invitado: la primera fuente es gratis (llega del CTA); la segunda pide cuenta.
+    if (sources.length > 0 && !requireAccount("second-source")) {
+      setAddSourceOpen(false)
+      return
+    }
     setExtractError(null)
     try {
       const source = await addSourceToTrip(tripId, urlInput.trim())
@@ -405,6 +420,10 @@ export default function InspirationPanel({
                     className="prose-article"
                     dangerouslySetInnerHTML={{ __html: currentSource.articleHtml }}
                   />
+                ) : isArticleHtmlLoading(currentSource.id) ? (
+                  <div className="flex justify-center py-16">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center py-16 text-center">
                     <p className="text-sm text-muted-foreground">Contenido no disponible</p>

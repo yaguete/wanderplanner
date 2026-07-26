@@ -4,6 +4,8 @@
 import type { Source, Trip } from "@/types/itinerary"
 import { BASIC_LABELS, ITEM_LABELS } from "@/lib/item-styles"
 import { countriesPlainList } from "@/lib/countries"
+import { travelerTypeLabels } from "@/lib/traveler-profile"
+import type { FavoriteReference, TravelerProfile } from "@/lib/db/profile-repo"
 
 /** Presupuesto total aproximado de caracteres del briefing. */
 const TOTAL_BUDGET = 180_000
@@ -37,6 +39,43 @@ function htmlToPlain(html: string): string {
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text
   return text.slice(0, max) + "\n…[truncado]"
+}
+
+/**
+ * Perfil del viajero para el prompt del asistente. Debe quedarse corto: comparte
+ * presupuesto de contexto con el briefing del viaje.
+ */
+export function buildUserProfileBriefing(
+  profile: TravelerProfile | null,
+  references: FavoriteReference[],
+): string | null {
+  const lines: string[] = []
+
+  const types = profile?.travelerTypes ?? []
+  if (types.length) {
+    lines.push(`- Tipo de viajero: ${travelerTypeLabels(types).join(", ")}`)
+  }
+  if (profile?.travelerNotes?.trim()) {
+    lines.push(`- Notas del usuario: ${profile.travelerNotes.trim()}`)
+  }
+  if (references.length) {
+    lines.push("- Referencias de confianza (priorízalas, sin limitarte a ellas):")
+    for (const ref of references) {
+      const domain = ref.domain ? ` (${ref.domain})` : ""
+      lines.push(`  - ${ref.label}${domain}`)
+    }
+  }
+
+  if (!lines.length) return null
+  return lines.join("\n")
+}
+
+/** Dominios de las referencias favoritas, para `include_domains` de Tavily. */
+export function preferredDomainsFrom(references: FavoriteReference[]): string[] {
+  const domains = references
+    .map((r) => r.domain?.trim().toLowerCase())
+    .filter((d): d is string => Boolean(d))
+  return [...new Set(domains)]
 }
 
 export function buildTripBriefing(trip: Trip, sources: Source[]): string {

@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
 import { MobileNavMenu } from "@/components/mobile-nav-menu"
 import { TripProvider } from "@/lib/trip-context"
+import { RegistrationGateProvider } from "@/components/auth/registration-gate"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 function TripsShell({ children }: { children: React.ReactNode }) {
@@ -30,9 +31,11 @@ function TripsShell({ children }: { children: React.ReactNode }) {
 export default function TripsLayout({ children }: { children: React.ReactNode }) {
   return (
     <TripProvider>
-      <TooltipProvider delayDuration={0}>
-        <TripsShell>{children}</TripsShell>
-      </TooltipProvider>
+      <RegistrationGateProvider>
+        <TooltipProvider delayDuration={0}>
+          <TripsShell>{children}</TripsShell>
+        </TooltipProvider>
+      </RegistrationGateProvider>
     </TripProvider>
   )
 }

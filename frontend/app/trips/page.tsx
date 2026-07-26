@@ -14,6 +14,7 @@ import {
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import {
 import { countriesPlainList } from "@/lib/countries"
 import { formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
+import { useRegistrationGate } from "@/components/auth/registration-gate"
 import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
 
@@ -131,9 +133,14 @@ function TripActions({
 }
 
 export default function TripsHomePage() {
-  const { trips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip } = useTrips()
+  const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip } =
+    useTrips()
   const router = useRouter()
+  const { requireAccount } = useRegistrationGate()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const openNewTripDialog = () => {
+    if (requireAccount("new-trip")) setDialogOpen(true)
+  }
   const [editingTripId, setEditingTripId] = useState<string | null>(null)
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
   const [filter, setFilter] = useState<TripFilter>("active")
@@ -250,7 +257,11 @@ export default function TripsHomePage() {
           </div>
         </div>
 
-        {visibleTrips.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center rounded-xl border border-dashed border-border px-6 py-14">
+            <Spinner className="size-5 text-muted-foreground" />
+          </div>
+        ) : visibleTrips.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
             <p className="text-sm font-medium text-foreground">
               {filter === "active" ? "No hay viajes activos" : "No hay viajes archivados"}
@@ -261,7 +272,7 @@ export default function TripsHomePage() {
                 : "Los viajes que archives aparecerán aquí."}
             </p>
             {filter === "active" ? (
-              <Button type="button" className="mt-4" onClick={() => setDialogOpen(true)}>
+              <Button type="button" className="mt-4" onClick={openNewTripDialog}>
                 <Plus className="h-4 w-4" />
                 Nuevo viaje
               </Button>
@@ -329,7 +340,7 @@ export default function TripsHomePage() {
             {filter === "active" ? (
               <button
                 type="button"
-                onClick={() => setDialogOpen(true)}
+                onClick={openNewTripDialog}
                 className="group flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-transparent p-8 transition-colors hover:border-foreground/30 hover:bg-muted/30"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
@@ -406,7 +417,7 @@ export default function TripsHomePage() {
             {filter === "active" ? (
               <button
                 type="button"
-                onClick={() => setDialogOpen(true)}
+                onClick={openNewTripDialog}
                 className="flex w-full items-center gap-3 border-t border-dashed border-border px-3 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground sm:px-4"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border sm:h-14 sm:w-14">

@@ -58,6 +58,13 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 
 ### Home de viajes
 - Tarjetas/lista con portada fotográfica (`coverUrl`) o emoji; acciones Archivar / Editar / Eliminar a primer nivel.
+- Mientras se cargan los viajes desde Supabase, el bloque muestra un spinner en el mismo contenedor punteado que el empty state (nunca «No hay viajes activos» de forma prematura).
+
+### Superficies de cuenta
+- `/` (landing placeholder), `/login`, `/signup` y `/account` comparten cromo propio, sin sidebar ni breadcrumb: marca arriba, una columna centrada (`max-w-md`) y fondo con un degradado radial tenue del primary.
+- Avatar de la cabecera: en desktop abre un menú (nombre, email, ajustes, cerrar sesión); en móvil sigue abriendo `MobileNavMenu`, que incorpora el pie de sesión.
+- Invitados (sesión anónima): el avatar y el pie muestran «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de ajustes.
+- `RegistrationGate`: modal breve (nombre, email, contraseña, o enlace de confirmación vía `updateUser` sobre la misma sesión anónima) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio.
 
 ## 5) Qué no hacer
 
@@ -66,3 +73,4 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - No reintroducir el breadcrumb en móvil ni FABs de detalle en desktop.
 - No envolver las respuestas del asistente en cards con borde/sombra.
 - No ofrecer «Añadir fuente» sobre webs gubernamentales / de visados como si fueran blogs de inspiración.
+- No bloquear al invitado antes de que vea valor: la primera fuente del CTA entra sin cuenta; la puerta salta en la segunda fuente, al crear otro viaje o al ir a inicio.

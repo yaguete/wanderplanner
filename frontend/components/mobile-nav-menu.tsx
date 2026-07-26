@@ -4,12 +4,14 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { Compass, Map, Plus, X } from "lucide-react"
+import { Compass, LogOut, Map, Plus, UserPlus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useTrips } from "@/lib/trip-context"
 import { NewTripDialog } from "@/components/new-trip-dialog"
-import { MOCK_USER } from "@/lib/mock-user"
+import { useAuth } from "@/lib/auth-context"
+import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { displayNameFor, initialsFor } from "@/lib/user-display"
 import { BrandMark } from "@/components/app-header"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
@@ -23,7 +25,12 @@ export function MobileNavMenu({
   const pathname = usePathname()
   const router = useRouter()
   const { trips, createTrip } = useTrips()
+  const { user, profile, isGuest, signOut } = useAuth()
+  const { requireAccount } = useRegistrationGate()
   const [newTripOpen, setNewTripOpen] = useState(false)
+
+  const userName = displayNameFor(user, profile)
+  const avatarUrl = (user?.user_metadata?.avatar_url as string | undefined) ?? null
 
   const isHome = pathname === "/trips" || pathname === "/trips/"
   const activeTripId = pathname.match(/^\/trips\/([^/]+)/)?.[1] ?? null
@@ -84,7 +91,14 @@ export function MobileNavMenu({
                 <nav className="mx-auto w-full max-w-sm shrink-0">
                   <Link
                     href="/trips"
-                    onClick={close}
+                    onClick={(e) => {
+                      if (!requireAccount("home")) {
+                        e.preventDefault()
+                        close()
+                        return
+                      }
+                      close()
+                    }}
                     className={cn(
                       "flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-lg font-medium transition-colors",
                       isHome
@@ -153,7 +167,13 @@ export function MobileNavMenu({
                 <Button
                   size="lg"
                   className="h-14 w-full rounded-2xl text-base"
-                  onClick={() => setNewTripOpen(true)}
+                  onClick={() => {
+                    if (!requireAccount("new-trip")) {
+                      close()
+                      return
+                    }
+                    setNewTripOpen(true)
+                  }}
                 >
                   <Plus className="h-5 w-5" />
                   Nuevo viaje
@@ -164,15 +184,44 @@ export function MobileNavMenu({
             <footer className="shrink-0 border-t border-border/60 px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
               <div className="mx-auto flex w-full max-w-sm items-center gap-3">
                 <Avatar className="size-11">
-                  {MOCK_USER.avatarUrl ? <AvatarImage src={MOCK_USER.avatarUrl} alt="" /> : null}
+                  {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
                   <AvatarFallback className="bg-secondary text-sm font-medium text-secondary-foreground">
-                    {MOCK_USER.name.slice(0, 1).toUpperCase()}
+                    {initialsFor(userName)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{MOCK_USER.name}</p>
-                  <p className="text-xs text-muted-foreground">Tu cuenta</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{userName}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {isGuest ? "Estás probando sin cuenta" : user?.email ?? "Tu cuenta"}
+                  </p>
                 </div>
+                {isGuest ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => {
+                      close()
+                      router.push("/signup")
+                    }}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Guardar
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="shrink-0 text-muted-foreground"
+                    aria-label="Cerrar sesión"
+                    onClick={() => {
+                      close()
+                      void signOut().then(() => router.push("/"))
+                    }}
+                  >
+                    <LogOut className="h-5 w-5" />
+                  </Button>
+                )}
               </div>
             </footer>
           </DialogPrimitive.Content>

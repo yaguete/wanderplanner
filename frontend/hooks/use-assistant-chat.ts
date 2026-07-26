@@ -7,15 +7,25 @@ import {
   type AssistantAction,
   type AssistantChatMessage,
 } from "@/lib/assistant-api"
-import { buildTripBriefing } from "@/lib/assistant-context"
 import {
+  buildTripBriefing,
+  buildUserProfileBriefing,
+  preferredDomainsFrom,
+} from "@/lib/assistant-context"
+import { resolveTripCountryCodes } from "@/lib/countries"
+import {
+  ConversationSyncer,
+  deleteConversationRow,
   deriveConversationTitle,
-  loadAssistantState,
-  saveAssistantState,
-  type PersistedAssistantConversation,
-  type PersistedAssistantMessage,
-  type PersistedAssistantTripState,
-} from "@/lib/assistant-persistence"
+  loadActiveConversationId,
+  loadConversations,
+  saveActiveConversationId,
+  type AssistantConversation,
+  type AssistantMessage,
+} from "@/lib/db/assistant-repo"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { useAuth } from "@/lib/auth-context"
+import { useTrips } from "@/lib/trip-context"
 
 export type ChatAction = AssistantAction & {
   id: string
@@ -65,11 +75,11 @@ function isEmptyAssistant(m: ChatMessage): boolean {
   return m.role === "assistant" && !m.content.trim() && !(m.actions?.length)
 }
 
-function sortByUpdatedDesc(a: PersistedAssistantConversation, b: PersistedAssistantConversation) {
+function sortByUpdatedDesc(a: AssistantConversation, b: AssistantConversation) {
   return b.updatedAt.localeCompare(a.updatedAt)
 }
 
-function toSummary(c: PersistedAssistantConversation): AssistantConversationSummary {
+function toSummary(c: AssistantConversation): AssistantConversationSummary {
   return {
     id: c.id,
     title: c.title,
@@ -80,7 +90,14 @@ function toSummary(c: PersistedAssistantConversation): AssistantConversationSumm
 }
 
 export function useAssistantChat(tripId: string, trip: Trip | undefined, sources: Source[]) {
-  const [conversations, setConversations] = useState<PersistedAssistantConversation[]>([])
+  const { user, profile, favoriteReferences } = useAuth()
+  const { loadTripSourcesWithArticles } = useTrips()
+  const userId = user?.id ?? null
+  const profileRef = useRef(profile)
+  const referencesRef = useRef(favoriteReferences)
+  profileRef.current = profile
+  referencesRef.current = favoriteReferences
+  const [conversations, setConversations] = useState<AssistantConversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
@@ -94,6 +111,7 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
   const activeIdRef = useRef(activeConversationId)
   const messagesRef = useRef(messages)
   const skipPersistRef = useRef(false)
+  const syncerRef = useRef<ConversationSyncer | null>(null)
 
   tripRef.current = trip
   sourcesRef.current = sources
@@ -101,88 +119,114 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
   activeIdRef.current = activeConversationId
   messagesRef.current = messages
 
-  const persistSnapshot = useCallback(
-    (
-      nextConversations: PersistedAssistantConversation[],
-      nextActiveId: string | null,
-    ) => {
-      const state: PersistedAssistantTripState = {
-        version: 1,
-        tripId,
-        activeConversationId: nextActiveId,
-        conversations: nextConversations,
-        updatedAt: new Date().toISOString(),
-      }
-      saveAssistantState(state)
+  /** La conversación activa se recuerda en local: es preferencia de UI, no dato del viaje. */
+  const persistActiveId = useCallback(
+    (nextActiveId: string | null) => {
+      saveActiveConversationId(tripId, nextActiveId)
     },
     [tripId],
   )
 
   useEffect(() => {
+    if (!userId || !isSupabaseConfigured()) {
+      setConversations([])
+      setActiveConversationId(null)
+      setMessages([])
+      setHydrated(false)
+      return
+    }
+
+    const supabase = createClient()
+    syncerRef.current?.dispose()
+    syncerRef.current = new ConversationSyncer(supabase, userId)
+
+    let active = true
     skipPersistRef.current = true
-    const saved = loadAssistantState(tripId)
-    setConversations(saved.conversations)
-    setActiveConversationId(saved.activeConversationId)
-    const active = saved.conversations.find((c) => c.id === saved.activeConversationId)
-    setMessages((active?.messages as ChatMessage[]) ?? [])
+    setHydrated(false)
     setError(null)
     setIsStreaming(false)
     setStatusLabel(null)
-    setHydrated(true)
-    // Permitir el siguiente ciclo de persistencia tras hidratar
-    requestAnimationFrame(() => {
-      skipPersistRef.current = false
-    })
-  }, [tripId])
 
-  // Persistir mensajes de la conversación activa (o drafts vacíos no guardados hasta el 1er mensaje)
+    void (async () => {
+      let loaded: AssistantConversation[] = []
+      try {
+        loaded = await loadConversations(supabase, tripId)
+      } catch {
+        loaded = []
+      }
+      if (!active) return
+
+      const preferred = loadActiveConversationId(tripId)
+      const activeId =
+        preferred && loaded.some((c) => c.id === preferred)
+          ? preferred
+          : loaded[0]?.id ?? null
+
+      setConversations(loaded)
+      setActiveConversationId(activeId)
+      setMessages((loaded.find((c) => c.id === activeId)?.messages as ChatMessage[]) ?? [])
+      setHydrated(true)
+      requestAnimationFrame(() => {
+        skipPersistRef.current = false
+      })
+    })()
+
+    return () => {
+      active = false
+      void syncerRef.current?.flush()
+    }
+  }, [tripId, userId])
+
+  // Persistir mensajes de la conversación activa (los drafts vacíos no crean fila)
   useEffect(() => {
     if (!hydrated || skipPersistRef.current) return
 
     const activeId = activeIdRef.current
-    const toSave = messages.filter((m) => !isEmptyAssistant(m)) as PersistedAssistantMessage[]
-
-    // Chat vacío sin id → no crear entrada hasta el primer mensaje
-    if (!activeId) {
-      if (toSave.length === 0) return
-      // No debería ocurrir: newConversation deja id null hasta send; send crea la conversación
-      return
-    }
+    const toSave = messages.filter((m) => !isEmptyAssistant(m)) as AssistantMessage[]
+    if (!activeId || toSave.length === 0) return
 
     setConversations((prev) => {
       const idx = prev.findIndex((c) => c.id === activeId)
+      const now = new Date().toISOString()
+
       if (idx < 0) {
-        // Conversación aún no en la lista: solo persistir si hay mensajes
-        if (toSave.length === 0) {
-          persistSnapshot(prev, activeId)
-          return prev
-        }
-        const now = new Date().toISOString()
-        const created: PersistedAssistantConversation = {
+        const created: AssistantConversation = {
           id: activeId,
+          tripId,
           title: deriveConversationTitle(toSave),
           messages: toSave,
           createdAt: now,
           updatedAt: now,
         }
-        const next = [created, ...prev]
-        persistSnapshot(next, activeId)
-        return next
+        syncerRef.current?.schedule(created)
+        return [created, ...prev]
       }
 
       const existing = prev[idx]!
-      const nextConv: PersistedAssistantConversation = {
+      const nextConv: AssistantConversation = {
         ...existing,
         messages: toSave,
         title: deriveConversationTitle(toSave) || existing.title,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
       }
+      syncerRef.current?.schedule(nextConv)
       const next = [...prev]
       next[idx] = nextConv
-      persistSnapshot(next, activeId)
       return next
     })
-  }, [messages, tripId, hydrated, persistSnapshot])
+  }, [messages, tripId, hydrated])
+
+  // No perder el último tramo del debounce al cerrar la pestaña.
+  useEffect(() => {
+    const flush = () => {
+      void syncerRef.current?.flush()
+    }
+    window.addEventListener("pagehide", flush)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      flush()
+    }
+  }, [])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -196,9 +240,9 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
     setError(null)
     setActiveConversationId(null)
     setMessages([])
-    // No persistimos conversaciones vacías; active queda null hasta el primer send
-    persistSnapshot(conversationsRef.current, null)
-  }, [stop, persistSnapshot])
+    // No se crea fila hasta el primer mensaje: `active` queda null hasta el send
+    persistActiveId(null)
+  }, [stop, persistActiveId])
 
   const openConversation = useCallback(
     (conversationId: string) => {
@@ -209,12 +253,12 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       skipPersistRef.current = true
       setActiveConversationId(conversationId)
       setMessages((conv.messages as ChatMessage[]) ?? [])
-      persistSnapshot(conversationsRef.current, conversationId)
+      persistActiveId(conversationId)
       requestAnimationFrame(() => {
         skipPersistRef.current = false
       })
     },
-    [stop, persistSnapshot],
+    [stop, persistActiveId],
   )
 
   const deleteConversation = useCallback(
@@ -235,12 +279,20 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       setConversations(remaining)
       setActiveConversationId(nextActive)
       if (wasActive) setMessages(nextMessages)
-      persistSnapshot(remaining, nextActive)
+      persistActiveId(nextActive)
+
+      syncerRef.current?.drop(conversationId)
+      if (isSupabaseConfigured()) {
+        void deleteConversationRow(createClient(), conversationId).catch(() => {
+          setError("No hemos podido borrar la conversación.")
+        })
+      }
+
       requestAnimationFrame(() => {
         skipPersistRef.current = false
       })
     },
-    [stop, persistSnapshot],
+    [stop, persistActiveId],
   )
 
   const send = useCallback(
@@ -255,7 +307,9 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       let convId = activeIdRef.current
       if (!convId) {
         convId = crypto.randomUUID()
+        activeIdRef.current = convId
         setActiveConversationId(convId)
+        persistActiveId(convId)
       }
 
       const userMsg: ChatMessage = {
@@ -279,7 +333,14 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       setStatusLabel("Pensando…")
 
       const history = toApiHistory([...baseMessages, userMsg])
-      const briefing = buildTripBriefing(currentTrip, sourcesRef.current)
+      // El HTML del artículo se carga bajo demanda: sin él, el briefing perdería el texto.
+      let briefingSources = sourcesRef.current
+      try {
+        briefingSources = await loadTripSourcesWithArticles(currentTrip.id)
+      } catch {
+        /* se envía el briefing con lo que haya en memoria */
+      }
+      const briefing = buildTripBriefing(currentTrip, briefingSources)
       const controller = new AbortController()
       abortRef.current = controller
 
@@ -298,8 +359,15 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       await streamAssistant(
         {
           trip_briefing: briefing,
-          countries: currentTrip.countries ?? [],
+          // createTrip deja countries vacío: inferimos UG/etc. del nombre y fuentes
+          // para precargar la ficha MAE en el prompt.
+          countries: resolveTripCountryCodes(currentTrip, briefingSources),
           messages: history,
+          user_profile: buildUserProfileBriefing(
+            profileRef.current,
+            referencesRef.current,
+          ),
+          preferred_domains: preferredDomainsFrom(referencesRef.current),
         },
         {
           onStatus: (label) => setStatusLabel(label),
@@ -374,7 +442,7 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       setStatusLabel(null)
       abortRef.current = null
     },
-    [isStreaming],
+    [isStreaming, persistActiveId, loadTripSourcesWithArticles],
   )
 
   const setActionStatus = useCallback(

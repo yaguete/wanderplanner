@@ -28,7 +28,7 @@ const BOOKING_LOGO = "https://play-lh.googleusercontent.com/eJuvWSnbPwEWAQCYwl8i
 const SKYSCANNER_LOGO = "https://www.skyscanner.es/images/opengraph_v1.png"
 const OMIO_LOGO = "https://www.omio.fr/corporate/wp-content/uploads/sites/2/resized/2022/05/media-3-270x180-c-default.jpg"
 const MOTORHOME_REPUBLIC_LOGO = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTJla2gWB9W3qGgJF5GPFMDo9ijA_9g7z59IQ&s"
-
+const PANGEA_LOGO = "https://s3-eu-west-1.amazonaws.com/tpd/logos/620bdcbc8301c7e3ef3bebe1/0x0.png"
 /** Claves en minúsculas (mismo criterio que `normalizeWording`). */
 const KNOWN_VENDOR_LOGOS: Record<string, string> = {
   heymondo: HEYMODO_LOGO,
@@ -50,6 +50,7 @@ const KNOWN_VENDOR_LOGOS: Record<string, string> = {
   skyscanner: SKYSCANNER_LOGO,
   omio: OMIO_LOGO,
   "motorhome republic": MOTORHOME_REPUBLIC_LOGO,
+  Pangea: PANGEA_LOGO,
 }
 
 const KNOWN_DOMAIN_LOGOS: Record<string, string> = {
@@ -59,6 +60,7 @@ const KNOWN_DOMAIN_LOGOS: Record<string, string> = {
   "roadtripafrica.com": ROAD_TRIP_AFRICA_LOGO,
   "iati.org": IATI_LOGO,
   "winetram.co.za": FRANSCHHOEK_WINE_TRAM_LOGO,
+  "www.pangea.es/": PANGEA_LOGO,
 }
 
 function normalizeWording(v: string | null | undefined): string {

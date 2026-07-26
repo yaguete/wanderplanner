@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import anthropic
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -21,14 +21,26 @@ load_dotenv()
 
 from article_fetch import fetch_article  # noqa: E402
 from assistant import router as assistant_router  # noqa: E402
+from auth import require_user  # noqa: E402
+from extraction_cache import get_cached_extraction, store_extraction  # noqa: E402
 
 PROMPT_PATH = Path(__file__).parent / "agents" / "itinerary_builder.md"
+
+DEFAULT_ORIGINS = ["http://localhost:3000", "http://localhost:3001"]
+
+
+def _allowed_origins() -> list[str]:
+    raw = (os.getenv("ALLOWED_ORIGINS") or "").strip()
+    if not raw:
+        return DEFAULT_ORIGINS
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -288,11 +300,17 @@ async def enrich_thumbnails(itinerary: dict) -> None:
 
 
 async def build_itinerary(url: str) -> dict:
+    # Caché global por URL: el mismo artículo no se vuelve a extraer ni a pagar.
+    cached = await get_cached_extraction(url)
+    if cached is not None:
+        return cached
+
     plain_text, cleaned_html, og_image = await fetch_article(url)
     itinerary = await asyncio.to_thread(call_claude, plain_text)
     itinerary["og_image"] = og_image
     itinerary["article_html"] = cleaned_html
     await enrich_thumbnails(itinerary)
+    await store_extraction(url, itinerary)
     return itinerary
 
 
@@ -308,7 +326,7 @@ def root():
 
 
 @app.post("/itinerary")
-async def generate_itinerary(request: ItineraryRequest):
+async def generate_itinerary(request: ItineraryRequest, _user=Depends(require_user)):
     try:
         return await build_itinerary(request.url)
     except httpx.HTTPError as e:

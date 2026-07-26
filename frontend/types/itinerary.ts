@@ -107,6 +107,8 @@ export interface Trip {
   basics: UserBasicItem[]
   /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */
   archived?: boolean
+  /** Slug del partner cuyo CTA originó el viaje (`/start?ref=…`). */
+  referrer?: string | null
 }
 
 export interface Source {

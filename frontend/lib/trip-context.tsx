@@ -1,8 +1,9 @@
 "use client"
 
 /**
- * Estado global de viajes y fuentes: en cliente se rehidrata y persiste en `localStorage`
- * (`lib/trip-persistence.ts`); el primer arranque o si no hay datos guardados usa mocks. Sin backend de persistencia.
+ * Estado global de viajes y fuentes. Las mutaciones siguen siendo síncronas y optimistas sobre
+ * `useState`; la persistencia vive en `lib/db/trips-repo.ts`, que sincroniza contra Supabase por
+ * diffing de filas (debounce + cola secuencial, last-write-wins).
  * Expone `TripProvider` / `useTrips()`. Al tocar `removeSourceFromTrip`, `refetchSource` o
  * añadir ítems, respeta la semántica de `sourceId` / `sourceItemId` / `sourceBasicItemId` en `types/itinerary`.
  */
@@ -11,22 +12,24 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react"
+import { toast } from "sonner"
 import type { Trip, Source, UserDay, UserDayItem, UserBasicItem } from "@/types/itinerary"
-import { MOCK_TRIPS, MOCK_SOURCES } from "@/lib/mock-data"
 import { fetchItinerary } from "@/lib/api"
 import { buildSource } from "@/lib/itinerary-utils"
-import { loadTripsState, saveTripsState } from "@/lib/trip-persistence"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
+import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
-import { clearAssistantState } from "@/lib/assistant-persistence"
 
 interface TripContextValue {
   trips: Trip[]
   sources: Source[]
+  /** Viajes y fuentes aún cargándose: la UI no debe concluir que un viaje no existe. */
+  isLoading: boolean
   createTrip: (data: {
     name: string
     countries: string[]
@@ -56,6 +59,11 @@ interface TripContextValue {
   refetchSource: (sourceId: string, url: string) => Promise<void>
   removeSourceFromTrip: (tripId: string, sourceId: string) => void
   isLoadingSource: boolean
+  /** Descarga el HTML del artículo (excluido de la carga inicial) al abrir la Crónica. */
+  ensureArticleHtml: (sourceId: string) => Promise<void>
+  isArticleHtmlLoading: (sourceId: string) => boolean
+  /** Fuentes del viaje con el HTML ya resuelto; el briefing del asistente lo necesita. */
+  loadTripSourcesWithArticles: (tripId: string) => Promise<Source[]>
 
   addDay: (tripId: string) => void
   updateDayLabel: (tripId: string, dayId: string, label: string) => void
@@ -75,13 +83,18 @@ interface TripContextValue {
 const TripContext = createContext<TripContextValue | null>(null)
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
-  const [trips, setTrips] = useState<Trip[]>(MOCK_TRIPS)
-  const [sources, setSources] = useState<Source[]>(MOCK_SOURCES)
+  const { user, isLoading: authLoading } = useAuth()
+  const [trips, setTrips] = useState<Trip[]>([])
+  const [sources, setSources] = useState<Source[]>([])
   const [rehydrated, setRehydrated] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isLoadingSource, setIsLoadingSource] = useState(false)
+  const [loadingArticleIds, setLoadingArticleIds] = useState<string[]>([])
   const tripsRef = useRef(trips)
   const sourcesRef = useRef(sources)
   const coverBackfillAttempted = useRef(new Set<string>())
+  const syncerRef = useRef<TripsSyncer | null>(null)
+  const hydratedFor = useRef<string | null>(null)
 
   useEffect(() => {
     tripsRef.current = trips
@@ -91,19 +104,72 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     sourcesRef.current = sources
   }, [sources])
 
-  useLayoutEffect(() => {
-    const saved = loadTripsState()
-    if (saved) {
-      setTrips(saved.trips)
-      setSources(saved.sources)
+  // Hidratación por usuario: al cerrar sesión se vacía el estado y se descarta el sincronizador.
+  useEffect(() => {
+    if (authLoading) return
+    const userId = user?.id ?? null
+
+    if (!userId || !isSupabaseConfigured()) {
+      syncerRef.current?.dispose()
+      syncerRef.current = null
+      hydratedFor.current = null
+      coverBackfillAttempted.current.clear()
+      setTrips([])
+      setSources([])
+      setRehydrated(false)
+      setIsLoading(false)
+      return
     }
-    setRehydrated(true)
-  }, [])
+
+    if (hydratedFor.current === userId) return
+    hydratedFor.current = userId
+    setIsLoading(true)
+    setRehydrated(false)
+
+    const supabase = createClient()
+    const syncer = new TripsSyncer(supabase, userId, () => {
+      toast.error("No hemos podido guardar los últimos cambios. Reintentando…")
+    })
+    syncerRef.current?.dispose()
+    syncerRef.current = syncer
+
+    let active = true
+    void (async () => {
+      try {
+        const snapshot = await loadTripsState(supabase, userId)
+        if (!active) return
+        syncer.reset(snapshot)
+        setTrips(snapshot.trips)
+        setSources(snapshot.sources)
+        setRehydrated(true)
+      } catch {
+        if (active) toast.error("No hemos podido cargar tus viajes.")
+      } finally {
+        if (active) setIsLoading(false)
+      }
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [authLoading, user?.id])
 
   useEffect(() => {
     if (!rehydrated) return
-    saveTripsState(trips, sources)
+    syncerRef.current?.schedule({ trips, sources })
   }, [trips, sources, rehydrated])
+
+  // Cierre de pestaña o navegación: no perder lo que quedaba en el debounce.
+  useEffect(() => {
+    const flush = () => {
+      void syncerRef.current?.flush()
+    }
+    window.addEventListener("pagehide", flush)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      flush()
+    }
+  }, [])
 
   const applyCoverFromSource = useCallback(async (tripId: string, source: Source) => {
     const queries = coverQueriesFromSource(source)
@@ -223,6 +289,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, archived: false } : t)))
   }, [])
 
+  // Las conversaciones del asistente caen por `on delete cascade` sobre `trips`.
   const deleteTrip = useCallback((tripId: string) => {
     setTrips((prev) => {
       const next = prev.filter((t) => t.id !== tripId)
@@ -232,8 +299,71 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       })
       return next
     })
-    clearAssistantState(tripId)
   }, [])
+
+  const ensureArticleHtml = useCallback(async (sourceId: string) => {
+    const existing = sourcesRef.current.find((s) => s.id === sourceId)
+    if (!existing || existing.articleHtml) return
+    if (!isSupabaseConfigured()) return
+
+    setLoadingArticleIds((prev) => (prev.includes(sourceId) ? prev : [...prev, sourceId]))
+    try {
+      const html = await fetchArticleHtml(createClient(), sourceId)
+      if (!html) return
+      const current = sourcesRef.current.find((s) => s.id === sourceId)
+      if (!current) return
+      const next: Source = { ...current, articleHtml: html }
+      // Ya está persistido: evita que el diffing lo reescriba en el siguiente upsert.
+      syncerRef.current?.acknowledgeSource(next)
+      setSources((prev) => prev.map((s) => (s.id === sourceId ? next : s)))
+    } catch {
+      /* la Crónica muestra su propio estado vacío */
+    } finally {
+      setLoadingArticleIds((prev) => prev.filter((id) => id !== sourceId))
+    }
+  }, [])
+
+  const isArticleHtmlLoading = useCallback(
+    (sourceId: string) => loadingArticleIds.includes(sourceId),
+    [loadingArticleIds],
+  )
+
+  const loadTripSourcesWithArticles = useCallback(
+    async (tripId: string): Promise<Source[]> => {
+      const trip = tripsRef.current.find((t) => t.id === tripId)
+      if (!trip) return []
+      const tripSources = sourcesRef.current.filter((s) => trip.sourceIds.includes(s.id))
+      const missing = tripSources.filter((s) => !s.articleHtml)
+      if (missing.length === 0 || !isSupabaseConfigured()) return tripSources
+
+      const supabase = createClient()
+      const fetched = await Promise.all(
+        missing.map(async (s) => {
+          try {
+            return [s.id, await fetchArticleHtml(supabase, s.id)] as const
+          } catch {
+            return [s.id, ""] as const
+          }
+        }),
+      )
+      const htmlById = new Map(fetched)
+      // El estado se actualiza para no repetir la descarga; el retorno no espera al re-render.
+      setSources((prev) =>
+        prev.map((s) => {
+          const html = htmlById.get(s.id)
+          if (!html) return s
+          const next: Source = { ...s, articleHtml: html }
+          syncerRef.current?.acknowledgeSource(next)
+          return next
+        }),
+      )
+      return tripSources.map((s) => {
+        const html = htmlById.get(s.id)
+        return html ? { ...s, articleHtml: html } : s
+      })
+    },
+    [],
+  )
 
   const getTrip = useCallback((tripId: string) => {
     return trips.find((t) => t.id === tripId)
@@ -504,6 +634,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     () => ({
       trips,
       sources,
+      isLoading,
       createTrip,
       updateTrip,
       deleteTrip,
@@ -515,6 +646,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       refetchSource,
       removeSourceFromTrip,
       isLoadingSource,
+      ensureArticleHtml,
+      isArticleHtmlLoading,
+      loadTripSourcesWithArticles,
       addDay,
       updateDayLabel,
       removeDay,
@@ -525,7 +659,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       addBasicToTrip,
       removeBasicFromTrip,
     }),
-    [trips, sources, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

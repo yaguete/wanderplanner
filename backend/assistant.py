@@ -11,12 +11,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any, AsyncIterator, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from article_fetch import fetch_article
+from auth import require_user
 from country_briefs import (
     ISO_TO_NAME,
     ensure_briefs,
@@ -150,6 +151,10 @@ class AssistantRequest(BaseModel):
     trip_briefing: str
     countries: list[str] = Field(default_factory=list)
     messages: list[ChatMessage]
+    # Perfil de viajero en markdown (tipos, notas y referencias favoritas).
+    user_profile: str | None = None
+    # Dominios de las referencias del usuario; Tavily los prioriza en `web_search`.
+    preferred_domains: list[str] = Field(default_factory=list)
 
 
 def _assistant_model() -> str:
@@ -190,6 +195,7 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 async def _run_tool(
     name: str,
     args: dict[str, Any],
+    preferred_domains: list[str] | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """
     Ejecuta una tool. Devuelve (contenido_para_el_modelo, action_event_o_None).
@@ -198,6 +204,7 @@ async def _run_tool(
         result = await tavily_search(
             str(args.get("query") or ""),
             max_results=int(args.get("max_results") or 5),
+            preferred_domains=preferred_domains,
         )
         return json.dumps(result, ensure_ascii=False), None
 
@@ -277,13 +284,18 @@ async def _run_tool(
     return json.dumps({"error": f"Herramienta desconocida: {name}"}, ensure_ascii=False), None
 
 
-def _build_system_prompt(trip_briefing: str, country_briefs_md: str) -> str:
+def _build_system_prompt(
+    trip_briefing: str,
+    country_briefs_md: str,
+    user_profile: str | None,
+) -> str:
     template = PROMPT_PATH.read_text(encoding="utf-8")
     return (
         template
         .replace("{today}", date.today().isoformat())
         .replace("{trip_briefing}", trip_briefing or "(Sin briefing)")
         .replace("{country_briefs}", country_briefs_md)
+        .replace("{user_profile}", (user_profile or "").strip() or "(Sin perfil configurado)")
     )
 
 
@@ -291,7 +303,7 @@ async def _stream_chat(req: AssistantRequest) -> AsyncIterator[str]:
     try:
         briefs = await ensure_briefs(req.countries or [])
         country_md = format_briefs_for_prompt(briefs)
-        system = _build_system_prompt(req.trip_briefing, country_md)
+        system = _build_system_prompt(req.trip_briefing, country_md, req.user_profile)
 
         messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for m in req.messages:
@@ -392,7 +404,9 @@ async def _stream_chat(req: AssistantRequest) -> AsyncIterator[str]:
                         args = {}
 
                     yield _sse("tool", {"name": fname, "status": "running", "args": args})
-                    tool_content, action = await _run_tool(fname, args)
+                    tool_content, action = await _run_tool(
+                        fname, args, req.preferred_domains
+                    )
                     if action:
                         yield _sse("action", action)
                     yield _sse("tool", {"name": fname, "status": "done"})
@@ -421,7 +435,7 @@ async def _stream_chat(req: AssistantRequest) -> AsyncIterator[str]:
 
 
 @router.post("/assistant/chat")
-async def assistant_chat(request: AssistantRequest):
+async def assistant_chat(request: AssistantRequest, _user=Depends(require_user)):
     if not (os.getenv("DEEPSEEK_API_KEY") or "").strip():
         raise HTTPException(status_code=500, detail="DEEPSEEK_API_KEY no configurada")
 
