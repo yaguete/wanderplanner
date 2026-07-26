@@ -58,32 +58,34 @@ export function AppSidebar({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <nav className="mt-0.5 space-y-0.5 pl-1">
-                {trips.map((t) => {
-                  const isActive = activeTripId === t.id
-                  return (
-                    <Link
-                      key={t.id}
-                      href={`/trips/${t.id}`}
-                      onClick={onNavigate}
-                      className={cn(
-                        "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] leading-snug transition-colors",
-                        isActive
-                          ? "bg-background font-medium text-foreground"
-                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/80",
-                      )}
-                    >
-                      <span
+                {trips
+                  .filter((t) => !t.archived)
+                  .map((t) => {
+                    const isActive = activeTripId === t.id
+                    return (
+                      <Link
+                        key={t.id}
+                        href={`/trips/${t.id}`}
+                        onClick={onNavigate}
                         className={cn(
-                          "h-1.5 w-1.5 shrink-0 rounded-full",
-                          isActive ? "bg-primary" : "bg-sidebar-foreground/30",
+                          "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] leading-snug transition-colors",
+                          isActive
+                            ? "bg-background font-medium text-foreground"
+                            : "text-sidebar-foreground/75 hover:bg-sidebar-accent/80",
                         )}
-                        aria-hidden
-                      />
-                      <span className="truncate">{t.name}</span>
-                    </Link>
-                  )
-                })}
-                {trips.length === 0 ? (
+                      >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                            isActive ? "bg-primary" : "bg-sidebar-foreground/30",
+                          )}
+                          aria-hidden
+                        />
+                        <span className="truncate">{t.name}</span>
+                      </Link>
+                    )
+                  })}
+                {trips.filter((t) => !t.archived).length === 0 ? (
                   <p className="px-2.5 py-2 text-xs text-muted-foreground">Todavía no hay viajes</p>
                 ) : null}
               </nav>
@@ -102,7 +104,7 @@ export function AppSidebar({
       <NewTripDialog
         open={newTripOpen}
         onOpenChange={setNewTripOpen}
-        onCreate={(data) => {
+        onSubmit={(data) => {
           const trip = createTrip(data)
           setNewTripOpen(false)
           onNavigate?.()

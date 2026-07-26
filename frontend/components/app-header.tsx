@@ -25,15 +25,26 @@ export function BrandMark({ className }: { className?: string }) {
 
 type AppHeaderProps = {
   leading?: ReactNode
+  /** En móvil: al pulsar el avatar (abre el menú lateral). */
+  onAvatarClick?: () => void
 }
 
-export function AppHeader({ leading }: AppHeaderProps) {
+export function AppHeader({ leading, onAvatarClick }: AppHeaderProps) {
   const initials = MOCK_USER.name
     .split(/\s+/)
     .map((p) => p[0])
     .join("")
     .slice(0, 2)
     .toUpperCase()
+
+  const avatar = (
+    <Avatar className="size-7">
+      {MOCK_USER.avatarUrl ? <AvatarImage src={MOCK_USER.avatarUrl} alt="" /> : null}
+      <AvatarFallback className="bg-secondary text-[10px] font-medium text-secondary-foreground">
+        {initials}
+      </AvatarFallback>
+    </Avatar>
+  )
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border bg-background px-3 sm:px-4">
@@ -47,12 +58,18 @@ export function AppHeader({ leading }: AppHeaderProps) {
       </Link>
       <div className="flex-1" />
       <span className="hidden text-sm text-muted-foreground sm:inline">{MOCK_USER.name}</span>
-      <Avatar className="size-7">
-        {MOCK_USER.avatarUrl ? <AvatarImage src={MOCK_USER.avatarUrl} alt={MOCK_USER.name} /> : null}
-        <AvatarFallback className="bg-secondary text-[10px] font-medium text-secondary-foreground">
-          {initials}
-        </AvatarFallback>
-      </Avatar>
+      {onAvatarClick ? (
+        <button
+          type="button"
+          onClick={onAvatarClick}
+          className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Abrir menú"
+        >
+          {avatar}
+        </button>
+      ) : (
+        avatar
+      )}
     </header>
   )
 }

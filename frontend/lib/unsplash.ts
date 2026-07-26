@@ -1,3 +1,5 @@
+import { collectCountryCodesFromHint, getCountryByCode } from "@/lib/countries"
+
 const UNSPLASH_KEY = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY
 
 const SESSION_KEY = "wp-unsplash-thumb-v1"
@@ -158,4 +160,36 @@ export async function fetchDestinationCover(destination: string): Promise<string
   } catch {
     return null
   }
+}
+
+/**
+ * Consultas de portada en orden de preferencia a partir de una fuente:
+ * 1) `source.area` (destino del artículo),
+ * 2) nombre del país inferido desde ese área.
+ */
+export function coverQueriesFromSource(source: {
+  area: string | null
+}): string[] {
+  const queries: string[] = []
+  const area = source.area?.trim()
+  if (area) queries.push(area)
+
+  const codes = collectCountryCodesFromHint(area)
+  for (const code of codes) {
+    const name = getCountryByCode(code.toUpperCase())?.name
+    if (name && !queries.some((q) => q.toLowerCase() === name.toLowerCase())) {
+      queries.push(name)
+    }
+  }
+  return queries
+}
+
+/** Prueba cada consulta con `fetchDestinationCover` y devuelve la primera imagen. */
+export async function fetchCoverFromQueries(queries: string[]): Promise<string | null> {
+  for (const q of queries) {
+    if (!q.trim()) continue
+    const url = await fetchDestinationCover(q.trim())
+    if (url) return url
+  }
+  return null
 }

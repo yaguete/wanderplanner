@@ -94,12 +94,19 @@ export interface Trip {
   startDate: string | null
   endDate: string | null
   numDays: number | null
+  /**
+   * Qué espera el usuario del viaje (opcional). Se incluye en el briefing del asistente.
+   * Texto libre; vacío se guarda como `null`.
+   */
+  expectations: string | null
   cover: string
   coverUrl: string | null
   sourceIds: string[]
   days: UserDay[]
   /** Seguros, SIM, descuentos, etc. a nivel de viaje (no por día). */
   basics: UserBasicItem[]
+  /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */
+  archived?: boolean
 }
 
 export interface Source {

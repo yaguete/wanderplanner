@@ -19,6 +19,7 @@ import {
 import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
 import { getDayUserDescription } from "@/lib/day-heading"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
@@ -51,9 +52,10 @@ export default function InspirationPanel({
   } = useTrips()
   const trip = getTrip(tripId)
   const sources = getTripSources(tripId)
+  const isMobile = useIsMobile()
 
   const [activeSourceId, setActiveSourceId] = useState<string | null>(sources[0]?.id ?? null)
-  const [sourceTab, setSourceTab] = useState<SourceTab>("itinerary")
+  const [sourceTab, setSourceTab] = useState<SourceTab>("source")
 
   useEffect(() => {
     if (sources.length === 0) {
@@ -142,7 +144,7 @@ export default function InspirationPanel({
       setActiveSourceId(source.id)
       setUrlInput("")
       setAddSourceOpen(false)
-      setSourceTab("itinerary")
+      setSourceTab("source")
     } catch (err) {
       setExtractError(
         err instanceof Error
@@ -206,46 +208,52 @@ export default function InspirationPanel({
     { id: "basics", label: "Descuentos" },
   ]
 
+  const addSourceForm = (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          placeholder="https://blog.com/mi-viaje-a..."
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void handleExtract()}
+          className="h-9 min-w-0 flex-1 bg-background text-[13px]"
+          aria-invalid={!!extractError}
+          autoFocus
+        />
+        <Button
+          type="button"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={() => void handleExtract()}
+          disabled={isLoadingSource || !urlInput.trim()}
+          aria-label="Añadir fuente"
+        >
+          {isLoadingSource ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+      {isLoadingSource ? (
+        <p className="text-xs text-muted-foreground">
+          Destilando la ruta del artículo… puede tardar unos segundos.
+        </p>
+      ) : null}
+      {extractError ? (
+        <p className="text-xs text-destructive" role="alert">
+          {extractError}
+        </p>
+      ) : null}
+    </div>
+  )
+
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0">
-        {addSourceOpen ? (
+        {addSourceOpen && !isMobile ? (
           <div className="space-y-2 border-b border-border px-3 py-2.5 sm:px-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="https://blog.com/mi-viaje-a..."
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void handleExtract()}
-                className="h-9 min-w-0 flex-1 bg-background text-[13px]"
-                aria-invalid={!!extractError}
-                autoFocus
-              />
-              <Button
-                type="button"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                onClick={() => void handleExtract()}
-                disabled={isLoadingSource || !urlInput.trim()}
-                aria-label="Añadir fuente"
-              >
-                {isLoadingSource ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-            {isLoadingSource ? (
-              <p className="text-xs text-muted-foreground">
-                Destilando la ruta del artículo… puede tardar unos segundos.
-              </p>
-            ) : null}
-            {extractError ? (
-              <p className="text-xs text-destructive" role="alert">
-                {extractError}
-              </p>
-            ) : null}
+            {addSourceForm}
           </div>
         ) : sources.length > 0 ? (
           <div className="px-3 pt-2.5 sm:px-4">
@@ -462,6 +470,25 @@ export default function InspirationPanel({
           </div>
         </div>
       </div>
+
+      {/* Móvil: sheet inferior encima de los FABs, con backdrop. */}
+      {addSourceOpen && isMobile ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[45] bg-foreground/25 sm:hidden"
+            aria-label="Cerrar añadir fuente"
+            onClick={() => setAddSourceOpen(false)}
+          />
+          <div
+            role="dialog"
+            aria-label="Añadir fuente"
+            className="fixed bottom-[4.75rem] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
+          >
+            {addSourceForm}
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
@@ -521,43 +548,57 @@ function ItemRow({
   onAdd: (dayId: string) => void
 }) {
   return (
-    <TravelItemCard
-      variant="source"
-      title={item.name}
-      detail={item.detail}
-      type={item.type}
-      isAdded={isAdded}
-      addedLabel={addedDayNumbers.length ? formatAddedDaysCompact(addedDayNumbers) : undefined}
-      thumbnail={
-        <InspirationThumbnail
-          kind="item"
-          item={item}
-          area={sourceArea}
-          mode={thumbnailMode ?? "default"}
+    <AddToItineraryMenu tripId={tripId} onAdd={onAdd}>
+      <button
+        type="button"
+        className="block w-full cursor-pointer rounded-2xl text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Añadir al itinerario"
+      >
+        <TravelItemCard
+          variant="source"
+          title={item.name}
+          detail={item.detail}
+          type={item.type}
+          isAdded={isAdded}
+          addedLabel={addedDayNumbers.length ? formatAddedDaysCompact(addedDayNumbers) : undefined}
+          thumbnail={
+            <InspirationThumbnail
+              kind="item"
+              item={item}
+              area={sourceArea}
+              mode={thumbnailMode ?? "default"}
+            />
+          }
+          action={
+            <span
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
+              aria-hidden
+            >
+              <Plus className="h-4 w-4" />
+            </span>
+          }
         />
-      }
-      action={<AddToItineraryButton tripId={tripId} onAdd={onAdd} />}
-    />
+      </button>
+    </AddToItineraryMenu>
   )
 }
 
-function AddToItineraryButton({ tripId, onAdd }: { tripId: string; onAdd: (dayId: string) => void }) {
+function AddToItineraryMenu({
+  tripId,
+  onAdd,
+  children,
+}: {
+  tripId: string
+  onAdd: (dayId: string) => void
+  children: ReactNode
+}) {
   const { getTrip } = useTrips()
   const trip = getTrip(tripId)
   const days = trip?.days ?? []
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-9 w-9 shrink-0 rounded-full border border-border p-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          aria-label="Añadir al itinerario"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
         <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           Añadir al día

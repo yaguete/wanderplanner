@@ -6,14 +6,23 @@
  * Expone `TripProvider` / `useTrips()`. Al tocar `removeSourceFromTrip`, `refetchSource` o
  * añadir ítems, respeta la semántica de `sourceId` / `sourceItemId` / `sourceBasicItemId` en `types/itinerary`.
  */
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import type { Trip, Source, UserDay, UserDayItem, UserBasicItem } from "@/types/itinerary"
 import { MOCK_TRIPS, MOCK_SOURCES } from "@/lib/mock-data"
 import { fetchItinerary } from "@/lib/api"
 import { buildSource } from "@/lib/itinerary-utils"
-import { getCountryByCode } from "@/lib/countries"
 import { loadTripsState, saveTripsState } from "@/lib/trip-persistence"
-import { fetchDestinationCover } from "@/lib/unsplash"
+import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
+import { clearAssistantState } from "@/lib/assistant-persistence"
 
 interface TripContextValue {
   trips: Trip[]
@@ -24,8 +33,21 @@ interface TripContextValue {
     startDate: string | null
     endDate: string | null
     numDays: number | null
+    expectations: string | null
   }) => Trip
+  updateTrip: (
+    tripId: string,
+    data: {
+      name: string
+      startDate: string | null
+      endDate: string | null
+      numDays: number | null
+      expectations: string | null
+    },
+  ) => { ok: true } | { ok: false; error: string }
   deleteTrip: (tripId: string) => void
+  archiveTrip: (tripId: string) => void
+  unarchiveTrip: (tripId: string) => void
 
   getTrip: (tripId: string) => Trip | undefined
   getTripSources: (tripId: string) => Source[]
@@ -57,6 +79,17 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const [sources, setSources] = useState<Source[]>(MOCK_SOURCES)
   const [rehydrated, setRehydrated] = useState(false)
   const [isLoadingSource, setIsLoadingSource] = useState(false)
+  const tripsRef = useRef(trips)
+  const sourcesRef = useRef(sources)
+  const coverBackfillAttempted = useRef(new Set<string>())
+
+  useEffect(() => {
+    tripsRef.current = trips
+  }, [trips])
+
+  useEffect(() => {
+    sourcesRef.current = sources
+  }, [sources])
 
   useLayoutEffect(() => {
     const saved = loadTripsState()
@@ -72,6 +105,30 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     saveTripsState(trips, sources)
   }, [trips, sources, rehydrated])
 
+  const applyCoverFromSource = useCallback(async (tripId: string, source: Source) => {
+    const queries = coverQueriesFromSource(source)
+    // Unsplash (destino/país) → og:image del artículo → emoji (coverUrl null)
+    const unsplashUrl = await fetchCoverFromQueries(queries)
+    const url = unsplashUrl ?? (source.ogImage?.trim() || null)
+    setTrips((prev) =>
+      prev.map((t) => (t.id === tripId ? { ...t, coverUrl: url } : t)),
+    )
+  }, [])
+
+  // Backfill: viajes con fuentes y sin coverUrl (mocks / datos previos al cambio).
+  useEffect(() => {
+    if (!rehydrated) return
+    for (const trip of tripsRef.current) {
+      if (trip.sourceIds.length === 0 || trip.coverUrl) continue
+      if (coverBackfillAttempted.current.has(trip.id)) continue
+      const firstId = trip.sourceIds[0]
+      const source = sourcesRef.current.find((s) => s.id === firstId)
+      if (!source) continue
+      coverBackfillAttempted.current.add(trip.id)
+      void applyCoverFromSource(trip.id, source)
+    }
+  }, [rehydrated, trips, sources, applyCoverFromSource])
+
   const createTrip = useCallback(
     (data: {
       name: string
@@ -79,6 +136,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       startDate: string | null
       endDate: string | null
       numDays: number | null
+      expectations: string | null
     }): Trip => {
     const dayCount = data.numDays && data.numDays > 0 ? data.numDays : 1
     const days: UserDay[] = Array.from({ length: dayCount }, () => ({
@@ -87,10 +145,6 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       items: [],
     }))
 
-    const firstCode = data.countries[0]
-    const coverQuery = firstCode
-      ? (getCountryByCode(firstCode)?.name ?? firstCode)
-      : data.name
     const trip: Trip = {
       id: crypto.randomUUID(),
       name: data.name,
@@ -98,24 +152,75 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       startDate: data.startDate,
       endDate: data.endDate,
       numDays: data.numDays,
+      expectations: data.expectations?.trim() ? data.expectations.trim() : null,
       cover: "✈️",
       coverUrl: null,
       sourceIds: [],
       days,
       basics: [],
+      archived: false,
     }
     setTrips((prev) => [...prev, trip])
-
-    // Fetch cover image in the background (non-blocking)
-    fetchDestinationCover(coverQuery).then((url) => {
-      if (url) {
-        setTrips((prev) =>
-          prev.map((t) => (t.id === trip.id ? { ...t, coverUrl: url } : t)),
-        )
-      }
-    })
-
     return trip
+  }, [])
+
+  const updateTrip = useCallback(
+    (
+      tripId: string,
+      data: {
+        name: string
+        startDate: string | null
+        endDate: string | null
+        numDays: number | null
+        expectations: string | null
+      },
+    ): { ok: true } | { ok: false; error: string } => {
+      const trip = tripsRef.current.find((t) => t.id === tripId)
+      if (!trip) return { ok: false, error: "Viaje no encontrado." }
+
+      const targetDays = data.numDays && data.numDays > 0 ? data.numDays : null
+      if (targetDays != null && targetDays < trip.days.length) {
+        const excess = trip.days.length - targetDays
+        return {
+          ok: false,
+          error: `Tu itinerario tiene ${trip.days.length} días. Elimina ${excess} día${excess === 1 ? "" : "s"} desde el panel del viaje antes de reducir el número aquí.`,
+        }
+      }
+
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          let days = t.days
+          if (targetDays != null && targetDays > t.days.length) {
+            const extra: UserDay[] = Array.from({ length: targetDays - t.days.length }, () => ({
+              id: crypto.randomUUID(),
+              label: "",
+              items: [],
+            }))
+            days = [...t.days, ...extra]
+          }
+          return {
+            ...t,
+            name: data.name,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            numDays: data.numDays,
+            expectations: data.expectations?.trim() ? data.expectations.trim() : null,
+            days,
+          }
+        }),
+      )
+      return { ok: true }
+    },
+    [],
+  )
+
+  const archiveTrip = useCallback((tripId: string) => {
+    setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, archived: true } : t)))
+  }, [])
+
+  const unarchiveTrip = useCallback((tripId: string) => {
+    setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, archived: false } : t)))
   }, [])
 
   const deleteTrip = useCallback((tripId: string) => {
@@ -127,6 +232,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       })
       return next
     })
+    clearAssistantState(tripId)
   }, [])
 
   const getTrip = useCallback((tripId: string) => {
@@ -139,10 +245,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return sources.filter((s) => trip.sourceIds.includes(s.id))
   }, [trips, sources])
 
-  const removeSourceFromTrip = useCallback((tripId: string, sourceId: string) => {
-    let nextTrips: Trip[] | null = null
-    setTrips((current) => {
-      nextTrips = current.map((t) => {
+  const removeSourceFromTrip = useCallback(
+    (tripId: string, sourceId: string) => {
+      const tripBefore = tripsRef.current.find((t) => t.id === tripId)
+      const wasFirst = tripBefore?.sourceIds[0] === sourceId
+
+      const nextTrips: Trip[] = tripsRef.current.map((t) => {
         if (t.id !== tripId) return t
         return {
           ...t,
@@ -152,66 +260,99 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             items: d.items.filter((i) => i.sourceId !== sourceId),
           })),
           basics: t.basics.filter((b) => b.sourceId !== sourceId),
+          ...(wasFirst ? { coverUrl: null } : {}),
         }
       })
-      return nextTrips
-    })
-    if (nextTrips) {
+      setTrips(nextTrips)
       setSources((prev) => {
         // No guardar `Source` que ya ningún `Trip` referencia (evita fuentes huérfanas en el array global).
-        const used = new Set(nextTrips!.flatMap((t) => t.sourceIds))
+        const used = new Set(nextTrips.flatMap((t) => t.sourceIds))
         return prev.filter((s) => used.has(s.id))
       })
-    }
-  }, [])
 
-  const addSourceToTrip = useCallback(async (tripId: string, url: string): Promise<Source> => {
-    setIsLoadingSource(true)
-    try {
-      const itinerary = await fetchItinerary(url)
-      const source = buildSource(url, itinerary)
+      if (wasFirst) {
+        const updated = nextTrips.find((t) => t.id === tripId)
+        const nextFirstId = updated?.sourceIds[0]
+        if (nextFirstId) {
+          const nextSource = sourcesRef.current.find((s) => s.id === nextFirstId)
+          if (nextSource) void applyCoverFromSource(tripId, nextSource)
+        }
+      }
+    },
+    [applyCoverFromSource],
+  )
 
-      setSources((prev) => [...prev, source])
-      setTrips((prev) =>
-        prev.map((t) =>
-          t.id === tripId ? { ...t, sourceIds: [...t.sourceIds, source.id] } : t,
-        ),
-      )
-      return source
-    } finally {
-      setIsLoadingSource(false)
-    }
-  }, [])
+  const addSourceToTrip = useCallback(
+    async (tripId: string, url: string): Promise<Source> => {
+      setIsLoadingSource(true)
+      try {
+        const itinerary = await fetchItinerary(url)
+        const source = buildSource(url, itinerary)
+        const wasEmpty =
+          (tripsRef.current.find((t) => t.id === tripId)?.sourceIds.length ?? 0) === 0
 
-  const refetchSource = useCallback(async (sourceId: string, url: string) => {
-    setIsLoadingSource(true)
-    try {
-      const itinerary = await fetchItinerary(url)
-      const rebuilt = buildSource(url, itinerary)
-      const newSource: Source = { ...rebuilt, id: sourceId }
-      // `rebuild` genera nuevos ids de ítems; solo conservamos entradas del viaje cuyo `sourceItemId` / `sourceBasicItemId` siga existiendo en la fuente refrescada.
-      const newItemIds = new Set(newSource.items.map((i) => i.id))
-      const newBasicIds = new Set(newSource.basics.map((b) => b.id))
+        setSources((prev) => [...prev, source])
+        setTrips((prev) =>
+          prev.map((t) =>
+            t.id === tripId ? { ...t, sourceIds: [...t.sourceIds, source.id] } : t,
+          ),
+        )
 
-      setTrips((prev) =>
-        prev.map((t) => ({
-          ...t,
-          days: t.days.map((d) => ({
-            ...d,
-            items: d.items.filter(
-              (i) => i.sourceId !== sourceId || newItemIds.has(i.sourceItemId),
+        if (wasEmpty) {
+          void applyCoverFromSource(tripId, source)
+        }
+        return source
+      } finally {
+        setIsLoadingSource(false)
+      }
+    },
+    [applyCoverFromSource],
+  )
+
+  const refetchSource = useCallback(
+    async (sourceId: string, url: string) => {
+      setIsLoadingSource(true)
+      try {
+        const itinerary = await fetchItinerary(url)
+        const rebuilt = buildSource(url, itinerary)
+        const newSource: Source = { ...rebuilt, id: sourceId }
+        // `rebuild` genera nuevos ids de ítems; solo conservamos entradas del viaje cuyo `sourceItemId` / `sourceBasicItemId` siga existiendo en la fuente refrescada.
+        const newItemIds = new Set(newSource.items.map((i) => i.id))
+        const newBasicIds = new Set(newSource.basics.map((b) => b.id))
+
+        const isFirstOfSomeTrip = tripsRef.current.some(
+          (t) => t.sourceIds[0] === sourceId,
+        )
+
+        setTrips((prev) =>
+          prev.map((t) => ({
+            ...t,
+            days: t.days.map((d) => ({
+              ...d,
+              items: d.items.filter(
+                (i) => i.sourceId !== sourceId || newItemIds.has(i.sourceItemId),
+              ),
+            })),
+            basics: t.basics.filter(
+              (b) => b.sourceId !== sourceId || newBasicIds.has(b.sourceBasicItemId),
             ),
           })),
-          basics: t.basics.filter(
-            (b) => b.sourceId !== sourceId || newBasicIds.has(b.sourceBasicItemId),
-          ),
-        })),
-      )
-      setSources((prev) => prev.map((s) => (s.id === sourceId ? newSource : s)))
-    } finally {
-      setIsLoadingSource(false)
-    }
-  }, [])
+        )
+        setSources((prev) => prev.map((s) => (s.id === sourceId ? newSource : s)))
+
+        if (isFirstOfSomeTrip) {
+          for (const trip of tripsRef.current) {
+            if (trip.sourceIds[0] === sourceId) {
+              void applyCoverFromSource(trip.id, newSource)
+            }
+          }
+        }
+      } finally {
+        setIsLoadingSource(false)
+      }
+    },
+    [applyCoverFromSource],
+  )
 
   const addDay = useCallback((tripId: string) => {
     setTrips((prev) =>
@@ -364,7 +505,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       trips,
       sources,
       createTrip,
+      updateTrip,
       deleteTrip,
+      archiveTrip,
+      unarchiveTrip,
       getTrip,
       getTripSources,
       addSourceToTrip,
@@ -381,7 +525,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       addBasicToTrip,
       removeBasicFromTrip,
     }),
-    [trips, sources, createTrip, deleteTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
+    [trips, sources, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

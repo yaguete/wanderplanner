@@ -4,3 +4,5 @@ backend/venv
 .env.local
 .env*.local
 .DS_Store
+backend/data/country_briefs/*.txt
+backend/data/country_briefs/index.json
