@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 import httpx
@@ -18,6 +19,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from auth import require_user
+from obs import log_kv
 from photo_lookup import (
     allow_paid_lookup,
     is_miss_fresh,
@@ -81,6 +83,30 @@ def _empty_cover() -> dict[str, Any]:
     return {"url": None, "author_name": None, "author_url": None}
 
 
+def _log_cover(
+    *,
+    cache_hit: bool,
+    search_calls: int = 0,
+    ping_calls: int = 0,
+    provider_ms: int | None = None,
+    capped: bool = False,
+    query: str | None = None,
+) -> None:
+    # ping_calls = download_location: no factura, pero consume cuota horaria Unsplash.
+    fields: dict[str, Any] = {
+        "event": "cover",
+        "cache_hit": cache_hit,
+        "search_calls": search_calls,
+        "ping_calls": ping_calls,
+        "provider_ms": provider_ms if search_calls else None,
+    }
+    if capped:
+        fields["capped"] = True
+    if not cache_hit and query is not None:
+        fields["q"] = query[:60]
+    log_kv(logger, **fields)
+
+
 async def _resolve_cover(query: str) -> dict[str, Any]:
     api_key = _unsplash_key()
     cfg = supabase_config()
@@ -95,11 +121,13 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
                 row = None
 
         if row and row.get("miss") and is_miss_fresh(row.get("resolved_at")):
+            _log_cover(cache_hit=True)
             return _empty_cover()
 
         if row and not row.get("miss"):
             url = row.get("photo_url")
             if isinstance(url, str) and url.strip():
+                _log_cover(cache_hit=True)
                 return {
                     "url": url,
                     "author_name": row.get("author_name"),
@@ -107,13 +135,16 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
                 }
 
         if not api_key:
+            _log_cover(cache_hit=False, query=query)
             return _empty_cover()
         if not allow_paid_lookup():
+            _log_cover(cache_hit=False, capped=True, query=query)
             return _empty_cover()
 
         # TODO(T1.2): meter solo los cache miss de Unsplash.
         search_q = f"{query} travel landscape"
         try:
+            t0 = time.perf_counter()
             r = await client.get(
                 "https://api.unsplash.com/search/photos",
                 params={
@@ -124,10 +155,18 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
                 },
                 headers={"Authorization": f"Client-ID {api_key}"},
             )
+            provider_ms = int((time.perf_counter() - t0) * 1000)
         except Exception:
+            _log_cover(cache_hit=False, search_calls=1, query=query)
             return _empty_cover()
 
         if r.status_code != 200:
+            _log_cover(
+                cache_hit=False,
+                search_calls=1,
+                provider_ms=provider_ms,
+                query=query,
+            )
             return _empty_cover()
 
         results = (r.json().get("results") or [])
@@ -152,6 +191,12 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
                     )
                 except Exception:
                     pass
+            _log_cover(
+                cache_hit=False,
+                search_calls=1,
+                provider_ms=provider_ms,
+                query=query,
+            )
             return _empty_cover()
 
         raw = (photo.get("urls") or {}).get("raw")
@@ -175,6 +220,12 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
                     )
                 except Exception:
                     pass
+            _log_cover(
+                cache_hit=False,
+                search_calls=1,
+                provider_ms=provider_ms,
+                query=query,
+            )
             return _empty_cover()
 
         url = f"{raw}&w=600&h=300&fit=crop&q=80"
@@ -186,8 +237,10 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
         if not isinstance(download_location, str):
             download_location = None
 
+        ping_calls = 0
         if download_location:
             await _trigger_download(client, api_key, download_location)
+            ping_calls = 1
 
         if cfg:
             base, skey = cfg
@@ -209,6 +262,13 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
             except Exception:
                 pass
 
+        _log_cover(
+            cache_hit=False,
+            search_calls=1,
+            ping_calls=ping_calls,
+            provider_ms=provider_ms,
+            query=query,
+        )
         return {
             "url": url,
             "author_name": author_name if isinstance(author_name, str) else None,

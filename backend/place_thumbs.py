@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from typing import Any
 
 import httpx
@@ -22,6 +23,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from auth import require_user
+from obs import log_kv
 from photo_lookup import (
     allow_paid_lookup,
     is_miss_fresh,
@@ -140,9 +142,35 @@ async def _search_photo_name(client: httpx.AsyncClient, api_key: str, query: str
     return photo_name.strip()
 
 
+def _log_thumb(
+    *,
+    cache_hit: bool,
+    search_calls: int = 0,
+    media_calls: int = 0,
+    provider_ms: int | None = None,
+    capped: bool = False,
+    query: str | None = None,
+) -> None:
+    fields: dict[str, Any] = {
+        "event": "thumb",
+        "cache_hit": cache_hit,
+        "search_calls": search_calls,
+        "media_calls": media_calls,
+        "provider_ms": provider_ms if (search_calls or media_calls) else None,
+    }
+    if capped:
+        fields["capped"] = True
+    if not cache_hit and query is not None:
+        fields["q"] = query[:60]
+    log_kv(logger, **fields)
+
+
 async def _resolve_thumb(query: str) -> dict[str, Any]:
     api_key = _google_key()
     cfg = supabase_config()
+    # Acumuladores si un getMedia de URI caducada falla y caemos a searchText.
+    prior_media_calls = 0
+    prior_provider_ms = 0
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         row: dict | None = None
@@ -154,21 +182,29 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                 row = None
 
         if row and row.get("miss") and is_miss_fresh(row.get("resolved_at")):
+            _log_thumb(cache_hit=True)
             return {"url": None}
 
         if row and not row.get("miss"):
             uri = row.get("photo_uri")
             if isinstance(uri, str) and uri.strip() and uri_still_fresh(row.get("photo_uri_expires_at")):
+                _log_thumb(cache_hit=True)
                 return {"url": uri}
 
             photo_name = row.get("photo_name")
             if isinstance(photo_name, str) and photo_name.strip() and api_key:
                 if not allow_paid_lookup():
+                    _log_thumb(cache_hit=False, capped=True, query=query)
                     return {"url": None}
                 try:
+                    t0 = time.perf_counter()
                     fresh = await _get_media_uri(client, api_key, photo_name.strip())
+                    media_ms = int((time.perf_counter() - t0) * 1000)
                 except Exception:
                     fresh = None
+                    media_ms = 0
+                prior_media_calls = 1
+                prior_provider_ms = media_ms
                 if fresh and cfg:
                     base, skey = cfg
                     try:
@@ -188,18 +224,45 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                     except Exception:
                         pass
                 if fresh:
+                    _log_thumb(
+                        cache_hit=False,
+                        media_calls=1,
+                        provider_ms=media_ms,
+                        query=query,
+                    )
                     return {"url": fresh}
                 # photo_name caducado → caer a searchText abajo
 
         if not api_key:
+            _log_thumb(
+                cache_hit=False,
+                media_calls=prior_media_calls,
+                provider_ms=prior_provider_ms if prior_media_calls else None,
+                query=query,
+            )
             return {"url": None}
         if not allow_paid_lookup():
+            _log_thumb(
+                cache_hit=False,
+                media_calls=prior_media_calls,
+                provider_ms=prior_provider_ms if prior_media_calls else None,
+                capped=True,
+                query=query,
+            )
             return {"url": None}
 
+        provider_ms = prior_provider_ms
+        search_calls = 0
+        media_calls = prior_media_calls
+
         try:
+            t0 = time.perf_counter()
             photo_name = await _search_photo_name(client, api_key, query)
+            provider_ms += int((time.perf_counter() - t0) * 1000)
+            search_calls = 1
         except Exception:
             photo_name = None
+            search_calls = 1
 
         if not photo_name:
             if cfg:
@@ -220,12 +283,23 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                     )
                 except Exception:
                     pass
+            _log_thumb(
+                cache_hit=False,
+                search_calls=search_calls,
+                media_calls=media_calls,
+                provider_ms=provider_ms,
+                query=query,
+            )
             return {"url": None}
 
         try:
+            t0 = time.perf_counter()
             uri = await _get_media_uri(client, api_key, photo_name)
+            provider_ms += int((time.perf_counter() - t0) * 1000)
+            media_calls += 1
         except Exception:
             uri = None
+            media_calls += 1
 
         if cfg:
             base, skey = cfg
@@ -246,6 +320,13 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
             except Exception:
                 pass
 
+        _log_thumb(
+            cache_hit=False,
+            search_calls=search_calls,
+            media_calls=media_calls,
+            provider_ms=provider_ms,
+            query=query,
+        )
         return {"url": uri}
 
 
