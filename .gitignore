@@ -1,5 +1,9 @@
 frontend/node_modules
+node_modules/
 backend/venv
+.venv/
+backend/__pycache__/
+*.tsbuildinfo
 .env
 .env.local
 .env*.local
