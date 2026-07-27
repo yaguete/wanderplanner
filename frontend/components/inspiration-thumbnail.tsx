@@ -10,7 +10,7 @@ import {
   getBasicThumbnail,
   getItemThumbnail,
 } from "@/lib/item-image"
-import { resolveThumbUrlOrNull } from "@/lib/unsplash"
+import { resolveThumbUrlOrNull } from "@/lib/thumbs"
 import { resolveVendorLogo } from "@/lib/vendor-logo"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
 
@@ -32,7 +32,7 @@ type InspirationThumbnailProps = (ItineraryItemProps | BasicProps) & {
 }
 
 /**
- * Miniatura para la lista de inspiración: `thumbUrl` del servidor, o Unsplash por query (nombre+región),
+ * Miniatura para la lista de inspiración: `thumbUrl` del servidor, o Places vía /thumb (nombre+región),
  * o Picsum como fallback. Carga diferida con IntersectionObserver.
  */
 export function InspirationThumbnail({ className, ...props }: InspirationThumbnailProps) {
@@ -111,14 +111,17 @@ function ItineraryItemInner({
   const fallback = useMemo(() => getItemThumbnail(item), [item.id, item.type])
   const [src, setSrc] = useState<string | null>(() => item.thumbUrl ?? null)
   const [settled, setSettled] = useState(() => !!item.thumbUrl)
+  const [imageLoaded, setImageLoaded] = useState(false)
 
   useEffect(() => {
+    setImageLoaded(false)
     if (item.thumbUrl) {
       setSrc(item.thumbUrl)
       setSettled(true)
       return
     }
     let cancel = false
+    setSettled(false)
     const q = buildThumbQuery(item.name, item.region, area)
     if (!q) {
       setSrc(fallback)
@@ -139,14 +142,20 @@ function ItineraryItemInner({
     return <div className="h-full w-full animate-pulse bg-muted" aria-hidden />
   }
   return (
-    <Image
-      src={src}
-      alt=""
-      fill
-      sizes="64px"
-      className="object-cover"
-      unoptimized
-    />
+    <>
+      {!imageLoaded ? (
+        <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden />
+      ) : null}
+      <Image
+        src={src}
+        alt=""
+        fill
+        sizes="64px"
+        className={cn("object-cover transition-opacity duration-200", imageLoaded ? "opacity-100" : "opacity-0")}
+        unoptimized
+        onLoad={() => setImageLoaded(true)}
+      />
+    </>
   )
 }
 
@@ -167,8 +176,10 @@ function BasicInner({
   const initial = mode === "vendorLogo" && logo.src ? logo.src : (item.thumbUrl ?? null)
   const [src, setSrc] = useState<string | null>(() => initial)
   const [settled, setSettled] = useState(() => !!initial)
+  const [imageLoaded, setImageLoaded] = useState(false)
 
   useEffect(() => {
+    setImageLoaded(false)
     if (mode === "vendorLogo" && logo.src) {
       setSrc(logo.src)
       setSettled(true)
@@ -180,6 +191,7 @@ function BasicInner({
       return
     }
     let cancel = false
+    setSettled(false)
     const q = buildBasicThumbQuery(item.name, item.category, area)
     if (!q) {
       setSrc(fallback)
@@ -199,17 +211,38 @@ function BasicInner({
   if (!settled || !src) {
     return <div className="h-full w-full animate-pulse bg-muted" aria-hidden />
   }
-  if (mode === "vendorLogo") {
-    return (
-      <img
-        src={src}
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover"
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
-  return <Image src={src} alt="" fill sizes="64px" className="object-cover" unoptimized />
+
+  const imgClass = cn(
+    "absolute inset-0 h-full w-full object-cover transition-opacity duration-200",
+    imageLoaded ? "opacity-100" : "opacity-0",
+  )
+
+  return (
+    <>
+      {!imageLoaded ? (
+        <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden />
+      ) : null}
+      {mode === "vendorLogo" ? (
+        <img
+          src={src}
+          alt=""
+          className={imgClass}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onLoad={() => setImageLoaded(true)}
+        />
+      ) : (
+        <Image
+          src={src}
+          alt=""
+          fill
+          sizes="64px"
+          className={cn("object-cover transition-opacity duration-200", imageLoaded ? "opacity-100" : "opacity-0")}
+          unoptimized
+          onLoad={() => setImageLoaded(true)}
+        />
+      )}
+    </>
+  )
 }

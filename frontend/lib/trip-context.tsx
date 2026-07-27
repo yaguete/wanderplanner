@@ -121,8 +121,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       return
     }
 
+    // Ya hidratado con éxito para este usuario (evita recargas en refrescos de sesión).
     if (hydratedFor.current === userId) return
-    hydratedFor.current = userId
+
     setIsLoading(true)
     setRehydrated(false)
 
@@ -134,6 +135,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     syncerRef.current = syncer
 
     let active = true
+    let completed = false
     void (async () => {
       try {
         const snapshot = await loadTripsState(supabase, userId)
@@ -142,6 +144,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         setTrips(snapshot.trips)
         setSources(snapshot.sources)
         setRehydrated(true)
+        hydratedFor.current = userId
+        completed = true
       } catch {
         if (active) toast.error("No hemos podido cargar tus viajes.")
       } finally {
@@ -151,6 +155,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false
+      // Strict Mode (dev) monta → limpia → remonta: si marcamos hydratedFor antes de
+      // terminar, el remount hace early-return y el spinner se queda eterno.
+      if (!completed) {
+        hydratedFor.current = null
+      }
     }
   }, [authLoading, user?.id])
 

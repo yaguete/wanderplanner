@@ -17,6 +17,7 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260726220000_init_wanderplanner.sql
 #   migrations/20260726223000_cleanup_anonymous_users.sql
 #   migrations/20260726230000_grant_data_api.sql
+#   migrations/20260728000000_place_thumbs_and_covers.sql
 
 # Opción B (si tienes Supabase CLI vinculado):
 supabase db push
@@ -29,7 +30,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://….supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ…
 ```
 
-5. **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (caché de extracciones) y, en producción, `REQUIRE_AUTH=true` + `SUPABASE_JWT_SECRET` (JWT Secret en Settings → API) o confiar en el JWKS del proyecto.
+5. **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (cachés `article_extractions`, `place_thumbs`, `destination_covers`) y, en producción, `REQUIRE_AUTH=true` + `SUPABASE_JWT_SECRET` (JWT Secret en Settings → API) o confiar en el JWKS del proyecto. Claves de imágenes solo en backend: `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`.
 
 ## Opcional
 
