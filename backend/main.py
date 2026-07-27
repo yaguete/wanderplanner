@@ -2,19 +2,28 @@
 WanderPlanner API: descarga HTML de un artículo, produce texto con enlaces para el LLM, llama a Claude
 con `agents/itinerary_builder.md` y devuelve JSON enriquecido con `article_html` y `og_image`.
 Cualquier cambio de esquema JSON del modelo debe alinearse con `frontend/types/itinerary` y con `itinerary-utils`.
+
+POST /itinerary responde como SSE (`text/event-stream`), no como un único JSON HTTP:
+  - event: progress  data: {"stage":"fetching"|"extracting"}  — heartbeat ~cada 10 s
+  - event: result    data: <mismo objeto itinerario que antes>  — payload final sin wrapper
+  - event: error     data: {"detail":"..."}  — fallo tras abrir el stream
+Auth vía Depends sigue devolviendo HTTP 401/403 antes del body.
 """
 import os
 import re
 import sys
 import json
 import asyncio
+from collections.abc import AsyncIterator, Awaitable
 from pathlib import Path
+from typing import Any, TypeVar
 
 import httpx
 import anthropic
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -299,6 +308,44 @@ async def enrich_thumbnails(itinerary: dict) -> None:
                 o["thumb_url"] = u
 
 
+HEARTBEAT_INTERVAL_S = 10.0
+
+T = TypeVar("T")
+
+
+def _sse(event: str, data: dict[str, Any] | Any) -> str:
+    payload = json.dumps(data, ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+def _is_sse_chunk(item: object) -> bool:
+    return isinstance(item, str) and item.startswith("event:")
+
+
+async def _await_with_heartbeats(
+    awaitable: Awaitable[T],
+    stage: str,
+) -> AsyncIterator[str | T]:
+    """Yields progress SSE strings every HEARTBEAT_INTERVAL_S until awaitable completes; then yields the result."""
+    task = asyncio.ensure_future(awaitable)
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_INTERVAL_S)
+            if not done:
+                yield _sse("progress", {"stage": stage})
+                continue
+            yield task.result()
+            return
+    except BaseException:
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        raise
+
+
 async def build_itinerary(url: str) -> dict:
     # Caché global por URL: el mismo artículo no se vuelve a extraer ni a pagar.
     cached = await get_cached_extraction(url)
@@ -314,6 +361,55 @@ async def build_itinerary(url: str) -> dict:
     return itinerary
 
 
+async def _stream_itinerary(url: str) -> AsyncIterator[str]:
+    try:
+        cached = await get_cached_extraction(url)
+        if cached is not None:
+            yield _sse("progress", {"stage": "fetching"})
+            yield _sse("result", cached)
+            return
+
+        yield _sse("progress", {"stage": "fetching"})
+        plain_text: str | None = None
+        cleaned_html: str | None = None
+        og_image: str | None = None
+        async for item in _await_with_heartbeats(fetch_article(url), "fetching"):
+            if _is_sse_chunk(item):
+                yield item  # type: ignore[misc]
+            else:
+                plain_text, cleaned_html, og_image = item  # type: ignore[misc]
+
+        assert plain_text is not None and cleaned_html is not None
+
+        yield _sse("progress", {"stage": "extracting"})
+        itinerary: dict | None = None
+        async for item in _await_with_heartbeats(
+            asyncio.to_thread(call_claude, plain_text),
+            "extracting",
+        ):
+            if _is_sse_chunk(item):
+                yield item  # type: ignore[misc]
+            else:
+                itinerary = item  # type: ignore[assignment]
+
+        assert itinerary is not None
+        itinerary["og_image"] = og_image
+        itinerary["article_html"] = cleaned_html
+
+        async for item in _await_with_heartbeats(enrich_thumbnails(itinerary), "extracting"):
+            if _is_sse_chunk(item):
+                yield item  # type: ignore[misc]
+
+        await store_extraction(url, itinerary)
+        yield _sse("result", itinerary)
+    except httpx.HTTPError as e:
+        yield _sse("error", {"detail": f"Error fetching article: {e}"})
+    except json.JSONDecodeError as e:
+        yield _sse("error", {"detail": f"Claude did not return valid JSON: {e}"})
+    except Exception as e:
+        yield _sse("error", {"detail": str(e)})
+
+
 # ── FastAPI endpoints ──────────────────────────────────────────────────────────
 
 class ItineraryRequest(BaseModel):
@@ -327,14 +423,15 @@ def root():
 
 @app.post("/itinerary")
 async def generate_itinerary(request: ItineraryRequest, _user=Depends(require_user)):
-    try:
-        return await build_itinerary(request.url)
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=400, detail=f"Error fetching article: {e}")
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Claude did not return valid JSON: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return StreamingResponse(
+        _stream_itinerary(request.url),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────

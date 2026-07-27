@@ -2,6 +2,7 @@
  * Cliente SSE del asistente: POST /assistant/chat
  */
 import { authHeaders } from "@/lib/api-auth"
+import { parseSse } from "@/lib/sse"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -43,54 +44,6 @@ function parseApiError(detail: unknown, status: number): string {
   }
   if (detail != null) return String(detail)
   return `Error del servidor: HTTP ${status}`
-}
-
-async function* parseSse(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<{
-  event: string
-  data: unknown
-}> {
-  const decoder = new TextDecoder()
-  let buffer = ""
-  let eventName = "message"
-  let dataLines: string[] = []
-
-  const flush = (): { event: string; data: unknown } | null => {
-    if (!dataLines.length) {
-      eventName = "message"
-      return null
-    }
-    const raw = dataLines.join("\n")
-    dataLines = []
-    const ev = eventName
-    eventName = "message"
-    try {
-      return { event: ev, data: JSON.parse(raw) }
-    } catch {
-      return { event: ev, data: raw }
-    }
-  }
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const parts = buffer.split("\n")
-    buffer = parts.pop() ?? ""
-    for (const line of parts) {
-      if (line === "") {
-        const item = flush()
-        if (item) yield item
-        continue
-      }
-      if (line.startsWith("event:")) {
-        eventName = line.slice(6).trim()
-      } else if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).trimStart())
-      }
-    }
-  }
-  const last = flush()
-  if (last) yield last
 }
 
 export async function streamAssistant(
