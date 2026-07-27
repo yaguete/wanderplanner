@@ -6,12 +6,59 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export type ItineraryProgressStage = "fetching" | "extracting"
 
-function parseDetail(detail: unknown, status?: number): string {
-  if (Array.isArray(detail)) {
-    return detail.map((x) => String((x as { msg?: string }).msg ?? x)).join("; ")
+export type UsageLimitKind = "guest" | "daily" | "monthly"
+
+/** Error HTTP 429 con cuota de uso (invitado vs registrado). */
+export class ApiLimitError extends Error {
+  readonly status = 429
+  readonly limit: UsageLimitKind
+
+  constructor(message: string, limit: UsageLimitKind) {
+    super(message)
+    this.name = "ApiLimitError"
+    this.limit = limit
   }
-  if (detail != null) return String(detail)
-  return status != null ? `Error del servidor: HTTP ${status}` : "Error del servidor"
+}
+
+function isUsageLimitKind(v: unknown): v is UsageLimitKind {
+  return v === "guest" || v === "daily" || v === "monthly"
+}
+
+/** Extrae mensaje legible y, si aplica, construye ApiLimitError desde el body FastAPI. */
+export function parseApiDetail(
+  detail: unknown,
+  status?: number,
+): { message: string; limitError?: ApiLimitError } {
+  if (detail != null && typeof detail === "object" && !Array.isArray(detail)) {
+    const obj = detail as { message?: unknown; limit?: unknown; detail?: unknown }
+    const message =
+      typeof obj.message === "string" && obj.message.trim()
+        ? obj.message
+        : typeof obj.detail === "string"
+          ? obj.detail
+          : status != null
+            ? `Error del servidor: HTTP ${status}`
+            : "Error del servidor"
+    if (status === 429 && isUsageLimitKind(obj.limit)) {
+      return { message, limitError: new ApiLimitError(message, obj.limit) }
+    }
+    return { message }
+  }
+  if (Array.isArray(detail)) {
+    return {
+      message: detail.map((x) => String((x as { msg?: string }).msg ?? x)).join("; "),
+    }
+  }
+  if (detail != null) {
+    return { message: String(detail) }
+  }
+  return {
+    message: status != null ? `Error del servidor: HTTP ${status}` : "Error del servidor",
+  }
+}
+
+function parseDetail(detail: unknown, status?: number): string {
+  return parseApiDetail(detail, status).message
 }
 
 export async function fetchItinerary(
@@ -39,9 +86,12 @@ export async function fetchItinerary(
     throw new Error(network)
   }
 
+  // El 429 llega como HTTP normal antes del SSE; no leer el stream aún.
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as { detail?: unknown }
-    throw new Error(parseDetail(error.detail, response.status))
+    const { message, limitError } = parseApiDetail(error.detail, response.status)
+    if (limitError) throw limitError
+    throw new Error(message)
   }
 
   if (!response.body) {

@@ -22,7 +22,7 @@ import httpx
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
-from auth import require_user
+from auth import AuthUser, require_user
 from obs import log_kv
 from photo_lookup import (
     allow_paid_lookup,
@@ -35,6 +35,7 @@ from photo_lookup import (
     supabase_headers,
     uri_still_fresh,
 )
+from usage import enforce_usage, record_event
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,11 @@ def _log_thumb(
     log_kv(logger, **fields)
 
 
-async def _resolve_thumb(query: str) -> dict[str, Any]:
+async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
+    """
+    Resuelve miniatura. Con single_flight, solo quien dispara la resolución real
+    paga cuota de usuario; los waiters reciben el resultado gratis (asimetría deseable).
+    """
     api_key = _google_key()
     cfg = supabase_config()
     # Acumuladores si un getMedia de URI caducada falla y caemos a searchText.
@@ -193,6 +198,7 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
 
             photo_name = row.get("photo_name")
             if isinstance(photo_name, str) and photo_name.strip() and api_key:
+                await enforce_usage(user, "photo_lookup")
                 if not allow_paid_lookup():
                     _log_thumb(cache_hit=False, capped=True, query=query)
                     return {"url": None}
@@ -224,6 +230,8 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                     except Exception:
                         pass
                 if fresh:
+                    if user is not None:
+                        await record_event(user.id, "photo_lookup", cost_hint=1)
                     _log_thumb(
                         cache_hit=False,
                         media_calls=1,
@@ -234,6 +242,8 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                 # photo_name caducado → caer a searchText abajo
 
         if not api_key:
+            if user is not None and prior_media_calls:
+                await record_event(user.id, "photo_lookup", cost_hint=prior_media_calls)
             _log_thumb(
                 cache_hit=False,
                 media_calls=prior_media_calls,
@@ -241,7 +251,11 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                 query=query,
             )
             return {"url": None}
+        if prior_media_calls == 0:
+            await enforce_usage(user, "photo_lookup")
         if not allow_paid_lookup():
+            if user is not None and prior_media_calls:
+                await record_event(user.id, "photo_lookup", cost_hint=prior_media_calls)
             _log_thumb(
                 cache_hit=False,
                 media_calls=prior_media_calls,
@@ -283,6 +297,9 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
                     )
                 except Exception:
                     pass
+            billable = search_calls + media_calls
+            if user is not None and billable:
+                await record_event(user.id, "photo_lookup", cost_hint=billable)
             _log_thumb(
                 cache_hit=False,
                 search_calls=search_calls,
@@ -320,6 +337,9 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
             except Exception:
                 pass
 
+        billable = search_calls + media_calls
+        if user is not None and billable:
+            await record_event(user.id, "photo_lookup", cost_hint=billable)
         _log_thumb(
             cache_hit=False,
             search_calls=search_calls,
@@ -331,7 +351,10 @@ async def _resolve_thumb(query: str) -> dict[str, Any]:
 
 
 @router.get("/thumb")
-async def get_thumb(q: str = Query(""), _user=Depends(require_user)):
+async def get_thumb(
+    q: str = Query(""),
+    user: AuthUser | None = Depends(require_user),
+):
     """
     Miniatura Places por consulta. 200 {"url": string|null}.
 
@@ -342,7 +365,7 @@ async def get_thumb(q: str = Query(""), _user=Depends(require_user)):
         return JSONResponse({"url": None})
 
     async def run() -> dict[str, Any]:
-        return await _resolve_thumb(query)
+        return await _resolve_thumb(query, user)
 
     result = await single_flight(f"thumb:{query}", run)
     return JSONResponse(result)

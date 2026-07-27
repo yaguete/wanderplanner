@@ -23,7 +23,9 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { getDayUserDescription } from "@/lib/day-heading"
+import { ApiLimitError } from "@/lib/api"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
+import { toast } from "sonner"
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
 
@@ -161,6 +163,15 @@ export default function InspirationPanel({
       setAddSourceOpen(false)
       setSourceTab("source")
     } catch (err) {
+      if (err instanceof ApiLimitError && err.limit === "guest") {
+        requireAccount("source-limit")
+        setAddSourceOpen(false)
+        return
+      }
+      if (err instanceof ApiLimitError) {
+        toast.error(err.message)
+        return
+      }
       setExtractError(
         err instanceof Error
           ? err.message
@@ -179,6 +190,14 @@ export default function InspirationPanel({
     try {
       await refetchSource(currentSource.id, currentSource.url)
     } catch (e) {
+      if (e instanceof ApiLimitError && e.limit === "guest") {
+        requireAccount("source-limit")
+        return
+      }
+      if (e instanceof ApiLimitError) {
+        toast.error(e.message)
+        return
+      }
       setRefetchError(
         e instanceof Error ? e.message : "No se pudo recargar el artículo. Inténtalo de nuevo.",
       )

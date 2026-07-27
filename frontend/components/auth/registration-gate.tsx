@@ -22,7 +22,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
 
-export type GateReason = "new-trip" | "second-source" | "home"
+export type GateReason =
+  | "new-trip"
+  | "second-source"
+  | "home"
+  | "source-limit"
+  | "assistant-limit"
 
 const COPY: Record<GateReason, { title: string; description: string }> = {
   "new-trip": {
@@ -39,6 +44,16 @@ const COPY: Record<GateReason, { title: string; description: string }> = {
     title: "Crea tu cuenta para acceder a tus viajes",
     description:
       "Guarda lo que has planificado y recupéralo cuando quieras, aquí o en el móvil.",
+  },
+  "source-limit": {
+    title: "Crea tu cuenta para combinar más fuentes",
+    description:
+      "Con una cuenta puedes añadir todos los artículos que quieras al mismo viaje y seguir planificando sin límite de invitado.",
+  },
+  "assistant-limit": {
+    title: "Crea tu cuenta para seguir con el asistente",
+    description:
+      "El asistente te ayuda a afinar el plan. Con cuenta tienes más mensajes y tu viaje queda guardado.",
   },
 }
 

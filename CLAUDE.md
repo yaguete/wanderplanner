@@ -118,6 +118,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Normalizar jsonb a tablas hijas solo si hace falta colaboración/queries.
 - `REQUIRE_AUTH=true` en producción.
 - Metering de uso de Places/Unsplash (T1.2) antes de producción: `/thumb` y `/cover` solo tienen cinturón `MAX_PHOTO_LOOKUPS_DAY`.
+- Límites por usuario (`usage_events`): programar `cleanup_usage_events()` en producción (T7.3) si pg_cron no está activo.
 - Placeholders: compartir/descargar; landing definitiva.
 
 ## Reglas que no se rompen

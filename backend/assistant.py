@@ -17,7 +17,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from article_fetch import fetch_article
-from auth import require_user
+from auth import AuthUser, require_user
 from country_briefs import (
     ISO_TO_NAME,
     ensure_briefs,
@@ -28,6 +28,7 @@ from country_briefs import (
     list_known_codes,
     fetch_and_cache,
 )
+from usage import enforce_usage, record_event
 from web_search import tavily_search
 
 PROMPT_PATH = Path(__file__).parent / "agents" / "travel_assistant.md"
@@ -299,7 +300,11 @@ def _build_system_prompt(
     )
 
 
-async def _stream_chat(req: AssistantRequest) -> AsyncIterator[str]:
+async def _stream_chat(
+    req: AssistantRequest,
+    user: AuthUser | None,
+) -> AsyncIterator[str]:
+    rounds_done = 0
     try:
         briefs = await ensure_briefs(req.countries or [])
         country_md = format_briefs_for_prompt(briefs)
@@ -330,6 +335,7 @@ async def _stream_chat(req: AssistantRequest) -> AsyncIterator[str]:
                 tools=TOOLS,
                 stream=True,
             )
+            rounds_done += 1
 
             content_parts: list[str] = []
             # tool_call_index -> accumulated
@@ -432,15 +438,24 @@ async def _stream_chat(req: AssistantRequest) -> AsyncIterator[str]:
         yield _sse("error", {"message": str(e.detail)})
     except Exception as e:
         yield _sse("error", {"message": str(e)})
+    finally:
+        # Contar aunque el cliente cierre el stream (GeneratorExit). Solo si hubo gasto.
+        if user is not None and rounds_done > 0:
+            await record_event(user.id, "assistant_message", cost_hint=rounds_done)
 
 
 @router.post("/assistant/chat")
-async def assistant_chat(request: AssistantRequest, _user=Depends(require_user)):
+async def assistant_chat(
+    request: AssistantRequest,
+    user: AuthUser | None = Depends(require_user),
+):
     if not (os.getenv("DEEPSEEK_API_KEY") or "").strip():
         raise HTTPException(status_code=500, detail="DEEPSEEK_API_KEY no configurada")
 
+    await enforce_usage(user, "assistant_message")
+
     return StreamingResponse(
-        _stream_chat(request),
+        _stream_chat(request, user),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

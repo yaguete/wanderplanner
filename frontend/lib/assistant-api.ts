@@ -1,6 +1,7 @@
 /**
  * Cliente SSE del asistente: POST /assistant/chat
  */
+import { ApiLimitError, parseApiDetail } from "@/lib/api"
 import { authHeaders } from "@/lib/api-auth"
 import { parseSse } from "@/lib/sse"
 
@@ -35,15 +36,7 @@ export type AssistantStreamHandlers = {
   onStatus?: (label: string | null) => void
   onAction?: (action: AssistantAction) => void
   onDone?: () => void
-  onError?: (message: string) => void
-}
-
-function parseApiError(detail: unknown, status: number): string {
-  if (Array.isArray(detail)) {
-    return detail.map((x) => String((x as { msg?: string }).msg ?? x)).join("; ")
-  }
-  if (detail != null) return String(detail)
-  return `Error del servidor: HTTP ${status}`
+  onError?: (error: string | ApiLimitError) => void
 }
 
 export async function streamAssistant(
@@ -83,9 +76,11 @@ export async function streamAssistant(
     return
   }
 
+  // El 429 llega como HTTP normal antes del SSE.
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as { detail?: unknown }
-    handlers.onError?.(parseApiError(error.detail, response.status))
+    const { message, limitError } = parseApiDetail(error.detail, response.status)
+    handlers.onError?.(limitError ?? message)
     return
   }
 

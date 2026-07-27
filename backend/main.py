@@ -34,11 +34,12 @@ load_dotenv()
 
 from article_fetch import fetch_article  # noqa: E402
 from assistant import router as assistant_router  # noqa: E402
-from auth import require_user  # noqa: E402
+from auth import AuthUser, require_user  # noqa: E402
 from covers import router as covers_router  # noqa: E402
 from extraction_cache import get_cached_extraction, store_extraction  # noqa: E402
 from obs import log_kv  # noqa: E402
 from place_thumbs import router as thumbs_router  # noqa: E402
+from usage import enforce_usage, record_event  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -225,13 +226,18 @@ def _call_claude_timed(plain_text: str) -> tuple[dict, int | None, int | None, i
     return itinerary, input_tokens, output_tokens, claude_ms
 
 
-async def _stream_itinerary(url: str) -> AsyncIterator[str]:
+async def _stream_itinerary(
+    url: str,
+    *,
+    cached: dict[str, Any] | None,
+    user: AuthUser | None,
+) -> AsyncIterator[str]:
+    """Si `cached` viene del handler, no se vuelve a consultar article_extractions."""
     fetch_ms: int | None = None
     claude_ms: int | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
     try:
-        cached = await get_cached_extraction(url)
         if cached is not None:
             _strip_thumb_urls(cached)
             _log_extraction(
@@ -272,6 +278,8 @@ async def _stream_itinerary(url: str) -> AsyncIterator[str]:
         itinerary["article_html"] = cleaned_html
         _strip_thumb_urls(itinerary)
         await store_extraction(url, itinerary)
+        if user is not None:
+            await record_event(user.id, "extraction", cost_hint=output_tokens)
         _log_extraction(
             url=url,
             outcome="ok",
@@ -333,9 +341,16 @@ def root():
 
 
 @app.post("/itinerary")
-async def generate_itinerary(request: ItineraryRequest, _user=Depends(require_user)):
+async def generate_itinerary(
+    request: ItineraryRequest,
+    user: AuthUser | None = Depends(require_user),
+):
+    cached = await get_cached_extraction(request.url)
+    if cached is None:
+        # Solo cuenta / bloquea cuando vamos a llamar a Claude (miss de caché).
+        await enforce_usage(user, "extraction")
     return StreamingResponse(
-        _stream_itinerary(request.url),
+        _stream_itinerary(request.url, cached=cached, user=user),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

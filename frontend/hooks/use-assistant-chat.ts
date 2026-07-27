@@ -7,6 +7,7 @@ import {
   type AssistantAction,
   type AssistantChatMessage,
 } from "@/lib/assistant-api"
+import { ApiLimitError } from "@/lib/api"
 import {
   buildTripBriefing,
   buildUserProfileBriefing,
@@ -26,6 +27,8 @@ import {
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useTrips } from "@/lib/trip-context"
+import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { toast } from "sonner"
 
 export type ChatAction = AssistantAction & {
   id: string
@@ -92,6 +95,7 @@ function toSummary(c: AssistantConversation): AssistantConversationSummary {
 export function useAssistantChat(tripId: string, trip: Trip | undefined, sources: Source[]) {
   const { user, profile, favoriteReferences } = useAuth()
   const { loadTripSourcesWithArticles } = useTrips()
+  const { requireAccount } = useRegistrationGate()
   const userId = user?.id ?? null
   const profileRef = useRef(profile)
   const referencesRef = useRef(favoriteReferences)
@@ -415,11 +419,22 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
             abortRef.current = null
             setMessages((prev) => prev.filter((m) => !isEmptyAssistant(m)))
           },
-          onError: (message) => {
-            setError(message)
+          onError: (err) => {
             setIsStreaming(false)
             setStatusLabel(null)
             abortRef.current = null
+            if (err instanceof ApiLimitError && err.limit === "guest") {
+              requireAccount("assistant-limit")
+              setMessages((prev) => prev.filter((m) => m.id !== currentAssistantId))
+              return
+            }
+            if (err instanceof ApiLimitError) {
+              toast.error(err.message)
+              setMessages((prev) => prev.filter((m) => m.id !== currentAssistantId))
+              return
+            }
+            const message = typeof err === "string" ? err : "Error del asistente"
+            setError(message)
             const id = currentAssistantId
             setMessages((prev) =>
               prev.map((m) =>
@@ -442,7 +457,7 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       setStatusLabel(null)
       abortRef.current = null
     },
-    [isStreaming, persistActiveId, loadTripSourcesWithArticles],
+    [isStreaming, persistActiveId, loadTripSourcesWithArticles, requireAccount],
   )
 
   const setActionStatus = useCallback(
