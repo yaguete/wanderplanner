@@ -254,6 +254,15 @@ def _count_sitios(text: str) -> int:
     return unique
 
 
+TOOL_NAMES = (
+    "web_search",
+    "fetch_url",
+    "get_country_brief",
+    "propose_add_item",
+    "propose_add_source",
+)
+
+
 def run_once(
     client: httpx.Client,
     base_url: str,
@@ -283,11 +292,17 @@ def run_once(
     actions_invalid = 0
     rounds = 0
     errors: list[str] = []
+    saw_done = False
+    tool_counts: dict[str, int] = {k: 0 for k in TOOL_NAMES}
     for name, data in events:
         if name == "status" and data.get("label") == "Pensando…":
             rounds += 1
         elif name == "delta":
             text_parts.append(str(data.get("text") or ""))
+        elif name == "tool" and data.get("status") == "running":
+            tname = str(data.get("name") or "")
+            if tname in tool_counts:
+                tool_counts[tname] += 1
         elif name == "action":
             kind = data.get("kind")
             if kind == "add_item":
@@ -297,6 +312,8 @@ def run_once(
                     actions_invalid += 1
             elif kind == "add_source":
                 add_source += 1
+        elif name == "done":
+            saw_done = True
         elif name == "error":
             errors.append(str(data.get("message") or data))
 
@@ -308,10 +325,28 @@ def run_once(
         "add_source": add_source,
         "actions_invalid": actions_invalid,
         "rounds": rounds,
+        "tool_counts": tool_counts,
+        "saw_done": saw_done,
         "sitios": _count_sitios(text),
         "elapsed_s": round(elapsed, 1),
         "errors": errors,
         "text_preview": text[:200].replace("\n", " "),
+    }
+
+
+def _empty_result(*, failed: bool = False, errors: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "actions": 0,
+        "add_item": 0,
+        "add_source": 0,
+        "actions_invalid": 0,
+        "rounds": 0,
+        "tool_counts": {k: 0 for k in TOOL_NAMES},
+        "saw_done": False,
+        "sitios": 0,
+        "elapsed_s": 0,
+        "errors": errors or [],
+        "failed": failed,
     }
 
 
@@ -327,7 +362,7 @@ def _run_scenario(
     print(f"description={scenario.description}")
     print(f"user_message={scenario.user_message!r}")
     if scenario.positive:
-        print("acceptance=mean>=4.5 min>=3 actions_invalid==0")
+        print("acceptance=mean>=4.5 min>=3 actions_invalid==0 no_sse_error")
     else:
         print(f"acceptance=mean<={scenario.expected_mean_max} (regression if mean>0.5)")
     print("---")
@@ -338,28 +373,20 @@ def _run_scenario(
             r = run_once(client, base_url, scenario, timeout)
         except Exception as e:
             print(f"run={i}/{runs} FAIL {type(e).__name__}: {e}")
-            results.append(
-                {
-                    "actions": 0,
-                    "add_item": 0,
-                    "add_source": 0,
-                    "actions_invalid": 0,
-                    "rounds": 0,
-                    "sitios": 0,
-                    "elapsed_s": 0,
-                    "errors": [str(e)],
-                    "failed": True,
-                }
-            )
+            results.append(_empty_result(failed=True, errors=[str(e)]))
             continue
         results.append(r)
         err = f" errors={r['errors']}" if r["errors"] else ""
         warn_rounds = " ROUNDS_MAX" if r["rounds"] >= MAX_ROUNDS else ""
+        tools_s = " ".join(
+            f"{k}={v}" for k, v in r["tool_counts"].items() if v
+        ) or "tools=-"
         print(
             f"run={i}/{runs} actions={r['actions']} "
             f"add_item={r['add_item']} add_source={r['add_source']} "
             f"actions_invalid={r['actions_invalid']} rounds={r['rounds']} "
-            f"sitios≈{r['sitios']} elapsed_s={r['elapsed_s']}{err}{warn_rounds}"
+            f"{tools_s} sitios≈{r['sitios']} elapsed_s={r['elapsed_s']}"
+            f"{err}{warn_rounds}"
         )
         if r.get("text_preview"):
             print(f"  preview: {r['text_preview'][:120]}…")
@@ -368,24 +395,39 @@ def _run_scenario(
     invalids = [int(r["actions_invalid"]) for r in results]
     rounds_l = [int(r["rounds"]) for r in results]
     failed = sum(1 for r in results if r.get("failed"))
+    sse_errors = sum(1 for r in results if r.get("errors"))
     mean_a = statistics.mean(actions) if actions else 0.0
     min_a = min(actions) if actions else 0
     max_a = max(actions) if actions else 0
     mean_r = statistics.mean(rounds_l) if rounds_l else 0.0
     max_r = max(rounds_l) if rounds_l else 0
 
+    tool_means: dict[str, float] = {}
+    for k in TOOL_NAMES:
+        vals = [int(r.get("tool_counts", {}).get(k, 0)) for r in results]
+        tool_means[k] = statistics.mean(vals) if vals else 0.0
+
     if scenario.positive:
-        ok = mean_a >= 4.5 and min_a >= 3 and sum(invalids) == 0 and failed == 0
+        ok = (
+            mean_a >= 4.5
+            and min_a >= 3
+            and sum(invalids) == 0
+            and failed == 0
+            and sse_errors == 0
+        )
     else:
-        ok = mean_a <= scenario.expected_mean_max and failed == 0
+        ok = mean_a <= scenario.expected_mean_max and failed == 0 and sse_errors == 0
 
     rounds_warn = max_r >= MAX_ROUNDS
+    tools_line = " ".join(f"{k}_mean={v:.2f}" for k, v in tool_means.items() if v > 0)
     print("---")
     print(
         f"summary scenario={scenario.id} runs={len(results)} failed={failed} "
+        f"sse_errors={sse_errors} "
         f"actions_mean={mean_a:.2f} actions_min={min_a} actions_max={max_a} "
         f"actions_invalid_total={sum(invalids)} "
         f"rounds_mean={mean_r:.2f} rounds_max={max_r} "
+        f"{tools_line} "
         f"ok={'yes' if ok else 'NO'}{' ROUNDS_HIT_MAX' if rounds_warn else ''}"
     )
     print()
@@ -400,6 +442,8 @@ def _run_scenario(
         "rounds_mean": mean_r,
         "rounds_max": max_r,
         "failed": failed,
+        "sse_errors": sse_errors,
+        "tool_means": tool_means,
     }
 
 
@@ -452,11 +496,16 @@ def main() -> int:
     for s in summaries:
         flag = "PASS" if s["ok"] else "FAIL"
         rw = " rounds_max=8!" if s["rounds_warn"] else ""
+        tools = " ".join(
+            f"{k}={v:.2f}" for k, v in s.get("tool_means", {}).items() if v > 0
+        )
         print(
             f"{flag} {s['scenario']}: actions_mean={s['actions_mean']:.2f} "
             f"min={s['actions_min']} max={s['actions_max']} "
             f"invalid={s['actions_invalid_total']} "
+            f"sse_errors={s.get('sse_errors', 0)} "
             f"rounds_mean={s['rounds_mean']:.2f} rounds_max={s['rounds_max']}{rw}"
+            + (f" tools[{tools}]" if tools else "")
         )
         if not s["ok"]:
             all_ok = False

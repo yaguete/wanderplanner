@@ -308,12 +308,23 @@ def _build_system_prompt(
     )
 
 
+_TOOL_COUNT_KEYS = (
+    "web_search",
+    "fetch_url",
+    "get_country_brief",
+    "propose_add_item",
+    "propose_add_source",
+)
+
+
 async def _stream_chat(
     req: AssistantRequest,
     user: AuthUser | None,
 ) -> AsyncIterator[str]:
     rounds_done = 0
     actions_emitted = 0
+    rounds_exhausted = False
+    tool_counts: dict[str, int] = {k: 0 for k in _TOOL_COUNT_KEYS}
     try:
         briefs = await ensure_briefs(req.countries or [])
         country_md = format_briefs_for_prompt(briefs)
@@ -335,15 +346,23 @@ async def _stream_chat(
         client = _deepseek_client()
         model = _assistant_model()
         max_rounds = 8
+        # Última ronda reservada sin tools: el modelo cierra en prosa con lo ya obtenido.
+        tool_rounds = max_rounds - 1
 
-        for _round in range(max_rounds):
+        for round_idx in range(max_rounds):
+            allow_tools = round_idx < tool_rounds
+            if not allow_tools:
+                rounds_exhausted = True
+
             yield _sse("status", {"label": "Pensando…"})
-            stream = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=TOOLS,
-                stream=True,
-            )
+            create_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "stream": True,
+            }
+            if allow_tools:
+                create_kwargs["tools"] = TOOLS
+            stream = await client.chat.completions.create(**create_kwargs)
             rounds_done += 1
 
             content_parts: list[str] = []
@@ -368,7 +387,7 @@ async def _stream_chat(
                     content_parts.append(delta.content)
                     yield _sse("delta", {"text": delta.content})
 
-                if delta.tool_calls:
+                if allow_tools and delta.tool_calls:
                     for tc in delta.tool_calls:
                         idx = tc.index if tc.index is not None else 0
                         slot = tool_acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
@@ -387,7 +406,7 @@ async def _stream_chat(
             else:
                 assistant_msg["content"] = None
 
-            if tool_acc and finish_reason == "tool_calls":
+            if allow_tools and tool_acc and finish_reason == "tool_calls":
                 # Cierra el bocadillo actual antes de las tools (si hubo texto).
                 if full_content.strip():
                     yield _sse("segment", {})
@@ -410,6 +429,8 @@ async def _stream_chat(
 
                 for tc in tool_calls_payload:
                     fname = tc["function"]["name"]
+                    if fname in tool_counts:
+                        tool_counts[fname] += 1
                     raw_args = tc["function"]["arguments"]
                     try:
                         args = json.loads(raw_args) if raw_args else {}
@@ -436,14 +457,16 @@ async def _stream_chat(
                     )
                 continue
 
-            # Respuesta final (sin más tools)
+            # Respuesta final (sin más tools), o cierre forzado de la ronda reservada.
             yield _sse("status", {"label": None})
             if full_content or not tool_acc:
                 messages.append(assistant_msg)
             yield _sse("done", {})
             return
 
-        yield _sse("error", {"message": "Demasiadas rondas de herramientas; inténtalo de nuevo."})
+        # No debería alcanzarse: la última ronda no hace continue. Cierre seguro.
+        yield _sse("status", {"label": None})
+        yield _sse("done", {})
     except HTTPException as e:
         yield _sse("error", {"message": str(e.detail)})
     except Exception as e:
@@ -451,12 +474,16 @@ async def _stream_chat(
     finally:
         # Contar aunque el cliente cierre el stream (GeneratorExit). Solo si hubo gasto.
         if rounds_done > 0:
-            log_kv(
-                logger,
-                event="assistant_chat",
-                actions=actions_emitted,
-                rounds=rounds_done,
-            )
+            fields: dict[str, Any] = {
+                "event": "assistant_chat",
+                "actions": actions_emitted,
+                "rounds": rounds_done,
+                "rounds_exhausted": rounds_exhausted,
+            }
+            for name, n in tool_counts.items():
+                if n:
+                    fields[name] = n
+            log_kv(logger, **fields)
         if user is not None and rounds_done > 0:
             await record_event(user.id, "assistant_message", cost_hint=rounds_done)
 
