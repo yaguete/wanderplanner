@@ -5,6 +5,7 @@ POST /assistant/chat → SSE (delta | tool | action | done | error).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import date
@@ -28,12 +29,14 @@ from country_briefs import (
     list_known_codes,
     fetch_and_cache,
 )
+from obs import log_kv
 from usage import enforce_usage, record_event
 from web_search import tavily_search
 
 PROMPT_PATH = Path(__file__).parent / "agents" / "travel_assistant.md"
 
 router = APIRouter(tags=["assistant"])
+logger = logging.getLogger(__name__)
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -119,6 +122,11 @@ TOOLS: list[dict[str, Any]] = [
             "name": "propose_add_item",
             "description": (
                 "Propone añadir un ítem a un día del itinerario del usuario. "
+                "Úsala solo cuando el usuario pida recomendaciones o sitios "
+                "para añadir al plan: una recomendación concreta = una llamada "
+                "(day_id del briefing). No la uses en preguntas informativas, "
+                "de visados, de opinión sobre el plan, ni al hablar de un ítem "
+                "que ya está en el itinerario. "
                 "No lo añade automáticamente; el usuario debe confirmar."
             ),
             "parameters": {
@@ -305,6 +313,7 @@ async def _stream_chat(
     user: AuthUser | None,
 ) -> AsyncIterator[str]:
     rounds_done = 0
+    actions_emitted = 0
     try:
         briefs = await ensure_briefs(req.countries or [])
         country_md = format_briefs_for_prompt(briefs)
@@ -414,6 +423,7 @@ async def _stream_chat(
                         fname, args, req.preferred_domains
                     )
                     if action:
+                        actions_emitted += 1
                         yield _sse("action", action)
                     yield _sse("tool", {"name": fname, "status": "done"})
 
@@ -440,6 +450,13 @@ async def _stream_chat(
         yield _sse("error", {"message": str(e)})
     finally:
         # Contar aunque el cliente cierre el stream (GeneratorExit). Solo si hubo gasto.
+        if rounds_done > 0:
+            log_kv(
+                logger,
+                event="assistant_chat",
+                actions=actions_emitted,
+                rounds=rounds_done,
+            )
         if user is not None and rounds_done > 0:
             await record_event(user.id, "assistant_message", cost_hint=rounds_done)
 
