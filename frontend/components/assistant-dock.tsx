@@ -39,6 +39,7 @@ import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
 import { ITEM_LABELS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
+import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 
 /** Offset desde la derecha cuando «Mi viaje» está abierto (right-2 + ancho panel + gap). */
 export const PLAN_PANEL_RIGHT_OFFSET =
@@ -441,7 +442,7 @@ export function AssistantPanelLayer({
         const item: UserDayItem = {
           id: crypto.randomUUID(),
           sourceItemId: `assistant-${crypto.randomUUID()}`,
-          sourceId: "assistant",
+          sourceId: ASSISTANT_SOURCE_ID,
           type: itemType,
           name: action.name,
           detail: action.detail ?? null,

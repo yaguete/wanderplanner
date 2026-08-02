@@ -20,6 +20,7 @@ import { ItineraryViewModeTabs, type ItineraryViewMode } from "@/components/itin
 import { ItineraryMapView, type ItineraryMapPoint } from "@/components/itinerary-map-view"
 import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
+import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
 
 function normalizeDayLabel(raw: string): string {
   return raw.replace(/\s+[—–]\s+/g, " - ")
@@ -49,6 +50,7 @@ export default function ItineraryPanel({
     getTrip,
     getTripSources,
     addDay,
+    addItemToDay,
     removeItemFromDay,
     removeSelectedDays,
     removeBasicFromTrip,
@@ -79,6 +81,13 @@ export default function ItineraryPanel({
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [listMode, setListMode] = useState<"list" | "map">("list")
+  const [manualDialogOpen, setManualDialogOpen] = useState(false)
+  const [manualDialogDayId, setManualDialogDayId] = useState<string | null>(null)
+
+  const openManualDialog = useCallback((dayId?: string | null) => {
+    setManualDialogDayId(dayId ?? null)
+    setManualDialogOpen(true)
+  }, [])
 
   useEffect(() => {
     if (!trip) return
@@ -123,6 +132,7 @@ export default function ItineraryPanel({
             type: it.type,
             dayNumber: i + 1,
             region: resolveRegion(it),
+            coords: it.coords ?? null,
           })
         }
       }
@@ -297,29 +307,40 @@ export default function ItineraryPanel({
               </button>
             </div>
             {listMode === "list" ? (
-              <button
-                type="button"
-                onClick={handleDayListAction}
-                className={cn(
-                  "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
-                  hasDaySelection
-                    ? "text-destructive hover:text-destructive/90"
-                    : "text-foreground hover:text-muted-foreground",
-                )}
-                aria-label={hasDaySelection ? "Eliminar día" : "Añadir día"}
-              >
-                {hasDaySelection ? (
-                  <>
-                    <X className="h-3.5 w-3.5 shrink-0" />
-                    Eliminar día
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-3.5 w-3.5 shrink-0" />
-                    Añadir día
-                  </>
-                )}
-              </button>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                <button
+                  type="button"
+                  onClick={() => openManualDialog(null)}
+                  className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
+                  aria-label="Añadir elemento"
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                  Añadir elemento
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDayListAction}
+                  className={cn(
+                    "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
+                    hasDaySelection
+                      ? "text-destructive hover:text-destructive/90"
+                      : "text-foreground hover:text-muted-foreground",
+                  )}
+                  aria-label={hasDaySelection ? "Eliminar día" : "Añadir día"}
+                >
+                  {hasDaySelection ? (
+                    <>
+                      <X className="h-3.5 w-3.5 shrink-0" />
+                      Eliminar día
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3.5 w-3.5 shrink-0" />
+                      Añadir día
+                    </>
+                  )}
+                </button>
+              </div>
             ) : null}
           </div>
 
@@ -345,6 +366,7 @@ export default function ItineraryPanel({
                   canMoveItemDown={canMoveDown}
                   onMoveItemUp={(itemId) => moveItemOneStep(itemId, "up")}
                   onMoveItemDown={(itemId) => moveItemOneStep(itemId, "down")}
+                  onAddManualItem={() => openManualDialog(day.id)}
                 />
               ))}
             </div>
@@ -400,7 +422,9 @@ export default function ItineraryPanel({
                           variant="planned"
                           title={item.name}
                           type={item.type}
+                          sourceId={item.sourceId}
                           sourceAuthor={item.sourceAuthor}
+                          detail={item.detail}
                           regionLabel={resolveRegion(item)}
                           href={item.affiliateUrl}
                           onRemove={() => removeItemFromDay(tripId, day.id, item.id)}
@@ -445,6 +469,7 @@ export default function ItineraryPanel({
                             variant="basic-planned"
                             title={b.name}
                             category={b.category}
+                            sourceId={b.sourceId}
                             sourceAuthor={b.sourceAuthor}
                             vendor={b.vendor}
                             href={b.affiliateUrl}
@@ -459,6 +484,23 @@ export default function ItineraryPanel({
           )}
         </div>
       )}
+
+      <AddManualItemDialog
+        open={manualDialogOpen}
+        onOpenChange={(next) => {
+          setManualDialogOpen(next)
+          if (!next) setManualDialogDayId(null)
+        }}
+        days={trip.days}
+        initialDayId={manualDialogDayId}
+        countryCodes={trip.countries}
+        destinationHint={
+          trip.countries.length ? countriesPlainList(trip.countries) : trip.name
+        }
+        onSubmit={(item, dayId) => {
+          addItemToDay(tripId, dayId, item)
+        }}
+      />
     </div>
   )
 }
@@ -552,7 +594,9 @@ function DayItineraryTimeline({
               variant="planned"
               title={item.name}
               type={item.type}
+              sourceId={item.sourceId}
               sourceAuthor={item.sourceAuthor}
+              detail={item.detail}
               regionLabel={resolveRegion(item)}
               href={item.affiliateUrl}
               onRemove={() => onRemoveItem(item.id)}
@@ -612,6 +656,7 @@ function DaySection({
   canMoveItemDown,
   onMoveItemUp,
   onMoveItemDown,
+  onAddManualItem,
 }: {
   tripId: string
   dayId: string
@@ -628,6 +673,7 @@ function DaySection({
   canMoveItemDown: (itemId: string) => boolean
   onMoveItemUp: (itemId: string) => void
   onMoveItemDown: (itemId: string) => void
+  onAddManualItem: () => void
 }) {
   const { updateDayLabel } = useTrips()
   const [editingDescription, setEditingDescription] = useState(false)
@@ -766,8 +812,18 @@ function DaySection({
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-muted-foreground/20 bg-muted/20 py-5 text-center text-sm text-muted-foreground/80">
-          Añade elementos desde Fuentes
+        <div className="rounded-2xl border-2 border-dashed border-muted-foreground/20 bg-muted/20 px-4 py-5 text-center text-sm text-muted-foreground">
+          <p>
+            Añade elementos desde Fuentes o{" "}
+            <button
+              type="button"
+              onClick={onAddManualItem}
+              className="font-medium text-foreground underline-offset-2 hover:underline"
+            >
+              añade uno propio
+            </button>
+            .
+          </p>
         </div>
       ) : (
         <DayItineraryTimeline

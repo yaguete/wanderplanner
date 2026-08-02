@@ -5,6 +5,7 @@ import { Check, ExternalLink, Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
+import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
 function TypeBadge({ type }: { type: ItemType }) {
@@ -49,7 +50,9 @@ type PlannedCardProps = {
   variant: "planned"
   title: string
   type: ItemType
+  sourceId: string
   sourceAuthor: string
+  detail?: string | null
   regionLabel?: string | null
   href?: string | null
   onRemove: () => void
@@ -73,6 +76,7 @@ type BasicPlannedCardProps = {
   variant: "basic-planned"
   title: string
   category: BasicCategory
+  sourceId: string
   sourceAuthor: string
   vendor?: string | null
   href?: string | null
@@ -180,13 +184,17 @@ export function TravelItemCard(props: TravelItemCardProps) {
 
   if (props.variant === "basic-planned") {
     const Icon = BASIC_ICONS[props.category]
+    const provenance = itemProvenanceLabel({
+      sourceId: props.sourceId,
+      sourceAuthor: props.sourceAuthor,
+    })
     const textBlock = (
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-[15px] font-bold leading-snug tracking-tight text-foreground">
           {props.title}
         </p>
         <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-snug text-muted-foreground">
-          {BASIC_LABELS[props.category]} vía @{props.sourceAuthor}
+          {BASIC_LABELS[props.category]} {provenance}
           {props.vendor ? <span className="text-muted-foreground/80"> · {props.vendor}</span> : null}
           {props.href ? <ExternalLink className="ml-0.5 h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
         </p>
@@ -237,6 +245,10 @@ export function TravelItemCard(props: TravelItemCardProps) {
   const TypeIcon = ITEM_TYPE_ICONS[props.type]
   const typeLabel = ITEM_LABELS[props.type]
   const region = props.regionLabel?.trim() ? props.regionLabel.trim() : null
+  const provenance = itemProvenanceLabel({
+    sourceId: props.sourceId,
+    sourceAuthor: props.sourceAuthor,
+  })
   const icon = (
     <span
       className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground"
@@ -254,11 +266,14 @@ export function TravelItemCard(props: TravelItemCardProps) {
       <p className="line-clamp-2 text-[15px] font-bold leading-snug tracking-tight text-foreground">
         {props.title}
       </p>
+      {props.sourceId === MANUAL_SOURCE_ID && props.detail?.trim() ? (
+        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail.trim()}</p>
+      ) : null}
       <p className="mt-1 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
         <span className="truncate">
           <span className={cn("mr-1 font-medium", colors.text)}>{typeLabel}</span>
           {region ? <span title={region}>{region} </span> : null}
-          vía @{props.sourceAuthor}
+          {provenance}
         </span>
         {props.href ? <ExternalLink className="h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
       </p>

@@ -115,6 +115,112 @@ function appendCountryParams(
   }
 }
 
+function buildGeocodeUrl(query: string, params: URLSearchParams): string {
+  return `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?${params}`
+}
+
+type MapboxFeature = {
+  id?: string
+  place_name?: string
+  text?: string
+  center?: [number, number]
+  context?: { id?: string; text?: string }[]
+}
+
+/**
+ * Etiqueta corta legible para la tarjeta: `text` + primera parte de contexto (ciudad/región/país).
+ */
+export function shortPlaceLabel(feature: {
+  text?: string
+  place_name?: string
+  context?: { id?: string; text?: string }[]
+}): string {
+  const primary = feature.text?.trim() || feature.place_name?.trim() || ""
+  if (!primary) return ""
+  const ctx = feature.context ?? []
+  const prefer = (prefix: string) =>
+    ctx.find((c) => c.id?.startsWith(prefix) && c.text?.trim())?.text?.trim()
+  const secondary =
+    prefer("place.") ||
+    prefer("locality.") ||
+    prefer("region.") ||
+    prefer("country.") ||
+    null
+  if (!secondary || secondary.toLowerCase() === primary.toLowerCase()) return primary
+  if (primary.toLowerCase().includes(secondary.toLowerCase())) return primary
+  return `${primary}, ${secondary}`
+}
+
+export type GeocodeSuggestion = {
+  id: string
+  /** place_name completo (útil para caché / debug). */
+  placeName: string
+  /** Etiqueta corta para `UserDayItem.region` y la tarjeta. */
+  text: string
+  center: LngLat
+}
+
+/**
+ * Autocompletado: varios candidatos (`autocomplete=true`). No usa la caché de un solo punto.
+ */
+export async function suggestPlaces(
+  text: string,
+  options?: {
+    proximity?: [number, number] | null
+    countryCodes?: string[] | null
+    limit?: number
+    signal?: AbortSignal
+  },
+): Promise<GeocodeSuggestion[]> {
+  if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return []
+  const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    limit: String(limit),
+    autocomplete: "true",
+    language: "es",
+  })
+  const proximity = options?.proximity ?? null
+  if (proximity) {
+    params.set("proximity", `${proximity[0]},${proximity[1]}`)
+  }
+  appendCountryParams(params, options?.countryCodes)
+
+  const url = buildGeocodeUrl(text.trim(), params)
+  const res = await fetch(url, { signal: options?.signal })
+  if (!res.ok) return []
+  const data = (await res.json()) as { features?: MapboxFeature[] }
+  const out: GeocodeSuggestion[] = []
+  for (const f of data.features ?? []) {
+    const c = f.center
+    if (!c || c.length < 2) continue
+    const placeName = f.place_name?.trim()
+    if (!placeName) continue
+    const center = { lng: c[0], lat: c[1] }
+    out.push({
+      id: f.id ?? `${placeName}-${center.lng}-${center.lat}`,
+      placeName,
+      text: shortPlaceLabel(f),
+      center,
+    })
+  }
+  return out
+}
+
+/** Sembrar la caché de geocodeFreeText para un place_name ya elegido (acelerador opcional). */
+export function seedGeocodeCache(
+  placeName: string,
+  center: LngLat,
+  countryCodes?: string[] | null,
+): void {
+  const name = placeName?.trim()
+  if (!name) return
+  const cKey = countryParamsKey(countryCodes)
+  const key = geocodeQueryKey(`__dest__${name}`, null, cKey)
+  setMemory(key, center.lng, center.lat)
+  writeLocalCache(key, center.lng, center.lat)
+}
+
 /**
  * Geocodifica un texto libre (p. ej. destino del viaje) y devuelve [lng, lat] para `proximity`.
  */
@@ -137,7 +243,7 @@ export async function geocodeFreeText(
   })
   if (options?.country) params.set("country", options.country)
   appendCountryParams(params, options?.countryCodes)
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text.trim())}.json?${params}`
+  const url = buildGeocodeUrl(text.trim(), params)
 
   const res = await fetch(url)
   if (!res.ok) return null
@@ -189,7 +295,7 @@ export async function geocodeName(
     params.set("country", options.country)
   }
 
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullQuery)}.json?${params}`
+  const url = buildGeocodeUrl(fullQuery, params)
 
   const res = await fetch(url)
   if (!res.ok) return null

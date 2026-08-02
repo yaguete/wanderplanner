@@ -170,6 +170,11 @@ export interface UserDayItem {
   sourceAuthor: string
   /** Misma pista que `SourceItem.region`; copiada al añadir al día para no depender de la `Source`. */
   region?: string | null
+  /**
+   * Coordenadas resueltas (p. ej. al elegir un candidato Mapbox en ítems manuales).
+   * Objeto `{ lng, lat }` — no tupla — para el jsonb y el contrato de `LngLat`.
+   */
+  coords?: { lng: number; lat: number } | null
   affiliateUrl?: string | null
   vendor?: string | null
 }

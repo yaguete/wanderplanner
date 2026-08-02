@@ -3,6 +3,7 @@
  */
 import type { Source, Trip } from "@/types/itinerary"
 import { BASIC_LABELS, ITEM_LABELS } from "@/lib/item-styles"
+import { itemProvenanceLabel } from "@/lib/item-provenance"
 import { countriesPlainList } from "@/lib/countries"
 import { travelerTypeLabels } from "@/lib/traveler-profile"
 import type { FavoriteReference, TravelerProfile } from "@/lib/db/profile-repo"
@@ -108,7 +109,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
         const region = item.region ? ` · ${item.region}` : ""
         const detail = item.detail ? ` — ${item.detail}` : ""
         lines.push(
-          `- [${typeLabel}] **${item.name}**${region}${detail} (vía @${item.sourceAuthor}; sourceId=${item.sourceId})`,
+          `- [${typeLabel}] **${item.name}**${region}${detail} (${itemProvenanceLabel(item)}; sourceId=${item.sourceId})`,
         )
       }
     }

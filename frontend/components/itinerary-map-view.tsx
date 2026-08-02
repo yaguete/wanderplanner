@@ -26,6 +26,8 @@ export type ItineraryMapPoint = {
    * Si está vacía, se cae al `destination` global del viaje.
    */
   region?: string | null
+  /** Coordenadas ya resueltas (ítems manuales); si existen, no se geocodifica. */
+  coords?: { lng: number; lat: number } | null
 }
 
 const PIN: Record<ItineraryMapPoint["type"], { fill: string; border: string }> = {
@@ -107,7 +109,17 @@ export function ItineraryMapView({
     const failed: { point: ItineraryMapPoint }[] = []
 
     const results = await Promise.allSettled(
-      points.map((p) => {
+      points.map(async (p): Promise<LngLat | null> => {
+        const saved = p.coords
+        if (
+          saved &&
+          typeof saved.lng === "number" &&
+          typeof saved.lat === "number" &&
+          Number.isFinite(saved.lng) &&
+          Number.isFinite(saved.lat)
+        ) {
+          return { lng: saved.lng, lat: saved.lat }
+        }
         // `region` por ítem (más concreto que el destino del viaje, e. g. "Soportújar, Granada");
         // si no la trae, se cae al `destination` global (`countries` del Trip).
         const tripDestination = p.region?.trim() ? p.region.trim() : dest || null
