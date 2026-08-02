@@ -10,7 +10,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 **Backend:** FastAPI, CORS vía `ALLOWED_ORIGINS` (default localhost:3000/3001), `httpx`, `anthropic`, `openai` (DeepSeek), `python-jose` (JWT Supabase), `bs4`/`lxml`, `python-dotenv`. Tavily en [`backend/web_search.py`](backend/web_search.py). Fichas país MAE en [`backend/country_briefs.py`](backend/country_briefs.py).
 
-**Hosting:** frontend pensado para Vercel; backend con [`backend/Dockerfile`](backend/Dockerfile) (Fly/Railway/Render). Setup Supabase en [`supabase/README.md`](supabase/README.md).
+**Hosting:** frontend en **Vercel** (Root Directory = `frontend`, dominio `wanderplanner.ai`); backend en **Fly.io** (app `wanderplanner-api`, región `ams`, [`backend/fly.toml`](backend/fly.toml) + [`backend/Dockerfile`](backend/Dockerfile), API `api.wanderplanner.ai`); Postgres + Auth en **Supabase** gestionado ([`supabase/README.md`](supabase/README.md)). Procedimiento, env y rollback: [`DEPLOY.md`](DEPLOY.md).
 
 **Modelos de IA:**
 - Itinerario: `claude-haiku-4-5-20251001`, clave `ANTHROPIC_API_KEY`.
@@ -22,6 +22,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 /                          # Raíz: monorepo frontend + backend + supabase
   DESIGN.md
   CLAUDE.md
+  DEPLOY.md                # Vercel + Fly.io + Supabase: env, deploy, rollback
+  scripts/
+    smoke.sh               # Smoke de la API (auth 401 + CORS)
   supabase/
     migrations/            # SQL: esquema documento + RLS + grants + cleanup anónimos
     README.md              # Activar Anonymous Sign-Ins, aplicar migraciones, env
