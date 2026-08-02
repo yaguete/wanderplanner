@@ -127,7 +127,7 @@ Configurar en Vercel → Project → Settings → Environment Variables. Todas s
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → URL | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon` `public` | Pública; RLS protege datos. **Nunca** la `service_role` |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | [account.mapbox.com](https://account.mapbox.com/) → Access tokens | Token `pk.…` **restringido por URL** a `wanderplanner.ai` (y previews si hace falta) |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile → site key | Misma clave que Bot protection en Supabase Auth. Sin ella, `/start` no muestra captcha |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile → site key | Clave pública del widget, visible en el navegador. Se usa en `/start`, `/login` y `/signup`; autoriza sus hostnames en Cloudflare. En Supabase Auth se configura la **secret key asociada**, nunca esta site key |
 
 Opcional: `NEXT_PUBLIC_VENDOR_LOGO_PROVIDER` (default `clearbit`).
 
@@ -167,7 +167,7 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
 ### Checklist de producción
 
 - Authentication → Providers → **Anonymous Sign-Ins** activado (`/start`).
-- Authentication → **Bot protection (Turnstile)** con la misma site key que `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
+- Authentication → **Bot protection (Turnstile)** con la **secret key** asociada a la site key pública configurada en `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
 - Authentication → URL Configuration:
   - Site URL: `https://wanderplanner.ai`
   - Redirect URLs: `https://wanderplanner.ai/**` + URLs de Preview de Vercel (`https://*.vercel.app/**` o las concretas).

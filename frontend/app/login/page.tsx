@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 
 function LoginForm() {
@@ -20,15 +21,28 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaKey, setCaptchaKey] = useState(0)
+  const captchaEnabled = isTurnstileEnabled()
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null)
+    setCaptchaKey((key) => key + 1)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setNotice(null)
+    if (captchaEnabled && !captchaToken) {
+      setError("Confirma que no eres un robot.")
+      return
+    }
     setSubmitting(true)
-    const result = await signIn(email.trim(), password)
+    const result = await signIn(email.trim(), password, captchaToken ?? undefined)
     setSubmitting(false)
     if (!result.ok) {
+      resetCaptcha()
       setError(result.error)
       return
     }
@@ -42,13 +56,20 @@ function LoginForm() {
       return
     }
     setError(null)
+    setNotice(null)
+    if (captchaEnabled && !captchaToken) {
+      setError("Confirma que no eres un robot.")
+      return
+    }
     setSubmitting(true)
-    const result = await sendMagicLink(email.trim())
+    const result = await sendMagicLink(email.trim(), captchaToken ?? undefined)
     setSubmitting(false)
     if (!result.ok) {
+      resetCaptcha()
       setError(result.error)
       return
     }
+    if (captchaEnabled) resetCaptcha()
     setNotice("Te hemos enviado un enlace de acceso. Revisa tu correo.")
   }
 
@@ -91,10 +112,16 @@ function LoginForm() {
           />
         </div>
 
+        {captchaEnabled ? <Turnstile key={captchaKey} onToken={setCaptchaToken} /> : null}
+
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {notice ? <p className="text-sm text-muted-foreground">{notice}</p> : null}
 
-        <Button type="submit" className="mt-1 h-11" disabled={submitting}>
+        <Button
+          type="submit"
+          className="mt-1 h-11"
+          disabled={submitting || (captchaEnabled && !captchaToken)}
+        >
           {submitting ? "Entrando…" : "Entrar"}
         </Button>
         <Button
@@ -102,7 +129,7 @@ function LoginForm() {
           variant="ghost"
           className="h-10"
           onClick={handleMagicLink}
-          disabled={submitting}
+          disabled={submitting || (captchaEnabled && !captchaToken)}
         >
           Enviarme un enlace de acceso
         </Button>

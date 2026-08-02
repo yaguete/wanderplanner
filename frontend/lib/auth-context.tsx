@@ -47,9 +47,9 @@ interface AuthContextValue {
   isLoading: boolean
   /** Hay sesión pero es anónima: puede planificar, no puede persistir su cuenta. */
   isGuest: boolean
-  signIn: (email: string, password: string) => Promise<AuthResult>
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<AuthResult>
   signUp: (
-    data: { email: string; password: string } & Partial<ProfileInput>,
+    data: { email: string; password: string; captchaToken?: string } & Partial<ProfileInput>,
   ) => Promise<AuthResult>
   /** Convierte la sesión anónima en cuenta real conservando el `user_id`. */
   upgradeGuest: (
@@ -58,7 +58,7 @@ interface AuthContextValue {
   signInAnonymously: (
     options?: { referrer?: string | null; captchaToken?: string },
   ) => Promise<AuthResult>
-  sendMagicLink: (email: string) => Promise<AuthResult>
+  sendMagicLink: (email: string, captchaToken?: string) => Promise<AuthResult>
   /**
    * Invitado → cuenta real por email: `updateUser({ email })` sobre el mismo `user_id`
    * (envía confirmación). No usar `signInWithOtp` aquí: crearía otro usuario y perdería el viaje.
@@ -178,13 +178,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   )
 
-  const signIn = useCallback<AuthContextValue["signIn"]>(async (email, password) => {
+  const signIn = useCallback<AuthContextValue["signIn"]>(async (email, password, captchaToken) => {
     if (!configured) return { ok: false, error: "Supabase no está configurado." }
     try {
       // Antes del login: evita que la hidratación del asistente restaure el puntero previo.
       clearActiveConversationPointers()
       const supabase = createClient()
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: captchaToken ? { captchaToken } : undefined,
+      })
       if (error) return { ok: false, error: error.message }
       return { ok: true }
     } catch (e) {
@@ -193,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [configured])
 
   const signUp = useCallback<AuthContextValue["signUp"]>(
-    async ({ email, password, ...profileData }) => {
+    async ({ email, password, captchaToken, ...profileData }) => {
       if (!configured) return { ok: false, error: "Supabase no está configurado." }
       try {
         const supabase = createClient()
@@ -201,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email,
           password,
           options: {
+            ...(captchaToken ? { captchaToken } : {}),
             data: profileData.displayName
               ? { display_name: profileData.displayName }
               : undefined,
@@ -269,13 +274,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   const sendMagicLink = useCallback<AuthContextValue["sendMagicLink"]>(
-    async (email) => {
+    async (email, captchaToken) => {
       if (!configured) return { ok: false, error: "Supabase no está configurado." }
       try {
         const supabase = createClient()
         const { error } = await supabase.auth.signInWithOtp({
           email,
           options: {
+            ...(captchaToken ? { captchaToken } : {}),
             emailRedirectTo:
               typeof window !== "undefined"
                 ? `${window.location.origin}/auth/callback`

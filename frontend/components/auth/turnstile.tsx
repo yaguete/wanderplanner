@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Cloudflare Turnstile para proteger la creación de sesiones anónimas (CTA público).
+ * Cloudflare Turnstile para proteger los flujos públicos de autenticación.
  * Si `NEXT_PUBLIC_TURNSTILE_SITE_KEY` no está definida, el componente no renderiza nada y
  * `isTurnstileEnabled()` devuelve false: en local se entra sin captcha.
  */
@@ -13,7 +13,12 @@ const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render
 type TurnstileApi = {
   render: (
     el: HTMLElement,
-    options: { sitekey: string; callback: (token: string) => void; "error-callback"?: () => void },
+    options: {
+      sitekey: string
+      callback: (token: string) => void
+      "error-callback"?: () => void
+      "expired-callback"?: () => void
+    },
   ) => string
   remove: (id: string) => void
 }
@@ -45,7 +50,7 @@ function loadScript(): Promise<void> {
   })
 }
 
-export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
+export function Turnstile({ onToken }: { onToken: (token: string | null) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const onTokenRef = useRef(onToken)
   onTokenRef.current = onToken
@@ -61,6 +66,8 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
         widgetId = window.turnstile.render(containerRef.current, {
           sitekey: SITE_KEY,
           callback: (token) => onTokenRef.current(token),
+          "error-callback": () => onTokenRef.current(null),
+          "expired-callback": () => onTokenRef.current(null),
         })
       })
       .catch(() => {})

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { TravelerProfileFields } from "@/components/auth/traveler-profile-fields"
+import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
 
@@ -29,11 +30,23 @@ function SignupForm() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaKey, setCaptchaKey] = useState(0)
+  const captchaEnabled = !isGuest && isTurnstileEnabled()
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null)
+    setCaptchaKey((key) => key + 1)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setNotice(null)
+    if (captchaEnabled && !captchaToken) {
+      setError("Confirma que no eres un robot.")
+      return
+    }
     setSubmitting(true)
 
     const payload = {
@@ -45,10 +58,13 @@ function SignupForm() {
       favoriteReferences: references,
     }
     // Un invitado conserva su `user_id` (y sus viajes) al registrarse.
-    const result = isGuest ? await upgradeGuest(payload) : await signUp(payload)
+    const result = isGuest
+      ? await upgradeGuest(payload)
+      : await signUp({ ...payload, captchaToken: captchaToken ?? undefined })
     setSubmitting(false)
 
     if (!result.ok) {
+      if (captchaEnabled) resetCaptcha()
       setError(result.error)
       return
     }
@@ -134,10 +150,16 @@ function SignupForm() {
           />
         </div>
 
+        {captchaEnabled ? <Turnstile key={captchaKey} onToken={setCaptchaToken} /> : null}
+
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {notice ? <p className="text-sm text-muted-foreground">{notice}</p> : null}
 
-        <Button type="submit" className="h-11" disabled={submitting}>
+        <Button
+          type="submit"
+          className="h-11"
+          disabled={submitting || (captchaEnabled && !captchaToken)}
+        >
           {submitting ? "Creando cuenta…" : "Crear cuenta"}
         </Button>
       </form>
