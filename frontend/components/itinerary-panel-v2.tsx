@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { countriesPlainList } from "@/lib/countries"
-import { formatTripMonthYear } from "@/lib/trip-dates"
+import { dateISOForDayIndex, formatDayDate, formatTripMonthYear } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
 import { BASIC_LABELS, ITEM_COLORS } from "@/lib/item-styles"
 import type { BasicCategory, UserDayItem } from "@/types/itinerary"
@@ -333,6 +333,9 @@ export default function ItineraryPanel({
                   dayIndex={dayIndex}
                   dayCount={trip.days.length}
                   dayDescription={getDayUserDescription(day.label)}
+                  dayDateLabel={
+                    formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex))
+                  }
                   items={day.items}
                   resolveRegion={resolveRegion}
                   isDaySelected={selectedDayIds.has(day.id)}
@@ -384,7 +387,11 @@ export default function ItineraryPanel({
                   )}
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {formatDayHeadingLine(dayIndex, getDayUserDescription(day.label))}
+                    {formatDayHeadingLine(
+                      dayIndex,
+                      getDayUserDescription(day.label),
+                      formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex)),
+                    )}
                   </p>
                   <ul className="m-0 flex list-none flex-col gap-3 p-0">
                     {stays.map((item) => (
@@ -595,6 +602,7 @@ function DaySection({
   dayIndex,
   dayCount,
   dayDescription,
+  dayDateLabel,
   items,
   resolveRegion,
   isDaySelected,
@@ -610,6 +618,7 @@ function DaySection({
   dayIndex: number
   dayCount: number
   dayDescription: string
+  dayDateLabel: string | null
   items: UserDayItem[]
   resolveRegion: (item: UserDayItem) => string | null
   isDaySelected: boolean
@@ -669,7 +678,7 @@ function DaySection({
     setEditingDescription(true)
   }
 
-  const headingForAria = formatDayHeadingLine(dayIndex, dayDescription)
+  const headingForAria = formatDayHeadingLine(dayIndex, dayDescription, dayDateLabel)
   const normalizedDesc = dayDescription.trim() ? normalizeDayLabel(dayDescription) : null
 
   return (
@@ -691,6 +700,16 @@ function DaySection({
         </div>
         <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5">
           <span className="shrink-0 text-[15px] font-semibold tabular-nums leading-tight">Día {dayIndex + 1}</span>
+          {dayDateLabel ? (
+            <>
+              <span className="shrink-0 text-[15px] text-muted-foreground" aria-hidden>
+                ·
+              </span>
+              <span className="shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground">
+                {dayDateLabel}
+              </span>
+            </>
+          ) : null}
           <span className="shrink-0 text-[15px] text-muted-foreground" aria-hidden>
             ·
           </span>

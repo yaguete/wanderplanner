@@ -11,6 +11,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Source, Trip, UserBasicItem, UserDay } from "@/types/itinerary"
+import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
 
 const DEBOUNCE_MS = 1_000
 const MAX_ATTEMPTS = 3
@@ -56,18 +57,28 @@ const SOURCE_COLUMNS = "id, url, author, title, area, og_image, items, basics"
 // ── Mapeo fila ↔ dominio ──────────────────────────────────────────────────────
 
 function rowToTrip(row: TripRow): Trip {
+  const days = row.days ?? []
+  // Normalización en lectura: legacy desacoplaba end_date / num_days de days.length.
+  // Fuente de verdad = days.length; endDate inclusive desde startDate.
+  // La fila en Supabase conserva el valor viejo hasta la siguiente escritura.
+  const numDays = days.length > 0 ? days.length : row.num_days
+  const startDate = row.start_date
+  const endDate =
+    startDate && numDays != null && numDays > 0
+      ? endDateFromStartAndNumDays(startDate, numDays)
+      : null
   return {
     id: row.id,
     name: row.name,
     countries: row.countries ?? [],
-    startDate: row.start_date,
-    endDate: row.end_date,
-    numDays: row.num_days,
+    startDate,
+    endDate,
+    numDays,
     expectations: row.expectations,
     cover: row.cover,
     coverUrl: row.cover_url,
     sourceIds: row.source_ids ?? [],
-    days: row.days ?? [],
+    days,
     basics: row.basics ?? [],
     archived: row.archived,
     referrer: row.referrer,

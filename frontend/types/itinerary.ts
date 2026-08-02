@@ -90,9 +90,13 @@ export interface Trip {
   name: string
   /** Códigos ISO 3166-1 alpha-2; opcionales. La creación de viaje ya no exige países (geocodificación: `UserDayItem.region` y nombre del viaje). */
   countries: string[]
-  /** Rango (YYYY-MM-DD); no tiene que alinearse con `numDays` aprox. */
+  /**
+   * Rango YYYY-MM-DD opcional. `endDate` se deriva de `startDate + numDays − 1`
+   * (días de calendario inclusive). Sin `startDate`, ambas quedan null.
+   */
   startDate: string | null
   endDate: string | null
+  /** Siempre alineado con `days.length` tras mutaciones / carga normalizada. */
   numDays: number | null
   /**
    * Qué espera el usuario del viaje (opcional). Se incluye en el briefing del asistente.

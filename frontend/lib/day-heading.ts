@@ -19,11 +19,24 @@ export function getDayUserDescription(stored: string): string {
 }
 
 /**
- * Título legible: "Día 1 · Llegada" (1-based day index in UI = dayIndex0 + 1)
+ * Título legible:
+ * - "Día 1 · 14 sept · Llegada" (con fecha y descripción)
+ * - "Día 1 · 14 sept" (solo fecha)
+ * - "Día 1 · Llegada" / "Día 1" (sin fecha, como antes)
+ *
+ * dayIndex0: índice 0-based; en UI el número es dayIndex0 + 1.
+ * dateLabel: p.ej. resultado de formatDayDate; opcional.
  */
-export function formatDayHeadingLine(dayIndex0: number, description: string): string {
+export function formatDayHeadingLine(
+  dayIndex0: number,
+  description: string,
+  dateLabel?: string | null,
+): string {
   const d = getDayUserDescription(description).trim()
   const n = dayIndex0 + 1
+  const date = dateLabel?.trim() || null
+  if (date && d) return `Día ${n} · ${date} · ${d}`
+  if (date) return `Día ${n} · ${date}`
   if (!d) return `Día ${n}`
   return `Día ${n} · ${d}`
 }

@@ -1,7 +1,6 @@
 "use client"
 
-import { useId, useEffect, useState, useRef } from "react"
-import type { DateRange } from "react-day-picker"
+import { useId, useEffect, useState } from "react"
 import { es } from "date-fns/locale"
 import { CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +18,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { daysBetweenInclusive, formatTripDates, toISODate } from "@/lib/trip-dates"
+import {
+  endDateFromStartAndNumDays,
+  formatDayDate,
+  formatTripDates,
+  toISODate,
+} from "@/lib/trip-dates"
 
 export type NewTripData = {
   name: string
@@ -69,12 +73,11 @@ export function NewTripDialog({
 }: NewTripDialogProps) {
   const id = useId()
   const [name, setName] = useState("")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [datePopOpen, setDatePopOpen] = useState(false)
   const [numDays, setNumDays] = useState("")
   const [expectations, setExpectations] = useState("")
   const [formError, setFormError] = useState<string | null>(null)
-  const numDaysTouchedRef = useRef(false)
 
   const nameId = `${id}-name`
   const datesId = `${id}-dates`
@@ -91,49 +94,37 @@ export function NewTripDialog({
       setName(initial.name)
       setNumDays(initial.numDays != null ? String(initial.numDays) : "")
       setExpectations(initial.expectations ?? "")
-      numDaysTouchedRef.current = true
-      if (initial.startDate && initial.endDate) {
-        setDateRange({
-          from: parseLocalYMD(initial.startDate),
-          to: parseLocalYMD(initial.endDate),
-        })
-      } else {
-        setDateRange(undefined)
-      }
+      setStartDate(initial.startDate ? parseLocalYMD(initial.startDate) : undefined)
     } else {
       setName("")
-      setDateRange(undefined)
+      setStartDate(undefined)
       setNumDays("")
       setExpectations("")
-      numDaysTouchedRef.current = false
     }
     // Solo al abrir: evita pisar ediciones si `initial` cambia de identidad.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open
   }, [open])
 
-  useEffect(() => {
-    if (!dateRange?.from || !dateRange.to) return
-    if (numDaysTouchedRef.current) return
-    const s = toISODate(dateRange.from)
-    const e = toISODate(dateRange.to)
-    const n = daysBetweenInclusive(s, e)
-    if (n != null) setNumDays(String(n))
-  }, [dateRange])
-
   const canSubmit = name.trim().length > 0
+
+  const parsedDays = (() => {
+    const n = numDays.trim() ? parseInt(numDays, 10) : null
+    return n != null && !Number.isNaN(n) && n > 0 ? n : null
+  })()
+
+  const startISO = startDate ? toISODate(startDate) : null
+  const derivedEnd =
+    startISO && parsedDays != null
+      ? endDateFromStartAndNumDays(startISO, parsedDays)
+      : null
+  const rangeLabel =
+    startISO && derivedEnd ? formatTripDates(startISO, derivedEnd) : null
 
   const handleSubmit = () => {
     if (!canSubmit) return
     setFormError(null)
 
-    let start: string | null = null
-    let end: string | null = null
-    if (dateRange?.from && dateRange.to) {
-      start = toISODate(dateRange.from)
-      end = toISODate(dateRange.to)
-    }
-    const n = numDays.trim() ? parseInt(numDays, 10) : null
-    const resolvedDays = n != null && !Number.isNaN(n) && n > 0 ? n : null
+    const resolvedDays = parsedDays
 
     if (
       isEdit &&
@@ -148,6 +139,12 @@ export function NewTripDialog({
       return
     }
 
+    const start = startISO
+    const end =
+      start && resolvedDays != null
+        ? endDateFromStartAndNumDays(start, resolvedDays)
+        : null
+
     const result = onSubmit({
       name: name.trim(),
       countries: [],
@@ -160,11 +157,6 @@ export function NewTripDialog({
       setFormError(result.error)
     }
   }
-
-  const rangeLabel =
-    dateRange?.from && dateRange.to
-      ? formatTripDates(toISODate(dateRange.from), toISODate(dateRange.to))
-      : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -202,20 +194,24 @@ export function NewTripDialog({
                   variant="outline"
                   className={cn(
                     "h-9 w-full justify-start text-left font-normal",
-                    !rangeLabel && "text-muted-foreground",
+                    !rangeLabel && !startDate && "text-muted-foreground",
                   )}
                   id={datesId}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                  {rangeLabel ?? "Selecciona un rango aproximado (opcional)"}
+                  {rangeLabel
+                    ? rangeLabel
+                    : startDate
+                      ? formatDayDate(toISODate(startDate)) ?? toISODate(startDate)
+                      : "Selecciona la fecha de inicio (opcional)"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
-                  mode="range"
-                  selected={dateRange}
-                  onSelect={setDateRange}
-                  numberOfMonths={2}
+                  mode="single"
+                  selected={startDate}
+                  onSelect={setStartDate}
+                  numberOfMonths={1}
                   locale={es}
                   className="p-2"
                 />
@@ -225,7 +221,7 @@ export function NewTripDialog({
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      setDateRange(undefined)
+                      setStartDate(undefined)
                     }}
                   >
                     Limpiar
@@ -242,7 +238,7 @@ export function NewTripDialog({
               </PopoverContent>
             </Popover>
             <p className="text-xs text-muted-foreground">
-              Periodo aproximado, no tiene que coincidir con el número de días del viaje.
+              Opcional. La fecha de fin se calcula con el número de días del viaje.
             </p>
           </div>
           <div className="space-y-2">
@@ -253,7 +249,6 @@ export function NewTripDialog({
               min={1}
               value={numDays}
               onChange={(e) => {
-                numDaysTouchedRef.current = true
                 setFormError(null)
                 setNumDays(e.target.value)
               }}
@@ -261,8 +256,8 @@ export function NewTripDialog({
             />
             <p className="text-xs text-muted-foreground">
               {isEdit
-                ? "Si reduces este número por debajo de los días que ya tienes en el itinerario, deberás borrar días ahí primero."
-                : "Define cuántos días se abren en el itinerario; al elegir un rango de fechas, se sugiere aquí si aún no lo has escrito tú."}
+                ? "Define los días del itinerario y, con fecha de inicio, la fecha de fin. Si reduces por debajo de los días que ya tienes, deberás borrar días en el panel del viaje primero."
+                : "Define cuántos días se abren en el itinerario y, con fecha de inicio, cuándo termina el viaje."}
             </p>
           </div>
           <div className="space-y-2">

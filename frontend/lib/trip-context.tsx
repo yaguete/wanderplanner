@@ -24,6 +24,16 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
+import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
+
+/** Alinea numDays y endDate con days.length (+ startDate inclusive). */
+function syncTripSchedule(trip: Trip, days: UserDay[]): Trip {
+  const numDays = days.length
+  const endDate = trip.startDate
+    ? endDateFromStartAndNumDays(trip.startDate, numDays)
+    : null
+  return { ...trip, days, numDays, endDate }
+}
 
 interface TripContextValue {
   trips: Trip[]
@@ -220,21 +230,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       items: [],
     }))
 
-    const trip: Trip = {
-      id: crypto.randomUUID(),
-      name: data.name,
-      countries: data.countries,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      numDays: data.numDays,
-      expectations: data.expectations?.trim() ? data.expectations.trim() : null,
-      cover: "✈️",
-      coverUrl: null,
-      sourceIds: [],
+    const trip = syncTripSchedule(
+      {
+        id: crypto.randomUUID(),
+        name: data.name,
+        countries: data.countries,
+        startDate: data.startDate,
+        endDate: null,
+        numDays: null,
+        expectations: data.expectations?.trim() ? data.expectations.trim() : null,
+        cover: "✈️",
+        coverUrl: null,
+        sourceIds: [],
+        days,
+        basics: [],
+        archived: false,
+      },
       days,
-      basics: [],
-      archived: false,
-    }
+    )
     setTrips((prev) => [...prev, trip])
     return trip
   }, [])
@@ -273,16 +286,19 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
               items: [],
             }))
             days = [...t.days, ...extra]
+          } else if (targetDays != null) {
+            days = t.days
           }
-          return {
-            ...t,
-            name: data.name,
-            startDate: data.startDate,
-            endDate: data.endDate,
-            numDays: data.numDays,
-            expectations: data.expectations?.trim() ? data.expectations.trim() : null,
+          // Sin numDays en el form: conservar days actuales; endDate se deriva de startDate.
+          return syncTripSchedule(
+            {
+              ...t,
+              name: data.name,
+              startDate: data.startDate,
+              expectations: data.expectations?.trim() ? data.expectations.trim() : null,
+            },
             days,
-          }
+          )
         }),
       )
       return { ok: true }
@@ -498,7 +514,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       prev.map((t) => {
         if (t.id !== tripId) return t
         const newDay: UserDay = { id: crypto.randomUUID(), label: "", items: [] }
-        return { ...t, days: [...t.days, newDay] }
+        return syncTripSchedule(t, [...t.days, newDay])
       }),
     )
   }, [])
@@ -515,9 +531,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const removeDay = useCallback((tripId: string, dayId: string) => {
     setTrips((prev) =>
-      prev.map((t) =>
-        t.id !== tripId ? t : { ...t, days: t.days.filter((d) => d.id !== dayId) },
-      ),
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        const days = t.days.filter((d) => d.id !== dayId)
+        if (days.length === 0) return t
+        return syncTripSchedule(t, days)
+      }),
     )
   }, [])
 
@@ -536,7 +555,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           if (days.length <= 1) break
           days = days.filter((x) => x.id !== d.id)
         }
-        return { ...t, days }
+        return syncTripSchedule(t, days)
       }),
     )
   }, [])

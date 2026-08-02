@@ -89,7 +89,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
     lines.push("- países: (ninguno configurado)")
   }
   lines.push(`- fechas: ${trip.startDate ?? "?"} → ${trip.endDate ?? "?"}`)
-  lines.push(`- días aprox. (numDays): ${trip.numDays ?? "?"}`)
+  lines.push(`- días del itinerario (numDays): ${trip.numDays ?? "?"}`)
   if (trip.expectations?.trim()) {
     lines.push("")
     lines.push("## Qué espera el usuario de este viaje")

@@ -91,7 +91,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 **Extracción (backend):** `Itinerary` snake_case + `og_image` / `article_html`; `thumb_url` siempre null en la respuesta (lazy en el front).
 
-**`Trip` (app):** metadatos, `countries`, fechas, `numDays`, `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `referrer?`.
+**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
 
 **Portada:** primera fuente → `GET /cover`(área/país) → `ogImage` → emoji.
 
@@ -141,7 +141,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | --- | --- |
 | Esquema SQL / RLS | [`supabase/migrations/`](supabase/migrations/), [`supabase/README.md`](supabase/README.md) |
 | [`types/itinerary.ts`](frontend/types/itinerary.ts) | prompt itinerario, `itinerary-utils`, `main.py`, forma de jsonb |
-| `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()` |
+| `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
 | Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start` |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), perfil |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
