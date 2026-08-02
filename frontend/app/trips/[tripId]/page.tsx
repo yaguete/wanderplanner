@@ -34,12 +34,13 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
   const pendingSourceUrl = searchParams.get("source")
-  const autoSourceRequested = useRef(false)
+  const autoSourceRequested = useRef<string | null>(null)
   const isMobile = useIsMobile()
   /** Lectura síncrona: evita true→false tras hidratar y el flash de cierre. */
   const [planOpen, setPlanOpen] = useState(readPlanOpen)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
+  const [autoSourceError, setAutoSourceError] = useState<string | null>(null)
   /**
    * La transición solo tras el primer paint (o un toggle).
    * Si no, al cambiar de viaje el remount anima el panel “escapándose” a la derecha.
@@ -55,14 +56,29 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   // Viaje llegado desde el CTA de un blog (`/start`): se extrae su fuente una sola vez.
   useEffect(() => {
-    if (!pendingSourceUrl || !trip || autoSourceRequested.current) return
-    autoSourceRequested.current = true
-    router.replace(`/trips/${tripId}`)
+    if (!pendingSourceUrl || !trip) return
     if (trip.sourceIds.length > 0) return
-    void addSourceToTrip(tripId, pendingSourceUrl).catch(() => {
-      setAddSourceOpen(true)
-    })
-  }, [pendingSourceUrl, trip, tripId, addSourceToTrip, router])
+    const requestKey = `${tripId}:${pendingSourceUrl}`
+    if (autoSourceRequested.current === requestKey) return
+    autoSourceRequested.current = requestKey
+    setAutoSourceError(null)
+    setAddSourceOpen(true)
+    void addSourceToTrip(tripId, pendingSourceUrl)
+      .then(() => setAddSourceOpen(false))
+      .catch((error: unknown) => {
+        setAutoSourceError(
+          error instanceof Error
+            ? error.message
+            : "No se pudo extraer la fuente. Inténtalo de nuevo.",
+        )
+      })
+  }, [pendingSourceUrl, trip, tripId, addSourceToTrip])
+
+  // No consumir `?source=` hasta que la fuente exista: así un fallo conserva la URL para reintentar.
+  useEffect(() => {
+    if (!pendingSourceUrl || !trip || trip.sourceIds.length === 0) return
+    router.replace(`/trips/${tripId}`)
+  }, [pendingSourceUrl, trip, tripId, router])
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -97,8 +113,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   /** Al cambiar de viaje, cierra overlays locales; el panel Mi viaje conserva su estado. */
   useEffect(() => {
     setAssistantOpen(false)
-    setAddSourceOpen(false)
-  }, [tripId])
+    if (!pendingSourceUrl) setAddSourceOpen(false)
+  }, [tripId, pendingSourceUrl])
 
   useEffect(() => {
     if (!planOpen && !assistantOpen) return
@@ -164,6 +180,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         tripId={tripId}
         addSourceOpen={addSourceOpen}
         onAddSourceOpenChange={openAddSource}
+        initialSourceUrl={pendingSourceUrl}
+        autoSourceError={autoSourceError}
       />
 
       {!isMobile && !assistantOpen ? (

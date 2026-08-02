@@ -26,6 +26,19 @@ function hostnameOf(raw: string): string | null {
   }
 }
 
+function errorMessage(error: unknown): string | null {
+  if (error instanceof Error && error.message) return error.message
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message
+  }
+  return null
+}
+
 function StartFlow() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -47,7 +60,23 @@ function StartFlow() {
     setError(null)
 
     try {
-      if (!user) {
+      const supabase = createClient()
+      let userId: string | undefined
+
+      // Una sesión anónima puede seguir en el navegador después de que la limpieza periódica
+      // haya borrado su fila de auth.users. Validarla evita insertar un viaje con un FK huérfano.
+      if (user) {
+        const { data, error: userError } = await supabase.auth.getUser()
+        if (!userError && data.user) {
+          userId = data.user.id
+        } else {
+          await supabase.auth.signOut({ scope: "local" })
+          startedRef.current = false
+          return
+        }
+      }
+
+      if (!userId) {
         const result = await signInAnonymously({
           referrer,
           captchaToken: captchaToken ?? undefined,
@@ -57,18 +86,28 @@ function StartFlow() {
           setError(result.error)
           return
         }
-        // El id del usuario llega por `onAuthStateChange`; el efecto reintenta con sesión.
-        return
+        // Continuar en esta misma ejecución evita una carrera entre el efecto de arranque y
+        // `onAuthStateChange`: el cambio de usuario puede renderizar antes de liberar startedRef.
+        const { data, error: userError } = await supabase.auth.getUser()
+        if (userError || !data.user) {
+          throw userError ?? new Error("No se pudo recuperar la sesión invitada.")
+        }
+        userId = data.user.id
       }
 
-      const supabase = createClient()
       const name = hostnameOf(sourceUrl) ? `Viaje desde ${hostnameOf(sourceUrl)}` : "Mi viaje"
-      const tripId = await insertDraftTrip(supabase, user.id, { name, referrer })
+      const tripId = await insertDraftTrip(supabase, userId, { name, referrer })
       const query = isValidSource ? `?source=${encodeURIComponent(sourceUrl)}` : ""
       router.replace(`/trips/${tripId}${query}`)
-    } catch {
+    } catch (error) {
       startedRef.current = false
-      setError("No hemos podido preparar tu viaje. Vuelve a intentarlo.")
+      const detail = errorMessage(error)
+      console.error("No se pudo preparar el viaje desde /start", error)
+      setError(
+        process.env.NODE_ENV === "development" && detail
+          ? `No hemos podido preparar tu viaje: ${detail}`
+          : "No hemos podido preparar tu viaje. Vuelve a intentarlo.",
+      )
     }
   }, [captchaToken, isValidSource, referrer, router, signInAnonymously, sourceUrl, user])
 
@@ -76,11 +115,6 @@ function StartFlow() {
     if (isLoading || !isSupabaseConfigured() || needsCaptcha) return
     void start()
   }, [isLoading, needsCaptcha, start])
-
-  // Tras la sesión anónima, `user` cambia y hay que continuar con la creación del viaje.
-  useEffect(() => {
-    if (user) startedRef.current = false
-  }, [user])
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">

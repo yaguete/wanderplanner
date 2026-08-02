@@ -38,10 +38,14 @@ export default function InspirationPanel({
   tripId,
   addSourceOpen = false,
   onAddSourceOpenChange,
+  initialSourceUrl,
+  autoSourceError,
 }: {
   tripId: string
   addSourceOpen?: boolean
   onAddSourceOpenChange?: (open: boolean) => void
+  initialSourceUrl?: string | null
+  autoSourceError?: string | null
 }) {
   const {
     getTrip,
@@ -74,6 +78,18 @@ export default function InspirationPanel({
   const [urlInput, setUrlInput] = useState("")
   const [extractError, setExtractError] = useState<string | null>(null)
   const [refetchError, setRefetchError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (initialSourceUrl) {
+      setUrlInput((current) => current || initialSourceUrl)
+    } else if (!addSourceOpen) {
+      setUrlInput("")
+    }
+  }, [initialSourceUrl, addSourceOpen])
+
+  useEffect(() => {
+    if (autoSourceError) setExtractError(autoSourceError)
+  }, [autoSourceError])
 
   const setAddSourceOpen = (open: boolean) => {
     onAddSourceOpenChange?.(open)
