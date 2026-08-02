@@ -18,7 +18,7 @@ import {
 } from "react"
 import { toast } from "sonner"
 import type { Trip, Source, UserDay, UserDayItem, UserBasicItem } from "@/types/itinerary"
-import { fetchItinerary } from "@/lib/api"
+import { fetchItinerary, type ItineraryProgressStage } from "@/lib/api"
 import { buildSource } from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
@@ -69,6 +69,8 @@ interface TripContextValue {
   refetchSource: (sourceId: string, url: string) => Promise<void>
   removeSourceFromTrip: (tripId: string, sourceId: string) => void
   isLoadingSource: boolean
+  /** Etapa SSE de la extracción en curso (null si no hay ninguna). */
+  loadingSourceStage: ItineraryProgressStage | null
   /** Descarga el HTML del artículo (excluido de la carga inicial) al abrir la Crónica. */
   ensureArticleHtml: (sourceId: string) => Promise<void>
   isArticleHtmlLoading: (sourceId: string) => boolean
@@ -99,6 +101,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const [rehydrated, setRehydrated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingSource, setIsLoadingSource] = useState(false)
+  const [loadingSourceStage, setLoadingSourceStage] = useState<ItineraryProgressStage | null>(
+    null,
+  )
   const [loadingArticleIds, setLoadingArticleIds] = useState<string[]>([])
   const tripsRef = useRef(trips)
   const sourcesRef = useRef(sources)
@@ -440,8 +445,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const addSourceToTrip = useCallback(
     async (tripId: string, url: string): Promise<Source> => {
       setIsLoadingSource(true)
+      setLoadingSourceStage("fetching")
       try {
-        const itinerary = await fetchItinerary(url)
+        const itinerary = await fetchItinerary(url, (stage) => setLoadingSourceStage(stage))
         const source = buildSource(url, itinerary)
         const wasEmpty =
           (tripsRef.current.find((t) => t.id === tripId)?.sourceIds.length ?? 0) === 0
@@ -459,6 +465,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         return source
       } finally {
         setIsLoadingSource(false)
+        setLoadingSourceStage(null)
       }
     },
     [applyCoverFromSource],
@@ -467,8 +474,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const refetchSource = useCallback(
     async (sourceId: string, url: string) => {
       setIsLoadingSource(true)
+      setLoadingSourceStage("fetching")
       try {
-        const itinerary = await fetchItinerary(url)
+        const itinerary = await fetchItinerary(
+          url,
+          (stage) => setLoadingSourceStage(stage),
+          { refresh: true },
+        )
         const rebuilt = buildSource(url, itinerary)
         const newSource: Source = { ...rebuilt, id: sourceId }
         // `rebuild` genera nuevos ids de ítems; solo conservamos entradas del viaje cuyo `sourceItemId` / `sourceBasicItemId` siga existiendo en la fuente refrescada.
@@ -504,6 +516,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         }
       } finally {
         setIsLoadingSource(false)
+        setLoadingSourceStage(null)
       }
     },
     [applyCoverFromSource],
@@ -674,6 +687,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       refetchSource,
       removeSourceFromTrip,
       isLoadingSource,
+      loadingSourceStage,
       ensureArticleHtml,
       isArticleHtmlLoading,
       loadTripSourcesWithArticles,
@@ -687,7 +701,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       addBasicToTrip,
       removeBasicFromTrip,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

@@ -64,6 +64,7 @@ function parseDetail(detail: unknown, status?: number): string {
 export async function fetchItinerary(
   url: string,
   onProgress?: (stage: ItineraryProgressStage) => void,
+  options?: { refresh?: boolean },
 ): Promise<Itinerary> {
   let response: Response
   try {
@@ -74,7 +75,7 @@ export async function fetchItinerary(
         Accept: "text/event-stream",
         ...(await authHeaders()),
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, refresh: Boolean(options?.refresh) }),
     })
   } catch (e) {
     const network =

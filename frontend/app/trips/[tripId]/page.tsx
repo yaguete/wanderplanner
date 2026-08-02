@@ -29,10 +29,11 @@ function readPlanOpen(): boolean {
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip, isLoading, addSourceToTrip } = useTrips()
+  const { getTrip, getTripSources, isLoading, addSourceToTrip, isLoadingSource } = useTrips()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
+  const sources = getTripSources(tripId)
   const pendingSourceUrl = searchParams.get("source")
   const autoSourceRequested = useRef<string | null>(null)
   const isMobile = useIsMobile()
@@ -41,6 +42,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [autoSourceError, setAutoSourceError] = useState<string | null>(null)
+  const preparingFirstSource = isLoadingSource && sources.length === 0 && !autoSourceError
   /**
    * La transición solo tras el primer paint (o un toggle).
    * Si no, al cambiar de viaje el remount anima el panel “escapándose” a la derecha.
@@ -62,16 +64,15 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     if (autoSourceRequested.current === requestKey) return
     autoSourceRequested.current = requestKey
     setAutoSourceError(null)
-    setAddSourceOpen(true)
-    void addSourceToTrip(tripId, pendingSourceUrl)
-      .then(() => setAddSourceOpen(false))
-      .catch((error: unknown) => {
-        setAutoSourceError(
-          error instanceof Error
-            ? error.message
-            : "No se pudo extraer la fuente. Inténtalo de nuevo.",
-        )
-      })
+    // No abrir el formulario mientras el sistema trabaja: solo en error para reintentar.
+    void addSourceToTrip(tripId, pendingSourceUrl).catch((error: unknown) => {
+      setAutoSourceError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo extraer la fuente. Inténtalo de nuevo.",
+      )
+      setAddSourceOpen(true)
+    })
   }, [pendingSourceUrl, trip, tripId, addSourceToTrip])
 
   // No consumir `?source=` hasta que la fuente exista: así un fallo conserva la URL para reintentar.
@@ -212,7 +213,9 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         planOpen={planOpen}
         onTogglePlan={togglePlan}
         addSourceOpen={addSourceOpen}
+        addSourceDisabled={preparingFirstSource}
         onToggleAddSource={() => {
+          if (preparingFirstSource) return
           setAssistantOpen(false)
           setPlanAnimEnabled(true)
           setPlanOpen(false)
@@ -254,7 +257,9 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
                 variant="outline"
                 size="icon"
                 className="absolute bottom-4 left-3 z-[50] h-11 w-11 rounded-full bg-background shadow-md"
+                disabled={preparingFirstSource}
                 onClick={() => {
+                  if (preparingFirstSource) return
                   setAssistantOpen(false)
                   setPlanAnimEnabled(true)
                   setPlanOpen(false)

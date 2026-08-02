@@ -4,6 +4,11 @@ Límites de uso por usuario sobre APIs de pago (Claude, DeepSeek, Places).
 Tabla `usage_events` vía service_role (mismo patrón que extraction_cache). Los contadores
 no son atómicos respecto al registro: dos peticiones concurrentes pueden pasar el mismo
 check. Se acepta (desviación máxima ~1); el front mitiga con UI en vuelo.
+
+Kinds:
+  - extraction / assistant_message / photo_lookup: cuota de usuario (user_id obligatorio)
+  - refresh: rate-limit de «Recargar» (user_id obligatorio)
+  - system_revalidation: mantenimiento de caché en fondo (user_id null)
 """
 from __future__ import annotations
 
@@ -22,21 +27,27 @@ logger = logging.getLogger(__name__)
 
 TABLE = "usage_events"
 
-Kind = Literal["extraction", "assistant_message", "photo_lookup"]
+Kind = Literal[
+    "extraction",
+    "assistant_message",
+    "photo_lookup",
+    "refresh",
+    "system_revalidation",
+]
 LimitKind = Literal["guest", "daily", "monthly"]
 
-_GUEST_DEFAULTS: dict[Kind, int] = {
+_GUEST_DEFAULTS: dict[str, int] = {
     "extraction": 1,
     "assistant_message": 10,
     "photo_lookup": 30,
 }
-_GUEST_ENV: dict[Kind, str] = {
+_GUEST_ENV: dict[str, str] = {
     "extraction": "GUEST_MAX_EXTRACTIONS",
     "assistant_message": "GUEST_MAX_ASSISTANT_MESSAGES",
     "photo_lookup": "GUEST_MAX_PHOTO_LOOKUPS",
 }
 
-_MESSAGES: dict[tuple[Kind, LimitKind], str] = {
+_MESSAGES: dict[tuple[str, LimitKind], str] = {
     ("extraction", "guest"): (
         "Has agotado el límite de extracciones de invitado. Crea una cuenta para continuar."
     ),
@@ -57,6 +68,12 @@ _MESSAGES: dict[tuple[Kind, LimitKind], str] = {
     ),
     ("photo_lookup", "daily"): (
         "Has alcanzado el límite diario de miniaturas. Vuelve mañana."
+    ),
+    ("refresh", "guest"): (
+        "Has agotado los recargas de invitado. Crea una cuenta para continuar."
+    ),
+    ("refresh", "daily"): (
+        "Has alcanzado el límite diario de recargas. Vuelve mañana."
     ),
 }
 
@@ -84,8 +101,8 @@ def _env_int(name: str, default: int) -> int:
     return default
 
 
-def _guest_max(kind: Kind) -> int:
-    return _env_int(_GUEST_ENV[kind], _GUEST_DEFAULTS[kind])
+def _guest_max(kind: str) -> int:
+    return _env_int(_GUEST_ENV.get(kind, ""), _GUEST_DEFAULTS.get(kind, 0))
 
 
 async def count_events(
@@ -134,16 +151,23 @@ async def count_events(
 
 
 async def record_event(
-    user_id: str,
+    user_id: str | None,
     kind: Kind,
     cost_hint: float | int | None = None,
 ) -> None:
     """Inserta un evento. Best-effort: no tumba la petición del usuario."""
     cfg = _config()
-    if not cfg or not user_id:
+    if not cfg:
+        return
+    if kind == "system_revalidation":
+        if user_id is not None:
+            user_id = None
+    elif not user_id:
         return
     base, key = cfg
-    body: dict[str, object] = {"user_id": user_id, "kind": kind}
+    body: dict[str, object] = {"kind": kind}
+    if user_id is not None:
+        body["user_id"] = user_id
     if cost_hint is not None:
         body["cost_hint"] = cost_hint
     try:
@@ -195,8 +219,15 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     """
     if user is None:
         return
+    if kind == "system_revalidation":
+        return
 
     if user.is_anonymous:
+        if kind == "refresh":
+            used = await count_events(user.id, kind)
+            if used >= _env_int("GUEST_MAX_REFRESHES", 3):
+                _raise_limit(user, kind, "guest")
+            return
         used = await count_events(user.id, kind)
         if used >= _guest_max(kind):
             _raise_limit(user, kind, "guest")
@@ -217,6 +248,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "assistant_message":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_ASSISTANT_MESSAGES_DAY", 50):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "refresh":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_REFRESHES_DAY", 20):
             _raise_limit(user, kind, "daily")
         return
 

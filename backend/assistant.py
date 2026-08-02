@@ -222,11 +222,12 @@ async def _run_tool(
         if not url.startswith(("http://", "https://")):
             return json.dumps({"error": "URL inválida"}, ensure_ascii=False), None
         try:
-            plain, _html, og = await fetch_article(url)
+            fetched = await fetch_article(url)
+            plain = fetched.plain_text
             if len(plain) > 24000:
                 plain = plain[:24000] + "\n…[truncado]"
             return json.dumps(
-                {"url": url, "og_image": og, "text": plain},
+                {"url": url, "og_image": fetched.og_image, "text": plain},
                 ensure_ascii=False,
             ), None
         except Exception as e:

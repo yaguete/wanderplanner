@@ -54,6 +54,7 @@ export default function InspirationPanel({
     refetchSource,
     removeSourceFromTrip,
     isLoadingSource,
+    loadingSourceStage,
     ensureArticleHtml,
     isArticleHtmlLoading,
     addItemToDay,
@@ -78,6 +79,9 @@ export default function InspirationPanel({
   const [urlInput, setUrlInput] = useState("")
   const [extractError, setExtractError] = useState<string | null>(null)
   const [refetchError, setRefetchError] = useState<string | null>(null)
+
+  const preparingFirstSource =
+    isLoadingSource && sources.length === 0 && !extractError && !autoSourceError
 
   useEffect(() => {
     if (initialSourceUrl) {
@@ -301,7 +305,7 @@ export default function InspirationPanel({
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0">
-        {addSourceOpen && !isMobile ? (
+        {addSourceOpen && !isMobile && !preparingFirstSource ? (
           <div className="space-y-2 border-b border-border px-3 py-2.5 sm:px-4">
             {addSourceForm}
           </div>
@@ -411,13 +415,29 @@ export default function InspirationPanel({
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
             {!currentSource ? (
-              <EmptyState
-                icon={Plus}
-                title="Añade tu primera fuente"
-                description="Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
-                actionLabel="Añadir fuente"
-                onAction={() => setAddSourceOpen(true)}
-              />
+              preparingFirstSource ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden />
+                  <div className="space-y-1.5">
+                    <p className="max-w-sm text-balance text-sm font-medium text-foreground">
+                      Preparando tu viaje con el artículo que estabas leyendo…
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {loadingSourceStage === "extracting"
+                        ? "Destilando la ruta…"
+                        : "Leyendo el artículo…"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={Plus}
+                  title="Añade tu primera fuente"
+                  description="Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
+                  actionLabel="Añadir fuente"
+                  onAction={() => setAddSourceOpen(true)}
+                />
+              )
             ) : sourceTab === "basics" ? (
               <div className="space-y-3 px-4 pb-6 pt-4 sm:px-6">
                 {!currentSource.basics.length ? (
@@ -528,7 +548,7 @@ export default function InspirationPanel({
       </div>
 
       {/* Móvil: sheet inferior encima de los FABs, con backdrop. */}
-      {addSourceOpen && isMobile ? (
+      {addSourceOpen && isMobile && !preparingFirstSource ? (
         <>
           <button
             type="button"

@@ -24,6 +24,7 @@ T = TypeVar("T")
 
 _locks: dict[str, asyncio.Lock] = {}
 _locks_guard = asyncio.Lock()
+_inflight: dict[str, asyncio.Future[Any]] = {}
 
 _day: date | None = None
 _lookups_today = 0
@@ -66,22 +67,36 @@ def allow_paid_lookup() -> bool:
 
 
 async def single_flight(key: str, coro_factory: Callable[[], Awaitable[T]]) -> T:
-    """Un solo worker por key; el resto espera y reutiliza (misma instancia)."""
+    """Un solo worker por key; el resto espera y reutiliza el mismo Future."""
     async with _locks_guard:
-        lock = _locks.get(key)
-        if lock is None:
-            lock = asyncio.Lock()
-            _locks[key] = lock
-    async with lock:
-        try:
-            return await coro_factory()
-        finally:
-            async with _locks_guard:
-                # Liberar el lock del dict si nadie más lo espera (best-effort).
-                if key in _locks and not _locks[key].locked():
-                    # Puede haber waiters; no borrar si locked. Tras exit, locked() es False
-                    # incluso con waiters en cola — dejamos el lock para reutilizar.
-                    pass
+        existing = _inflight.get(key)
+        if existing is not None:
+            waiter: asyncio.Future[Any] = existing
+        else:
+            loop = asyncio.get_running_loop()
+            waiter = loop.create_future()
+            _inflight[key] = waiter
+            existing = None
+
+    if existing is not None:
+        return await asyncio.shield(waiter)
+
+    try:
+        result = await coro_factory()
+    except BaseException as e:
+        if not waiter.done():
+            waiter.set_exception(e)
+        async with _locks_guard:
+            if _inflight.get(key) is waiter:
+                _inflight.pop(key, None)
+        raise
+    else:
+        if not waiter.done():
+            waiter.set_result(result)
+        async with _locks_guard:
+            if _inflight.get(key) is waiter:
+                _inflight.pop(key, None)
+        return result
 
 
 def supabase_config() -> tuple[str, str] | None:

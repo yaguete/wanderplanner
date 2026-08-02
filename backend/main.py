@@ -9,8 +9,16 @@ POST /itinerary responde como SSE (`text/event-stream`), no como un único JSON 
   - event: error     data: {"detail":"..."}  — fallo tras abrir el stream
 Auth vía Depends sigue devolviendo HTTP 401/403 antes del body.
 
+Caché global stale-while-revalidate (`article_extractions`):
+  - fresh → payload al instante
+  - stale → payload al instante + revalidación en fondo
+  - expired/miss → fetch + Claude síncrono
+  - refresh=true → validación remota síncrona; Claude solo si cambió el contenido útil
+
 Las miniaturas y portadas NO se resuelven aquí: ver GET /thumb (Places) y GET /cover (Unsplash).
 """
+from __future__ import annotations
+
 import os
 import sys
 import json
@@ -28,16 +36,28 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from article_fetch import fetch_article  # noqa: E402
+from article_fetch import (  # noqa: E402
+    CONTENT_VERSION,
+    ArticleFetchResult,
+    content_hash,
+    fetch_article,
+    normalize_article_url,
+)
 from assistant import router as assistant_router  # noqa: E402
 from auth import AuthUser, require_user  # noqa: E402
 from covers import router as covers_router  # noqa: E402
-from extraction_cache import get_cached_extraction, store_extraction  # noqa: E402
+from extraction_cache import (  # noqa: E402
+    CacheEntry,
+    get_cached_extraction,
+    store_extraction,
+    touch_validation,
+)
 from obs import log_kv  # noqa: E402
+from photo_lookup import single_flight  # noqa: E402
 from place_thumbs import router as thumbs_router  # noqa: E402
 from usage import enforce_usage, record_event  # noqa: E402
 
@@ -162,6 +182,7 @@ def _log_extraction(
     output_tokens: int | None = None,
     items: int | None = None,
     error_type: str | None = None,
+    freshness: str | None = None,
 ) -> None:
     fields: dict[str, Any] = {
         "event": "extraction",
@@ -176,6 +197,8 @@ def _log_extraction(
     }
     if error_type is not None:
         fields["error_type"] = error_type
+    if freshness is not None:
+        fields["freshness"] = freshness
     log_kv(logger, **fields)
 
 
@@ -212,13 +235,6 @@ async def _await_with_heartbeats(
         raise
 
 
-async def _fetch_article_timed(url: str) -> tuple[str, str, str | None, int]:
-    t0 = time.perf_counter()
-    plain_text, cleaned_html, og_image = await fetch_article(url)
-    fetch_ms = int((time.perf_counter() - t0) * 1000)
-    return plain_text, cleaned_html, og_image, fetch_ms
-
-
 def _call_claude_timed(plain_text: str) -> tuple[dict, int | None, int | None, int]:
     t0 = time.perf_counter()
     itinerary, input_tokens, output_tokens = call_claude(plain_text)
@@ -226,60 +242,420 @@ def _call_claude_timed(plain_text: str) -> tuple[dict, int | None, int | None, i
     return itinerary, input_tokens, output_tokens, claude_ms
 
 
+# El loop solo guarda referencias débiles a las tasks: sin esto, el GC puede
+# cancelar una revalidación de fondo a medias.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro: Awaitable[None]) -> None:
+    task = asyncio.ensure_future(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+def _flight_key(url: str) -> str:
+    return f"extract:{normalize_article_url(url) or url}"
+
+
+def _content_unchanged(entry: CacheEntry, fetched: ArticleFetchResult) -> bool:
+    """True si no hace falta redestilar (misma fecha o mismo hash útil)."""
+    if (
+        fetched.article_modified_at is not None
+        and entry.article_modified_at is not None
+        and fetched.article_modified_at == entry.article_modified_at
+    ):
+        return True
+    if fetched.content_hash and entry.content_hash and fetched.content_hash == entry.content_hash:
+        return True
+    return False
+
+
+async def _touch_from_fetch(url: str, entry: CacheEntry, fetched: ArticleFetchResult) -> None:
+    await touch_validation(
+        url,
+        etag=fetched.etag or entry.etag,
+        last_modified=fetched.last_modified or entry.last_modified,
+        article_modified_at=fetched.article_modified_at or entry.article_modified_at,
+        content_hash_value=fetched.content_hash or entry.content_hash,
+        content_version=CONTENT_VERSION,
+        cache_url=entry.url,
+    )
+
+
+async def _store_from_fetch(
+    url: str,
+    itinerary: dict,
+    fetched: ArticleFetchResult,
+    *,
+    cache_url: str | None = None,
+) -> None:
+    await store_extraction(
+        url,
+        itinerary,
+        etag=fetched.etag,
+        last_modified=fetched.last_modified,
+        article_modified_at=fetched.article_modified_at,
+        content_hash_value=fetched.content_hash or content_hash(fetched.plain_text),
+        content_version=CONTENT_VERSION,
+        cache_url=cache_url,
+    )
+
+
+async def _distill_sync(
+    url: str,
+    *,
+    user: AuthUser | None,
+    entry: CacheEntry | None = None,
+) -> dict:
+    """Fetch + Claude + store. Single-flight por URL canónica."""
+
+    async def _run() -> dict:
+        fetched = await fetch_article(
+            url,
+            etag=entry.etag if entry else None,
+            last_modified=entry.last_modified if entry else None,
+        )
+        if fetched.not_modified and entry is not None:
+            await _touch_from_fetch(url, entry, fetched)
+            payload = dict(entry.payload)
+            _strip_thumb_urls(payload)
+            return payload
+
+        itinerary, input_tokens, output_tokens = await asyncio.to_thread(
+            call_claude, fetched.plain_text
+        )
+        itinerary["og_image"] = fetched.og_image
+        itinerary["article_html"] = fetched.cleaned_html
+        _strip_thumb_urls(itinerary)
+        await _store_from_fetch(
+            url,
+            itinerary,
+            fetched,
+            cache_url=entry.url if entry else None,
+        )
+        if user is not None:
+            await record_event(user.id, "extraction", cost_hint=output_tokens)
+        _log_extraction(
+            url=url,
+            outcome="ok",
+            cache_hit=False,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            items=_count_items(itinerary),
+            freshness="miss" if entry is None else entry.freshness,
+        )
+        return itinerary
+
+    return await single_flight(_flight_key(url), _run)
+
+
+async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
+    """Revalidación de fondo: nunca consume cuota de usuario."""
+
+    async def _run() -> None:
+        try:
+            fetched = await fetch_article(
+                url,
+                etag=entry.etag,
+                last_modified=entry.last_modified,
+            )
+            if fetched.not_modified:
+                await _touch_from_fetch(url, entry, fetched)
+                log_kv(
+                    logger,
+                    event="extraction_revalidate",
+                    outcome="not_modified",
+                    host=_host(url),
+                )
+                return
+
+            # Bump de content_version sin redestilar si el hash «nuevo» solo refleja el limpiador.
+            if (
+                entry.content_version is not None
+                and entry.content_version != CONTENT_VERSION
+                and entry.content_hash
+            ):
+                # Recalculamos hash sobre el texto nuevo; si coincide con lo guardado
+                # (raro tras cambio de limpiador) o si dateModified no cambió → solo touch.
+                if _content_unchanged(entry, fetched) or (
+                    fetched.article_modified_at is None
+                    and entry.article_modified_at is None
+                    and fetched.content_hash == entry.content_hash
+                ):
+                    await touch_validation(
+                        url,
+                        etag=fetched.etag or entry.etag,
+                        last_modified=fetched.last_modified or entry.last_modified,
+                        article_modified_at=fetched.article_modified_at
+                        or entry.article_modified_at,
+                        content_hash_value=fetched.content_hash,
+                        content_version=CONTENT_VERSION,
+                        cache_url=entry.url,
+                    )
+                    log_kv(
+                        logger,
+                        event="extraction_revalidate",
+                        outcome="version_bump",
+                        host=_host(url),
+                    )
+                    return
+
+            if _content_unchanged(entry, fetched):
+                await _touch_from_fetch(url, entry, fetched)
+                log_kv(
+                    logger,
+                    event="extraction_revalidate",
+                    outcome="unchanged",
+                    host=_host(url),
+                )
+                return
+
+            itinerary, _in, output_tokens = await asyncio.to_thread(
+                call_claude, fetched.plain_text
+            )
+            itinerary["og_image"] = fetched.og_image
+            itinerary["article_html"] = fetched.cleaned_html
+            _strip_thumb_urls(itinerary)
+            await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
+            await record_event(None, "system_revalidation", cost_hint=output_tokens)
+            log_kv(
+                logger,
+                event="extraction_revalidate",
+                outcome="redistilled",
+                host=_host(url),
+                items=_count_items(itinerary),
+            )
+        except Exception as e:
+            # Fallback: no tocar la caché ante error de red del blog.
+            log_kv(
+                logger,
+                event="extraction_revalidate",
+                outcome="error",
+                host=_host(url),
+                error_type=type(e).__name__,
+            )
+
+    await single_flight(f"revalidate:{normalize_article_url(url) or url}", _run)
+
+
+async def _validate_sync_for_refresh(
+    url: str,
+    entry: CacheEntry,
+    *,
+    user: AuthUser | None,
+) -> dict:
+    """Validación síncrona forzada (Recargar): Claude solo si cambió el contenido."""
+    t0 = time.perf_counter()
+    fetched = await fetch_article(
+        url,
+        etag=entry.etag,
+        last_modified=entry.last_modified,
+    )
+    fetch_ms = int((time.perf_counter() - t0) * 1000)
+
+    if fetched.not_modified:
+        await _touch_from_fetch(url, entry, fetched)
+        if user is not None:
+            await record_event(user.id, "refresh")
+        payload = dict(entry.payload)
+        _strip_thumb_urls(payload)
+        _log_extraction(
+            url=url,
+            outcome="ok",
+            cache_hit=True,
+            fetch_ms=fetch_ms,
+            items=_count_items(payload),
+            freshness="refresh_not_modified",
+        )
+        return payload
+
+    if (
+        entry.content_version is not None
+        and entry.content_version != CONTENT_VERSION
+        and _content_unchanged(entry, fetched)
+    ):
+        await touch_validation(
+            url,
+            etag=fetched.etag or entry.etag,
+            last_modified=fetched.last_modified or entry.last_modified,
+            article_modified_at=fetched.article_modified_at or entry.article_modified_at,
+            content_hash_value=fetched.content_hash,
+            content_version=CONTENT_VERSION,
+            cache_url=entry.url,
+        )
+        if user is not None:
+            await record_event(user.id, "refresh")
+        payload = dict(entry.payload)
+        _strip_thumb_urls(payload)
+        return payload
+
+    if _content_unchanged(entry, fetched):
+        await _touch_from_fetch(url, entry, fetched)
+        if user is not None:
+            await record_event(user.id, "refresh")
+        payload = dict(entry.payload)
+        _strip_thumb_urls(payload)
+        _log_extraction(
+            url=url,
+            outcome="ok",
+            cache_hit=True,
+            fetch_ms=fetch_ms,
+            items=_count_items(payload),
+            freshness="refresh_unchanged",
+        )
+        return payload
+
+    # Contenido cambió → redestilar (cuenta como extraction, no solo refresh).
+    await enforce_usage(user, "extraction")
+    t1 = time.perf_counter()
+    itinerary, input_tokens, output_tokens = await asyncio.to_thread(
+        call_claude, fetched.plain_text
+    )
+    claude_ms = int((time.perf_counter() - t1) * 1000)
+    itinerary["og_image"] = fetched.og_image
+    itinerary["article_html"] = fetched.cleaned_html
+    _strip_thumb_urls(itinerary)
+    await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
+    if user is not None:
+        await record_event(user.id, "extraction", cost_hint=output_tokens)
+        await record_event(user.id, "refresh")
+    _log_extraction(
+        url=url,
+        outcome="ok",
+        cache_hit=False,
+        fetch_ms=fetch_ms,
+        claude_ms=claude_ms,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        items=_count_items(itinerary),
+        freshness="refresh_changed",
+    )
+    return itinerary
+
+
 async def _stream_itinerary(
     url: str,
     *,
-    cached: dict[str, Any] | None,
+    entry: CacheEntry | None,
     user: AuthUser | None,
+    refresh: bool,
 ) -> AsyncIterator[str]:
-    """Si `cached` viene del handler, no se vuelve a consultar article_extractions."""
     fetch_ms: int | None = None
     claude_ms: int | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
     try:
-        if cached is not None:
-            _strip_thumb_urls(cached)
+        # ── Refresh forzado ──────────────────────────────────────────────────
+        if refresh and entry is not None:
+            yield _sse("progress", {"stage": "fetching"})
+            result: dict | None = None
+            async for item in _await_with_heartbeats(
+                _validate_sync_for_refresh(url, entry, user=user),
+                "fetching",
+            ):
+                if _is_sse_chunk(item):
+                    yield item  # type: ignore[misc]
+                else:
+                    result = item  # type: ignore[misc]
+            assert result is not None
+            yield _sse("result", result)
+            return
+
+        if refresh and entry is None:
+            # Sin fila: mismo flujo que miss; la cuota de refresh ya se aplicó en el handler.
+            if user is not None:
+                await record_event(user.id, "refresh")
+
+        # ── Hit fresco / stale ───────────────────────────────────────────────
+        if entry is not None and entry.freshness in ("fresh", "stale") and not refresh:
+            payload = dict(entry.payload)
+            _strip_thumb_urls(payload)
             _log_extraction(
                 url=url,
                 outcome="ok",
                 cache_hit=True,
-                items=_count_items(cached),
+                items=_count_items(payload),
+                freshness=entry.freshness,
             )
             yield _sse("progress", {"stage": "fetching"})
-            yield _sse("result", cached)
+            yield _sse("result", payload)
+            if entry.freshness == "stale":
+                _spawn_background(revalidate_in_background(url, entry))
             return
 
+        # ── Miss / expired: destilación síncrona con heartbeats ──────────────
         yield _sse("progress", {"stage": "fetching"})
-        plain_text: str | None = None
-        cleaned_html: str | None = None
-        og_image: str | None = None
-        async for item in _await_with_heartbeats(_fetch_article_timed(url), "fetching"):
-            if _is_sse_chunk(item):
-                yield item  # type: ignore[misc]
-            else:
-                plain_text, cleaned_html, og_image, fetch_ms = item  # type: ignore[misc]
 
-        assert plain_text is not None and cleaned_html is not None
+        async def _fetch_then_maybe_claude() -> dict:
+            nonlocal fetch_ms, claude_ms, input_tokens, output_tokens
+            t0 = time.perf_counter()
+            fetched = await fetch_article(
+                url,
+                etag=entry.etag if entry else None,
+                last_modified=entry.last_modified if entry else None,
+            )
+            fetch_ms = int((time.perf_counter() - t0) * 1000)
 
-        yield _sse("progress", {"stage": "extracting"})
+            if fetched.not_modified and entry is not None:
+                await _touch_from_fetch(url, entry, fetched)
+                payload = dict(entry.payload)
+                _strip_thumb_urls(payload)
+                return payload
+
+            if entry is not None and not fetched.not_modified and _content_unchanged(
+                entry, fetched
+            ):
+                await _touch_from_fetch(url, entry, fetched)
+                payload = dict(entry.payload)
+                # Actualizar HTML/og por si el envoltorio cambió sin cambiar el texto útil.
+                if fetched.cleaned_html:
+                    payload["article_html"] = fetched.cleaned_html
+                if fetched.og_image:
+                    payload["og_image"] = fetched.og_image
+                _strip_thumb_urls(payload)
+                await store_extraction(
+                    url,
+                    payload,
+                    etag=fetched.etag,
+                    last_modified=fetched.last_modified,
+                    article_modified_at=fetched.article_modified_at,
+                    content_hash_value=fetched.content_hash,
+                    content_version=CONTENT_VERSION,
+                    cache_url=entry.url,
+                )
+                return payload
+
+            t1 = time.perf_counter()
+            itinerary, input_tokens, output_tokens = await asyncio.to_thread(
+                call_claude, fetched.plain_text
+            )
+            claude_ms = int((time.perf_counter() - t1) * 1000)
+            itinerary["og_image"] = fetched.og_image
+            itinerary["article_html"] = fetched.cleaned_html
+            _strip_thumb_urls(itinerary)
+            await _store_from_fetch(
+                url,
+                itinerary,
+                fetched,
+                cache_url=entry.url if entry else None,
+            )
+            if user is not None:
+                await record_event(user.id, "extraction", cost_hint=output_tokens)
+            return itinerary
+
         itinerary: dict | None = None
+        # Single-flight envuelve toda la destilación.
         async for item in _await_with_heartbeats(
-            asyncio.to_thread(_call_claude_timed, plain_text),
+            single_flight(_flight_key(url), _fetch_then_maybe_claude),
             "extracting",
         ):
             if _is_sse_chunk(item):
+                # Distinguir etapa: tras el fetch real preferimos "extracting".
                 yield item  # type: ignore[misc]
             else:
-                itinerary, input_tokens, output_tokens, claude_ms = item  # type: ignore[misc]
+                itinerary = item  # type: ignore[misc]
 
         assert itinerary is not None
-        itinerary["og_image"] = og_image
-        itinerary["article_html"] = cleaned_html
-        _strip_thumb_urls(itinerary)
-        await store_extraction(url, itinerary)
-        if user is not None:
-            await record_event(user.id, "extraction", cost_hint=output_tokens)
         _log_extraction(
             url=url,
             outcome="ok",
@@ -289,6 +665,7 @@ async def _stream_itinerary(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             items=_count_items(itinerary),
+            freshness=entry.freshness if entry else "miss",
         )
         yield _sse("result", itinerary)
     except httpx.HTTPError as e:
@@ -333,6 +710,7 @@ async def _stream_itinerary(
 
 class ItineraryRequest(BaseModel):
     url: str
+    refresh: bool = Field(default=False)
 
 
 @app.get("/")
@@ -345,12 +723,21 @@ async def generate_itinerary(
     request: ItineraryRequest,
     user: AuthUser | None = Depends(require_user),
 ):
-    cached = await get_cached_extraction(request.url)
-    if cached is None:
-        # Solo cuenta / bloquea cuando vamos a llamar a Claude (miss de caché).
+    entry = await get_cached_extraction(request.url)
+
+    if request.refresh:
+        await enforce_usage(user, "refresh")
+    # Miss/expired (o refresh sin fila): habrá destilación síncrona → cuota de extraction.
+    if entry is None or entry.freshness == "expired":
         await enforce_usage(user, "extraction")
+
     return StreamingResponse(
-        _stream_itinerary(request.url, cached=cached, user=user),
+        _stream_itinerary(
+            request.url,
+            entry=entry,
+            user=user,
+            refresh=request.refresh,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -373,17 +760,19 @@ if __name__ == "__main__":
     print(f"Fetching: {url}\n", flush=True)
 
     async def run():
-        plain_text, cleaned_html, og_image = await fetch_article(url)
+        fetched = await fetch_article(url)
         if debug:
             print("─" * 60)
-            print(f"ARTICLE TEXT ({len(plain_text)} chars):")
-            print(f"OG Image: {og_image}")
-            print(f"CLEANED HTML ({len(cleaned_html)} chars)\n")
-            print(plain_text[:3000])
-            if len(plain_text) > 3000:
-                print(f"\n... [{len(plain_text) - 3000} chars más] ...")
+            print(f"ARTICLE TEXT ({len(fetched.plain_text)} chars):")
+            print(f"OG Image: {fetched.og_image}")
+            print(f"CLEANED HTML ({len(fetched.cleaned_html)} chars)\n")
+            print(fetched.plain_text[:3000])
+            if len(fetched.plain_text) > 3000:
+                print(f"\n... [{len(fetched.plain_text) - 3000} chars más] ...")
             print("─" * 60 + "\n")
-        itinerary, _input_tokens, _output_tokens = await asyncio.to_thread(call_claude, plain_text)
+        itinerary, _input_tokens, _output_tokens = await asyncio.to_thread(
+            call_claude, fetched.plain_text
+        )
         return itinerary
 
     result = asyncio.run(run())

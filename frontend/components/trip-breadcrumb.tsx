@@ -13,6 +13,7 @@ type TripBreadcrumbProps = {
   onTogglePlan: () => void
   addSourceOpen?: boolean
   onToggleAddSource?: () => void
+  addSourceDisabled?: boolean
   className?: string
 }
 
@@ -22,6 +23,7 @@ export function TripBreadcrumb({
   onTogglePlan,
   addSourceOpen = false,
   onToggleAddSource,
+  addSourceDisabled = false,
   className,
 }: TripBreadcrumbProps) {
   const itemCount = trip.days.reduce((sum, d) => sum + d.items.length, 0)
@@ -65,6 +67,7 @@ export function TripBreadcrumb({
           variant="outline"
           size="sm"
           className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+          disabled={addSourceDisabled}
           onClick={onToggleAddSource}
           aria-pressed={addSourceOpen}
           aria-label={addSourceOpen ? "Cancelar añadir fuente" : "Añadir fuente"}
