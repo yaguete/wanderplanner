@@ -16,8 +16,8 @@ Fuente de verdad: este documento + tokens en `frontend/app/globals.css`.
 
 ### Fuentes primero, plan a demanda
 - Las fuentes ocupan el canvas principal.
-- «Mi viaje» es un panel overlay derecho ocultable.
-- El asistente es otro overlay (mismo footprint ~560px en desktop).
+- «Mi viaje» es un panel lateral derecho plegable y redimensionable (participa en el layout; no flota encima).
+- El asistente es un overlay anclado al área de Fuentes (~560px, ampliable a ~760px en desktop).
 
 ## 2) Color
 
@@ -41,9 +41,8 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 
 ### Desktop
 - Breadcrumb de viaje ~44px (`TripBreadcrumb`): nombre, meta, «Añadir fuente», «Mi viaje».
-- Fuentes a ancho completo.
-- «Mi viaje»: overlay derecho ~560px, persistencia de abierto/cerrado en `localStorage`.
-- Asistente: overlay hermano (mismo ancho); FAB «Asistente» abajo a la derecha (se desplaza si el plan está abierto).
+- Fuentes a la izquierda (flex); «Mi viaje» a la derecha como panel acoplado plegable/redimensionable (~35% por defecto, límites ~20–50%), con persistencia de abierto/cerrado (`wp-plan-open`) y del ancho (`autoSaveId`).
+- Asistente: overlay sobre el área de Fuentes (no invade «Mi viaje»); FAB «Asistente» abajo a la derecha; botón de anchura amplia en la cabecera del chat.
 
 ### Móvil
 - **Sin** breadcrumb (gana altura útil).
@@ -69,7 +68,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 ## 5) Qué no hacer
 
 - No reintroducir Fraunces, brand turquesa ni primary terracota.
-- No volver al split permanente Fuentes | Mi viaje en desktop.
+- No volver al split permanente Fuentes | Mi viaje en desktop (el panel derecho debe poder plegarse).
 - No reintroducir el breadcrumb en móvil ni FABs de detalle en desktop.
 - No envolver las respuestas del asistente en cards con borde/sombra.
 - No ofrecer «Añadir fuente» sobre webs gubernamentales / de visados como si fueran blogs de inspiración.

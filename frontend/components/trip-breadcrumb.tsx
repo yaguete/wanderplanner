@@ -76,9 +76,14 @@ export function TripBreadcrumb({
 
       <Button
         type="button"
-        variant="default"
+        variant={planOpen ? "secondary" : "default"}
         size="sm"
-        className="h-8 shrink-0 gap-1.5 px-2.5 text-xs shadow-sm shadow-primary/20"
+        className={cn(
+          "h-8 shrink-0 gap-1.5 px-2.5 text-xs",
+          planOpen
+            ? "bg-muted text-foreground hover:bg-muted/80"
+            : "shadow-sm shadow-primary/20",
+        )}
         onClick={onTogglePlan}
         aria-pressed={planOpen}
         aria-controls="trip-plan-panel"

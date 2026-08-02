@@ -2,8 +2,8 @@
  * Conversaciones del asistente en Supabase (`assistant_conversations`, una fila por conversación
  * con `messages jsonb`). Sustituye a `lib/assistant-persistence.ts`.
  *
- * `activeConversationId` no se guarda aquí: es preferencia de UI y vive en localStorage por viaje.
- * Al borrar un viaje, las filas caen por `on delete cascade`.
+ * `activeConversationId` no se guarda aquí: es preferencia de UI y vive en localStorage
+ * por usuario y viaje. Al borrar un viaje, las filas caen por `on delete cascade`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { AssistantAction } from "@/lib/assistant-api"
@@ -34,6 +34,14 @@ type ConversationRow = {
 }
 
 const ACTIVE_KEY_PREFIX = "wanderplanner:assistant-active:"
+
+function activeKey(userId: string, tripId: string): string {
+  return `${ACTIVE_KEY_PREFIX}${userId}:${tripId}`
+}
+
+function legacyActiveKey(tripId: string): string {
+  return `${ACTIVE_KEY_PREFIX}${tripId}`
+}
 
 /** Título local a partir del primer mensaje del usuario. */
 export function deriveConversationTitle(messages: AssistantMessage[]): string {
@@ -100,23 +108,55 @@ export async function deleteConversationRow(
 
 // ── Preferencia local de conversación activa ─────────────────────────────────
 
-export function loadActiveConversationId(tripId: string): string | null {
+export function loadActiveConversationId(userId: string, tripId: string): string | null {
   if (typeof window === "undefined") return null
   try {
-    return localStorage.getItem(`${ACTIVE_KEY_PREFIX}${tripId}`)
+    const scoped = localStorage.getItem(activeKey(userId, tripId))
+    if (scoped) return scoped
+
+    // Migración one-shot desde la clave legacy (sin userId).
+    const legacy = localStorage.getItem(legacyActiveKey(tripId))
+    if (!legacy) return null
+    localStorage.setItem(activeKey(userId, tripId), legacy)
+    localStorage.removeItem(legacyActiveKey(tripId))
+    return legacy
   } catch {
     return null
   }
 }
 
-export function saveActiveConversationId(tripId: string, id: string | null): void {
+export function saveActiveConversationId(
+  userId: string,
+  tripId: string,
+  id: string | null,
+): void {
   if (typeof window === "undefined") return
   try {
-    const key = `${ACTIVE_KEY_PREFIX}${tripId}`
+    const key = activeKey(userId, tripId)
     if (id) localStorage.setItem(key, id)
     else localStorage.removeItem(key)
+    // Evita que una clave legacy restaure la conversación tras un login limpio.
+    localStorage.removeItem(legacyActiveKey(tripId))
   } catch {
     /* cuota / modo privado */
+  }
+}
+
+/**
+ * Borra solo los punteros locales de conversación activa.
+ * No toca filas de Supabase (el histórico permanece).
+ */
+export function clearActiveConversationPointers(): void {
+  if (typeof window === "undefined") return
+  try {
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(ACTIVE_KEY_PREFIX)) toRemove.push(key)
+    }
+    for (const key of toRemove) localStorage.removeItem(key)
+  } catch {
+    /* ignore */
   }
 }
 

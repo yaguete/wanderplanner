@@ -126,9 +126,10 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
   /** La conversación activa se recuerda en local: es preferencia de UI, no dato del viaje. */
   const persistActiveId = useCallback(
     (nextActiveId: string | null) => {
-      saveActiveConversationId(tripId, nextActiveId)
+      if (!userId) return
+      saveActiveConversationId(userId, tripId, nextActiveId)
     },
-    [tripId],
+    [tripId, userId],
   )
 
   useEffect(() => {
@@ -160,11 +161,10 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       }
       if (!active) return
 
-      const preferred = loadActiveConversationId(tripId)
+      // Sin puntero activo válido → chat limpio (p. ej. tras login). El histórico sigue en `loaded`.
+      const preferred = loadActiveConversationId(userId, tripId)
       const activeId =
-        preferred && loaded.some((c) => c.id === preferred)
-          ? preferred
-          : loaded[0]?.id ?? null
+        preferred && loaded.some((c) => c.id === preferred) ? preferred : null
 
       setConversations(loaded)
       setActiveConversationId(activeId)

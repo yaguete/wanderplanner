@@ -27,6 +27,7 @@ import {
   type FavoriteReferenceInput,
   type TravelerProfile,
 } from "@/lib/db/profile-repo"
+import { clearActiveConversationPointers } from "@/lib/db/assistant-repo"
 
 export type AuthResult = { ok: true } | { ok: false; error: string }
 
@@ -180,6 +181,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback<AuthContextValue["signIn"]>(async (email, password) => {
     if (!configured) return { ok: false, error: "Supabase no está configurado." }
     try {
+      // Antes del login: evita que la hidratación del asistente restaure el puntero previo.
+      clearActiveConversationPointers()
       const supabase = createClient()
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) return { ok: false, error: error.message }
@@ -333,6 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!configured) return
     const supabase = createClient()
     await supabase.auth.signOut()
+    clearActiveConversationPointers()
     setProfile(null)
     setFavoriteReferences([])
     loadedProfileFor.current = null

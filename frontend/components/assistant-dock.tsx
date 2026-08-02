@@ -1,11 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import {
   ArrowLeft,
   History,
   Link2,
   Loader2,
+  Maximize2,
+  Minimize2,
   Minus,
   Plus,
   SendHorizontal,
@@ -41,9 +43,8 @@ import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 
-/** Offset desde la derecha cuando «Mi viaje» está abierto (right-2 + ancho panel + gap). */
-export const PLAN_PANEL_RIGHT_OFFSET =
-  "calc(0.5rem + min(560px, calc(100vw - 2rem)) + 0.75rem)"
+const ASSISTANT_WIDTH_NARROW = "min(560px, calc(100% - 1rem))"
+const ASSISTANT_WIDTH_WIDE = "min(760px, calc(100% - 1rem))"
 
 const SUGGESTIONS = [
   "¿Necesito visado para este viaje?",
@@ -57,8 +58,6 @@ type AssistantPanelLayerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   tripId: string
-  /** En desktop, desplaza el chat a la izquierda del panel Mi viaje. */
-  shiftForPlan?: boolean
 }
 
 function StatusPill({ label }: { label: string }) {
@@ -321,7 +320,6 @@ export function AssistantPanelLayer({
   open,
   onOpenChange,
   tripId,
-  shiftForPlan = false,
 }: AssistantPanelLayerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -332,6 +330,8 @@ export function AssistantPanelLayer({
   const [linkError, setLinkError] = useState<string | null>(null)
   const [view, setView] = useState<PanelView>("chat")
   const [pendingDelete, setPendingDelete] = useState<AssistantConversationSummary | null>(null)
+  /** Solo desktop: modo de lectura más ancho; se conserva al minimizar en la misma vista. */
+  const [wide, setWide] = useState(false)
 
   const { getTrip, getTripSources, addSourceToTrip, addItemToDay, isLoadingSource } = useTrips()
   const trip = getTrip(tripId)
@@ -497,16 +497,15 @@ export function AssistantPanelLayer({
       className={cn(
         "absolute z-40 flex min-h-0 flex-col overflow-hidden bg-background",
         "inset-0 border-t border-border",
-        /* Mismo footprint que «Mi viaje» en desktop: top/bottom/right-2 + ancho 560 */
-        "sm:inset-auto sm:top-2 sm:bottom-2 sm:w-[min(560px,calc(100vw-2rem))]",
+        "sm:inset-auto sm:top-2 sm:right-2 sm:bottom-2",
         "sm:rounded-xl sm:border sm:shadow-[0_16px_48px_rgba(0,0,0,0.14)]",
         "duration-200 animate-in fade-in-0 slide-in-from-bottom-2",
-        shiftForPlan ? "sm:right-[var(--plan-panel-offset)]" : "sm:right-2",
+        "sm:transition-[width] sm:duration-200 sm:ease-out",
       )}
       style={
-        shiftForPlan
-          ? ({ "--plan-panel-offset": PLAN_PANEL_RIGHT_OFFSET } as CSSProperties)
-          : undefined
+        isMobile
+          ? undefined
+          : { width: wide ? ASSISTANT_WIDTH_WIDE : ASSISTANT_WIDTH_NARROW }
       }
     >
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
@@ -554,6 +553,18 @@ export function AssistantPanelLayer({
             >
               <History className="h-3.5 w-3.5" />
             </button>
+            {!isMobile ? (
+              <button
+                type="button"
+                onClick={() => setWide((v) => !v)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label={wide ? "Reducir ancho del asistente" : "Ampliar asistente para lectura"}
+                aria-pressed={wide}
+                title={wide ? "Ancho normal" : "Modo lectura amplia"}
+              >
+                {wide ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </button>
+            ) : null}
           </>
         )}
         <button

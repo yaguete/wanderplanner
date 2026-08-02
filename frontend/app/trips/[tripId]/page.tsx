@@ -1,19 +1,22 @@
 "use client"
 
-import { Suspense, use, useEffect, useRef, useState, type CSSProperties } from "react"
+import { Suspense, use, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { PanelRightClose, PanelRightOpen, Plus, Sparkles, X } from "lucide-react"
+import type { ImperativePanelHandle } from "react-resizable-panels"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
-import { AssistantPanelLayer, PLAN_PANEL_RIGHT_OFFSET } from "@/components/assistant-dock"
+import { AssistantPanelLayer } from "@/components/assistant-dock"
 import { TripBreadcrumb } from "@/components/trip-breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 
 const PLAN_OPEN_KEY = "wp-plan-open"
+const PLAN_LAYOUT_SAVE_ID = "wp-trip-plan-layout"
 
 function readPlanOpen(): boolean {
   if (typeof window === "undefined") return true
@@ -40,8 +43,10 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   /**
    * La transición solo tras el primer paint (o un toggle).
    * Si no, al cambiar de viaje el remount anima el panel “escapándose” a la derecha.
+   * Solo aplica al overlay móvil.
    */
   const [planAnimEnabled, setPlanAnimEnabled] = useState(false)
+  const planPanelRef = useRef<ImperativePanelHandle>(null)
 
   // Solo se concluye que el viaje no existe cuando la carga ha terminado.
   useEffect(() => {
@@ -73,6 +78,21 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       /* ignore */
     }
   }, [planOpen])
+
+  /** Desktop: sincroniza el panel redimensionable con planOpen (botones / localStorage). */
+  useEffect(() => {
+    if (isMobile) return
+    const id = requestAnimationFrame(() => {
+      const panel = planPanelRef.current
+      if (!panel) return
+      if (planOpen) {
+        if (panel.isCollapsed()) panel.expand()
+      } else if (!panel.isCollapsed()) {
+        panel.collapse()
+      }
+    })
+    return () => cancelAnimationFrame(id)
+  }, [planOpen, isMobile])
 
   /** Al cambiar de viaje, cierra overlays locales; el panel Mi viaje conserva su estado. */
   useEffect(() => {
@@ -107,19 +127,73 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   if (!trip) return null
 
-  const shiftAssistantForPlan = planOpen && !isMobile
+  const closePlan = () => {
+    setPlanAnimEnabled(true)
+    setPlanOpen(false)
+  }
+
+  const togglePlan = () => {
+    setAddSourceOpen(false)
+    if (isMobile) {
+      setAssistantOpen(false)
+      setPlanAnimEnabled(true)
+      setPlanOpen((v) => !v)
+      return
+    }
+    const panel = planPanelRef.current
+    if (!panel) {
+      setPlanOpen((v) => !v)
+      return
+    }
+    if (panel.isCollapsed()) panel.expand()
+    else panel.collapse()
+  }
+
+  const openAddSource = (open: boolean) => {
+    if (open) {
+      setAssistantOpen(false)
+      setPlanAnimEnabled(true)
+      setPlanOpen(false)
+    }
+    setAddSourceOpen(open)
+  }
+
+  const inspirationColumn = (
+    <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
+      <InspirationPanel
+        tripId={tripId}
+        addSourceOpen={addSourceOpen}
+        onAddSourceOpenChange={openAddSource}
+      />
+
+      {!isMobile && !assistantOpen ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="absolute bottom-4 right-3 z-40 h-11 gap-2 rounded-full px-4 text-sm shadow-md"
+          onClick={() => setAssistantOpen(true)}
+          aria-controls="inspiration-assistant-panel"
+          aria-expanded={false}
+        >
+          <Sparkles className="h-4 w-4" />
+          Asistente
+        </Button>
+      ) : null}
+
+      <AssistantPanelLayer
+        open={assistantOpen}
+        onOpenChange={setAssistantOpen}
+        tripId={tripId}
+      />
+    </div>
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <TripBreadcrumb
         trip={trip}
         planOpen={planOpen}
-        onTogglePlan={() => {
-          setAddSourceOpen(false)
-          if (isMobile) setAssistantOpen(false)
-          setPlanAnimEnabled(true)
-          setPlanOpen((v) => !v)
-        }}
+        onTogglePlan={togglePlan}
         addSourceOpen={addSourceOpen}
         onToggleAddSource={() => {
           setAssistantOpen(false)
@@ -129,155 +203,131 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         }}
       />
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div className="relative h-full min-h-0 overflow-hidden">
-          <InspirationPanel
-            tripId={tripId}
-            addSourceOpen={addSourceOpen}
-            onAddSourceOpenChange={(open) => {
-              if (open) {
-                setAssistantOpen(false)
-                setPlanAnimEnabled(true)
-                setPlanOpen(false)
-              }
-              setAddSourceOpen(open)
-            }}
-          />
-        </div>
+      {isMobile ? (
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          {inspirationColumn}
 
-        {isMobile && planOpen ? (
-          <button
-            type="button"
-            className="absolute inset-0 z-20 bg-foreground/20"
-            aria-label="Cerrar Mi viaje"
-            onClick={() => {
-              setPlanAnimEnabled(true)
-              setPlanOpen(false)
-            }}
-          />
-        ) : null}
-
-        <aside
-          id="trip-plan-panel"
-          aria-label="Mi viaje"
-          aria-hidden={!planOpen}
-          className={cn(
-            "absolute z-30 flex flex-col overflow-hidden bg-background",
-            planAnimEnabled && "transition-transform duration-200 ease-out",
-            isMobile
-              ? "inset-0 w-full border-l border-border"
-              : "bottom-2 right-2 top-2 w-[min(560px,calc(100vw-2rem))] rounded-xl border border-border shadow-[0_16px_48px_rgba(0,0,0,0.14)]",
-            planOpen
-              ? "translate-x-0"
-              : cn(
-                  "pointer-events-none",
-                  isMobile ? "translate-x-full" : "translate-x-[calc(100%+0.5rem)]",
-                ),
-          )}
-        >
-          <ItineraryPanel
-            tripId={tripId}
-            onClose={() => {
-              setPlanAnimEnabled(true)
-              setPlanOpen(false)
-            }}
-          />
-        </aside>
-
-        {/* Móvil: FABs inferiores (sustituyen al breadcrumb). Se ocultan solo con el asistente. */}
-        {isMobile && !assistantOpen ? (
-          <div className="absolute bottom-4 right-3 z-[50] flex items-center gap-2">
-            <Button
+          {planOpen ? (
+            <button
               type="button"
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 rounded-full bg-background shadow-md"
-              onClick={() => {
-                setAssistantOpen(false)
-                setPlanAnimEnabled(true)
-                setPlanOpen(false)
-                setAddSourceOpen((v) => !v)
-              }}
-              aria-pressed={addSourceOpen}
-              aria-label={addSourceOpen ? "Cancelar añadir fuente" : "Añadir fuente"}
-            >
-              {addSourceOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 rounded-full bg-background shadow-md"
-              onClick={() => {
-                setPlanAnimEnabled(true)
-                setPlanOpen(false)
-                setAddSourceOpen(false)
-                setAssistantOpen(true)
-              }}
-              aria-controls="inspiration-assistant-panel"
-              aria-expanded={false}
-              aria-label="Abrir asistente"
-            >
-              <Sparkles className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant={planOpen ? "secondary" : "default"}
-              size="icon"
-              className={cn(
-                "h-11 w-11 rounded-full shadow-md",
-                planOpen ? "bg-muted text-foreground hover:bg-muted/80" : "shadow-primary/20",
-              )}
-              onClick={() => {
-                setAddSourceOpen(false)
-                setAssistantOpen(false)
-                setPlanAnimEnabled(true)
-                setPlanOpen((v) => !v)
-              }}
-              aria-pressed={planOpen}
-              aria-controls="trip-plan-panel"
-              aria-label={planOpen ? "Cerrar Mi viaje" : "Abrir Mi viaje"}
-            >
-              {planOpen ? (
-                <PanelRightClose className="h-4 w-4" />
-              ) : (
-                <PanelRightOpen className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        ) : null}
+              className="absolute inset-0 z-20 bg-foreground/20"
+              aria-label="Cerrar Mi viaje"
+              onClick={closePlan}
+            />
+          ) : null}
 
-        {/* Desktop: FAB del asistente (breadcrumb conserva + / Mi viaje). */}
-        {!isMobile && !assistantOpen ? (
-          <Button
-            type="button"
-            variant="outline"
+          <aside
+            id="trip-plan-panel"
+            aria-label="Mi viaje"
+            aria-hidden={!planOpen}
             className={cn(
-              "absolute bottom-4 z-40 h-11 gap-2 rounded-full px-4 text-sm shadow-md",
-              planAnimEnabled && "transition-[right] duration-200",
-              shiftAssistantForPlan ? "right-[var(--plan-panel-offset)]" : "right-3",
+              "absolute z-30 flex flex-col overflow-hidden bg-background",
+              planAnimEnabled && "transition-transform duration-200 ease-out",
+              "inset-0 w-full border-l border-border",
+              planOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
             )}
-            style={
-              shiftAssistantForPlan
-                ? ({ "--plan-panel-offset": PLAN_PANEL_RIGHT_OFFSET } as CSSProperties)
-                : undefined
-            }
-            onClick={() => setAssistantOpen(true)}
-            aria-controls="inspiration-assistant-panel"
-            aria-expanded={false}
           >
-            <Sparkles className="h-4 w-4" />
-            Asistente
-          </Button>
-        ) : null}
+            <ItineraryPanel tripId={tripId} onClose={closePlan} />
+          </aside>
 
-        <AssistantPanelLayer
-          open={assistantOpen}
-          onOpenChange={setAssistantOpen}
-          tripId={tripId}
-          shiftForPlan={shiftAssistantForPlan}
-        />
-      </div>
+          {!assistantOpen ? (
+            <div className="absolute bottom-4 right-3 z-[50] flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 rounded-full bg-background shadow-md"
+                onClick={() => {
+                  setAssistantOpen(false)
+                  setPlanAnimEnabled(true)
+                  setPlanOpen(false)
+                  setAddSourceOpen((v) => !v)
+                }}
+                aria-pressed={addSourceOpen}
+                aria-label={addSourceOpen ? "Cancelar añadir fuente" : "Añadir fuente"}
+              >
+                {addSourceOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 rounded-full bg-background shadow-md"
+                onClick={() => {
+                  setPlanAnimEnabled(true)
+                  setPlanOpen(false)
+                  setAddSourceOpen(false)
+                  setAssistantOpen(true)
+                }}
+                aria-controls="inspiration-assistant-panel"
+                aria-expanded={false}
+                aria-label="Abrir asistente"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={planOpen ? "secondary" : "default"}
+                size="icon"
+                className={cn(
+                  "h-11 w-11 rounded-full shadow-md",
+                  planOpen ? "bg-muted text-foreground hover:bg-muted/80" : "shadow-primary/20",
+                )}
+                onClick={togglePlan}
+                aria-pressed={planOpen}
+                aria-controls="trip-plan-panel"
+                aria-label={planOpen ? "Cerrar Mi viaje" : "Abrir Mi viaje"}
+              >
+                {planOpen ? (
+                  <PanelRightClose className="h-4 w-4" />
+                ) : (
+                  <PanelRightOpen className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <ResizablePanelGroup
+          direction="horizontal"
+          autoSaveId={PLAN_LAYOUT_SAVE_ID}
+          className="min-h-0 flex-1"
+        >
+          <ResizablePanel defaultSize={65} minSize={30} className="min-h-0 min-w-0">
+            {inspirationColumn}
+          </ResizablePanel>
+
+          <ResizableHandle
+            withHandle
+            className={cn(
+              "w-px bg-border transition-opacity",
+              !planOpen && "pointer-events-none opacity-0",
+            )}
+          />
+
+          <ResizablePanel
+            ref={planPanelRef}
+            id="trip-plan-panel"
+            collapsible
+            collapsedSize={0}
+            defaultSize={planOpen ? 35 : 0}
+            minSize={20}
+            maxSize={50}
+            onCollapse={() => setPlanOpen(false)}
+            onExpand={() => setPlanOpen(true)}
+            className={cn(
+              "min-h-0 overflow-hidden bg-background",
+              planOpen && "border-l border-border",
+            )}
+            aria-label="Mi viaje"
+            aria-hidden={!planOpen}
+          >
+            <div className={cn("flex h-full min-h-0 flex-col", !planOpen && "invisible")}>
+              <ItineraryPanel tripId={tripId} onClose={closePlan} />
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
     </div>
   )
 }
