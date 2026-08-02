@@ -348,7 +348,7 @@ export default function InspirationPanel({
           {currentSource ? (
             <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1 sm:px-6">
               <div className="flex items-start gap-3">
-                {currentSource.ogImage ? (
+                {!isMobile && currentSource.ogImage ? (
                   <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                     <img
                       src={currentSource.ogImage}
@@ -361,14 +361,16 @@ export default function InspirationPanel({
                   <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
                     {currentSource.title}
                   </h3>
-                  <a
-                    href={currentSource.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
-                  >
-                    {currentSource.url}
-                  </a>
+                  {!isMobile ? (
+                    <a
+                      href={currentSource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    >
+                      {currentSource.url}
+                    </a>
+                  ) : null}
                 </div>
               </div>
               <div className="mt-3 flex gap-4 overflow-x-auto sm:gap-5">
@@ -585,6 +587,52 @@ function ItemRow({
   thumbnailMode?: "default" | "transportIcon"
   onAdd: (dayId: string) => void
 }) {
+  const isMobile = useIsMobile()
+  const plusButton = (
+    <button
+      type="button"
+      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label="Añadir al itinerario"
+    >
+      <Plus className="h-4 w-4" />
+    </button>
+  )
+  const card = (
+    <TravelItemCard
+      variant="source"
+      title={item.name}
+      detail={item.detail}
+      type={item.type}
+      isAdded={isAdded}
+      addedLabel={addedDayNumbers.length ? formatAddedDaysCompact(addedDayNumbers) : undefined}
+      thumbnail={
+        <InspirationThumbnail
+          kind="item"
+          item={item}
+          area={sourceArea}
+          mode={thumbnailMode ?? "default"}
+        />
+      }
+      action={
+        isMobile ? (
+          <AddToItineraryMenu tripId={tripId} onAdd={onAdd}>
+            {plusButton}
+          </AddToItineraryMenu>
+        ) : (
+          <span
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
+            aria-hidden
+          >
+            <Plus className="h-4 w-4" />
+          </span>
+        )
+      }
+    />
+  )
+
+  // Desktop: toda la card abre el menú. Móvil: solo el «+», para no interferir con el scroll.
+  if (isMobile) return card
+
   return (
     <AddToItineraryMenu tripId={tripId} onAdd={onAdd}>
       <button
@@ -592,30 +640,7 @@ function ItemRow({
         className="block w-full cursor-pointer rounded-2xl text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Añadir al itinerario"
       >
-        <TravelItemCard
-          variant="source"
-          title={item.name}
-          detail={item.detail}
-          type={item.type}
-          isAdded={isAdded}
-          addedLabel={addedDayNumbers.length ? formatAddedDaysCompact(addedDayNumbers) : undefined}
-          thumbnail={
-            <InspirationThumbnail
-              kind="item"
-              item={item}
-              area={sourceArea}
-              mode={thumbnailMode ?? "default"}
-            />
-          }
-          action={
-            <span
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
-              aria-hidden
-            >
-              <Plus className="h-4 w-4" />
-            </span>
-          }
-        />
+        {card}
       </button>
     </AddToItineraryMenu>
   )

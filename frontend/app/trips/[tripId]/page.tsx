@@ -169,8 +169,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       {!isMobile && !assistantOpen ? (
         <Button
           type="button"
-          variant="outline"
-          className="absolute bottom-4 right-3 z-40 h-11 gap-2 rounded-full px-4 text-sm shadow-md"
+          className="assistant-cta absolute bottom-4 right-3 z-40 h-11 gap-2 rounded-full px-4 text-sm"
           onClick={() => setAssistantOpen(true)}
           aria-controls="inspiration-assistant-panel"
           aria-expanded={false}
@@ -231,12 +230,12 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
           </aside>
 
           {!assistantOpen ? (
-            <div className="absolute bottom-4 right-3 z-[50] flex items-center gap-2">
+            <>
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                className="h-11 w-11 rounded-full bg-background shadow-md"
+                className="absolute bottom-4 left-3 z-[50] h-11 w-11 rounded-full bg-background shadow-md"
                 onClick={() => {
                   setAssistantOpen(false)
                   setPlanAnimEnabled(true)
@@ -248,43 +247,45 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
               >
                 {addSourceOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-11 w-11 rounded-full bg-background shadow-md"
-                onClick={() => {
-                  setPlanAnimEnabled(true)
-                  setPlanOpen(false)
-                  setAddSourceOpen(false)
-                  setAssistantOpen(true)
-                }}
-                aria-controls="inspiration-assistant-panel"
-                aria-expanded={false}
-                aria-label="Abrir asistente"
-              >
-                <Sparkles className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant={planOpen ? "secondary" : "default"}
-                size="icon"
-                className={cn(
-                  "h-11 w-11 rounded-full shadow-md",
-                  planOpen ? "bg-muted text-foreground hover:bg-muted/80" : "shadow-primary/20",
-                )}
-                onClick={togglePlan}
-                aria-pressed={planOpen}
-                aria-controls="trip-plan-panel"
-                aria-label={planOpen ? "Cerrar Mi viaje" : "Abrir Mi viaje"}
-              >
-                {planOpen ? (
-                  <PanelRightClose className="h-4 w-4" />
-                ) : (
-                  <PanelRightOpen className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
+              <div className="absolute bottom-4 right-3 z-[50] flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 rounded-full bg-background shadow-md"
+                  onClick={() => {
+                    setPlanAnimEnabled(true)
+                    setPlanOpen(false)
+                    setAddSourceOpen(false)
+                    setAssistantOpen(true)
+                  }}
+                  aria-controls="inspiration-assistant-panel"
+                  aria-expanded={false}
+                  aria-label="Abrir asistente"
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant={planOpen ? "secondary" : "default"}
+                  size="icon"
+                  className={cn(
+                    "h-11 w-11 rounded-full shadow-md",
+                    planOpen ? "bg-muted text-foreground hover:bg-muted/80" : "shadow-primary/20",
+                  )}
+                  onClick={togglePlan}
+                  aria-pressed={planOpen}
+                  aria-controls="trip-plan-panel"
+                  aria-label={planOpen ? "Cerrar Mi viaje" : "Abrir Mi viaje"}
+                >
+                  {planOpen ? (
+                    <PanelRightClose className="h-4 w-4" />
+                  ) : (
+                    <PanelRightOpen className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </>
           ) : null}
         </div>
       ) : (
