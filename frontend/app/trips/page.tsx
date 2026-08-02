@@ -312,11 +312,12 @@ export default function TripsHomePage() {
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {trip.numDays != null && (
                           <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                            {trip.numDays} días
+                            {trip.numDays} {trip.numDays === 1 ? "día" : "días"}
                           </Badge>
                         )}
                         <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                          {trip.sourceIds.length} fuentes
+                          {trip.sourceIds.length}{" "}
+                          {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
                         </Badge>
                         <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
                           {itemCount} ítems
@@ -389,11 +390,12 @@ export default function TripsHomePage() {
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {trip.numDays != null && (
                             <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                              {trip.numDays} días
+                              {trip.numDays} {trip.numDays === 1 ? "día" : "días"}
                             </Badge>
                           )}
                           <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                            {trip.sourceIds.length} fuentes
+                            {trip.sourceIds.length}{" "}
+                            {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
                           </Badge>
                           <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
                             {itemCount} ítems
