@@ -57,6 +57,11 @@ type PlannedCardProps = {
   href?: string | null
   onRemove: () => void
   moveControls?: ReactNode
+  /**
+   * Indicador de ejecución (reservado / pendiente / sin reserva).
+   * Hermano del bloque enlazado — nunca dentro del `<a>` afiliado.
+   */
+  taskIndicator?: ReactNode
   className?: string
 }
 
@@ -300,6 +305,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
           </div>
         )}
         <div className="flex shrink-0 items-center gap-1 pr-1">
+          {props.taskIndicator}
           {props.moveControls}
           <button
             type="button"

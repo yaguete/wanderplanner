@@ -6,7 +6,7 @@ no son atómicos respecto al registro: dos peticiones concurrentes pueden pasar 
 check. Se acepta (desviación máxima ~1); el front mitiga con UI en vuelo.
 
 Kinds:
-  - extraction / assistant_message / photo_lookup: cuota de usuario (user_id obligatorio)
+  - extraction / assistant_message / photo_lookup / day_summary: cuota de usuario (user_id obligatorio)
   - refresh: rate-limit de «Recargar» (user_id obligatorio)
   - system_revalidation: mantenimiento de caché en fondo (user_id null)
 """
@@ -33,6 +33,7 @@ Kind = Literal[
     "photo_lookup",
     "refresh",
     "system_revalidation",
+    "day_summary",
 ]
 LimitKind = Literal["guest", "daily", "monthly"]
 
@@ -40,11 +41,13 @@ _GUEST_DEFAULTS: dict[str, int] = {
     "extraction": 1,
     "assistant_message": 10,
     "photo_lookup": 30,
+    "day_summary": 5,
 }
 _GUEST_ENV: dict[str, str] = {
     "extraction": "GUEST_MAX_EXTRACTIONS",
     "assistant_message": "GUEST_MAX_ASSISTANT_MESSAGES",
     "photo_lookup": "GUEST_MAX_PHOTO_LOOKUPS",
+    "day_summary": "GUEST_MAX_DAY_SUMMARIES",
 }
 
 _MESSAGES: dict[tuple[str, LimitKind], str] = {
@@ -74,6 +77,12 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("refresh", "daily"): (
         "Has alcanzado el límite diario de recargas. Vuelve mañana."
+    ),
+    ("day_summary", "guest"): (
+        "Has agotado las descripciones por IA de invitado. Crea una cuenta para continuar."
+    ),
+    ("day_summary", "daily"): (
+        "Has alcanzado el límite diario de descripciones por IA. Vuelve mañana."
     ),
 }
 
@@ -248,6 +257,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "assistant_message":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_ASSISTANT_MESSAGES_DAY", 50):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "day_summary":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_DAY_SUMMARIES_DAY", 60):
             _raise_limit(user, kind, "daily")
         return
 

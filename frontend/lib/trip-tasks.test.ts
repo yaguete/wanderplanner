@@ -362,6 +362,54 @@ assert.equal(cancellableApplies("basic"), false)
   )
 }
 
+// ── 4b. Triaje de food (espejo de activity) ───────────────────────────────────
+
+{
+  const promoted = makeTrip({
+    tasks: {
+      [foodKey]: {
+        status: "pending",
+        cost: 25,
+        cancellable: null,
+        notes: null,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    },
+  })
+  const promotedTask = buildTripTasks(promoted).find((t) => t.id === foodKey)!
+  assert.equal(promotedTask.bucket, "main")
+  let totals = computeTripTaskTotals(buildTripTasks(promoted))
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 4)
+  assert.equal(totals.totalCost, 25)
+
+  const dismissed = makeTrip({
+    tasks: {
+      [foodKey]: {
+        status: "notNeeded",
+        cost: 25,
+        cancellable: null,
+        notes: "sin reserva",
+        updatedAt: "2026-08-02T00:00:00.000Z",
+      },
+    },
+  })
+  const dismissedTask = buildTripTasks(dismissed).find((t) => t.id === foodKey)!
+  assert.equal(dismissedTask.bucket, "dismissed")
+  assert.equal(dismissedTask.state?.cost, 25)
+  totals = computeTripTaskTotals(buildTripTasks(dismissed))
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 3)
+  assert.equal(totals.totalCost, 0)
+
+  const restored = mergeTaskState(dismissed.tasks[foodKey], { status: "pending" })
+  assert.equal(restored.status, "pending")
+  assert.equal(restored.cost, 25)
+  const restoredTrip = makeTrip({ tasks: { [foodKey]: restored } })
+  assert.equal(
+    buildTripTasks(restoredTrip).find((t) => t.id === foodKey)!.bucket,
+    "main",
+  )
+}
+
 // ── Extra notNeeded → dismissed (no main) ────────────────────────────────────
 
 {

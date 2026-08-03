@@ -64,7 +64,7 @@ function parseDetail(detail: unknown, status?: number): string {
 export async function fetchItinerary(
   url: string,
   onProgress?: (stage: ItineraryProgressStage) => void,
-  options?: { refresh?: boolean },
+  options?: { refresh?: boolean; signal?: AbortSignal },
 ): Promise<Itinerary> {
   let response: Response
   try {
@@ -76,8 +76,10 @@ export async function fetchItinerary(
         ...(await authHeaders()),
       },
       body: JSON.stringify({ url, refresh: Boolean(options?.refresh) }),
+      signal: options?.signal,
     })
   } catch (e) {
+    if (isAbortError(e)) throw e
     const network =
       e instanceof TypeError
         ? `No se pudo conectar con el API en ${API_BASE}. Comprueba que el backend esté en marcha (p. ej. en el puerto 8000) y que CORS permita origin de esta app.`
@@ -102,6 +104,9 @@ export async function fetchItinerary(
   let result: Itinerary | null = null
   try {
     for await (const { event, data } of parseSse(response.body.getReader())) {
+      if (options?.signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError")
+      }
       if (event === "progress") {
         const stage = (data as { stage?: string })?.stage
         if (stage === "fetching" || stage === "extracting") {
@@ -121,6 +126,7 @@ export async function fetchItinerary(
       }
     }
   } catch (e) {
+    if (isAbortError(e)) throw e
     if (e instanceof Error) throw e
     throw new Error("La respuesta del API no es JSON válido")
   }
@@ -129,4 +135,12 @@ export async function fetchItinerary(
     throw new Error("La respuesta del API no es JSON válido")
   }
   return result
+}
+
+/** True si el error es un aborto de fetch / AbortController. */
+export function isAbortError(e: unknown): boolean {
+  return (
+    (e instanceof DOMException && e.name === "AbortError") ||
+    (e instanceof Error && e.name === "AbortError")
+  )
 }

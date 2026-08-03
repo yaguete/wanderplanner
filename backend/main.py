@@ -50,6 +50,7 @@ from article_fetch import (  # noqa: E402
 from assistant import router as assistant_router  # noqa: E402
 from auth import AuthUser, require_user  # noqa: E402
 from covers import router as covers_router  # noqa: E402
+from day_summary import router as day_summary_router  # noqa: E402
 from extraction_cache import (  # noqa: E402
     CacheEntry,
     get_cached_extraction,
@@ -88,6 +89,7 @@ app.add_middleware(
 app.include_router(assistant_router)
 app.include_router(thumbs_router)
 app.include_router(covers_router)
+app.include_router(day_summary_router)
 
 
 # Salida: itinerarios largos (p. ej. muchas franjas/ítems) superan 8K tokens de JSON; Haiku 4.5 admite ~64K.

@@ -74,7 +74,11 @@ interface TripContextValue {
 
   getTrip: (tripId: string) => Trip | undefined
   getTripSources: (tripId: string) => Source[]
-  addSourceToTrip: (tripId: string, url: string) => Promise<Source>
+  addSourceToTrip: (
+    tripId: string,
+    url: string,
+    options?: { signal?: AbortSignal },
+  ) => Promise<Source>
   /** Vuelve a descargar itinerario + HTML del artículo; conserva el id de la fuente. */
   refetchSource: (sourceId: string, url: string) => Promise<void>
   removeSourceFromTrip: (tripId: string, sourceId: string) => void
@@ -89,6 +93,12 @@ interface TripContextValue {
 
   addDay: (tripId: string) => void
   updateDayLabel: (tripId: string, dayId: string, label: string) => void
+  /** Escribe label + summarySignature en una sola mutación (descripción por IA). */
+  applyDaySummary: (
+    tripId: string,
+    dayId: string,
+    data: { label: string; signature: string },
+  ) => void
   removeDay: (tripId: string, dayId: string) => void
   /** Quita días cuyo id esté en la lista; nunca deja el viaje sin días. */
   removeSelectedDays: (tripId: string, dayIds: string[]) => void
@@ -479,11 +489,19 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   )
 
   const addSourceToTrip = useCallback(
-    async (tripId: string, url: string): Promise<Source> => {
+    async (
+      tripId: string,
+      url: string,
+      options?: { signal?: AbortSignal },
+    ): Promise<Source> => {
       setIsLoadingSource(true)
       setLoadingSourceStage("fetching")
       try {
-        const itinerary = await fetchItinerary(url, (stage) => setLoadingSourceStage(stage))
+        const itinerary = await fetchItinerary(
+          url,
+          (stage) => setLoadingSourceStage(stage),
+          { signal: options?.signal },
+        )
         const source = buildSource(url, itinerary)
         const wasEmpty =
           (tripsRef.current.find((t) => t.id === tripId)?.sourceIds.length ?? 0) === 0
@@ -579,6 +597,26 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       ),
     )
   }, [])
+
+  const applyDaySummary = useCallback(
+    (tripId: string, dayId: string, data: { label: string; signature: string }) => {
+      setTrips((prev) =>
+        prev.map((t) =>
+          t.id !== tripId
+            ? t
+            : {
+                ...t,
+                days: t.days.map((d) =>
+                  d.id === dayId
+                    ? { ...d, label: data.label, summarySignature: data.signature }
+                    : d,
+                ),
+              },
+        ),
+      )
+    },
+    [],
+  )
 
   const removeDay = useCallback((tripId: string, dayId: string) => {
     setTrips((prev) =>
@@ -842,6 +880,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       loadTripSourcesWithArticles,
       addDay,
       updateDayLabel,
+      applyDaySummary,
       removeDay,
       removeSelectedDays,
       addItemToDay,
@@ -856,7 +895,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       setNumTravelers,
       setTripCurrency,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, setNumTravelers, setTripCurrency],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, setNumTravelers, setTripCurrency],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

@@ -4,11 +4,10 @@
  * Panel "Fuentes": biblioteca de investigación, pestañas Crónica / Ruta / Transporte / Descuentos,
  * extracción por URL y consolidación en «Mi viaje» conservando procedencia y afiliado.
  */
-import { useState, useMemo, useEffect, type ReactNode } from "react"
+import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react"
 import { Loader2, Plus, RefreshCw, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,12 +18,13 @@ import {
 import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
+import { AddSourceDialog, AddSourceFlow } from "@/components/add-source-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { getDayUserDescription } from "@/lib/day-heading"
 import { ApiLimitError } from "@/lib/api"
-import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
+import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { toast } from "sonner"
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
@@ -67,6 +67,8 @@ export default function InspirationPanel({
 
   const [activeSourceId, setActiveSourceId] = useState<string | null>(sources[0]?.id ?? null)
   const [sourceTab, setSourceTab] = useState<SourceTab>("source")
+  const [mobileAnalyzing, setMobileAnalyzing] = useState(false)
+  const [refetchError, setRefetchError] = useState<string | null>(null)
 
   useEffect(() => {
     if (sources.length === 0) {
@@ -76,34 +78,42 @@ export default function InspirationPanel({
     setActiveSourceId((id) => (id && sources.some((s) => s.id === id) ? id : sources[0]!.id))
   }, [sources])
 
-  const [urlInput, setUrlInput] = useState("")
-  const [extractError, setExtractError] = useState<string | null>(null)
-  const [refetchError, setRefetchError] = useState<string | null>(null)
-
   const preparingFirstSource =
-    isLoadingSource && sources.length === 0 && !extractError && !autoSourceError
-
-  useEffect(() => {
-    if (initialSourceUrl) {
-      setUrlInput((current) => current || initialSourceUrl)
-    } else if (!addSourceOpen) {
-      setUrlInput("")
-    }
-  }, [initialSourceUrl, addSourceOpen])
-
-  useEffect(() => {
-    if (autoSourceError) setExtractError(autoSourceError)
-  }, [autoSourceError])
+    isLoadingSource && sources.length === 0 && !autoSourceError && !addSourceOpen
 
   const setAddSourceOpen = (open: boolean) => {
     onAddSourceOpenChange?.(open)
-    if (!open) {
-      setUrlInput("")
-      setExtractError(null)
-    }
+    if (!open) setMobileAnalyzing(false)
   }
 
   const currentSource = sources.find((s) => s.id === activeSourceId) ?? sources[0] ?? null
+
+  const guardBeforeExtract = useCallback(() => {
+    if (sources.length > 0 && !requireAccount("second-source")) return false
+    return true
+  }, [sources.length, requireAccount])
+
+  const handleExtract = useCallback(
+    async (url: string, signal: AbortSignal) => {
+      return addSourceToTrip(tripId, url, { signal })
+    },
+    [addSourceToTrip, tripId],
+  )
+
+  const handleExtractSuccess = useCallback(
+    (source: Source) => {
+      setActiveSourceId(source.id)
+      setSourceTab("source")
+      setAddSourceOpen(false)
+    },
+    // setAddSourceOpen closes over onAddSourceOpenChange
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [onAddSourceOpenChange],
+  )
+
+  const handleGuestLimit = useCallback(() => {
+    requireAccount("source-limit")
+  }, [requireAccount])
 
   // El HTML del artículo no viene en la carga inicial: se pide al abrir la Crónica.
   useEffect(() => {
@@ -168,38 +178,6 @@ export default function InspirationPanel({
     return groupItemsByDayHint(items)
   }, [currentSource, groupItemsByDayHint])
 
-  const handleExtract = async () => {
-    if (!urlInput.trim()) return
-    // Invitado: la primera fuente es gratis (llega del CTA); la segunda pide cuenta.
-    if (sources.length > 0 && !requireAccount("second-source")) {
-      setAddSourceOpen(false)
-      return
-    }
-    setExtractError(null)
-    try {
-      const source = await addSourceToTrip(tripId, urlInput.trim())
-      setActiveSourceId(source.id)
-      setUrlInput("")
-      setAddSourceOpen(false)
-      setSourceTab("source")
-    } catch (err) {
-      if (err instanceof ApiLimitError && err.limit === "guest") {
-        requireAccount("source-limit")
-        setAddSourceOpen(false)
-        return
-      }
-      if (err instanceof ApiLimitError) {
-        toast.error(err.message)
-        return
-      }
-      setExtractError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo extraer la fuente. Comprueba la URL y que el backend esté en marcha.",
-      )
-    }
-  }
-
   useEffect(() => {
     setRefetchError(null)
   }, [activeSourceId])
@@ -262,54 +240,10 @@ export default function InspirationPanel({
     { id: "basics", label: "Descuentos" },
   ]
 
-  const addSourceForm = (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <Input
-          placeholder="https://blog.com/mi-viaje-a..."
-          value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void handleExtract()}
-          className="h-9 min-w-0 flex-1 bg-background text-[13px]"
-          aria-invalid={!!extractError}
-          autoFocus
-        />
-        <Button
-          type="button"
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          onClick={() => void handleExtract()}
-          disabled={isLoadingSource || !urlInput.trim()}
-          aria-label="Añadir fuente"
-        >
-          {isLoadingSource ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-      {isLoadingSource ? (
-        <p className="text-xs text-muted-foreground">
-          Destilando la ruta del artículo… puede tardar unos segundos.
-        </p>
-      ) : null}
-      {extractError ? (
-        <p className="text-xs text-destructive" role="alert">
-          {extractError}
-        </p>
-      ) : null}
-    </div>
-  )
-
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0">
-        {addSourceOpen && !isMobile && !preparingFirstSource ? (
-          <div className="space-y-2 border-b border-border px-3 py-2.5 sm:px-4">
-            {addSourceForm}
-          </div>
-        ) : sources.length > 0 ? (
+        {sources.length > 0 ? (
           <div className="px-3 pt-2.5 sm:px-4">
             <div
               className={cn(
@@ -358,6 +292,24 @@ export default function InspirationPanel({
                   </div>
                 )
               })}
+              <button
+                type="button"
+                onClick={() => {
+                  if (preparingFirstSource) return
+                  setAddSourceOpen(true)
+                }}
+                disabled={preparingFirstSource}
+                className={cn(
+                  "inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-input",
+                  "bg-background text-foreground transition-colors",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "disabled:pointer-events-none disabled:opacity-50",
+                )}
+                aria-label="Añadir fuente"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+              </button>
             </div>
           </div>
         ) : null}
@@ -427,13 +379,20 @@ export default function InspirationPanel({
                         ? "Destilando la ruta…"
                         : "Leyendo el artículo…"}
                     </p>
+                    <p className="max-w-sm text-balance text-xs text-muted-foreground">
+                      Puede tardar más de 30 segundos si el artículo es largo.
+                    </p>
                   </div>
                 </div>
               ) : (
                 <EmptyState
                   icon={Plus}
                   title="Añade tu primera fuente"
-                  description="Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
+                  description={
+                    autoSourceError
+                      ? autoSourceError
+                      : "Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
+                  }
                   actionLabel="Añadir fuente"
                   onAction={() => setAddSourceOpen(true)}
                 />
@@ -547,21 +506,48 @@ export default function InspirationPanel({
         </div>
       </div>
 
-      {/* Móvil: sheet inferior encima de los FABs, con backdrop. */}
-      {addSourceOpen && isMobile && !preparingFirstSource ? (
+      {/* Desktop: diálogo bloqueante. Móvil: sheet inferior con el mismo flujo. */}
+      {!isMobile ? (
+        <AddSourceDialog
+          open={addSourceOpen && !preparingFirstSource}
+          onOpenChange={setAddSourceOpen}
+          tripId={tripId}
+          initialUrl={initialSourceUrl}
+          loadingStage={loadingSourceStage}
+          onExtract={handleExtract}
+          onSuccess={handleExtractSuccess}
+          guardBeforeExtract={guardBeforeExtract}
+          onGuestLimit={handleGuestLimit}
+        />
+      ) : addSourceOpen && !preparingFirstSource ? (
         <>
           <button
             type="button"
             className="fixed inset-0 z-[45] bg-foreground/25 sm:hidden"
             aria-label="Cerrar añadir fuente"
-            onClick={() => setAddSourceOpen(false)}
+            disabled={mobileAnalyzing}
+            onClick={() => {
+              if (mobileAnalyzing) return
+              setAddSourceOpen(false)
+            }}
           />
           <div
             role="dialog"
-            aria-label="Añadir fuente"
+            aria-label={mobileAnalyzing ? "Analizando fuente" : "Añadir fuente"}
             className="fixed bottom-[4.75rem] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
           >
-            {addSourceForm}
+            <AddSourceFlow
+              tripId={tripId}
+              initialUrl={initialSourceUrl}
+              loadingStage={loadingSourceStage}
+              onExtract={handleExtract}
+              onSuccess={handleExtractSuccess}
+              onCancel={() => setAddSourceOpen(false)}
+              analyzing={mobileAnalyzing}
+              setAnalyzing={setMobileAnalyzing}
+              guardBeforeExtract={guardBeforeExtract}
+              onGuestBlocked={handleGuestLimit}
+            />
           </div>
         </>
       ) : null}

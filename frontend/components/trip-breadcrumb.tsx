@@ -1,6 +1,6 @@
 "use client"
 
-import { PanelRightClose, PanelRightOpen, Plus, X } from "lucide-react"
+import { PanelRightClose, PanelRightOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { countriesPlainList } from "@/lib/countries"
 import { formatTripDates } from "@/lib/trip-dates"
@@ -11,9 +11,6 @@ type TripBreadcrumbProps = {
   trip: Trip
   planOpen: boolean
   onTogglePlan: () => void
-  addSourceOpen?: boolean
-  onToggleAddSource?: () => void
-  addSourceDisabled?: boolean
   className?: string
 }
 
@@ -21,9 +18,6 @@ export function TripBreadcrumb({
   trip,
   planOpen,
   onTogglePlan,
-  addSourceOpen = false,
-  onToggleAddSource,
-  addSourceDisabled = false,
   className,
 }: TripBreadcrumbProps) {
   const itemCount = trip.days.reduce((sum, d) => sum + d.items.length, 0)
@@ -60,22 +54,6 @@ export function TripBreadcrumb({
         {" · "}
         {itemCount} {itemCount === 1 ? "ítem" : "ítems"}
       </p>
-
-      {onToggleAddSource ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
-          disabled={addSourceDisabled}
-          onClick={onToggleAddSource}
-          aria-pressed={addSourceOpen}
-          aria-label={addSourceOpen ? "Cancelar añadir fuente" : "Añadir fuente"}
-        >
-          {addSourceOpen ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-          <span className="hidden sm:inline">{addSourceOpen ? "Cancelar" : "Añadir fuente"}</span>
-        </Button>
-      ) : null}
 
       <Button
         type="button"

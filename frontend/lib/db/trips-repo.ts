@@ -11,8 +11,20 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { ExtraTask, Source, Trip, TripTaskState, UserBasicItem, UserDay } from "@/types/itinerary"
+import { stripNullChars } from "@/lib/day-summary"
 import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
+
+/** Postgres rechaza \\u0000 en text/jsonb (error 22P05). */
+function sanitizeDaysForDb(days: UserDay[]): UserDay[] {
+  return days.map((d) => {
+    const label = d.label != null ? stripNullChars(d.label) : d.label
+    const summarySignature =
+      d.summarySignature != null ? stripNullChars(d.summarySignature) : d.summarySignature
+    if (label === d.label && summarySignature === d.summarySignature) return d
+    return { ...d, label, summarySignature }
+  })
+}
 
 const DEBOUNCE_MS = 1_000
 const MAX_ATTEMPTS = 3
@@ -62,7 +74,7 @@ const SOURCE_COLUMNS = "id, url, author, title, area, og_image, items, basics"
 // ── Mapeo fila ↔ dominio ──────────────────────────────────────────────────────
 
 export function rowToTrip(row: TripRow): Trip {
-  const days = row.days ?? []
+  const days = sanitizeDaysForDb(row.days ?? [])
   // Normalización en lectura: legacy desacoplaba end_date / num_days de days.length.
   // Fuente de verdad = days.length; endDate inclusive desde startDate.
   // La fila en Supabase conserva el valor viejo hasta la siguiente escritura.
@@ -109,7 +121,7 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
     archived: Boolean(trip.archived),
     referrer: trip.referrer ?? null,
     source_ids: trip.sourceIds ?? [],
-    days: trip.days ?? [],
+    days: sanitizeDaysForDb(trip.days ?? []),
     basics: trip.basics ?? [],
     // Poda única al serializar: el jsonb persistido no retiene estados huérfanos.
     tasks: pruneTaskStates(trip),

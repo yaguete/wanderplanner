@@ -1,12 +1,22 @@
 "use client"
 
 /**
- * Panel del itinerario: `ItineraryViewMode` (itinerario, alojamiento, transporte, básicos), en modo
- * itinerario además `listMode` lista/mapa (`ItineraryMapView`). Edición de días, reordenación con
- * `moveItemBetweenDays` y filas con enlace de afiliado en `ItineraryItemRow` / `BasicItineraryRow`.
+ * Panel «Mi viaje»: una sola cabecera con pestañas
+ * Ruta · Actividades · Alojamientos · Transporte · Básicos.
+ * Ruta = timeline + Lista/Mapa; el resto = filas de tarea por categoría.
  */
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react"
-import { Car, Check, ChevronDown, ChevronUp, List, Map as MapIcon, Plus, X } from "lucide-react"
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  List,
+  Loader2,
+  Map as MapIcon,
+  Plus,
+  Sparkles,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
@@ -14,29 +24,60 @@ import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { countriesPlainList } from "@/lib/countries"
 import { dateISOForDayIndex, formatDayDate, formatTripMonthYear } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
-import { BASIC_LABELS, ITEM_COLORS } from "@/lib/item-styles"
-import type { BasicCategory, UserDayItem } from "@/types/itinerary"
-import { ItineraryViewModeTabs, type ItineraryViewMode } from "@/components/itinerary-view-mode-tabs"
+import { ITEM_COLORS } from "@/lib/item-styles"
+import { TASK_STATUS_LABELS } from "@/lib/task-labels"
+import { dayItemsSignature, generateDaySummary } from "@/lib/day-summary"
+import { ApiLimitError } from "@/lib/api"
+import { toast } from "sonner"
+import {
+  categoryFromItemType,
+  resolveTaskStatus,
+  taskBucket,
+  taskKeyForItem,
+} from "@/lib/trip-tasks"
+import type { TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
+import {
+  ItineraryViewModeTabs,
+  VIEW_MODE_DEFAULT_TASK_CATEGORY,
+  VIEW_MODE_TASK_CATEGORIES,
+  type ItineraryViewMode,
+} from "@/components/itinerary-view-mode-tabs"
 import { ItineraryMapView, type ItineraryMapPoint } from "@/components/itinerary-map-view"
-import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
+import {
+  TripTasksManagedFragment,
+  TripTasksPanel,
+  TripTasksProgressHairline,
+  TripTasksSummaryDetail,
+} from "@/components/trip-tasks-panel"
+
+const CATEGORY_EMPTY: Record<
+  Exclude<ItineraryViewMode, "itinerary">,
+  { title: string; description: string }
+> = {
+  activities: {
+    title: "Sin actividades que gestionar",
+    description:
+      "Consolida actividades o restaurantes en la Ruta, o añade una tarea a mano.",
+  },
+  stay: {
+    title: "Sin alojamientos que gestionar",
+    description: "Consolida estancias en la Ruta o añade una tarea a mano.",
+  },
+  transport: {
+    title: "Sin transporte que gestionar",
+    description: "Consolida traslados en la Ruta o añade una tarea a mano.",
+  },
+  basics: {
+    title: "Sin básicos que gestionar",
+    description:
+      "Añade ofertas desde la pestaña Descuentos de tus fuentes, o una tarea a mano.",
+  },
+}
 
 function normalizeDayLabel(raw: string): string {
   return raw.replace(/\s+[—–]\s+/g, " - ")
-}
-
-function panelHeadingForMode(mode: ItineraryViewMode): string {
-  switch (mode) {
-    case "itinerary":
-      return "Mi viaje"
-    case "stay":
-      return "Alojamientos"
-    case "transport":
-      return "Transporte"
-    case "basics":
-      return "Básicos"
-  }
 }
 
 export default function ItineraryPanel({
@@ -55,6 +96,9 @@ export default function ItineraryPanel({
     removeSelectedDays,
     removeBasicFromTrip,
     moveItemBetweenDays,
+    setTaskState,
+    addExtraTask,
+    removeExtraTask,
   } = useTrips()
   const trip = getTrip(tripId)
   const dateSub = useMemo(() => (trip ? formatTripMonthYear(trip.startDate) : null), [trip])
@@ -83,6 +127,35 @@ export default function ItineraryPanel({
   const [listMode, setListMode] = useState<"list" | "map">("list")
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [manualDialogDayId, setManualDialogDayId] = useState<string | null>(null)
+  const [extraTaskDialogOpen, setExtraTaskDialogOpen] = useState(false)
+
+  const handleSetTaskState = useCallback(
+    (taskKey: string, patch: Partial<TripTaskState>) => {
+      setTaskState(tripId, taskKey, patch)
+    },
+    [setTaskState, tripId],
+  )
+
+  const handleAddExtraTask = useCallback(
+    (data: { title: string; category: TripTaskCategory }) => {
+      addExtraTask(tripId, data)
+    },
+    [addExtraTask, tripId],
+  )
+
+  const handleRemoveExtraTask = useCallback(
+    (taskId: string) => {
+      removeExtraTask(tripId, taskId)
+    },
+    [removeExtraTask, tripId],
+  )
+
+  const handleRemoveBasic = useCallback(
+    (basicIds: string[]) => {
+      for (const id of basicIds) removeBasicFromTrip(tripId, id)
+    },
+    [removeBasicFromTrip, tripId],
+  )
 
   const openManualDialog = useCallback((dayId?: string | null) => {
     setManualDialogDayId(dayId ?? null)
@@ -100,27 +173,9 @@ export default function ItineraryPanel({
     })
   }, [trip])
 
-  if (!trip) return null
-
-  const hasDaySelection = selectedDayIds.size > 0
-
-  const stayByDay = useMemo(() => {
-    return trip.days
-      .map((day, dayIndex) => ({
-        day,
-        dayIndex,
-        stays: day.items.filter((i) => i.type === "stay"),
-      }))
-      .filter((g) => g.stays.length > 0)
-  }, [trip.days])
-
-  const basicCategoryOrder: BasicCategory[] = useMemo(
-    () => ["insurance", "sim", "carRental", "flight", "other"],
-    [],
-  )
-
   // Mismo orden que en la lista: días en secuencia, y dentro de cada día el orden de `items`; solo `stay` y `activity` en el mapa.
   const mapPoints: ItineraryMapPoint[] = useMemo(() => {
+    if (!trip) return []
     const out: ItineraryMapPoint[] = []
     for (let i = 0; i < trip.days.length; i++) {
       const d = trip.days[i]!
@@ -138,18 +193,19 @@ export default function ItineraryPanel({
       }
     }
     return out
-  }, [trip.days, resolveRegion])
+  }, [trip, resolveRegion])
 
   // Índice de posición global (por día) para reglas de flechas arriba/abajo; debe coincidir con `moveItemOneStep`.
   const itemLocationById = useMemo(() => {
     const map = new Map<string, { dayId: string; dayIndex: number; itemIndex: number }>()
+    if (!trip) return map
     trip.days.forEach((day, dayIndex) => {
       day.items.forEach((item, itemIndex) => {
         map.set(item.id, { dayId: day.id, dayIndex, itemIndex })
       })
     })
     return map
-  }, [trip.days])
+  }, [trip])
 
   const canMoveUp = useCallback(
     (itemId: string) => {
@@ -162,6 +218,7 @@ export default function ItineraryPanel({
 
   const canMoveDown = useCallback(
     (itemId: string) => {
+      if (!trip) return false
       const loc = itemLocationById.get(itemId)
       if (!loc) return false
       const day = trip.days[loc.dayIndex]
@@ -169,11 +226,12 @@ export default function ItineraryPanel({
       const hasNextDay = loc.dayIndex < trip.days.length - 1
       return hasNextInSameDay || hasNextDay
     },
-    [itemLocationById, trip.days],
+    [itemLocationById, trip],
   )
 
   const moveItemOneStep = useCallback(
     (itemId: string, direction: "up" | "down") => {
+      if (!trip) return
       const current = itemLocationById.get(itemId)
       if (!current) return
       const currentDay = trip.days[current.dayIndex]
@@ -210,8 +268,16 @@ export default function ItineraryPanel({
         toIndex,
       })
     },
-    [itemLocationById, moveItemBetweenDays, trip.days, tripId],
+    [itemLocationById, moveItemBetweenDays, trip, tripId],
   )
+
+  if (!trip) return null
+
+  const hasDaySelection = selectedDayIds.size > 0
+  const isRoute = viewMode === "itinerary"
+  const categoryView = isRoute
+    ? null
+    : (viewMode as Exclude<ItineraryViewMode, "itinerary">)
 
   const setDaySelected = (dayId: string, checked: boolean) => {
     setSelectedDayIds((prev) => {
@@ -233,21 +299,14 @@ export default function ItineraryPanel({
 
   return (
     <div className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background">
-      <div className="shrink-0 space-y-3 border-b border-border px-4 py-3">
+      <div className="relative shrink-0 space-y-2 border-b border-border px-4 py-3">
+        {/* Fila 1: título + fecha + cerrar */}
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                {panelHeadingForMode(viewMode)}
-              </h2>
-              {dateSub ? (
-                <p className="text-xs text-muted-foreground tabular-nums">{dateSub}</p>
-              ) : null}
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-              {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
-              {trip.days.length === 1 ? "día" : "días"}
-            </p>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="text-sm font-semibold text-foreground">Mi viaje</h2>
+            {dateSub ? (
+              <p className="text-xs text-muted-foreground tabular-nums">{dateSub}</p>
+            ) : null}
           </div>
           {onClose ? (
             <Button
@@ -262,10 +321,23 @@ export default function ItineraryPanel({
             </Button>
           ) : null}
         </div>
-        <ItineraryViewModeTabs value={viewMode} onValueChange={setViewMode} />
+
+        {/* Fila 2: meta — ítems · días · gestionadas */}
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
+          {trip.days.length === 1 ? "día" : "días"}
+          <TripTasksManagedFragment trip={trip} />
+        </p>
+
+        {/* Fila 3: pestañas */}
+        <div className="min-h-8">
+          <ItineraryViewModeTabs value={viewMode} onValueChange={setViewMode} />
+        </div>
+
+        <TripTasksProgressHairline trip={trip} />
       </div>
 
-      {viewMode === "itinerary" ? (
+      {isRoute ? (
         <>
           <div className="flex shrink-0 items-center gap-3 px-4 py-2.5">
             <div
@@ -312,10 +384,10 @@ export default function ItineraryPanel({
                   type="button"
                   onClick={() => openManualDialog(null)}
                   className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
-                  aria-label="Añadir elemento"
+                  aria-label="Añadir ítem"
                 >
                   <Plus className="h-3.5 w-3.5 shrink-0" />
-                  Añadir elemento
+                  Añadir ítem
                 </button>
                 <button
                   type="button"
@@ -357,6 +429,8 @@ export default function ItineraryPanel({
                   dayDateLabel={
                     formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex))
                   }
+                  summarySignature={day.summarySignature ?? null}
+                  countryCodes={trip.countries}
                   items={day.items}
                   resolveRegion={resolveRegion}
                   isDaySelected={selectedDayIds.has(day.id)}
@@ -367,6 +441,8 @@ export default function ItineraryPanel({
                   onMoveItemUp={(itemId) => moveItemOneStep(itemId, "up")}
                   onMoveItemDown={(itemId) => moveItemOneStep(itemId, "down")}
                   onAddManualItem={() => openManualDialog(day.id)}
+                  onSetTaskState={handleSetTaskState}
+                  taskStates={trip.tasks}
                 />
               ))}
             </div>
@@ -381,109 +457,36 @@ export default function ItineraryPanel({
             </div>
           )}
         </>
-      ) : viewMode === "transport" ? (
-        <div className="flex min-h-0 flex-1 flex-col px-4 pt-2">
-          <EmptyState
-            icon={Car}
-            title="Vista de transporte en preparación"
-            description="Aquí reuniremos vuelos, trenes y traslados de tus fuentes y de la ruta consolidada."
+      ) : categoryView ? (
+        <>
+          <div className="flex shrink-0 items-start justify-between gap-3 px-4 py-2.5">
+            <TripTasksSummaryDetail trip={trip} />
+            <button
+              type="button"
+              onClick={() => setExtraTaskDialogOpen(true)}
+              className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              Añadir tarea
+            </button>
+          </div>
+          <TripTasksPanel
+            trip={trip}
+            categories={VIEW_MODE_TASK_CATEGORIES[categoryView]}
+            defaultCategory={VIEW_MODE_DEFAULT_TASK_CATEGORY[categoryView]}
+            emptyTitle={CATEGORY_EMPTY[categoryView].title}
+            emptyDescription={CATEGORY_EMPTY[categoryView].description}
+            hideSummary
+            hideToolbar
+            extraDialogOpen={extraTaskDialogOpen}
+            onExtraDialogOpenChange={setExtraTaskDialogOpen}
+            onSetTaskState={handleSetTaskState}
+            onAddExtraTask={handleAddExtraTask}
+            onRemoveExtraTask={handleRemoveExtraTask}
+            onRemoveBasic={handleRemoveBasic}
           />
-        </div>
-      ) : viewMode === "stay" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
-          {stayByDay.length === 0 ? (
-            <EmptyState
-              icon={Plus}
-              title="Sin alojamientos todavía"
-              description="Añade estancias desde la ruta destilada de tus fuentes."
-              className="py-10"
-            />
-          ) : (
-            <div className="flex flex-col">
-              {stayByDay.map(({ day, dayIndex, stays }, sectionIndex) => (
-                <div
-                  key={day.id}
-                  className={cn(
-                    "flex flex-col gap-2",
-                    sectionIndex > 0 && "mt-0 border-t border-border/50 pt-6",
-                  )}
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {formatDayHeadingLine(
-                      dayIndex,
-                      getDayUserDescription(day.label),
-                      formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex)),
-                    )}
-                  </p>
-                  <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                    {stays.map((item) => (
-                      <li key={item.id} className="m-0 p-0">
-                        <TravelItemCard
-                          variant="planned"
-                          title={item.name}
-                          type={item.type}
-                          sourceId={item.sourceId}
-                          sourceAuthor={item.sourceAuthor}
-                          detail={item.detail}
-                          regionLabel={resolveRegion(item)}
-                          href={item.affiliateUrl}
-                          onRemove={() => removeItemFromDay(tripId, day.id, item.id)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
-          {trip.basics.length === 0 ? (
-            <EmptyState
-              icon={Plus}
-              title="Sin básicos todavía"
-              description="Añade ofertas desde la pestaña Descuentos de tus fuentes."
-              className="py-10"
-            />
-          ) : (
-            <div className="flex flex-col">
-              {basicCategoryOrder
-                .map((cat) => ({ cat, list: trip.basics.filter((b) => b.category === cat) }))
-                .filter((s) => s.list.length > 0)
-                .map(({ cat, list }, sectionIndex) => (
-                  <div
-                    key={cat}
-                    className={cn(
-                      "flex flex-col gap-3",
-                      sectionIndex > 0 && "mt-0 border-t border-border/50 pt-6",
-                    )}
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {BASIC_LABELS[cat]}
-                    </p>
-                    <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                      {list.map((b) => (
-                        <li key={b.id} className="m-0 p-0">
-                          <TravelItemCard
-                            variant="basic-planned"
-                            title={b.name}
-                            category={b.category}
-                            sourceId={b.sourceId}
-                            sourceAuthor={b.sourceAuthor}
-                            vendor={b.vendor}
-                            href={b.affiliateUrl}
-                            onRemove={() => removeBasicFromTrip(tripId, b.id)}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
+        </>
+      ) : null}
 
       <AddManualItemDialog
         open={manualDialogOpen}
@@ -513,6 +516,8 @@ function DayItineraryTimeline({
   canMoveItemDown,
   onMoveItemUp,
   onMoveItemDown,
+  taskStates,
+  onSetTaskState,
 }: {
   items: UserDayItem[]
   resolveRegion: (item: UserDayItem) => string | null
@@ -521,6 +526,8 @@ function DayItineraryTimeline({
   canMoveItemDown: (itemId: string) => boolean
   onMoveItemUp: (itemId: string) => void
   onMoveItemDown: (itemId: string) => void
+  taskStates: Record<string, TripTaskState>
+  onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const firstLiRef = useRef<HTMLLIElement | null>(null)
@@ -566,77 +573,147 @@ function DayItineraryTimeline({
     <div ref={wrapRef} className="relative pl-0">
       {showLine && (
         <div
-          className="pointer-events-none absolute left-2.5 z-0 w-px bg-border"
+          className="pointer-events-none absolute left-2.5 z-0 hidden w-px bg-border sm:block"
           style={{ top: line.top, height: line.height }}
           aria-hidden
         />
       )}
       <ul className="relative z-[1] m-0 list-none space-y-2.5 p-0">
-        {items.map((item, index) => (
-          <li
-            key={item.id}
-            ref={(el) => {
-              if (index === 0) firstLiRef.current = el
-              if (index === n - 1) lastLiRef.current = el
-            }}
-            className="flex min-h-0 items-center gap-3"
-          >
-            <div className="z-10 flex w-5 shrink-0 items-center justify-center" aria-hidden>
-              <div
-                className={cn(
-                  "h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-card",
-                  ITEM_COLORS[item.type].dot,
-                )}
+        {items.map((item, index) => {
+          const taskKey = taskKeyForItem(item)
+          const state = taskStates[taskKey] ?? null
+          const status = resolveTaskStatus(state)
+          const bucket = taskBucket(categoryFromItemType(item.type), state, "dayItem")
+          const indicator =
+            bucket === "triage" ? null : (
+              <RouteTaskIndicator
+                bucket={bucket}
+                status={status}
+                onRestore={
+                  bucket === "dismissed"
+                    ? () => onSetTaskState(taskKey, { status: "pending" })
+                    : undefined
+                }
               />
-            </div>
-            <TravelItemCard
-              className="min-w-0 flex-1"
-              variant="planned"
-              title={item.name}
-              type={item.type}
-              sourceId={item.sourceId}
-              sourceAuthor={item.sourceAuthor}
-              detail={item.detail}
-              regionLabel={resolveRegion(item)}
-              href={item.affiliateUrl}
-              onRemove={() => onRemoveItem(item.id)}
-              moveControls={
-                <div className="flex w-8 flex-col items-center justify-center gap-0.5">
-                  {canMoveItemUp(item.id) ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onMoveItemUp(item.id)
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Mover ítem hacia arriba"
-                    >
-                      <ChevronUp className="h-4 w-4" strokeWidth={1.8} />
-                    </button>
-                  ) : null}
-                  {canMoveItemDown(item.id) ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onMoveItemDown(item.id)
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Mover ítem hacia abajo"
-                    >
-                      <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
-                    </button>
-                  ) : null}
-                </div>
-              }
-            />
-          </li>
-        ))}
+            )
+          return (
+            <li
+              key={item.id}
+              ref={(el) => {
+                if (index === 0) firstLiRef.current = el
+                if (index === n - 1) lastLiRef.current = el
+              }}
+              className="flex min-h-0 items-center gap-0 sm:gap-3"
+            >
+              <div className="z-10 hidden w-5 shrink-0 items-center justify-center sm:flex" aria-hidden>
+                <div
+                  className={cn(
+                    "h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-card",
+                    ITEM_COLORS[item.type].dot,
+                  )}
+                />
+              </div>
+              <TravelItemCard
+                className="min-w-0 flex-1"
+                variant="planned"
+                title={item.name}
+                type={item.type}
+                sourceId={item.sourceId}
+                sourceAuthor={item.sourceAuthor}
+                detail={item.detail}
+                regionLabel={resolveRegion(item)}
+                href={item.affiliateUrl}
+                onRemove={() => onRemoveItem(item.id)}
+                taskIndicator={indicator}
+                moveControls={
+                  <div className="flex w-8 flex-col items-center justify-center gap-0.5">
+                    {canMoveItemUp(item.id) ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          onMoveItemUp(item.id)
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Mover ítem hacia arriba"
+                      >
+                        <ChevronUp className="h-4 w-4" strokeWidth={1.8} />
+                      </button>
+                    ) : null}
+                    {canMoveItemDown(item.id) ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          onMoveItemDown(item.id)
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Mover ítem hacia abajo"
+                      >
+                        <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
+                      </button>
+                    ) : null}
+                  </div>
+                }
+              />
+            </li>
+          )
+        })}
       </ul>
     </div>
+  )
+}
+
+function RouteTaskIndicator({
+  bucket,
+  status,
+  onRestore,
+}: {
+  bucket: "main" | "dismissed"
+  status: "pending" | "booked" | "notNeeded"
+  onRestore?: () => void
+}) {
+  if (bucket === "dismissed" && onRestore) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onRestore()
+        }}
+        className="inline-flex h-8 max-w-[4.5rem] items-center rounded-md px-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        title="Quitar «sin reserva»"
+        aria-label="Restaurar tarea: quitar sin reserva"
+      >
+        Sin reserva
+      </button>
+    )
+  }
+
+  if (status === "booked") {
+    return (
+      <span
+        className="inline-flex h-8 items-center gap-0.5 rounded-md px-1.5 text-[10px] font-semibold text-emerald-700"
+        title={TASK_STATUS_LABELS.booked}
+        aria-label={TASK_STATUS_LABELS.booked}
+      >
+        <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+      </span>
+    )
+  }
+
+  // Solo tareas del bucket main pendientes: punto discreto.
+  return (
+    <span
+      className="inline-flex h-8 w-2 items-center justify-center"
+      title={TASK_STATUS_LABELS.pending}
+      aria-label={TASK_STATUS_LABELS.pending}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
+    </span>
   )
 }
 
@@ -647,6 +724,8 @@ function DaySection({
   dayCount,
   dayDescription,
   dayDateLabel,
+  summarySignature,
+  countryCodes,
   items,
   resolveRegion,
   isDaySelected,
@@ -657,6 +736,8 @@ function DaySection({
   onMoveItemUp,
   onMoveItemDown,
   onAddManualItem,
+  taskStates,
+  onSetTaskState,
 }: {
   tripId: string
   dayId: string
@@ -664,6 +745,8 @@ function DaySection({
   dayCount: number
   dayDescription: string
   dayDateLabel: string | null
+  summarySignature: string | null
+  countryCodes: string[]
   items: UserDayItem[]
   resolveRegion: (item: UserDayItem) => string | null
   isDaySelected: boolean
@@ -674,12 +757,21 @@ function DaySection({
   onMoveItemUp: (itemId: string) => void
   onMoveItemDown: (itemId: string) => void
   onAddManualItem: () => void
+  taskStates: Record<string, TripTaskState>
+  onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
 }) {
-  const { updateDayLabel } = useTrips()
+  const { updateDayLabel, applyDaySummary } = useTrips()
   const [editingDescription, setEditingDescription] = useState(false)
   const [draft, setDraft] = useState(dayDescription)
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const descriptionEditorRef = useRef<HTMLDivElement>(null)
+
+  const signature = useMemo(() => dayItemsSignature(items), [items])
+  const canGenerate =
+    items.length >= 1 && signature !== (summarySignature ?? null) && !generating
+  const showAiButton = items.length >= 1
 
   useEffect(() => {
     if (!editingDescription) setDraft(dayDescription)
@@ -722,6 +814,36 @@ function DaySection({
   const startEdit = () => {
     setDraft(dayDescription)
     setEditingDescription(true)
+  }
+
+  const handleGenerateSummary = async () => {
+    if (!canGenerate) return
+    setGenError(null)
+    setGenerating(true)
+    try {
+      const summary = await generateDaySummary({
+        items: items.map((i) => ({
+          type: i.type,
+          name: i.name,
+          region: resolveRegion(i),
+        })),
+        country_codes: countryCodes,
+        day_index: dayIndex,
+      })
+      applyDaySummary(tripId, dayId, { label: summary, signature })
+      setDraft(summary)
+    } catch (err) {
+      if (err instanceof ApiLimitError) {
+        toast.error(err.message)
+      } else {
+        const msg =
+          err instanceof Error ? err.message : "No se pudo generar la descripción."
+        setGenError(msg)
+        toast.error(msg)
+      }
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const headingForAria = formatDayHeadingLine(dayIndex, dayDescription, dayDateLabel)
@@ -808,6 +930,34 @@ function DaySection({
               {normalizedDesc ?? "Sin descripción"}
             </button>
           )}
+          {showAiButton ? (
+            <button
+              type="button"
+              onClick={() => void handleGenerateSummary()}
+              disabled={!canGenerate}
+              title={
+                genError
+                  ? genError
+                  : canGenerate
+                    ? "Generar descripción con IA"
+                    : "Sin cambios en los ítems del día"
+              }
+              aria-label="Generar descripción con IA"
+              className={cn(
+                "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                canGenerate
+                  ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "cursor-default text-muted-foreground/35",
+              )}
+            >
+              {generating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              )}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -834,6 +984,8 @@ function DaySection({
           canMoveItemDown={canMoveItemDown}
           onMoveItemUp={onMoveItemUp}
           onMoveItemDown={onMoveItemDown}
+          taskStates={taskStates}
+          onSetTaskState={onSetTaskState}
         />
       )}
     </div>

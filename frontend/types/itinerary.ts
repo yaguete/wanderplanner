@@ -218,6 +218,11 @@ export interface UserDay {
   /** Texto de la descripción (lo que va tras «Día n ·» en pantalla; sin prefijo fijo) */
   label: string
   items: UserDayItem[]
+  /**
+   * Huella de los ítems con los que se generó la última descripción por IA
+   * (`dayItemsSignature`). Si coincide con la firma actual, el botón queda apagado.
+   */
+  summarySignature?: string | null
 }
 
 export interface UserDayItem {

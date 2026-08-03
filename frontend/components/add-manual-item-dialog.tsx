@@ -195,7 +195,7 @@ export function AddManualItemDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold tracking-tight">
-            Añadir elemento
+            Añadir ítem
           </DialogTitle>
           <DialogDescription>
             Algo que no viene de ninguna fuente: lo añades tú al plan.
