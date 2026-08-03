@@ -64,8 +64,20 @@ interface AuthContextValue {
    * (envía confirmación). No usar `signInWithOtp` aquí: crearía otro usuario y perdería el viaje.
    */
   linkGuestEmail: (email: string, displayName?: string | null) => Promise<AuthResult>
+  /**
+   * Sincroniza con el servidor tras confirmar el email en otra pestaña.
+   * Devuelve `true` si la sesión sigue siendo anónima.
+   */
+  refreshGuestStatus: () => Promise<boolean>
   signOut: () => Promise<void>
   updateProfile: (data: ProfileInput) => Promise<AuthResult>
+}
+
+/** Email pendiente de confirmar tras `updateUser({ email })` (campo `new_email` o `email`). */
+function pendingEmailOf(user: User | null | undefined): string | null {
+  if (!user) return null
+  const candidate = (user.new_email ?? user.email)?.trim()
+  return candidate || null
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -245,6 +257,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await persistProfile(data.user.id, profileData)
           setUser(data.user)
         }
+        // Si el proyecto tiene autoconfirm, el JWT nuevo ya no será anónimo.
+        // Si no, seguirá como invitado-pendiente hasta confirmar el email.
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+        if (!refreshError && refreshed.session) {
+          setSession(refreshed.session)
+          setUser(refreshed.session.user)
+        }
         return { ok: true }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
@@ -338,6 +357,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [configured],
   )
 
+  const refreshGuestStatus = useCallback<AuthContextValue["refreshGuestStatus"]>(async () => {
+    if (!configured) return true
+    try {
+      const supabase = createClient()
+      // getUser() consulta al servidor (no al JWT cacheado).
+      const { data, error } = await supabase.auth.getUser()
+      if (error || !data.user) return true
+
+      if (!data.user.is_anonymous) {
+        // Acuñar JWT nuevo para que el backend también deje de ver is_anonymous.
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+        if (!refreshError && refreshed.session) {
+          setSession(refreshed.session)
+          setUser(refreshed.session.user)
+          return Boolean(refreshed.session.user.is_anonymous)
+        }
+        setUser(data.user)
+        return false
+      }
+
+      // Sigue anónimo: actualizar por si hay new_email / email pendientes.
+      setUser(data.user)
+      return true
+    } catch {
+      return true
+    }
+  }, [configured])
+
+  // Tras confirmar el email en otra pestaña, al volver el foco sincronizamos el JWT.
+  useEffect(() => {
+    if (!configured) return
+    const pendingUpgrade = Boolean(user?.is_anonymous && pendingEmailOf(user))
+    if (!pendingUpgrade) return
+
+    const onFocusOrVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return
+      void refreshGuestStatus()
+    }
+
+    window.addEventListener("focus", onFocusOrVisible)
+    document.addEventListener("visibilitychange", onFocusOrVisible)
+    return () => {
+      window.removeEventListener("focus", onFocusOrVisible)
+      document.removeEventListener("visibilitychange", onFocusOrVisible)
+    }
+  }, [configured, user, refreshGuestStatus])
+
   const signOut = useCallback(async () => {
     if (!configured) return
     const supabase = createClient()
@@ -375,6 +441,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInAnonymously,
       sendMagicLink,
       linkGuestEmail,
+      refreshGuestStatus,
       signOut,
       updateProfile,
     }),
@@ -390,6 +457,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInAnonymously,
       sendMagicLink,
       linkGuestEmail,
+      refreshGuestStatus,
       signOut,
       updateProfile,
     ],
