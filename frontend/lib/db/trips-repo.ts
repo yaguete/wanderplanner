@@ -10,15 +10,16 @@
  * solo de lo cambiado, con debounce, cola secuencial y last-write-wins (sin rollback).
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { Source, Trip, UserBasicItem, UserDay } from "@/types/itinerary"
+import type { ExtraTask, Source, Trip, TripTaskState, UserBasicItem, UserDay } from "@/types/itinerary"
 import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
+import { pruneTaskStates } from "@/lib/trip-tasks"
 
 const DEBOUNCE_MS = 1_000
 const MAX_ATTEMPTS = 3
 
 export type TripsSnapshot = { trips: Trip[]; sources: Source[] }
 
-type TripRow = {
+export type TripRow = {
   id: string
   user_id: string
   name: string
@@ -34,6 +35,10 @@ type TripRow = {
   source_ids: string[] | null
   days: UserDay[] | null
   basics: UserBasicItem[] | null
+  tasks: Record<string, TripTaskState> | null
+  extra_tasks: ExtraTask[] | null
+  num_travelers: number | null
+  currency: string | null
 }
 
 type SourceRow = {
@@ -50,13 +55,13 @@ type SourceRow = {
 }
 
 const TRIP_COLUMNS =
-  "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics"
+  "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, num_travelers, currency"
 /** Sin `article_html`: puede ser enorme y solo hace falta al abrir la Crónica. */
 const SOURCE_COLUMNS = "id, url, author, title, area, og_image, items, basics"
 
 // ── Mapeo fila ↔ dominio ──────────────────────────────────────────────────────
 
-function rowToTrip(row: TripRow): Trip {
+export function rowToTrip(row: TripRow): Trip {
   const days = row.days ?? []
   // Normalización en lectura: legacy desacoplaba end_date / num_days de days.length.
   // Fuente de verdad = days.length; endDate inclusive desde startDate.
@@ -80,12 +85,16 @@ function rowToTrip(row: TripRow): Trip {
     sourceIds: row.source_ids ?? [],
     days,
     basics: row.basics ?? [],
+    tasks: row.tasks ?? {},
+    extraTasks: row.extra_tasks ?? [],
+    numTravelers: row.num_travelers ?? null,
+    currency: row.currency?.trim() ? row.currency.trim() : "EUR",
     archived: row.archived,
     referrer: row.referrer,
   }
 }
 
-function tripToRow(trip: Trip, userId: string): TripRow {
+export function tripToRow(trip: Trip, userId: string): TripRow {
   return {
     id: trip.id,
     user_id: userId,
@@ -102,6 +111,11 @@ function tripToRow(trip: Trip, userId: string): TripRow {
     source_ids: trip.sourceIds ?? [],
     days: trip.days ?? [],
     basics: trip.basics ?? [],
+    // Poda única al serializar: el jsonb persistido no retiene estados huérfanos.
+    tasks: pruneTaskStates(trip),
+    extra_tasks: trip.extraTasks ?? [],
+    num_travelers: trip.numTravelers ?? null,
+    currency: trip.currency?.trim() ? trip.currency.trim() : "EUR",
   }
 }
 
@@ -180,6 +194,10 @@ export async function insertDraftTrip(
     num_days: 1,
     days: [{ id: crypto.randomUUID(), label: "", items: [] }],
     basics: [],
+    tasks: {},
+    extra_tasks: [],
+    num_travelers: null,
+    currency: "EUR",
     source_ids: [],
     referrer: data.referrer,
   })

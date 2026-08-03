@@ -85,6 +85,53 @@ export type ItemType = "transport" | "stay" | "food" | "activity"
 /** Categoría de “Básicos” en app (camelCase). */
 export type BasicCategory = "insurance" | "sim" | "carRental" | "flight" | "other"
 
+/**
+ * Grupos de la vista Tareas (T4.2). No amplía `ItemType` ni `BasicCategory`:
+ * se deriva del tipo del ítem (`stay` → accommodation, todos los básicos → `basic`).
+ * `paperwork` / `health` quedan reservadas para las tareas de país (T4.4).
+ */
+export type TripTaskCategory =
+  | "accommodation"
+  | "transport"
+  | "activity"
+  | "food"
+  | "basic"
+  | "paperwork"
+  | "health"
+  | "other"
+
+/**
+ * Estado de una tarea. `notNeeded` = "esto no hay que reservarlo" (triaje);
+ * los tres valores son excluyentes. Ausencia en el mapa = nunca tocada.
+ */
+export type TripTaskStatus = "pending" | "booked" | "notNeeded"
+
+/**
+ * Estado de una tarea tocada por el usuario. Solo se persiste en `Trip.tasks`
+ * (o en `ExtraTask.state`) tras una mutación explícita; ausencia = nunca tocada
+ * (siempre-accionables se tratan como pendientes; activity/food van a triaje).
+ */
+export interface TripTaskState {
+  status: TripTaskStatus
+  cost: number | null
+  /**
+   * Si la reserva es cancelable. `null` = no aplica o no indicado.
+   * La UI solo lo enseñará en alojamiento y transporte.
+   */
+  cancellable: boolean | null
+  notes: string | null
+  /** ISO UTC; se sella en cada mutación de estado. */
+  updatedAt: string
+}
+
+/** Tarea manual (no proviene de un ítem del itinerario ni de un básico). */
+export interface ExtraTask {
+  id: string
+  title: string
+  category: TripTaskCategory
+  state: TripTaskState
+}
+
 export interface Trip {
   id: string
   name: string
@@ -109,6 +156,19 @@ export interface Trip {
   days: UserDay[]
   /** Seguros, SIM, descuentos, etc. a nivel de viaje (no por día). */
   basics: UserBasicItem[]
+  /**
+   * Estado de tareas indexado por clave derivada (`taskKeyForItem` /
+   * `taskKeyForBasic` en `lib/trip-tasks.ts`), no por id de ítem: un alojamiento
+   * de N noches es UNA reserva aunque aparezca N veces en la Ruta.
+   * Solo entradas tocadas por el usuario; no duplica datos descriptivos del ítem.
+   */
+  tasks: Record<string, TripTaskState>
+  /** Tareas manuales con su estado anidado. */
+  extraTasks: ExtraTask[]
+  /** Viajeros del viaje; nullable hasta T4.3 (coste por persona). */
+  numTravelers: number | null
+  /** Divisa del viaje (ISO 4217). Una sola para que el total sea suma válida. */
+  currency: string
   /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */
   archived?: boolean
   /** Slug del partner cuyo CTA originó el viaje (`/start?ref=…`). */

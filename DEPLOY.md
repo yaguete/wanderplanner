@@ -179,12 +179,17 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   3. `20260726230000_grant_data_api.sql`
   4. `20260728000000_place_thumbs_and_covers.sql`
   5. `20260728120000_usage_events.sql`
+  6. `20260803000000_grant_service_role_backend_tables.sql`
+  7. `20260803120000_article_extractions_validation.sql`
+  8. `20260803180000_trip_tasks.sql`
 
 ```bash
 # Con CLI vinculada al proyecto:
 supabase db push
 # O pegar cada fichero en SQL Editor, en orden.
 ```
+
+**Orden con el frontend:** `20260803180000_trip_tasks.sql` añade columnas que el front ya pide en `TRIP_COLUMNS` (`tasks`, `extra_tasks`, `num_travelers`, `currency`). Hay que aplicar esa migración **antes** de mergear a `main` (Vercel despliega Production en cada push). Aplicarla con el frontend viejo aún en producción es inocuo (`add column if not exists`).
 
 Detalle local y env: [`supabase/README.md`](supabase/README.md).
 

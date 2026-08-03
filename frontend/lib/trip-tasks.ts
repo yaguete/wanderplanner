@@ -1,0 +1,406 @@
+/**
+ * Selector derivado de tareas del viaje: no duplica ítems ni reservas.
+ * Compone la lista agregando `trip.days[].items` por clave derivada
+ * (`taskKeyForItem`), más `basics` (`taskKeyForBasic`) y `extraTasks`,
+ * y asocia el `TripTaskState` persistido (o `null` si nunca se ha tocado).
+ *
+ * También expone `pruneTaskStates` (claves vivas) para limpiar huérfanos
+ * al serializar y al mutar en memoria ("borrar es olvidar").
+ */
+import type {
+  BasicCategory,
+  ExtraTask,
+  ItemType,
+  Trip,
+  TripTaskCategory,
+  TripTaskState,
+  TripTaskStatus,
+  UserBasicItem,
+  UserDayItem,
+} from "@/types/itinerary"
+
+export type DerivedTaskOrigin = "dayItem" | "basic" | "extra"
+
+/** Dónde pinta T4.2 la tarea. Único sitio que decide pertenencia. */
+export type TaskBucket = "main" | "triage" | "dismissed"
+
+export type DerivedTripTask = {
+  /** Clave de tarea (`taskKeyForItem` / `taskKeyForBasic` / id del extra). */
+  id: string
+  origin: DerivedTaskOrigin
+  category: TripTaskCategory
+  /** Discriminador original: `ItemType` (día), `BasicCategory` (básico) o la categoría del extra. */
+  sourceKind: ItemType | BasicCategory | TripTaskCategory
+  title: string
+  /** `null` = nunca tocada. */
+  state: TripTaskState | null
+  bucket: TaskBucket
+  /** Ids de todas las ocurrencias agregadas. */
+  itemIds: string[]
+  /** Índices de día (0-based), ordenados y sin repetir. Vacío en básicos/extras. */
+  dayIndexes: number[]
+  /** Número de ocurrencias (= `itemIds.length`). */
+  occurrences: number
+  /** Solo alojamiento: noches = días distintos en los que aparece. */
+  nights?: number
+  sourceId?: string
+  affiliateUrl?: string | null
+}
+
+export type TripTaskTotals = {
+  byStatus: { pending: number; booked: number }
+  costByStatus: { pending: number; booked: number }
+  costByCategory: Partial<Record<TripTaskCategory, number>>
+  totalCost: number
+  /** Suma de costes con `cancellable === false` (compromiso no cancelable). */
+  committedCost: number
+}
+
+/** Categorías que no pasan por triaje: entran directo a `main` si no están descartadas. */
+const ALWAYS_ACTIONABLE: ReadonlySet<TripTaskCategory> = new Set([
+  "accommodation",
+  "transport",
+  "basic",
+  "paperwork",
+  "health",
+  "other",
+])
+
+/** Trim + minúsculas + sin acentos + espacios colapsados. */
+export function normalizeName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+}
+
+/**
+ * Única forma de construir la clave de un ítem de día.
+ * Prefijo `ItemType` evita colisionar un restaurante con una actividad homónima.
+ * No incluye `sourceId`: el mismo hotel desde dos blogs es UNA reserva.
+ */
+export function taskKeyForItem(item: Pick<UserDayItem, "type" | "name">): string {
+  return `${item.type}:${normalizeName(item.name)}`
+}
+
+/**
+ * Clave de un básico. Incluye categoría + nombre normalizado para deduplicar
+ * el mismo seguro/SIM/… llegado desde dos fuentes (no el uuid del ítem).
+ */
+export function taskKeyForBasic(
+  basic: Pick<UserBasicItem, "category" | "name">,
+): string {
+  return `basic:${basic.category}:${normalizeName(basic.name)}`
+}
+
+export function categoryFromItemType(type: ItemType): TripTaskCategory {
+  switch (type) {
+    case "stay":
+      return "accommodation"
+    case "transport":
+      return "transport"
+    case "activity":
+      return "activity"
+    case "food":
+      return "food"
+  }
+}
+
+/** Todos los básicos del viaje caen en la categoría de vista `basic`. */
+export function categoryFromBasic(_category: BasicCategory): TripTaskCategory {
+  return "basic"
+}
+
+/** `cancellable` solo aplica (y se enseña) en alojamiento y transporte. */
+export function cancellableApplies(category: TripTaskCategory): boolean {
+  return category === "accommodation" || category === "transport"
+}
+
+function needsTriage(category: TripTaskCategory): boolean {
+  return !ALWAYS_ACTIONABLE.has(category)
+}
+
+/**
+ * Resolutor de tres estados para el indicador de la Ruta
+ * (reservado ✓ / pendiente / no aplica). Ausencia → `"pending"`.
+ * Única lectura O(1) que T4.2 debe usar sobre `trip.tasks[taskKey]`.
+ */
+export function resolveTaskStatus(state: TripTaskState | null): TripTaskStatus {
+  return state?.status ?? "pending"
+}
+
+/**
+ * Estado de una tarea del bucket `main`, para totales.
+ * `null` / ausente → pending; `notNeeded` no debería llegar aquí (bucket dismissed).
+ * No usar desde la Ruta: ahí va `resolveTaskStatus`.
+ */
+export function effectiveStatus(state: TripTaskState | null): "pending" | "booked" {
+  return state?.status === "booked" ? "booked" : "pending"
+}
+
+/**
+ * Bucket de accionabilidad. T4.2 solo pinta; no decide pertenencia.
+ * Extras no pasan por triaje (nunca `"triage"`), pero `notNeeded` → `"dismissed"`.
+ */
+export function taskBucket(
+  category: TripTaskCategory,
+  state: TripTaskState | null,
+  origin: DerivedTaskOrigin,
+): TaskBucket {
+  if (state?.status === "notNeeded") return "dismissed"
+  if (origin === "extra") return "main"
+  if (needsTriage(category) && state === null) return "triage"
+  return "main"
+}
+
+/**
+ * Elimina del mapa las claves que ya no tienen ninguna ocurrencia viva
+ * (ítems de día vía `taskKeyForItem`, o básicos vía `taskKeyForBasic`).
+ * Punto único de poda: serialización (`tripToRow`) y mutaciones en memoria.
+ */
+export function pruneTaskStates(
+  trip: Pick<Trip, "days" | "basics" | "tasks">,
+): Record<string, TripTaskState> {
+  const live = new Set<string>()
+  for (const day of trip.days ?? []) {
+    for (const item of day.items ?? []) live.add(taskKeyForItem(item))
+  }
+  for (const basic of trip.basics ?? []) live.add(taskKeyForBasic(basic))
+
+  const next: Record<string, TripTaskState> = {}
+  for (const [key, state] of Object.entries(trip.tasks ?? {})) {
+    if (live.has(key)) next[key] = state
+  }
+  return next
+}
+
+/** Aplica poda de tareas al objeto Trip (memoria: "borrar es olvidar"). */
+export function withPrunedTasks(trip: Trip): Trip {
+  return { ...trip, tasks: pruneTaskStates(trip) }
+}
+
+type DayItemGroup = {
+  key: string
+  type: ItemType
+  category: TripTaskCategory
+  title: string
+  itemIds: string[]
+  dayIndexes: number[]
+  dayIndexSet: Set<number>
+  sourceId?: string
+  affiliateUrl: string | null
+}
+
+function aggregateDayItems(trip: Trip): DerivedTripTask[] {
+  const groups = new Map<string, DayItemGroup>()
+  const order: string[] = []
+
+  trip.days.forEach((day, dayIndex) => {
+    for (const item of day.items) {
+      const key = taskKeyForItem(item)
+      let group = groups.get(key)
+      if (!group) {
+        group = {
+          key,
+          type: item.type,
+          category: categoryFromItemType(item.type),
+          title: item.name,
+          itemIds: [],
+          dayIndexes: [],
+          dayIndexSet: new Set(),
+          sourceId: item.sourceId,
+          affiliateUrl: item.affiliateUrl ?? null,
+        }
+        groups.set(key, group)
+        order.push(key)
+      }
+      group.itemIds.push(item.id)
+      if (!group.dayIndexSet.has(dayIndex)) {
+        group.dayIndexSet.add(dayIndex)
+        group.dayIndexes.push(dayIndex)
+      }
+      if (!group.affiliateUrl && item.affiliateUrl) {
+        group.affiliateUrl = item.affiliateUrl
+      }
+    }
+  })
+
+  return order.map((key) => {
+    const g = groups.get(key)!
+    const state = trip.tasks[key] ?? null
+    const origin: DerivedTaskOrigin = "dayItem"
+    return {
+      id: key,
+      origin,
+      category: g.category,
+      sourceKind: g.type,
+      title: g.title,
+      state,
+      bucket: taskBucket(g.category, state, origin),
+      itemIds: g.itemIds,
+      dayIndexes: g.dayIndexes,
+      occurrences: g.itemIds.length,
+      nights: g.type === "stay" ? g.dayIndexes.length : undefined,
+      sourceId: g.sourceId,
+      affiliateUrl: g.affiliateUrl,
+    }
+  })
+}
+
+type BasicGroup = {
+  key: string
+  category: BasicCategory
+  title: string
+  itemIds: string[]
+  sourceId?: string
+  affiliateUrl: string | null
+}
+
+function aggregateBasics(trip: Trip): DerivedTripTask[] {
+  const groups = new Map<string, BasicGroup>()
+  const order: string[] = []
+
+  for (const basic of trip.basics) {
+    const key = taskKeyForBasic(basic)
+    let group = groups.get(key)
+    if (!group) {
+      group = {
+        key,
+        category: basic.category,
+        title: basic.name,
+        itemIds: [],
+        sourceId: basic.sourceId,
+        affiliateUrl: basic.affiliateUrl,
+      }
+      groups.set(key, group)
+      order.push(key)
+    }
+    group.itemIds.push(basic.id)
+    if (!group.affiliateUrl && basic.affiliateUrl) {
+      group.affiliateUrl = basic.affiliateUrl
+    }
+  }
+
+  return order.map((key) => {
+    const g = groups.get(key)!
+    const state = trip.tasks[key] ?? null
+    const category = categoryFromBasic(g.category)
+    const origin: DerivedTaskOrigin = "basic"
+    return {
+      id: key,
+      origin,
+      category,
+      sourceKind: g.category,
+      title: g.title,
+      state,
+      bucket: taskBucket(category, state, origin),
+      itemIds: g.itemIds,
+      dayIndexes: [],
+      occurrences: g.itemIds.length,
+      sourceId: g.sourceId,
+      affiliateUrl: g.affiliateUrl,
+    }
+  })
+}
+
+function extraTask(extra: ExtraTask): DerivedTripTask {
+  const origin: DerivedTaskOrigin = "extra"
+  return {
+    id: extra.id,
+    origin,
+    category: extra.category,
+    sourceKind: extra.category,
+    title: extra.title,
+    state: extra.state,
+    bucket: taskBucket(extra.category, extra.state, origin),
+    itemIds: [extra.id],
+    dayIndexes: [],
+    occurrences: 1,
+  }
+}
+
+/**
+ * Lista agregada de tareas: una entrada por reserva (clave), no por ocurrencia.
+ * Orden: primera aparición en días, luego básicos, luego extras.
+ * Ausencia en el mapa → `state: null` (sin centinela).
+ */
+export function buildTripTasks(trip: Trip): DerivedTripTask[] {
+  const out = aggregateDayItems(trip)
+  out.push(...aggregateBasics(trip))
+  for (const extra of trip.extraTasks) {
+    out.push(extraTask(extra))
+  }
+  return out
+}
+
+/**
+ * Totales solo sobre el bucket `main`. Excluye `triage` y `dismissed`.
+ * El "X de Y gestionadas" de T4.2 = `byStatus.booked` sobre
+ * `byStatus.booked + byStatus.pending`. Costes `null` no entran en
+ * `costByStatus` / `costByCategory` / `totalCost` / `committedCost`.
+ */
+export function computeTripTaskTotals(tasks: DerivedTripTask[]): TripTaskTotals {
+  const byStatus = { pending: 0, booked: 0 }
+  const costByStatus = { pending: 0, booked: 0 }
+  const costByCategory: Partial<Record<TripTaskCategory, number>> = {}
+  let totalCost = 0
+  let committedCost = 0
+
+  for (const task of tasks) {
+    if (task.bucket !== "main") continue
+
+    const status = effectiveStatus(task.state)
+    byStatus[status] += 1
+
+    const cost = task.state?.cost
+    if (cost != null && Number.isFinite(cost)) {
+      costByStatus[status] += cost
+      costByCategory[task.category] = (costByCategory[task.category] ?? 0) + cost
+      totalCost += cost
+      if (task.state?.cancellable === false) {
+        committedCost += cost
+      }
+    }
+  }
+
+  return {
+    byStatus,
+    costByStatus,
+    costByCategory,
+    totalCost,
+    committedCost,
+  }
+}
+
+function normalizeCost(cost: number | null | undefined): number | null {
+  if (cost == null) return null
+  if (!Number.isFinite(cost) || cost < 0) return null
+  return cost
+}
+
+/** Merge parcial de estado; sella `updatedAt` en ISO UTC. Coste inválido → null. */
+export function mergeTaskState(
+  current: TripTaskState | null | undefined,
+  patch: Partial<TripTaskState>,
+  now: string = new Date().toISOString(),
+): TripTaskState {
+  const nextCost =
+    patch.cost !== undefined ? normalizeCost(patch.cost) : (current?.cost ?? null)
+  return {
+    status: patch.status ?? current?.status ?? "pending",
+    cost: nextCost,
+    cancellable:
+      patch.cancellable !== undefined ? patch.cancellable : (current?.cancellable ?? null),
+    notes: patch.notes !== undefined ? patch.notes : (current?.notes ?? null),
+    updatedAt: now,
+  }
+}
+
+export function createExtraTaskState(
+  patch: Partial<TripTaskState> = {},
+  now: string = new Date().toISOString(),
+): TripTaskState {
+  return mergeTaskState(null, patch, now)
+}

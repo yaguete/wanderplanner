@@ -17,7 +17,16 @@ import {
   useState,
 } from "react"
 import { toast } from "sonner"
-import type { Trip, Source, UserDay, UserDayItem, UserBasicItem } from "@/types/itinerary"
+import type {
+  Trip,
+  Source,
+  UserDay,
+  UserDayItem,
+  UserBasicItem,
+  TripTaskState,
+  TripTaskCategory,
+  ExtraTask,
+} from "@/types/itinerary"
 import { fetchItinerary, type ItineraryProgressStage } from "@/lib/api"
 import { buildSource } from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
@@ -25,6 +34,7 @@ import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-re
 import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
 import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
+import { createExtraTaskState, mergeTaskState, withPrunedTasks } from "@/lib/trip-tasks"
 
 /** Alinea numDays y endDate con days.length (+ startDate inclusive). */
 function syncTripSchedule(trip: Trip, days: UserDay[]): Trip {
@@ -90,6 +100,28 @@ interface TripContextValue {
   ) => void
   addBasicToTrip: (tripId: string, basic: UserBasicItem) => void
   removeBasicFromTrip: (tripId: string, basicId: string) => void
+
+  /**
+   * Actualiza el estado de una tarea por clave (`taskKeyForItem` /
+   * `taskKeyForBasic`, o el id del extra). Si `taskKey` es un extra, escribe en
+   * `ExtraTask.state`; si no, en `trip.tasks[taskKey]`.
+   */
+  setTaskState: (tripId: string, taskKey: string, patch: Partial<TripTaskState>) => void
+  addExtraTask: (
+    tripId: string,
+    data: { title: string; category: TripTaskCategory; state?: Partial<TripTaskState> },
+  ) => ExtraTask
+  removeExtraTask: (tripId: string, taskId: string) => void
+  updateExtraTask: (
+    tripId: string,
+    taskId: string,
+    data: { title?: string; category?: TripTaskCategory },
+  ) => void
+
+  /** Viajeros del viaje (T4.3: coste por persona). `null` = no configurado. */
+  setNumTravelers: (tripId: string, numTravelers: number | null) => void
+  /** Divisa del viaje (ISO 4217). Vacío → EUR. */
+  setTripCurrency: (tripId: string, currency: string) => void
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -249,6 +281,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         sourceIds: [],
         days,
         basics: [],
+        tasks: {},
+        extraTasks: [],
+        numTravelers: null,
+        currency: "EUR",
         archived: false,
       },
       days,
@@ -412,7 +448,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
       const nextTrips: Trip[] = tripsRef.current.map((t) => {
         if (t.id !== tripId) return t
-        return {
+        return withPrunedTasks({
           ...t,
           sourceIds: t.sourceIds.filter((id) => id !== sourceId),
           days: t.days.map((d) => ({
@@ -421,7 +457,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           })),
           basics: t.basics.filter((b) => b.sourceId !== sourceId),
           ...(wasFirst ? { coverUrl: null } : {}),
-        }
+        })
       })
       setTrips(nextTrips)
       setSources((prev) => {
@@ -492,18 +528,20 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         )
 
         setTrips((prev) =>
-          prev.map((t) => ({
-            ...t,
-            days: t.days.map((d) => ({
-              ...d,
-              items: d.items.filter(
-                (i) => i.sourceId !== sourceId || newItemIds.has(i.sourceItemId),
+          prev.map((t) =>
+            withPrunedTasks({
+              ...t,
+              days: t.days.map((d) => ({
+                ...d,
+                items: d.items.filter(
+                  (i) => i.sourceId !== sourceId || newItemIds.has(i.sourceItemId),
+                ),
+              })),
+              basics: t.basics.filter(
+                (b) => b.sourceId !== sourceId || newBasicIds.has(b.sourceBasicItemId),
               ),
-            })),
-            basics: t.basics.filter(
-              (b) => b.sourceId !== sourceId || newBasicIds.has(b.sourceBasicItemId),
-            ),
-          })),
+            }),
+          ),
         )
         setSources((prev) => prev.map((s) => (s.id === sourceId ? newSource : s)))
 
@@ -548,7 +586,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         if (t.id !== tripId) return t
         const days = t.days.filter((d) => d.id !== dayId)
         if (days.length === 0) return t
-        return syncTripSchedule(t, days)
+        return withPrunedTasks(syncTripSchedule(t, days))
       }),
     )
   }, [])
@@ -568,7 +606,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           if (days.length <= 1) break
           days = days.filter((x) => x.id !== d.id)
         }
-        return syncTripSchedule(t, days)
+        return withPrunedTasks(syncTripSchedule(t, days))
       }),
     )
   }, [])
@@ -590,16 +628,15 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const removeItemFromDay = useCallback((tripId: string, dayId: string, itemId: string) => {
     setTrips((prev) =>
-      prev.map((t) =>
-        t.id !== tripId
-          ? t
-          : {
-              ...t,
-              days: t.days.map((d) =>
-                d.id === dayId ? { ...d, items: d.items.filter((i) => i.id !== itemId) } : d,
-              ),
-            },
-      ),
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        return withPrunedTasks({
+          ...t,
+          days: t.days.map((d) =>
+            d.id === dayId ? { ...d, items: d.items.filter((i) => i.id !== itemId) } : d,
+          ),
+        })
+      }),
     )
   }, [])
 
@@ -665,11 +702,123 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const removeBasicFromTrip = useCallback((tripId: string, basicId: string) => {
     setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        return withPrunedTasks({
+          ...t,
+          basics: t.basics.filter((b) => b.id !== basicId),
+        })
+      }),
+    )
+  }, [])
+
+  const setNumTravelers = useCallback((tripId: string, numTravelers: number | null) => {
+    setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        const next =
+          numTravelers == null || !Number.isFinite(numTravelers) || numTravelers < 1
+            ? null
+            : Math.floor(numTravelers)
+        return { ...t, numTravelers: next }
+      }),
+    )
+  }, [])
+
+  const setTripCurrency = useCallback((tripId: string, currency: string) => {
+    setTrips((prev) =>
       prev.map((t) =>
-        t.id !== tripId ? t : { ...t, basics: t.basics.filter((b) => b.id !== basicId) },
+        t.id !== tripId
+          ? t
+          : { ...t, currency: currency.trim() ? currency.trim().toUpperCase() : "EUR" },
       ),
     )
   }, [])
+
+  const setTaskState = useCallback(
+    (tripId: string, taskKey: string, patch: Partial<TripTaskState>) => {
+      const now = new Date().toISOString()
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          const extraIdx = t.extraTasks.findIndex((e) => e.id === taskKey)
+          if (extraIdx >= 0) {
+            const extraTasks = t.extraTasks.map((e, i) =>
+              i === extraIdx
+                ? { ...e, state: mergeTaskState(e.state, patch, now) }
+                : e,
+            )
+            return { ...t, extraTasks }
+          }
+          return {
+            ...t,
+            tasks: {
+              ...t.tasks,
+              [taskKey]: mergeTaskState(t.tasks[taskKey], patch, now),
+            },
+          }
+        }),
+      )
+    },
+    [],
+  )
+
+  const addExtraTask = useCallback(
+    (
+      tripId: string,
+      data: { title: string; category: TripTaskCategory; state?: Partial<TripTaskState> },
+    ): ExtraTask => {
+      const extra: ExtraTask = {
+        id: crypto.randomUUID(),
+        title: data.title.trim(),
+        category: data.category,
+        state: createExtraTaskState(data.state),
+      }
+      setTrips((prev) =>
+        prev.map((t) =>
+          t.id !== tripId ? t : { ...t, extraTasks: [...t.extraTasks, extra] },
+        ),
+      )
+      return extra
+    },
+    [],
+  )
+
+  const removeExtraTask = useCallback((tripId: string, taskId: string) => {
+    setTrips((prev) =>
+      prev.map((t) =>
+        t.id !== tripId
+          ? t
+          : { ...t, extraTasks: t.extraTasks.filter((e) => e.id !== taskId) },
+      ),
+    )
+  }, [])
+
+  const updateExtraTask = useCallback(
+    (
+      tripId: string,
+      taskId: string,
+      data: { title?: string; category?: TripTaskCategory },
+    ) => {
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          return {
+            ...t,
+            extraTasks: t.extraTasks.map((e) => {
+              if (e.id !== taskId) return e
+              return {
+                ...e,
+                title: data.title !== undefined ? data.title.trim() : e.title,
+                category: data.category ?? e.category,
+              }
+            }),
+          }
+        }),
+      )
+    },
+    [],
+  )
 
   const value = useMemo<TripContextValue>(
     () => ({
@@ -700,8 +849,14 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       moveItemBetweenDays,
       addBasicToTrip,
       removeBasicFromTrip,
+      setTaskState,
+      addExtraTask,
+      removeExtraTask,
+      updateExtraTask,
+      setNumTravelers,
+      setTripCurrency,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, setNumTravelers, setTripCurrency],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>
