@@ -284,35 +284,152 @@ export function countriesPlainList(codes: string[]): string {
 }
 
 /**
- * Nombres en inglés frecuentes en blog / LLM; el listado COUNTRIES usa español.
- * Clave: minúsculas, sin tildes si el nombre EN va sin ellas.
+ * Normaliza un topónimo para lookup: minúsculas, sin tildes, puntuación → espacios.
+ * No acepta códigos ISO de 2 letras como texto libre (evita `in`/`us` espurios).
  */
-const COUNTRY_EXONYM_TO_CODE: Record<string, string> = {
-  kenya: "KE",
-  tanzania: "TZ",
-  rwanda: "RW",
-  uganda: "UG",
-  namibia: "NA",
-  botswana: "BW",
-  zambia: "ZM",
-  zimbabwe: "ZW",
-  malawi: "MW",
-  mozambique: "MZ",
-  ethiopia: "ET",
-  egypt: "EG",
-  morocco: "MA",
-  oman: "OM",
-  nepal: "NP",
-  bhutan: "BT",
-  laos: "LA",
-  cambodia: "KH",
-  "south sudan": "SS",
-  "sri lanka": "LK",
+export function normalizeCountryName(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/['’`]/g, "")
+    .replace(/[-_/]+/g, " ")
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/**
+ * Aliases no canónicos / abreviaturas habituales (no duplicar el catálogo ES↔EN).
+ * Clave: ya normalizada con `normalizeCountryName`.
+ */
+const COUNTRY_ALIAS_TO_CODE: Record<string, string> = {
+  usa: "US",
+  us: "US",
+  "united states of america": "US",
+  uk: "GB",
+  "great britain": "GB",
+  britain: "GB",
+  england: "GB",
+  holland: "NL",
+  "ivory coast": "CI",
+  "cote divoire": "CI",
+  "czech republic": "CZ",
+  "south korea": "KR",
+  "north korea": "KP",
+  "united arab emirates": "AE",
+  uae: "AE",
+  "democratic republic of the congo": "CD",
+  "dr congo": "CD",
+  "republic of the congo": "CG",
+  "cabo verde": "CV",
+  "cape verde": "CV",
+  "east timor": "TL",
+  "vatican city": "VA",
+  "holy see": "VA",
+}
+
+type NameIndex = {
+  /** alias normalizado → código ISO (solo entradas unívocas). */
+  exact: Map<string, string>
+  /** aliases de longitud ≥ 4 para búsqueda por límites de palabra. */
+  words: { name: string; code: string }[]
+}
+
+function buildCountryNameIndex(): NameIndex {
+  const candidates = new Map<string, Set<string>>()
+
+  const add = (
+    raw: string | null | undefined,
+    code: string,
+    opts: { allowIso2Alias?: boolean } = {},
+  ) => {
+    if (!raw) return
+    const key = normalizeCountryName(raw)
+    if (!key || key.length < 2) return
+    // No indexar códigos ISO de 2 letras como topónimos libres (`in`, `us`…).
+    // Sí se permiten abreviaturas explícitas del mapa de aliases (`uk`, `us`).
+    if (!opts.allowIso2Alias && /^[a-z]{2}$/.test(key)) return
+    let set = candidates.get(key)
+    if (!set) {
+      set = new Set()
+      candidates.set(key, set)
+    }
+    set.add(code.toUpperCase())
+  }
+
+  let enNames: Intl.DisplayNames | null = null
+  try {
+    enNames = new Intl.DisplayNames(["en"], { type: "region" })
+  } catch {
+    enNames = null
+  }
+
+  for (const c of COUNTRIES) {
+    add(c.name, c.code)
+    if (enNames) {
+      try {
+        add(enNames.of(c.code), c.code)
+      } catch {
+        // región no soportada por el runtime
+      }
+    }
+  }
+
+  for (const [alias, code] of Object.entries(COUNTRY_ALIAS_TO_CODE)) {
+    add(alias, code, { allowIso2Alias: true })
+  }
+
+  const exact = new Map<string, string>()
+  const words: { name: string; code: string }[] = []
+  for (const [name, codes] of candidates) {
+    if (codes.size !== 1) continue // ambiguo → descartar
+    const code = [...codes][0]!
+    exact.set(name, code)
+    if (name.length >= 4) words.push({ name, code })
+  }
+  // Preferir nombres más largos primero al escanear blobs.
+  words.sort((a, b) => b.name.length - a.name.length)
+  return { exact, words }
+}
+
+const COUNTRY_NAME_INDEX: NameIndex = buildCountryNameIndex()
+
+function lookupExactCountryName(raw: string): string | null {
+  const key = normalizeCountryName(raw)
+  if (!key) return null
+  return COUNTRY_NAME_INDEX.exact.get(key) ?? null
+}
+
+/**
+ * Códigos cuya denominación aparece como palabra completa en el texto normalizado.
+ * Si un nombre corto está contenido en otro más largo ya encontrado (Guinea ⊂ Guinea-Bissau),
+ * se descarta el corto para no inventar un segundo país.
+ */
+function codesFromWordMatches(normalized: string): string[] {
+  if (!normalized) return []
+  const hits: { name: string; code: string }[] = []
+  for (const entry of COUNTRY_NAME_INDEX.words) {
+    if (hasWordBoundaryMatch(normalized, entry.name)) hits.push(entry)
+  }
+  const kept = hits.filter((a) =>
+    !hits.some(
+      (b) =>
+        b.name !== a.name &&
+        b.name.length > a.name.length &&
+        (b.name === a.name ||
+          b.name.startsWith(`${a.name} `) ||
+          b.name.endsWith(` ${a.name}`) ||
+          b.name.includes(` ${a.name} `)),
+    ),
+  )
+  return [...new Set(kept.map((h) => h.code))]
 }
 
 /**
  * Extrae códigos ISO-3166 alpha-2 (minúsculas) desde regiones/destino para filtrar geocodificación
  * (p. ej. "Murchison Falls NP, Uganda" → "ug", evitando resultados en India o EEUU).
+ * Acepta nombres en español (catálogo) e inglés (`Intl.DisplayNames`).
  */
 export function collectCountryCodesFromHint(hint: string | null | undefined): string[] {
   if (!hint?.trim()) return []
@@ -325,50 +442,21 @@ export function collectCountryCodesFromHint(hint: string | null | undefined): st
   const fromSegment = (raw: string) => {
     const t = raw.trim()
     if (!t) return
-    const tL = t.toLowerCase()
 
-    if (COUNTRY_EXONYM_TO_CODE[tL]) {
-      addCode(COUNTRY_EXONYM_TO_CODE[tL]!)
+    const exact = lookupExactCountryName(t)
+    if (exact) {
+      addCode(exact)
       return
     }
 
-    for (const c of COUNTRIES) {
-      if (c.name.toLowerCase() === tL) {
-        addCode(c.code)
-        return
-      }
-    }
-
-    for (const c of COUNTRIES) {
-      const n = c.name.toLowerCase()
-      if (n.length < 4) continue
-      if (tL === n || tL.startsWith(`${n} `) || tL.startsWith(`norte de ${n}`) || tL.endsWith(` ${n}`)) {
-        addCode(c.code)
-        return
-      }
-    }
-    for (const [w, code] of Object.entries(COUNTRY_EXONYM_TO_CODE)) {
-      if (w.length < 4) continue
-      if (tL === w || tL === `norte de ${w}` || tL.endsWith(` ${w}`)) {
-        addCode(code)
-        return
-      }
+    for (const code of codesFromWordMatches(normalizeCountryName(t))) {
+      addCode(code)
     }
   }
 
   fromSegment(hint)
   for (const seg of hint.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
     fromSegment(seg)
-  }
-  if (found.size === 0) {
-    const t = hint.toLowerCase()
-    for (const c of COUNTRIES) {
-      const n = c.name.toLowerCase()
-      if (n.length < 4) continue
-      if (t === n || t.endsWith(`, ${n}`) || t.endsWith(`, ${n} `) || t.includes(`, ${n},`) || t.includes(`, ${n}(`)) {
-        addCode(c.code)
-      }
-    }
   }
 
   return [...found]
@@ -407,19 +495,21 @@ export function resolveTripCountryCodes(
     }
   }
 
-  // Nombre suelto en texto largo: "viaje a Uganda", "Uganda 2026"…
-  if (found.size === 0) {
-    const blob = hints.join(" ").toLowerCase()
-    for (const c of COUNTRIES) {
-      const n = c.name.toLowerCase()
-      if (n.length < 4) continue
-      if (blob.includes(n)) found.add(c.code.toUpperCase())
-    }
-    for (const [word, code] of Object.entries(COUNTRY_EXONYM_TO_CODE)) {
-      if (word.length < 4) continue
-      if (blob.includes(word)) found.add(code.toUpperCase())
-    }
+  // Unión con escaneo global por límites de palabra (p. ej. "Japan and Thailand").
+  const blob = normalizeCountryName(hints.join(" "))
+  for (const code of codesFromWordMatches(blob)) {
+    found.add(code)
   }
 
   return [...found]
+}
+
+/** Coincidencia de palabra completa (Unicode letters/numbers). */
+export function hasWordBoundaryMatch(haystack: string, needle: string): boolean {
+  if (!needle) return false
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`,
+    "iu",
+  ).test(haystack)
 }

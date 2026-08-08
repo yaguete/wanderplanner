@@ -165,6 +165,11 @@ export interface Trip {
   tasks: Record<string, TripTaskState>
   /** Tareas manuales con su estado anidado. */
   extraTasks: ExtraTask[]
+  /**
+   * Ids estables de sugerencias de trámites de país descartadas
+   * (`country:{iso}:{slug}` de GET /country-tasks). No viven en `tasks`.
+   */
+  dismissedCountryTasks: string[]
   /** Viajeros del viaje; nullable hasta T4.3 (coste por persona). */
   numTravelers: number | null
   /** Divisa del viaje (ISO 4217). Una sola para que el total sea suma válida. */

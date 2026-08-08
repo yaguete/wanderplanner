@@ -2,7 +2,7 @@
 
 ## Qué es
 
-WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y fuentes de inspiración por URL (`Source`), persistidos en **Supabase** (Postgres + Auth + RLS) con modelo documento (`jsonb`). Un backend Python expone `POST /itinerary` (extrae un artículo con Claude → JSON estructurado, SSE con heartbeats, caché global por URL en `article_extractions`; **sin** resolver miniaturas), `POST /partners/prewarm` (pre-síntesis pública para el kit de partners; Turnstile + límites; solo metadatos), `GET /thumb` (Places + caché `place_thumbs`), `GET /cover` (Unsplash + caché `destination_covers`) y `POST /assistant/chat` (asistente con DeepSeek + tools, SSE); todos salvo `/partners/prewarm` pueden verificar el JWT de Supabase. El front muestra esas fuentes, deja consolidar ítems en días, conserva afiliación (`affiliateUrl` / `affiliate_url`) y ofrece un asistente con varias conversaciones por viaje que conoce el perfil del viajero (tipo de viaje + blogs favoritos).
+WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y fuentes de inspiración por URL (`Source`), persistidos en **Supabase** (Postgres + Auth + RLS) con modelo documento (`jsonb`). Un backend Python expone `POST /itinerary` (extrae un artículo con Claude → JSON estructurado, SSE con heartbeats, caché global por URL en `article_extractions`; **sin** resolver miniaturas), `POST /partners/prewarm` (pre-síntesis pública para el kit de partners; Turnstile + límites; solo metadatos), `GET /thumb` (Places + caché `place_thumbs`), `GET /cover` (Unsplash + caché `destination_covers`), `GET /country-tasks` (trámites previos al viaje desde Recomendaciones MAE + Haiku; caché `country_task_suggestions`) y `POST /assistant/chat` (asistente con DeepSeek + tools, SSE); todos salvo `/partners/prewarm` pueden verificar el JWT de Supabase. El front muestra esas fuentes, deja consolidar ítems en días, conserva afiliación (`affiliateUrl` / `affiliate_url`) y ofrece un asistente con varias conversaciones por viaje que conoce el perfil del viajero (tipo de viaje + blogs favoritos).
 
 ## Stack
 
@@ -34,6 +34,10 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     place_thumbs.py        # GET /thumb (Places; caché place_thumbs)
     covers.py              # GET /cover (Unsplash; caché destination_covers)
     photo_lookup.py        # normalización, single-flight, tope diario
+    country_briefs.py      # Fichas país MAE (PDF) para el asistente
+    travel_briefs.py       # Recomendaciones de viaje MAE (HTML) para trámites
+    country_tasks.py       # GET /country-tasks (Haiku → trámites paperwork/health)
+    country_tasks_cache.py # country_task_suggestions vía service_role
     assistant.py           # POST /assistant/chat (SSE)
     auth.py                # JWT Supabase (HS256 o JWKS)
     extraction_cache.py    # article_extractions vía service_role
@@ -43,7 +47,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
   frontend/
     app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips…
     middleware.ts          # Sesión Supabase; protege /trips y /account
-    components/            # UI + auth/ (RegistrationGate, Turnstile…) + partners/
+    components/            # UI + auth/ + partners/ + country-tasks-section
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
       trip-context.tsx     # Mutaciones síncronas; sync vía trips-repo
@@ -51,6 +55,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       partners-api.ts      # POST /partners/prewarm (SSE, sin Bearer)
       thumbs.ts            # GET /thumb (lazy; memoria + sessionStorage)
       unsplash.ts          # portadas vía GET /cover (sin clave en el navegador)
+      country-tasks.ts     # GET /country-tasks (lazy; sessionStorage + dismissals)
       db/                  # trips-repo, assistant-repo, profile-repo
       supabase/            # client, server, middleware helpers
     hooks/
@@ -82,8 +87,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Viajes de partner (`trip.referrer`): al añadir la primera fuente, si el viaje sigue virgen (sin fechas, ≤1 día vacío), se redimensiona a `totalDays` (tope 60), se fija `startDate` = mañana y se renombra con `source.area`. Con `&days=N` el calendario ya viene fijado en `/start` y solo se renombra. Nunca pisa viajes creados por el usuario.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
-- Preferencias UI menores (`wp-trips-view`, `wp-plan-open`) y cachés de thumbs/Mapbox en session/local storage.
+- Preferencias UI menores (`wp-trips-view`, `wp-plan-open`) y cachés de thumbs/Mapbox/country-tasks en session/local storage.
 - Miniaturas: no van en el payload de `/itinerary` (`thumb_url` null). `InspirationThumbnail` las pide a `GET /thumb` al entrar en viewport. Portadas: `GET /cover` vía [`unsplash.ts`](frontend/lib/unsplash.ts) (claves solo en backend).
+- Trámites de país (T4.4): pestaña **Básicos** → `GET /country-tasks` (Recomendaciones MAE + Haiku). Sugerencias aceptadas → `ExtraTask` con id `country:{iso}:{slug}`; descartes en `dismissedCountryTasks` (columna propia, **no** en `tasks`).
 
 ## Archivos críticos
 
@@ -95,15 +101,15 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
 - [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously.
 - [`frontend/components/auth/registration-gate.tsx`](frontend/components/auth/registration-gate.tsx).
-- [`frontend/lib/api.ts`](frontend/lib/api.ts) / [`assistant-api.ts`](frontend/lib/assistant-api.ts) / [`api-auth.ts`](frontend/lib/api-auth.ts) / [`thumbs.ts`](frontend/lib/thumbs.ts) / [`unsplash.ts`](frontend/lib/unsplash.ts) — Bearer del access token; thumbs y covers.
-- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
-- Migraciones en [`supabase/migrations/`](supabase/migrations/) (`article_extractions`, `place_thumbs`, `destination_covers`: solo service_role).
+- [`frontend/lib/api.ts`](frontend/lib/api.ts) / [`assistant-api.ts`](frontend/lib/assistant-api.ts) / [`api-auth.ts`](frontend/lib/api-auth.ts) / [`thumbs.ts`](frontend/lib/thumbs.ts) / [`unsplash.ts`](frontend/lib/unsplash.ts) / [`country-tasks.ts`](frontend/lib/country-tasks.ts) — Bearer del access token; thumbs, covers y trámites.
+- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country_tasks.py`](backend/country_tasks.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
+- Migraciones en [`supabase/migrations/`](supabase/migrations/) (`article_extractions`, `place_thumbs`, `destination_covers`, `country_task_suggestions`: solo service_role).
 
 ## Modelo de datos
 
 **Extracción (backend):** `Itinerary` snake_case + `og_image` / `article_html`; `thumb_url` siempre null en la respuesta (lazy en el front).
 
-**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
+**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `tasks`, `extraTasks`, `dismissedCountryTasks`, `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
 
 **Portada:** primera fuente → `GET /cover`(área/país) → `ogImage` → emoji.
 
@@ -160,4 +166,5 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), perfil |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
+| Trámites de país | [`country_tasks.py`](backend/country_tasks.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country-tasks.ts`](frontend/lib/country-tasks.ts), [`country-tasks-section.tsx`](frontend/components/country-tasks-section.tsx), `dismissed_country_tasks` |
 | Thumbs / covers | [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`thumbs.ts`](frontend/lib/thumbs.ts), [`unsplash.ts`](frontend/lib/unsplash.ts) |

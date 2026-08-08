@@ -70,8 +70,8 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `GOOGLE_PLACES_API_KEY` | Google Cloud → APIs & Services → Places API (New) | Miniaturas `/thumb`. Acepta también alias `GOOGLE_MAPS_API_KEY` |
 | `UNSPLASH_ACCESS_KEY` | [unsplash.com/oauth/applications](https://unsplash.com/oauth/applications) | Portadas `/cover` (solo backend; **nunca** `NEXT_PUBLIC_*`) |
 | `SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Mismo proyecto que el front |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` | **Solo backend.** Cachés `article_extractions` / `place_thumbs` / `destination_covers` y `usage_events` |
-| `REQUIRE_AUTH` | — (configuración propia) | `true` en producción. Sin Bearer → 401 en `/itinerary`, `/thumb`, `/cover`, `/assistant/chat`. **No** afecta a `/partners/prewarm` (público por diseño) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` | **Solo backend.** Cachés `article_extractions` / `place_thumbs` / `destination_covers` / `country_task_suggestions` y `usage_events` |
+| `REQUIRE_AUTH` | — (configuración propia) | `true` en producción. Sin Bearer → 401 en `/itinerary`, `/thumb`, `/cover`, `/assistant/chat`, `/day-summary`, `/country-tasks`. **No** afecta a `/partners/prewarm` (público por diseño) |
 | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile → secret key (la misma que en Supabase Auth → Bot protection) | Obligatoria si `REQUIRE_AUTH=true`: sin ella `/partners/prewarm` responde **503** (fail-closed). En local sin `REQUIRE_AUTH` el prewarm acepta sin captcha |
 | `ALLOWED_ORIGINS` | — | CSV de orígenes CORS. Prod: `https://wanderplanner.ai`. Añade URLs de Preview de Vercel si quieres probar APIs desde previews |
 
@@ -89,10 +89,13 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `GUEST_MAX_EXTRACTIONS` | `1` |
 | `GUEST_MAX_ASSISTANT_MESSAGES` | `10` |
 | `GUEST_MAX_PHOTO_LOOKUPS` | `30` |
+| `GUEST_MAX_COUNTRY_TASKS` | `5` (misses Claude de `/country-tasks` como invitado) |
 | `USER_MAX_EXTRACTIONS_DAY` | `10` |
 | `USER_MAX_EXTRACTIONS_MONTH` | `50` |
 | `USER_MAX_ASSISTANT_MESSAGES_DAY` | `50` |
 | `USER_MAX_PHOTO_LOOKUPS_DAY` | `300` |
+| `USER_MAX_COUNTRY_TASKS_DAY` | `30` |
+| `TRAVEL_BRIEF_TTL_DAYS` | `7` (refresco de Recomendaciones MAE en la propia petición) |
 
 ### Rollback (Fly)
 
@@ -187,6 +190,11 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   6. `20260803000000_grant_service_role_backend_tables.sql`
   7. `20260803120000_article_extractions_validation.sql`
   8. `20260803180000_trip_tasks.sql`
+  9. `20260804010000_day_summary_usage.sql`
+  10. `20260808000000_sources_total_days.sql`
+  11. `20260808190000_partner_prewarm_usage.sql` (si aplica el kit partners)
+  12. `20260808200000_dismissed_country_tasks.sql`
+  13. `20260808210000_country_task_suggestions.sql`
 
 ```bash
 # Con CLI vinculada al proyecto:
@@ -195,6 +203,8 @@ supabase db push
 ```
 
 **Orden con el frontend:** `20260803180000_trip_tasks.sql` añade columnas que el front ya pide en `TRIP_COLUMNS` (`tasks`, `extra_tasks`, `num_travelers`, `currency`). Hay que aplicar esa migración **antes** de mergear a `main` (Vercel despliega Production en cada push). Aplicarla con el frontend viejo aún en producción es inocuo (`add column if not exists`).
+
+**T4.4 trámites por destino:** aplicar `20260808200000_dismissed_country_tasks.sql` y `20260808210000_country_task_suggestions.sql` **antes** del frontend que pide `dismissed_country_tasks` en `TRIP_COLUMNS`. Orden de despliegue: **migraciones → backend Fly (`GET /country-tasks`) → frontend Vercel**.
 
 Detalle local y env: [`supabase/README.md`](supabase/README.md).
 

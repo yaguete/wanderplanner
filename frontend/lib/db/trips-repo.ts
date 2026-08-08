@@ -49,6 +49,7 @@ export type TripRow = {
   basics: UserBasicItem[] | null
   tasks: Record<string, TripTaskState> | null
   extra_tasks: ExtraTask[] | null
+  dismissed_country_tasks: string[] | null
   num_travelers: number | null
   currency: string | null
 }
@@ -68,7 +69,7 @@ type SourceRow = {
 }
 
 const TRIP_COLUMNS =
-  "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, num_travelers, currency"
+  "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency"
 /** Sin `article_html`: puede ser enorme y solo hace falta al abrir la Crónica. */
 const SOURCE_COLUMNS = "id, url, author, title, area, total_days, og_image, items, basics"
 
@@ -100,6 +101,9 @@ export function rowToTrip(row: TripRow): Trip {
     basics: row.basics ?? [],
     tasks: row.tasks ?? {},
     extraTasks: row.extra_tasks ?? [],
+    dismissedCountryTasks: Array.isArray(row.dismissed_country_tasks)
+      ? row.dismissed_country_tasks.filter((id): id is string => typeof id === "string")
+      : [],
     numTravelers: row.num_travelers ?? null,
     currency: row.currency?.trim() ? row.currency.trim() : "EUR",
     archived: row.archived,
@@ -127,6 +131,7 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
     // Poda única al serializar: el jsonb persistido no retiene estados huérfanos.
     tasks: pruneTaskStates(trip),
     extra_tasks: trip.extraTasks ?? [],
+    dismissed_country_tasks: trip.dismissedCountryTasks ?? [],
     num_travelers: trip.numTravelers ?? null,
     currency: trip.currency?.trim() ? trip.currency.trim() : "EUR",
   }
@@ -228,6 +233,7 @@ export async function insertDraftTrip(
     basics: [],
     tasks: {},
     extra_tasks: [],
+    dismissed_country_tasks: [],
     num_travelers: null,
     currency: "EUR",
     source_ids: [],

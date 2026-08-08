@@ -5,6 +5,7 @@ __pycache__/
 .env
 .env.*
 data/country_briefs/
+data/travel_briefs/
 .git/
 .gitignore
 .DS_Store

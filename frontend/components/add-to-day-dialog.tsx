@@ -88,9 +88,18 @@ export function AddToDayDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0">
-        <DialogHeader className="space-y-3 border-b border-border px-5 pb-4 pt-5 text-left">
-          <div>
+      <DialogContent
+        className={cn(
+          "flex max-w-md flex-col gap-0 overflow-hidden p-0",
+          // Móvil: pantalla completa (sin bandas oscuras arriba/abajo)
+          "max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-full max-sm:max-w-none",
+          "max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0",
+          // Cierre encima del notch cuando la modal es full-bleed
+          "[&>button]:max-sm:top-[max(0.75rem,env(safe-area-inset-top))]",
+        )}
+      >
+        <DialogHeader className="shrink-0 space-y-3 border-b border-border px-5 pb-4 pt-5 text-left max-sm:pt-[max(1.25rem,env(safe-area-inset-top))]">
+          <div className="pr-16">
             <DialogTitle className="text-base font-semibold tracking-tight">
               Añadir al día
             </DialogTitle>
@@ -138,15 +147,15 @@ export function AddToDayDialog({
         </DialogHeader>
 
         {days.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground max-sm:flex-1">
             Este viaje aún no tiene días. Añade un día en «Mi viaje» para empezar.
           </p>
         ) : visibleRows.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground max-sm:flex-1">
             Ningún día coincide con «{query.trim()}».
           </p>
         ) : (
-          <ul className="max-h-[min(55vh,24rem)] overflow-y-auto p-2">
+          <ul className="max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:pb-[env(safe-area-inset-bottom)]">
             {visibleRows.map((row) => (
               <li key={row.id}>
                 <button

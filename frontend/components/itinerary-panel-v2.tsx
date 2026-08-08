@@ -99,6 +99,9 @@ export default function ItineraryPanel({
     setTaskState,
     addExtraTask,
     removeExtraTask,
+    acceptCountryTask,
+    dismissCountryTask,
+    reevaluateCountryTasks,
   } = useTrips()
   const trip = getTrip(tripId)
   const dateSub = useMemo(() => (trip ? formatTripMonthYear(trip.startDate) : null), [trip])
@@ -148,6 +151,32 @@ export default function ItineraryPanel({
       removeExtraTask(tripId, taskId)
     },
     [removeExtraTask, tripId],
+  )
+
+  const handleAcceptCountryTask = useCallback(
+    (data: {
+      id: string
+      title: string
+      category: TripTaskCategory
+      state?: Partial<TripTaskState>
+    }) => {
+      acceptCountryTask(tripId, data)
+    },
+    [acceptCountryTask, tripId],
+  )
+
+  const handleDismissCountryTask = useCallback(
+    (taskId: string) => {
+      dismissCountryTask(tripId, taskId)
+    },
+    [dismissCountryTask, tripId],
+  )
+
+  const handleReevaluateCountryTasks = useCallback(
+    (activeCountryCodes: string[]) => {
+      reevaluateCountryTasks(tripId, activeCountryCodes)
+    },
+    [reevaluateCountryTasks, tripId],
   )
 
   const handleRemoveBasic = useCallback(
@@ -299,7 +328,7 @@ export default function ItineraryPanel({
 
   return (
     <div className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background">
-      <div className="relative shrink-0 space-y-2 border-b border-border px-4 py-3">
+      <div className="relative shrink-0 space-y-3 border-b border-border px-4 py-3.5">
         {/* Fila 1: título + fecha + cerrar */}
         <div className="flex items-center gap-2">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
@@ -313,11 +342,11 @@ export default function ItineraryPanel({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0"
+              className="h-8 w-8 shrink-0 max-sm:h-11 max-sm:w-11 max-sm:rounded-full max-sm:bg-muted/80 max-sm:hover:bg-muted"
               onClick={onClose}
               aria-label="Cerrar Mi viaje"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4 max-sm:h-5 max-sm:w-5" />
             </Button>
           ) : null}
         </div>
@@ -484,6 +513,16 @@ export default function ItineraryPanel({
             onAddExtraTask={handleAddExtraTask}
             onRemoveExtraTask={handleRemoveExtraTask}
             onRemoveBasic={handleRemoveBasic}
+            countryTasks={
+              categoryView === "basics"
+                ? {
+                    sources: tripSources,
+                    onAccept: handleAcceptCountryTask,
+                    onDismiss: handleDismissCountryTask,
+                    onReevaluate: handleReevaluateCountryTasks,
+                  }
+                : undefined
+            }
           />
         </>
       ) : null}

@@ -4,10 +4,12 @@
  * Panel "Fuentes": biblioteca de investigación, pestañas Crónica / Ruta / Transporte / Descuentos,
  * extracción por URL y consolidación en «Mi viaje» conservando procedencia y afiliado.
  */
-import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react"
-import { Loader2, Plus, RefreshCw, Sparkles, X } from "lucide-react"
+import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { Loader2, Plus, RefreshCw, Search, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
@@ -17,8 +19,23 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ApiLimitError } from "@/lib/api"
-import type { Source, SourceBasicItem, SourceItem, UserDay } from "@/types/itinerary"
+import { ITEM_LABELS } from "@/lib/item-styles"
+import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { toast } from "sonner"
+
+function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
+  if (item.name.toLowerCase().includes(needle)) return true
+  if (item.detail?.toLowerCase().includes(needle)) return true
+  if (item.region?.toLowerCase().includes(needle)) return true
+  if (item.vendor?.toLowerCase().includes(needle)) return true
+  if (ITEM_LABELS[item.type].toLowerCase().includes(needle)) return true
+  if (item.dayHint != null) {
+    const day = String(item.dayHint)
+    if (day === needle || day.startsWith(needle)) return true
+    if (`día ${day}`.includes(needle) || `dia ${day}`.includes(needle)) return true
+  }
+  return false
+}
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
 
@@ -62,6 +79,8 @@ export default function InspirationPanel({
   const [sourceTab, setSourceTab] = useState<SourceTab>("source")
   const [mobileAnalyzing, setMobileAnalyzing] = useState(false)
   const [refetchError, setRefetchError] = useState<string | null>(null)
+  /** Ítem pendiente de «Añadir al día»; un solo Dialog para toda la lista (sobrevive al virtualizer). */
+  const [pickingItem, setPickingItem] = useState<SourceItem | null>(null)
 
   useEffect(() => {
     if (sources.length === 0) {
@@ -174,6 +193,10 @@ export default function InspirationPanel({
   useEffect(() => {
     setRefetchError(null)
   }, [activeSourceId])
+
+  useEffect(() => {
+    setPickingItem(null)
+  }, [activeSourceId, sourceTab])
 
   const handleRefetchArticle = async () => {
     if (!currentSource) return
@@ -338,7 +361,7 @@ export default function InspirationPanel({
                   ) : null}
                 </div>
               </div>
-              <div className="mt-3 flex gap-4 overflow-x-auto sm:gap-5">
+              <div className="mt-4 flex gap-4 overflow-x-auto sm:mt-5 sm:gap-5">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -358,7 +381,13 @@ export default function InspirationPanel({
             </div>
           ) : null}
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+          <div
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden",
+              // Ruta gestiona su propio scroll (buscador fijo encima de la lista)
+              sourceTab === "itinerary" ? "overflow-hidden" : "overflow-y-auto",
+            )}
+          >
             {!currentSource ? (
               preparingFirstSource ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
@@ -471,18 +500,19 @@ export default function InspirationPanel({
                     sourceArea={currentSource.area}
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
-                    days={trip?.days ?? []}
-                    tripStartDate={trip?.startDate ?? null}
                     thumbnailMode="transportIcon"
-                    onAdd={(dayId) => handleAddItem(item, dayId)}
+                    onPick={() => setPickingItem(item)}
                   />
                 )}
               />
             ) : (
               <SourceGroupedList
+                key={`${currentSource.id}-ruta`}
                 groups={groupedItems}
                 emptyTitle="Sin ítems de ruta"
                 emptyDescription="Cuando se destile el artículo, verás actividades, alojamientos y comidas aquí."
+                searchable
+                searchPlaceholder="Buscar actividad, restaurante o lugar"
                 renderItem={(item) => (
                   <ItemRow
                     key={item.id}
@@ -490,9 +520,7 @@ export default function InspirationPanel({
                     sourceArea={currentSource.area}
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
-                    days={trip?.days ?? []}
-                    tripStartDate={trip?.startDate ?? null}
-                    onAdd={(dayId) => handleAddItem(item, dayId)}
+                    onPick={() => setPickingItem(item)}
                   />
                 )}
               />
@@ -500,6 +528,24 @@ export default function InspirationPanel({
           </div>
         </div>
       </div>
+
+      {pickingItem && trip ? (
+        <AddToDayDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPickingItem(null)
+          }}
+          days={trip.days}
+          tripStartDate={trip.startDate ?? null}
+          itemName={pickingItem.name}
+          itemType={pickingItem.type}
+          addedDayNumbers={addedItemDaysBySourceItemId.get(pickingItem.id) ?? []}
+          onSelect={(dayId) => {
+            handleAddItem(pickingItem, dayId)
+            setPickingItem(null)
+          }}
+        />
+      ) : null}
 
       {/* Desktop: diálogo bloqueante. Móvil: sheet inferior con el mismo flujo. */}
       {!isMobile ? (
@@ -555,12 +601,34 @@ function SourceGroupedList({
   emptyTitle,
   emptyDescription,
   renderItem,
+  searchable = false,
+  searchPlaceholder = "Buscar en la ruta",
 }: {
   groups: { day: number | null; items: SourceItem[] }[]
   emptyTitle: string
   emptyDescription: string
   renderItem: (item: SourceItem) => ReactNode
+  searchable?: boolean
+  searchPlaceholder?: string
 }) {
+  const [query, setQuery] = useState("")
+
+  const filteredGroups = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return groups
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => sourceItemMatchesQuery(item, needle)),
+      }))
+      .filter((group) => group.items.length > 0)
+  }, [groups, query])
+
+  const totalItems = groups.reduce((n, g) => n + g.items.length, 0)
+  const showSearch = searchable && totalItems > 0
+  const needle = query.trim()
+  const hasFilter = needle.length > 0
+
   if (!groups.length) {
     return (
       <EmptyState
@@ -571,18 +639,156 @@ function SourceGroupedList({
       />
     )
   }
+
+  // Transporte (sin buscador): listas cortas; montaje completo vale.
+  if (!showSearch) {
+    return (
+      <div className="space-y-5 px-4 pb-6 pt-4 sm:px-6">
+        {filteredGroups.map((group, gi) => (
+          <div key={gi} className="space-y-2">
+            {group.day != null ? (
+              <p className="px-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Día {group.day}
+              </p>
+            ) : null}
+            {group.items.map((item) => renderItem(item))}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-5 px-4 pb-6 pt-4 sm:px-6">
-      {groups.map((group, gi) => (
-        <div key={gi} className="space-y-2">
-          {group.day != null ? (
-            <p className="px-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Día {group.day}
-            </p>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 bg-background px-4 pb-3 pt-4 sm:px-6">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+            className={cn("h-9 pl-8 text-sm", hasFilter && "pr-9")}
+            aria-label="Buscar en la ruta"
+          />
+          {hasFilter ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Quitar filtro"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           ) : null}
-          {group.items.map((item) => renderItem(item))}
         </div>
-      ))}
+      </div>
+      {hasFilter && filteredGroups.length === 0 ? (
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-6">
+          Ningún ítem coincide con «{needle}».
+        </p>
+      ) : (
+        <VirtualSourceRows groups={filteredGroups} renderItem={renderItem} resetKey={query} />
+      )}
+    </div>
+  )
+}
+
+type FlatRow =
+  | { kind: "header"; key: string; day: number }
+  | { kind: "item"; key: string; item: SourceItem; groupGap: boolean }
+
+function flattenSourceGroups(
+  groups: { day: number | null; items: SourceItem[] }[],
+): FlatRow[] {
+  const rows: FlatRow[] = []
+  groups.forEach((group, gi) => {
+    if (group.day != null) {
+      rows.push({ kind: "header", key: `day-${group.day}-${gi}`, day: group.day })
+    }
+    group.items.forEach((item, ii) => {
+      const isLastInGroup = ii === group.items.length - 1
+      const isLastGroup = gi === groups.length - 1
+      rows.push({
+        kind: "item",
+        key: item.id,
+        item,
+        groupGap: isLastInGroup && !isLastGroup,
+      })
+    })
+  })
+  return rows
+}
+
+/** Lista virtualizada: solo monta las filas visibles (+ overscan). */
+function VirtualSourceRows({
+  groups,
+  renderItem,
+  resetKey,
+}: {
+  groups: { day: number | null; items: SourceItem[] }[]
+  renderItem: (item: SourceItem) => ReactNode
+  resetKey: string
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rows = useMemo(() => flattenSourceGroups(groups), [groups])
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => {
+      const row = rows[index]
+      if (!row || row.kind === "header") return 28
+      // card ~80px + pb-2; más aire entre grupos (antes space-y-5)
+      return row.groupGap ? 108 : 92
+    },
+    overscan: 10,
+  })
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+    virtualizer.scrollToOffset(0)
+    // Solo al cambiar el filtro / resetKey
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
+
+  const virtualRows = virtualizer.getVirtualItems()
+
+  return (
+    <div
+      ref={scrollRef}
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 sm:px-6"
+    >
+      <div
+        className="relative w-full"
+        style={{ height: virtualizer.getTotalSize() }}
+      >
+        {virtualRows.map((vRow) => {
+          const row = rows[vRow.index]
+          if (!row) return null
+          return (
+            <div
+              key={row.key}
+              data-index={vRow.index}
+              ref={virtualizer.measureElement}
+              className="absolute left-0 top-0 w-full"
+              style={{ transform: `translateY(${vRow.start}px)` }}
+            >
+              {row.kind === "header" ? (
+                <p className="px-0.5 pb-2 pt-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Día {row.day}
+                </p>
+              ) : (
+                <div className={cn("pb-2", row.groupGap && "pb-5")}>
+                  {renderItem(row.item)}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -592,22 +798,17 @@ function ItemRow({
   sourceArea,
   isAdded,
   addedDayNumbers,
-  days,
-  tripStartDate,
   thumbnailMode,
-  onAdd,
+  onPick,
 }: {
   item: SourceItem
   sourceArea: string | null
   isAdded: boolean
   addedDayNumbers: number[]
-  days: UserDay[]
-  tripStartDate: string | null
   thumbnailMode?: "default" | "transportIcon"
-  onAdd: (dayId: string) => void
+  onPick: () => void
 }) {
   const isMobile = useIsMobile()
-  const [pickerOpen, setPickerOpen] = useState(false)
   const card = (
     <TravelItemCard
       variant="source"
@@ -628,7 +829,7 @@ function ItemRow({
         isMobile ? (
           <button
             type="button"
-            onClick={() => setPickerOpen(true)}
+            onClick={onPick}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Añadir al itinerario"
           >
@@ -646,40 +847,19 @@ function ItemRow({
     />
   )
 
-  const picker = (
-    <AddToDayDialog
-      open={pickerOpen}
-      onOpenChange={setPickerOpen}
-      days={days}
-      tripStartDate={tripStartDate}
-      itemName={item.name}
-      itemType={item.type}
-      addedDayNumbers={addedDayNumbers}
-      onSelect={onAdd}
-    />
-  )
-
   // Desktop: toda la card abre el selector. Móvil: solo el «+», para no interferir con el scroll.
   if (isMobile) {
-    return (
-      <>
-        {card}
-        {picker}
-      </>
-    )
+    return card
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setPickerOpen(true)}
-        className="block w-full cursor-pointer rounded-2xl text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label="Añadir al itinerario"
-      >
-        {card}
-      </button>
-      {picker}
-    </>
+    <button
+      type="button"
+      onClick={onPick}
+      className="block w-full cursor-pointer rounded-2xl text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label="Añadir al itinerario"
+    >
+      {card}
+    </button>
   )
 }

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/collapsible"
 import { EmptyState } from "@/components/empty-state"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
+import { CountryTasksSection } from "@/components/country-tasks-section"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
@@ -32,7 +33,7 @@ import {
   type DerivedTripTask,
   type TripTaskTotals,
 } from "@/lib/trip-tasks"
-import type { Trip, TripTaskCategory, TripTaskState } from "@/types/itinerary"
+import type { Source, Trip, TripTaskCategory, TripTaskState } from "@/types/itinerary"
 
 export type TripTasksPanelProps = {
   trip: Trip
@@ -55,6 +56,21 @@ export type TripTasksPanelProps = {
   /** Control externo del diálogo de tarea manual (cuando hideToolbar). */
   extraDialogOpen?: boolean
   onExtraDialogOpenChange?: (open: boolean) => void
+  /**
+   * Fuentes del viaje + callbacks para sugerencias MAE (solo pestaña Básicos).
+   * Si faltan, no se muestra la sección de trámites.
+   */
+  countryTasks?: {
+    sources: Source[]
+    onAccept: (data: {
+      id: string
+      title: string
+      category: TripTaskCategory
+      state?: Partial<TripTaskState>
+    }) => void
+    onDismiss: (taskId: string) => void
+    onReevaluate: (activeCountryCodes: string[]) => void
+  }
 }
 
 function useTaskTotals(trip: Trip): TripTaskTotals {
@@ -206,6 +222,7 @@ export function TripTasksPanel({
   hideToolbar = false,
   extraDialogOpen: controlledOpen,
   onExtraDialogOpenChange,
+  countryTasks,
 }: TripTasksPanelProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const extraDialogOpen = controlledOpen ?? internalOpen
@@ -254,56 +271,77 @@ export function TripTasksPanel({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2">
-        {isEmpty ? (
-          <EmptyState
-            icon={CheckSquare}
-            title={emptyTitle}
-            description={emptyDescription}
-            actionLabel="Añadir tarea"
-            onAction={() => setExtraDialogOpen(true)}
-            className="py-10"
-          />
-        ) : (
-          <div className="flex flex-col gap-6">
-            {groupedMain.map(({ category, list }) => (
-              <section key={category} className="flex flex-col gap-0">
-                {groupedMain.length > 1 ? (
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {TASK_CATEGORY_LABELS[category]}
-                  </p>
-                ) : null}
-                <ul className="m-0 list-none divide-y divide-border/70 border-y border-border/70 p-0">
-                  {list.map((task) => (
-                    <li key={task.id} className="m-0 p-0">
-                      <TaskRow
-                        task={task}
-                        currency={trip.currency || "EUR"}
-                        onSetTaskState={onSetTaskState}
-                        onRemoveExtraTask={
-                          task.origin === "extra" ? onRemoveExtraTask : undefined
-                        }
-                        onRemoveBasic={
-                          task.origin === "basic" ? onRemoveBasic : undefined
-                        }
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+        <div className="flex flex-col gap-6">
+          {countryTasks ? (
+            <CountryTasksSection
+              trip={trip}
+              sources={countryTasks.sources}
+              onAccept={countryTasks.onAccept}
+              onDismiss={countryTasks.onDismiss}
+              onReevaluate={countryTasks.onReevaluate}
+            />
+          ) : null}
 
-            {triageTasks.length > 0 ? (
-              <TriageSection tasks={triageTasks} onSetTaskState={onSetTaskState} />
-            ) : null}
+          {isEmpty && !countryTasks ? (
+            <EmptyState
+              icon={CheckSquare}
+              title={emptyTitle}
+              description={emptyDescription}
+              actionLabel="Añadir tarea"
+              onAction={() => setExtraDialogOpen(true)}
+              className="py-10"
+            />
+          ) : isEmpty ? (
+            <EmptyState
+              icon={CheckSquare}
+              title={emptyTitle}
+              description={emptyDescription}
+              actionLabel="Añadir tarea"
+              onAction={() => setExtraDialogOpen(true)}
+              className="py-6"
+            />
+          ) : (
+            <>
+              {groupedMain.map(({ category, list }) => (
+                <section key={category} className="flex flex-col gap-0">
+                  {groupedMain.length > 1 ? (
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      {TASK_CATEGORY_LABELS[category]}
+                    </p>
+                  ) : null}
+                  <ul className="m-0 list-none divide-y divide-border/70 border-y border-border/70 p-0">
+                    {list.map((task) => (
+                      <li key={task.id} className="m-0 p-0">
+                        <TaskRow
+                          task={task}
+                          currency={trip.currency || "EUR"}
+                          onSetTaskState={onSetTaskState}
+                          onRemoveExtraTask={
+                            task.origin === "extra" ? onRemoveExtraTask : undefined
+                          }
+                          onRemoveBasic={
+                            task.origin === "basic" ? onRemoveBasic : undefined
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
 
-            {dismissedTasks.length > 0 ? (
-              <DismissedSection
-                tasks={dismissedTasks}
-                onSetTaskState={onSetTaskState}
-              />
-            ) : null}
-          </div>
-        )}
+              {triageTasks.length > 0 ? (
+                <TriageSection tasks={triageTasks} onSetTaskState={onSetTaskState} />
+              ) : null}
+
+              {dismissedTasks.length > 0 ? (
+                <DismissedSection
+                  tasks={dismissedTasks}
+                  onSetTaskState={onSetTaskState}
+                />
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
 
       <AddExtraTaskDialog
