@@ -185,6 +185,8 @@ export interface Source {
    * Se usa como fallback de `SourceItem.region` para geocodificar (`buildContextualQuery` en `lib/mapbox.ts`).
    */
   area: string | null
+  /** Días que declara la guía original (`itinerary.total_days`); null si no es un número válido. */
+  totalDays: number | null
   items: SourceItem[]
   /** Ofertas / básicos extraídos del blog (pestaña Descuentos). */
   basics: SourceBasicItem[]
@@ -264,33 +266,4 @@ export interface UserBasicItem {
   vendor: string | null
   affiliateUrl: string | null
   sourceAuthor: string
-}
-
-// ── Legacy types (backward compat for old components, will be removed) ────────
-
-export interface Reference {
-  id: string
-  url: string
-  destination: string
-  totalDays: number
-  ogImage: string | null
-  articleHtml: string
-  itinerary: Itinerary
-}
-
-export type TripItemKind = "accommodation" | "activity" | "restaurant" | "transport"
-
-export interface TripItem {
-  id: string
-  kind: TripItemKind
-  name: string
-  subtitle: string | null
-  sourceRefId: string
-}
-
-export interface TripDay {
-  id: string
-  dayNumber: number
-  title: string
-  items: TripItem[]
 }

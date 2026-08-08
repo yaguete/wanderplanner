@@ -22,12 +22,16 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260803000000_grant_service_role_backend_tables.sql
 #   migrations/20260803120000_article_extractions_validation.sql
 #   migrations/20260803180000_trip_tasks.sql
+#   migrations/20260804010000_day_summary_usage.sql
+#   migrations/20260808000000_sources_total_days.sql
 
 # Opción B (si tienes Supabase CLI vinculado):
 supabase db push
 ```
 
 `20260803180000_trip_tasks.sql` debe aplicarse **antes** de desplegar un frontend que lea `tasks` / `extra_tasks` / `num_travelers` / `currency` (si no, PostgREST 400 y `/trips` no carga). Es aditiva e idempotente: segura con el front viejo aún en producción.
+
+`20260808000000_sources_total_days.sql` tiene la misma exigencia: `SOURCE_COLUMNS` pide `total_days` en todo `select` de `sources`, así que debe aplicarse **antes** de desplegar un frontend que ya la incluya (si no, PostgREST 400 al cargar `/trips` para cualquier usuario, no solo el flujo de partner). También aditiva e idempotente.
 
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 

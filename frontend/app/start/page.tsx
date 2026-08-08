@@ -1,11 +1,14 @@
 "use client"
 
 /**
- * Entrada del CTA de blogs amigos: `/start?source=<url>&ref=<partner>`.
+ * Entrada del CTA de blogs amigos: `/start?source=<url>&ref=<partner>&days=<N>`.
  *
  * Abre sesión (anónima si no hay ninguna), crea un viaje borrador con el `referrer` y salta al
  * detalle con `?source=`, donde se lanza la extracción. La caché `article_extractions` hace que
  * el artículo del partner esté normalmente listo al instante.
+ *
+ * `&days=N` (opcional, 1..60) fuerza la duración del borrador desde el post del blogger;
+ * tiene prioridad sobre `total_days` de la extracción.
  */
 import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
@@ -17,14 +20,7 @@ import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { insertDraftTrip } from "@/lib/db/trips-repo"
-
-function hostnameOf(raw: string): string | null {
-  try {
-    return new URL(raw).hostname.replace(/^www\./i, "")
-  } catch {
-    return null
-  }
-}
+import { draftTripNameFor, parseDaysParam } from "@/lib/partner-trip"
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) return error.message
@@ -46,6 +42,7 @@ function StartFlow() {
 
   const sourceUrl = searchParams.get("source")?.trim() || ""
   const referrer = searchParams.get("ref")?.trim() || null
+  const forcedDays = parseDaysParam(searchParams.get("days"))
   const isValidSource = /^https?:\/\//i.test(sourceUrl)
 
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
@@ -95,8 +92,12 @@ function StartFlow() {
         userId = data.user.id
       }
 
-      const name = hostnameOf(sourceUrl) ? `Viaje desde ${hostnameOf(sourceUrl)}` : "Mi viaje"
-      const tripId = await insertDraftTrip(supabase, userId, { name, referrer })
+      const name = draftTripNameFor(sourceUrl)
+      const tripId = await insertDraftTrip(supabase, userId, {
+        name,
+        referrer,
+        numDays: forcedDays,
+      })
       const query = isValidSource ? `?source=${encodeURIComponent(sourceUrl)}` : ""
       router.replace(`/trips/${tripId}${query}`)
     } catch (error) {
@@ -109,7 +110,7 @@ function StartFlow() {
           : "No hemos podido preparar tu viaje. Vuelve a intentarlo.",
       )
     }
-  }, [captchaToken, isValidSource, referrer, router, signInAnonymously, sourceUrl, user])
+  }, [captchaToken, forcedDays, isValidSource, referrer, router, signInAnonymously, sourceUrl, user])
 
   useEffect(() => {
     if (isLoading || !isSupabaseConfigured() || needsCaptcha) return

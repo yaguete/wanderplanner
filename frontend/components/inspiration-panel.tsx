@@ -8,23 +8,16 @@ import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react
 import { Loader2, Plus, RefreshCw, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
 import { AddSourceDialog, AddSourceFlow } from "@/components/add-source-dialog"
+import { AddToDayDialog } from "@/components/add-to-day-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
-import { getDayUserDescription } from "@/lib/day-heading"
 import { ApiLimitError } from "@/lib/api"
-import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
+import type { Source, SourceBasicItem, SourceItem, UserDay } from "@/types/itinerary"
 import { toast } from "sonner"
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
@@ -478,7 +471,8 @@ export default function InspirationPanel({
                     sourceArea={currentSource.area}
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
-                    tripId={tripId}
+                    days={trip?.days ?? []}
+                    tripStartDate={trip?.startDate ?? null}
                     thumbnailMode="transportIcon"
                     onAdd={(dayId) => handleAddItem(item, dayId)}
                   />
@@ -496,7 +490,8 @@ export default function InspirationPanel({
                     sourceArea={currentSource.area}
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
-                    tripId={tripId}
+                    days={trip?.days ?? []}
+                    tripStartDate={trip?.startDate ?? null}
                     onAdd={(dayId) => handleAddItem(item, dayId)}
                   />
                 )}
@@ -597,7 +592,8 @@ function ItemRow({
   sourceArea,
   isAdded,
   addedDayNumbers,
-  tripId,
+  days,
+  tripStartDate,
   thumbnailMode,
   onAdd,
 }: {
@@ -605,20 +601,13 @@ function ItemRow({
   sourceArea: string | null
   isAdded: boolean
   addedDayNumbers: number[]
-  tripId: string
+  days: UserDay[]
+  tripStartDate: string | null
   thumbnailMode?: "default" | "transportIcon"
   onAdd: (dayId: string) => void
 }) {
   const isMobile = useIsMobile()
-  const plusButton = (
-    <button
-      type="button"
-      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label="Añadir al itinerario"
-    >
-      <Plus className="h-4 w-4" />
-    </button>
-  )
+  const [pickerOpen, setPickerOpen] = useState(false)
   const card = (
     <TravelItemCard
       variant="source"
@@ -637,9 +626,14 @@ function ItemRow({
       }
       action={
         isMobile ? (
-          <AddToItineraryMenu tripId={tripId} onAdd={onAdd}>
-            {plusButton}
-          </AddToItineraryMenu>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Añadir al itinerario"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         ) : (
           <span
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
@@ -652,60 +646,40 @@ function ItemRow({
     />
   )
 
-  // Desktop: toda la card abre el menú. Móvil: solo el «+», para no interferir con el scroll.
-  if (isMobile) return card
+  const picker = (
+    <AddToDayDialog
+      open={pickerOpen}
+      onOpenChange={setPickerOpen}
+      days={days}
+      tripStartDate={tripStartDate}
+      itemName={item.name}
+      itemType={item.type}
+      addedDayNumbers={addedDayNumbers}
+      onSelect={onAdd}
+    />
+  )
+
+  // Desktop: toda la card abre el selector. Móvil: solo el «+», para no interferir con el scroll.
+  if (isMobile) {
+    return (
+      <>
+        {card}
+        {picker}
+      </>
+    )
+  }
 
   return (
-    <AddToItineraryMenu tripId={tripId} onAdd={onAdd}>
+    <>
       <button
         type="button"
+        onClick={() => setPickerOpen(true)}
         className="block w-full cursor-pointer rounded-2xl text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Añadir al itinerario"
       >
         {card}
       </button>
-    </AddToItineraryMenu>
-  )
-}
-
-function AddToItineraryMenu({
-  tripId,
-  onAdd,
-  children,
-}: {
-  tripId: string
-  onAdd: (dayId: string) => void
-  children: ReactNode
-}) {
-  const { getTrip } = useTrips()
-  const trip = getTrip(tripId)
-  const days = trip?.days ?? []
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[220px]">
-        <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          Añadir al día
-        </DropdownMenuLabel>
-        {days.map((d, dayIndex) => {
-          const desc = getDayUserDescription(d.label).trim() || "Sin descripción"
-          return (
-            <DropdownMenuItem
-              key={d.id}
-              onClick={() => onAdd(d.id)}
-              className="cursor-pointer text-[13px]"
-            >
-              {dayIndex + 1} - {desc}
-            </DropdownMenuItem>
-          )
-        })}
-        {days.length === 0 ? (
-          <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-            Crea un día primero
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      {picker}
+    </>
   )
 }

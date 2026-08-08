@@ -12,7 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { ExtraTask, Source, Trip, TripTaskState, UserBasicItem, UserDay } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
-import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
+import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
 
 /** Postgres rechaza \\u0000 en text/jsonb (error 22P05). */
@@ -60,6 +60,7 @@ type SourceRow = {
   author: string
   title: string
   area: string | null
+  total_days: number | null
   og_image: string | null
   items: Source["items"] | null
   basics: Source["basics"] | null
@@ -69,7 +70,7 @@ type SourceRow = {
 const TRIP_COLUMNS =
   "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, num_travelers, currency"
 /** Sin `article_html`: puede ser enorme y solo hace falta al abrir la Crónica. */
-const SOURCE_COLUMNS = "id, url, author, title, area, og_image, items, basics"
+const SOURCE_COLUMNS = "id, url, author, title, area, total_days, og_image, items, basics"
 
 // ── Mapeo fila ↔ dominio ──────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ function rowToSource(row: SourceRow): Source {
     author: row.author,
     title: row.title,
     area: row.area,
+    totalDays: row.total_days ?? null,
     items: row.items ?? [],
     basics: row.basics ?? [],
     articleHtml: row.article_html ?? "",
@@ -153,6 +155,7 @@ function sourceToRow(source: Source, userId: string, includeHtml: boolean): Sour
     author: source.author,
     title: source.title,
     area: source.area,
+    total_days: source.totalDays ?? null,
     og_image: source.ogImage,
     items: source.items ?? [],
     basics: source.basics ?? [],
@@ -192,19 +195,36 @@ export async function loadTripsState(
 /**
  * Viaje borrador del CTA de un blog partner. Se inserta directamente (fuera de `trip-context`,
  * que solo vive bajo `/trips`) para poder redirigir al detalle con el id ya creado.
+ * Con `numDays` (p. ej. `&days=N` del CTA) crea N días vacíos y fija inicio = mañana.
  */
 export async function insertDraftTrip(
   supabase: SupabaseClient,
   userId: string,
-  data: { name: string; referrer: string | null },
+  data: { name: string; referrer: string | null; numDays?: number | null },
 ): Promise<string> {
   const id = crypto.randomUUID()
+  const forcedDays =
+    data.numDays != null && Number.isFinite(data.numDays) && data.numDays >= 1
+      ? Math.floor(data.numDays)
+      : null
+  const dayCount = forcedDays ?? 1
+  const days = Array.from({ length: dayCount }, () => ({
+    id: crypto.randomUUID(),
+    label: "",
+    items: [],
+  }))
+  const startDate = forcedDays != null ? tomorrowISO() : null
+  const endDate =
+    startDate && forcedDays != null ? endDateFromStartAndNumDays(startDate, forcedDays) : null
+
   const { error } = await supabase.from("trips").insert({
     id,
     user_id: userId,
     name: data.name,
-    num_days: 1,
-    days: [{ id: crypto.randomUUID(), label: "", items: [] }],
+    num_days: dayCount,
+    start_date: startDate,
+    end_date: endDate,
+    days,
     basics: [],
     tasks: {},
     extra_tasks: [],

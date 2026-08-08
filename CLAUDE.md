@@ -57,7 +57,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - **`/`** — Landing placeholder ([`app/page.tsx`](frontend/app/page.tsx)): CTAs Entrar / Crear cuenta.
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas).
-- **`/start?source=&ref=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada.
+- **`/start?source=&ref=&days=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado.
 - **Layout raíz** — Inter, `AuthProvider`, Analytics. **Sin** `TripProvider`.
 - **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx): `TripProvider` → `RegistrationGateProvider` → shell (header, sidebar, main). Único sitio de `useTrips()`.
 - **`/trips`** — Listado Activos/Archivados; empty/loading con spinner mientras `isLoading`.
@@ -73,7 +73,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 ## Persistencia (modelo documento)
 
 - Tablas `trips` / `sources`: columnas planas + `days`/`basics`/`items` en **jsonb camelCase** (contrato de [`types/itinerary.ts`](frontend/types/itinerary.ts)).
+- `sources.total_days` (= `Source.totalDays`): duración declarada por la guía (`itinerary.total_days`); permite que un viaje de partner adopte los días del artículo.
 - [`trip-context.tsx`](frontend/lib/trip-context.tsx): mutaciones **síncronas** sobre `useState`; [`TripsSyncer`](frontend/lib/db/trips-repo.ts) hace upsert/delete por diffing (debounce ~1 s, cola, flush `pagehide`). Last-write-wins.
+- Viajes de partner (`trip.referrer`): al añadir la primera fuente, si el viaje sigue virgen (sin fechas, ≤1 día vacío), se redimensiona a `totalDays` (tope 60), se fija `startDate` = mañana y se renombra con `source.area`. Con `&days=N` el calendario ya viene fijado en `/start` y solo se renombra. Nunca pisa viajes creados por el usuario.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
 - Preferencias UI menores (`wp-trips-view`, `wp-plan-open`) y cachés de thumbs/Mapbox en session/local storage.
@@ -81,8 +83,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Archivos críticos
 
-- [`frontend/types/itinerary.ts`](frontend/types/itinerary.ts) — Dominio; `Trip.referrer` para CTAs.
-- [`frontend/lib/trip-context.tsx`](frontend/lib/trip-context.tsx) — Mutaciones + `isLoading` + sync Supabase.
+- [`frontend/types/itinerary.ts`](frontend/types/itinerary.ts) — Dominio; `Trip.referrer` para CTAs; `Source.totalDays`.
+- [`frontend/lib/trip-context.tsx`](frontend/lib/trip-context.tsx) — Mutaciones + `isLoading` + sync Supabase; adopción de calendario de partner.
+- [`frontend/lib/partner-trip.ts`](frontend/lib/partner-trip.ts) — `draftTripNameFor` / `parseDaysParam` / `MAX_AUTO_DAYS` (CTA `/start`).
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
 - [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously.
 - [`frontend/components/auth/registration-gate.tsx`](frontend/components/auth/registration-gate.tsx).
@@ -103,9 +106,10 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 ## Flujo principal
 
 1. Auth (registrado o anónimo vía `/start`).
-2. `addSourceToTrip` → `POST /itinerary` (caché `article_extractions`; se guarda en cuanto Claude responde) → `buildSource` → sync fila `sources` + `trips`.
-3. Miniaturas visibles → `GET /thumb`; portada → `GET /cover`.
-4. Consolidar en días / básicos; asistente con briefing + `user_profile`.
+2. CTA partner (`/start`): borrador con `referrer`; opcionalmente N días + inicio mañana si `&days=N`.
+3. `addSourceToTrip` → `POST /itinerary` (caché `article_extractions`; se guarda en cuanto Claude responde) → `buildSource` (incluye `totalDays`) → sync fila `sources` + `trips`. Si el viaje tiene `referrer` y sigue virgen, adopta `totalDays` + `startDate` mañana y renombra con `area`.
+4. Miniaturas visibles → `GET /thumb`; portada → `GET /cover`.
+5. Consolidar en días / básicos; asistente con briefing + `user_profile`.
 
 ## Convenciones
 

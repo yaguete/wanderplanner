@@ -95,6 +95,11 @@ export function dateISOForDayIndex(
   return toISODate(addDays(a, dayIndex0))
 }
 
+/** YYYY-MM-DD de mañana en zona local del navegador. */
+export function tomorrowISO(): string {
+  return toISODate(addDays(new Date(), 1))
+}
+
 /** Rango a ISO; útil al seleccionar en el picker (Date inicio, Date fin). */
 export function toISODate(d: Date): string {
   const y = d.getFullYear()

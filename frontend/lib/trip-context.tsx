@@ -33,7 +33,8 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
-import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
+import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
+import { draftTripNameFor, MAX_AUTO_DAYS } from "@/lib/partner-trip"
 import { createExtraTaskState, mergeTaskState, withPrunedTasks } from "@/lib/trip-tasks"
 
 /** Alinea numDays y endDate con days.length (+ startDate inclusive). */
@@ -43,6 +44,34 @@ function syncTripSchedule(trip: Trip, days: UserDay[]): Trip {
     ? endDateFromStartAndNumDays(trip.startDate, numDays)
     : null
   return { ...trip, days, numDays, endDate }
+}
+
+function makeEmptyDays(count: number): UserDay[] {
+  return Array.from({ length: count }, () => ({
+    id: crypto.randomUUID(),
+    label: "",
+    items: [],
+  }))
+}
+
+/**
+ * Puede renombrarse con el `area` de la fuente: primer source de un viaje de partner cuyo nombre
+ * sigue siendo el que puso `insertDraftTrip`. Deliberadamente NO exige `!trip.startDate`: con
+ * `&days=N` el borrador ya llega con `startDate` puesto (lo fija `insertDraftTrip`) y aun así sigue
+ * siendo "virgen" — el rename no debe depender de si el calendario se auto-dimensiona o no.
+ */
+function canRenameFromGuide(trip: Trip): boolean {
+  return Boolean(trip.referrer) && trip.sourceIds.length === 0
+}
+
+/**
+ * Solo viajes de partner que siguen tal cual los dejó `insertDraftTrip` SIN `&days=N`: nunca pisar
+ * al usuario ni redimensionar dos veces un viaje que ya llegó con N días de `&days=N`.
+ */
+function canAdoptGuideSchedule(trip: Trip): boolean {
+  if (!trip.referrer || trip.sourceIds.length > 0 || trip.startDate) return false
+  if (trip.days.length > 1) return false
+  return trip.days.every((d) => d.items.length === 0 && !d.label.trim())
 }
 
 interface TripContextValue {
@@ -508,9 +537,26 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
         setSources((prev) => [...prev, source])
         setTrips((prev) =>
-          prev.map((t) =>
-            t.id === tripId ? { ...t, sourceIds: [...t.sourceIds, source.id] } : t,
-          ),
+          prev.map((t) => {
+            if (t.id !== tripId) return t
+            const next: Trip = { ...t, sourceIds: [...t.sourceIds, source.id] }
+            // Rename: independiente de si hay startDate (puede venir de &days=N).
+            const named =
+              canRenameFromGuide(t) &&
+              source.area &&
+              t.name === draftTripNameFor(source.url)
+                ? { ...next, name: source.area }
+                : next
+            // Redimensionado de días: solo si el viaje sigue completamente virgen (sin startDate propio).
+            if (!canAdoptGuideSchedule(t)) return named
+            const total = source.totalDays
+            if (!total || total < 1 || total > MAX_AUTO_DAYS) return named
+            const days = [
+              ...named.days,
+              ...makeEmptyDays(Math.max(0, total - named.days.length)),
+            ]
+            return syncTripSchedule({ ...named, startDate: tomorrowISO() }, days)
+          }),
         )
 
         if (wasEmpty) {

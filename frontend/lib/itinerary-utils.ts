@@ -164,6 +164,10 @@ export function buildSource(
     title: `${itinerary.destination} — ${itinerary.total_days} días`,
     // `area` = destino del artículo; usado como fallback de geocoding cuando un ítem no trae `region`.
     area: itinerary.destination?.trim() ? itinerary.destination.trim() : null,
+    totalDays:
+      Number.isFinite(itinerary.total_days) && itinerary.total_days > 0
+        ? Math.floor(itinerary.total_days)
+        : null,
     items: flattenItinerary(itinerary),
     basics: flattenBasics(itinerary),
     articleHtml: itinerary.article_html ?? "",
