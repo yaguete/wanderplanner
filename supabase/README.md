@@ -27,6 +27,7 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260808190000_partner_prewarm_usage.sql
 #   migrations/20260808200000_dismissed_country_tasks.sql
 #   migrations/20260808210000_country_task_suggestions.sql
+#   migrations/20260808220000_trip_origin.sql
 
 # Opción B (si tienes Supabase CLI vinculado):
 supabase db push
@@ -37,6 +38,8 @@ supabase db push
 `20260808000000_sources_total_days.sql` tiene la misma exigencia: `SOURCE_COLUMNS` pide `total_days` en todo `select` de `sources`, así que debe aplicarse **antes** de desplegar un frontend que ya la incluya (si no, PostgREST 400 al cargar `/trips` para cualquier usuario, no solo el flujo de partner). También aditiva e idempotente.
 
 `20260808200000_dismissed_country_tasks.sql` + `20260808210000_country_task_suggestions.sql` (T4.4): la primera añade `trips.dismissed_country_tasks` (el front la pide en `TRIP_COLUMNS`); la segunda crea la caché service_role de destilados y amplía `usage_events.kind` con `country_tasks`. Orden: **migraciones → backend (`GET /country-tasks`) → frontend**.
+
+**⚠️ T4B.1 origen del viaje:** `20260808220000_trip_origin.sql` añade `trips.origin` (jsonb nullable). El frontend la pide en `TRIP_COLUMNS`; si llega a producción **antes** que la migración, PostgREST responde *column does not exist* y **`/trips` deja de cargar para todos**. Orden obligatorio: **aplicar la migración en Supabase → verificar la columna → solo entonces mergear a `main`**. Aditiva e idempotente (`add column if not exists`): segura con el front viejo aún en producción.
 
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 

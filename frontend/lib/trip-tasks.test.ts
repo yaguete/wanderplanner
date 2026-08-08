@@ -6,7 +6,7 @@ import type {
   UserBasicItem,
   UserDayItem,
 } from "@/types/itinerary"
-import { rowToTrip, tripToRow, type TripRow } from "./db/trips-repo"
+import { parseTripOrigin, rowToTrip, tripToRow, type TripRow } from "./db/trips-repo"
 import {
   buildTripTasks,
   cancellableApplies,
@@ -99,6 +99,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     dismissedCountryTasks: [],
     numTravelers: null,
     currency: "EUR",
+    origin: null,
     archived: false,
     ...overrides,
   }
@@ -508,7 +509,7 @@ assert.equal(cancellableApplies("basic"), false)
     dismissed_country_tasks: null,
     num_travelers: null,
     currency: null,
-  } as TripRow
+  } as unknown as TripRow
 
   const loaded = rowToTrip(legacy)
   assert.deepEqual(loaded.tasks, {})
@@ -516,6 +517,7 @@ assert.equal(cancellableApplies("basic"), false)
   assert.deepEqual(loaded.dismissedCountryTasks, [])
   assert.equal(loaded.numTravelers, null)
   assert.equal(loaded.currency, "EUR")
+  assert.equal(loaded.origin, null)
 
   const trip = makeTrip({
     tasks: {
@@ -535,15 +537,64 @@ assert.equal(cancellableApplies("basic"), false)
       },
     },
     dismissedCountryTasks: ["country:th:tdac"],
+    origin: {
+      label: "Barcelona",
+      countryCode: "ES",
+      coords: { lng: 2.1734, lat: 41.3851 },
+    },
+    numTravelers: 2,
   })
   const row = tripToRow(trip, "user-1")
   assert.ok(row.tasks)
   assert.ok(row.tasks![stayKey])
   assert.equal(row.tasks!["ghost:orphan"], undefined)
   assert.equal(row.currency, "EUR")
-  assert.equal(row.num_travelers, null)
+  assert.equal(row.num_travelers, 2)
   assert.deepEqual(row.extra_tasks, [])
   assert.deepEqual(row.dismissed_country_tasks, ["country:th:tdac"])
+  assert.deepEqual(row.origin, {
+    label: "Barcelona",
+    countryCode: "ES",
+    coords: { lng: 2.1734, lat: 41.3851 },
+  })
+  const back = rowToTrip(row)
+  assert.deepEqual(back.origin, trip.origin)
+  assert.equal(back.numTravelers, 2)
+}
+
+// ── parseTripOrigin: lectura defensiva ───────────────────────────────────────
+
+{
+  assert.equal(parseTripOrigin(null), null)
+  assert.equal(parseTripOrigin(undefined), null)
+  assert.equal(parseTripOrigin("Barcelona"), null)
+  assert.equal(parseTripOrigin({}), null)
+  assert.equal(parseTripOrigin({ label: "  ", coords: { lng: 1, lat: 2 } }), null)
+  // Tupla → null (contrato = objeto {lng,lat}).
+  assert.equal(
+    parseTripOrigin({ label: "BCN", coords: [2.17, 41.38], countryCode: "ES" }),
+    null,
+  )
+  assert.equal(
+    parseTripOrigin({ label: "BCN", coords: { lng: NaN, lat: 41 }, countryCode: "ES" }),
+    null,
+  )
+  assert.equal(
+    parseTripOrigin({ label: "BCN", coords: { lng: 2, lat: 91 }, countryCode: "ES" }),
+    null,
+  )
+  assert.deepEqual(
+    parseTripOrigin({ label: "BCN", coords: { lng: 2, lat: 41 }, countryCode: "esp" }),
+    { label: "BCN", countryCode: null, coords: { lng: 2, lat: 41 } },
+  )
+  assert.deepEqual(
+    parseTripOrigin({
+      label: "  Barcelona  ",
+      countryCode: "es",
+      coords: { lng: 2.17, lat: 41.38 },
+    }),
+    { label: "Barcelona", countryCode: "ES", coords: { lng: 2.17, lat: 41.38 } },
+  )
 }
 
 console.log("trip-tasks: ok")

@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 import type {
   Trip,
+  TripOrigin,
   Source,
   UserDay,
   UserDayItem,
@@ -87,6 +88,8 @@ interface TripContextValue {
     endDate: string | null
     numDays: number | null
     expectations: string | null
+    origin?: TripOrigin | null
+    numTravelers?: number | null
   }) => Trip
   updateTrip: (
     tripId: string,
@@ -96,6 +99,9 @@ interface TripContextValue {
       endDate: string | null
       numDays: number | null
       expectations: string | null
+      origin?: TripOrigin | null
+      numTravelers?: number | null
+      currency?: string
     },
   ) => { ok: true } | { ok: false; error: string }
   deleteTrip: (tripId: string) => void
@@ -316,6 +322,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       endDate: string | null
       numDays: number | null
       expectations: string | null
+      origin?: TripOrigin | null
+      numTravelers?: number | null
     }): Trip => {
     const dayCount = data.numDays && data.numDays > 0 ? data.numDays : 1
     const days: UserDay[] = Array.from({ length: dayCount }, () => ({
@@ -323,6 +331,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       label: "",
       items: [],
     }))
+
+    const numTravelers =
+      data.numTravelers == null || !Number.isFinite(data.numTravelers) || data.numTravelers < 1
+        ? null
+        : Math.floor(data.numTravelers)
 
     const trip = syncTripSchedule(
       {
@@ -341,8 +354,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         tasks: {},
         extraTasks: [],
         dismissedCountryTasks: [],
-        numTravelers: null,
+        numTravelers,
         currency: "EUR",
+        origin: data.origin ?? null,
         archived: false,
       },
       days,
@@ -360,6 +374,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         endDate: string | null
         numDays: number | null
         expectations: string | null
+        origin?: TripOrigin | null
+        numTravelers?: number | null
+        currency?: string
       },
     ): { ok: true } | { ok: false; error: string } => {
       const trip = tripsRef.current.find((t) => t.id === tripId)
@@ -373,6 +390,22 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           error: `Tu itinerario tiene ${trip.days.length} días. Elimina ${excess} día${excess === 1 ? "" : "s"} desde el panel del viaje antes de reducir el número aquí.`,
         }
       }
+
+      const numTravelers =
+        data.numTravelers === undefined
+          ? trip.numTravelers
+          : data.numTravelers == null || !Number.isFinite(data.numTravelers) || data.numTravelers < 1
+            ? null
+            : Math.floor(data.numTravelers)
+
+      const currency =
+        data.currency === undefined
+          ? trip.currency
+          : data.currency.trim()
+            ? data.currency.trim().toUpperCase()
+            : "EUR"
+
+      const origin = data.origin === undefined ? trip.origin : data.origin
 
       setTrips((prev) =>
         prev.map((t) => {
@@ -395,6 +428,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
               name: data.name,
               startDate: data.startDate,
               expectations: data.expectations?.trim() ? data.expectations.trim() : null,
+              origin,
+              numTravelers,
+              currency,
             },
             days,
           )

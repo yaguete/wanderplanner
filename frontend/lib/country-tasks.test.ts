@@ -33,6 +33,7 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
     dismissedCountryTasks: [],
     numTravelers: null,
     currency: "EUR",
+    origin: null,
     archived: false,
     ...overrides,
   }
@@ -146,13 +147,19 @@ assert.equal(buildCountryTaskId("TH", "Visado TDAC"), "country:th:visado-tdac")
     dismissed_country_tasks: null,
     num_travelers: null,
     currency: null,
-  } as TripRow
+  } as unknown as TripRow
 
   const loaded = rowToTrip(legacy)
   assert.deepEqual(loaded.dismissedCountryTasks, [])
+  assert.equal(loaded.origin, null)
 
   const trip = baseTrip({
     dismissedCountryTasks: ["country:th:tdac"],
+    origin: {
+      label: "Madrid",
+      countryCode: "ES",
+      coords: { lng: -3.7038, lat: 40.4168 },
+    },
     extraTasks: [
       {
         id: "country:th:vacunas",
@@ -165,8 +172,10 @@ assert.equal(buildCountryTaskId("TH", "Visado TDAC"), "country:th:visado-tdac")
   const row = tripToRow(trip, "user-1")
   assert.deepEqual(row.dismissed_country_tasks, ["country:th:tdac"])
   assert.equal(row.extra_tasks![0]!.id, "country:th:vacunas")
+  assert.deepEqual(row.origin, trip.origin)
   const back = rowToTrip(row)
   assert.deepEqual(back.dismissedCountryTasks, ["country:th:tdac"])
+  assert.deepEqual(back.origin, trip.origin)
 }
 
 // ── Word-boundary en inferencia de países ────────────────────────────────────

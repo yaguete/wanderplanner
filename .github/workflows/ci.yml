@@ -22,7 +22,16 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run test:trip-dates
+      - run: npm run test:trip-tasks
+      - run: npm run test:country-tasks
+      - run: npm run test:task-labels
+      - run: npm run test:day-summary
+      - run: npm run test:assistant-context
+      - run: npm run test:trip-origin
       - run: npm run build
+      # eslint instalado (eslint-config-next); no se usa como gate todavía:
+      # hay errores preexistentes en auth-context/trip-context/tailwind.config
+      # que no pertenecen a T4B.1. `npm run lint` funciona en local.
 
   backend:
     runs-on: ubuntu-latest

@@ -109,7 +109,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 **Extracción (backend):** `Itinerary` snake_case + `og_image` / `article_html`; `thumb_url` siempre null en la respuesta (lazy en el front).
 
-**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `tasks`, `extraTasks`, `dismissedCountryTasks`, `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
+**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `tasks`, `extraTasks`, `dismissedCountryTasks`, `numTravelers`, `currency`, `origin` (`TripOrigin | null`: label + coords `{lng,lat}` + countryCode), `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
 
 **Portada:** primera fuente → `GET /cover`(área/país) → `ogImage` → emoji.
 

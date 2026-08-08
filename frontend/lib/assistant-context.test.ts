@@ -1,0 +1,86 @@
+import assert from "node:assert/strict"
+import type { Trip } from "@/types/itinerary"
+import { buildTripBriefing } from "./assistant-context"
+import { countryCodeFromMapboxFeature } from "./mapbox"
+
+function baseTrip(overrides: Partial<Trip> = {}): Trip {
+  return {
+    id: "trip-brief",
+    name: "Budapest",
+    countries: ["HU"],
+    startDate: "2026-09-01",
+    endDate: "2026-09-05",
+    numDays: 5,
+    expectations: null,
+    cover: "✈️",
+    coverUrl: null,
+    sourceIds: [],
+    days: [{ id: "d1", label: "", items: [] }],
+    basics: [],
+    tasks: {},
+    extraTasks: [],
+    dismissedCountryTasks: [],
+    numTravelers: null,
+    currency: "EUR",
+    origin: null,
+    archived: false,
+    ...overrides,
+  }
+}
+
+{
+  const md = buildTripBriefing(baseTrip(), [])
+  assert.match(md, /- origen: \(no configurado\)/)
+  assert.doesNotMatch(md, /- viajeros:/)
+}
+
+{
+  const md = buildTripBriefing(
+    baseTrip({
+      origin: {
+        label: "Barcelona",
+        countryCode: "ES",
+        coords: { lng: 2.1734, lat: 41.3851 },
+      },
+      numTravelers: 2,
+      currency: "USD",
+    }),
+    [],
+  )
+  assert.match(md, /- origen: Barcelona, ES · 41\.3851, 2\.1734/)
+  assert.match(md, /- viajeros: 2/)
+  assert.match(md, /- divisa: USD/)
+}
+
+{
+  assert.equal(
+    countryCodeFromMapboxFeature({
+      context: [{ id: "country.123", short_code: "es" }],
+    }),
+    "ES",
+  )
+  assert.equal(
+    countryCodeFromMapboxFeature({
+      id: "country.456",
+      short_code: "hu",
+    }),
+    "HU",
+  )
+  assert.equal(
+    countryCodeFromMapboxFeature({
+      id: "place.1",
+      context: [{ id: "region.1", short_code: "CT" }],
+    }),
+    null,
+  )
+  // Códigos de región tipo ES-CT: null (no alpha-2 puro); no hay normalización mágica.
+  assert.equal(
+    countryCodeFromMapboxFeature({
+      context: [{ id: "country.1", short_code: "ES-CT" }],
+    }),
+    null,
+  )
+  assert.equal(countryCodeFromMapboxFeature({}), null)
+}
+
+console.log("assistant-context + mapbox country: ok")

@@ -124,7 +124,43 @@ type MapboxFeature = {
   place_name?: string
   text?: string
   center?: [number, number]
-  context?: { id?: string; text?: string }[]
+  /** ISO corto del propio feature cuando es un país (p. ej. "ES"). */
+  short_code?: string
+  properties?: { short_code?: string }
+  context?: { id?: string; text?: string; short_code?: string }[]
+}
+
+/**
+ * ISO 3166-1 alpha-2 desde una feature de Geocoding v5.
+ * Preferencia: short_code del context `country.*` → short_code de la feature si es país.
+ */
+export function countryCodeFromMapboxFeature(feature: {
+  id?: string
+  short_code?: string
+  properties?: { short_code?: string }
+  context?: { id?: string; short_code?: string }[]
+}): string | null {
+  const normalize = (raw: string | undefined | null): string | null => {
+    if (!raw) return null
+    const code = raw.trim().toUpperCase()
+    // Mapbox a veces usa "ES" o códigos de región ("ES-CT"); solo aceptamos alpha-2.
+    const m = code.match(/^([A-Z]{2})$/)
+    return m ? m[1]! : null
+  }
+
+  for (const c of feature.context ?? []) {
+    if (c.id?.startsWith("country.")) {
+      const fromCtx = normalize(c.short_code)
+      if (fromCtx) return fromCtx
+      // Fallback: id "country.XXXX" no es ISO; solo short_code es fiable.
+    }
+  }
+
+  if (feature.id?.startsWith("country.")) {
+    return normalize(feature.short_code) ?? normalize(feature.properties?.short_code)
+  }
+
+  return normalize(feature.short_code) ?? normalize(feature.properties?.short_code)
 }
 
 /**
@@ -158,6 +194,8 @@ export type GeocodeSuggestion = {
   /** Etiqueta corta para `UserDayItem.region` y la tarjeta. */
   text: string
   center: LngLat
+  /** ISO 3166-1 alpha-2 si Mapbox lo aporta; null si no. */
+  countryCode: string | null
 }
 
 /**
@@ -202,6 +240,7 @@ export async function suggestPlaces(
       placeName,
       text: shortPlaceLabel(f),
       center,
+      countryCode: countryCodeFromMapboxFeature(f),
     })
   }
   return out

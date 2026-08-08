@@ -443,6 +443,9 @@ export default function TripsHomePage() {
                 endDate: editingTrip.endDate,
                 numDays: editingTrip.numDays,
                 expectations: editingTrip.expectations ?? null,
+                origin: editingTrip.origin ?? null,
+                numTravelers: editingTrip.numTravelers ?? null,
+                currency: editingTrip.currency || "EUR",
               }
             : null
         }
@@ -461,6 +464,9 @@ export default function TripsHomePage() {
               endDate: data.endDate,
               numDays: data.numDays,
               expectations: data.expectations,
+              origin: data.origin,
+              numTravelers: data.numTravelers,
+              currency: data.currency,
             })
             if (!result.ok) return { error: result.error }
             setEditingTripId(null)

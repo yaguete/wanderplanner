@@ -10,10 +10,64 @@
  * solo de lo cambiado, con debounce, cola secuencial y last-write-wins (sin rollback).
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { ExtraTask, Source, Trip, TripTaskState, UserBasicItem, UserDay } from "@/types/itinerary"
+import type {
+  ExtraTask,
+  Source,
+  Trip,
+  TripOrigin,
+  TripTaskState,
+  UserBasicItem,
+  UserDay,
+} from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
+
+/**
+ * Lectura defensiva de `trips.origin`. Cualquier forma inválida (incluido
+ * coords como tupla) → null: los viajes legacy y el jsonb corrupto no rompen
+ * la carga.
+ */
+export function parseTripOrigin(raw: unknown): TripOrigin | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+  const label = typeof obj.label === "string" ? obj.label.trim() : ""
+  if (!label) return null
+
+  let lng: number | null = null
+  let lat: number | null = null
+  const coords = obj.coords
+  if (coords && typeof coords === "object" && !Array.isArray(coords)) {
+    const c = coords as Record<string, unknown>
+    if (typeof c.lng === "number" && typeof c.lat === "number") {
+      lng = c.lng
+      lat = c.lat
+    }
+  } else if (Array.isArray(coords) && coords.length >= 2) {
+    // Tupla legacy/corrupta: degradar a null (contrato = objeto {lng,lat}).
+    return null
+  }
+  if (
+    lng == null ||
+    lat == null ||
+    !Number.isFinite(lng) ||
+    !Number.isFinite(lat) ||
+    lng < -180 ||
+    lng > 180 ||
+    lat < -90 ||
+    lat > 90
+  ) {
+    return null
+  }
+
+  let countryCode: string | null = null
+  if (typeof obj.countryCode === "string") {
+    const code = obj.countryCode.trim().toUpperCase()
+    if (/^[A-Z]{2}$/.test(code)) countryCode = code
+  }
+
+  return { label, countryCode, coords: { lng, lat } }
+}
 
 /** Postgres rechaza \\u0000 en text/jsonb (error 22P05). */
 function sanitizeDaysForDb(days: UserDay[]): UserDay[] {
@@ -52,6 +106,7 @@ export type TripRow = {
   dismissed_country_tasks: string[] | null
   num_travelers: number | null
   currency: string | null
+  origin: TripOrigin | null
 }
 
 type SourceRow = {
@@ -69,7 +124,7 @@ type SourceRow = {
 }
 
 const TRIP_COLUMNS =
-  "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency"
+  "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
 /** Sin `article_html`: puede ser enorme y solo hace falta al abrir la Crónica. */
 const SOURCE_COLUMNS = "id, url, author, title, area, total_days, og_image, items, basics"
 
@@ -106,6 +161,7 @@ export function rowToTrip(row: TripRow): Trip {
       : [],
     numTravelers: row.num_travelers ?? null,
     currency: row.currency?.trim() ? row.currency.trim() : "EUR",
+    origin: parseTripOrigin(row.origin),
     archived: row.archived,
     referrer: row.referrer,
   }
@@ -134,6 +190,7 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
     dismissed_country_tasks: trip.dismissedCountryTasks ?? [],
     num_travelers: trip.numTravelers ?? null,
     currency: trip.currency?.trim() ? trip.currency.trim() : "EUR",
+    origin: parseTripOrigin(trip.origin),
   }
 }
 
@@ -236,6 +293,7 @@ export async function insertDraftTrip(
     dismissed_country_tasks: [],
     num_travelers: null,
     currency: "EUR",
+    origin: null,
     source_ids: [],
     referrer: data.referrer,
   })

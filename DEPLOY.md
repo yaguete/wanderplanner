@@ -195,6 +195,7 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   11. `20260808190000_partner_prewarm_usage.sql` (si aplica el kit partners)
   12. `20260808200000_dismissed_country_tasks.sql`
   13. `20260808210000_country_task_suggestions.sql`
+  14. `20260808220000_trip_origin.sql`
 
 ```bash
 # Con CLI vinculada al proyecto:
@@ -205,6 +206,8 @@ supabase db push
 **Orden con el frontend:** `20260803180000_trip_tasks.sql` añade columnas que el front ya pide en `TRIP_COLUMNS` (`tasks`, `extra_tasks`, `num_travelers`, `currency`). Hay que aplicar esa migración **antes** de mergear a `main` (Vercel despliega Production en cada push). Aplicarla con el frontend viejo aún en producción es inocuo (`add column if not exists`).
 
 **T4.4 trámites por destino:** aplicar `20260808200000_dismissed_country_tasks.sql` y `20260808210000_country_task_suggestions.sql` **antes** del frontend que pide `dismissed_country_tasks` en `TRIP_COLUMNS`. Orden de despliegue: **migraciones → backend Fly (`GET /country-tasks`) → frontend Vercel**.
+
+**⚠️ T4B.1 origen del viaje:** `20260808220000_trip_origin.sql` añade `trips.origin` (jsonb nullable). El frontend la incluye en `TRIP_COLUMNS`; si mergeas a `main` **antes** de aplicar la migración, PostgREST responde *column does not exist* y **`/trips` cae para todos los usuarios**. Orden obligatorio: **1) aplicar la migración en Supabase de producción, 2) verificar la columna, 3) solo entonces mergear**. Aditiva e idempotente: segura con el front viejo aún en producción.
 
 Detalle local y env: [`supabase/README.md`](supabase/README.md).
 

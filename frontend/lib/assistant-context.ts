@@ -89,8 +89,23 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
   } else {
     lines.push("- países: (ninguno configurado)")
   }
+  if (trip.origin) {
+    const country = trip.origin.countryCode ? `, ${trip.origin.countryCode}` : ""
+    const { lng, lat } = trip.origin.coords
+    lines.push(
+      `- origen: ${trip.origin.label}${country} · ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+    )
+  } else {
+    lines.push("- origen: (no configurado)")
+  }
   lines.push(`- fechas: ${trip.startDate ?? "?"} → ${trip.endDate ?? "?"}`)
   lines.push(`- días del itinerario (numDays): ${trip.numDays ?? "?"}`)
+  if (trip.numTravelers != null && trip.numTravelers > 0) {
+    lines.push(`- viajeros: ${trip.numTravelers}`)
+  }
+  if (trip.currency?.trim()) {
+    lines.push(`- divisa: ${trip.currency.trim().toUpperCase()}`)
+  }
   if (trip.expectations?.trim()) {
     lines.push("")
     lines.push("## Qué espera el usuario de este viaje")

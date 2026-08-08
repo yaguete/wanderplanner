@@ -132,6 +132,17 @@ export interface ExtraTask {
   state: TripTaskState
 }
 
+/**
+ * Punto de partida del viajero (T4B.1). Coordenadas en objeto `{ lng, lat }`
+ * — no tupla — igual que `UserDayItem.coords` y el jsonb.
+ */
+export interface TripOrigin {
+  label: string
+  /** ISO 3166-1 alpha-2; null si Mapbox no lo aporta. */
+  countryCode: string | null
+  coords: { lng: number; lat: number }
+}
+
 export interface Trip {
   id: string
   name: string
@@ -174,6 +185,11 @@ export interface Trip {
   numTravelers: number | null
   /** Divisa del viaje (ISO 4217). Una sola para que el total sea suma válida. */
   currency: string
+  /**
+   * Origen del viajero (ciudad/dirección de salida). Null = no configurado
+   * o viaje anterior a T4B.1.
+   */
+  origin: TripOrigin | null
   /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */
   archived?: boolean
   /** Slug del partner cuyo CTA originó el viaje (`/start?ref=…`). */

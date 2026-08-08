@@ -11,7 +11,9 @@
     "test:trip-tasks": "tsx lib/trip-tasks.test.ts",
     "test:country-tasks": "tsx lib/country-tasks.test.ts",
     "test:task-labels": "tsx lib/task-labels.test.ts",
-    "test:day-summary": "tsx lib/day-summary.test.ts"
+    "test:day-summary": "tsx lib/day-summary.test.ts",
+    "test:assistant-context": "tsx lib/assistant-context.test.ts",
+    "test:trip-origin": "tsx lib/trip-origin-resolve.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -76,6 +78,8 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.0",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.23.1",
