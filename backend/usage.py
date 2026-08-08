@@ -6,7 +6,8 @@ no son atómicos respecto al registro: dos peticiones concurrentes pueden pasar 
 check. Se acepta (desviación máxima ~1); el front mitiga con UI en vuelo.
 
 Kinds:
-  - extraction / assistant_message / photo_lookup / day_summary: cuota de usuario (user_id obligatorio)
+  - extraction / assistant_message / photo_lookup / day_summary / country_tasks:
+    cuota de usuario (user_id obligatorio)
   - refresh: rate-limit de «Recargar» (user_id obligatorio)
   - system_revalidation: mantenimiento de caché en fondo (user_id null)
   - partner_prewarm: pre-síntesis desde /partners (user_id null; cap global durable)
@@ -36,6 +37,7 @@ Kind = Literal[
     "system_revalidation",
     "day_summary",
     "partner_prewarm",
+    "country_tasks",
 ]
 _USERLESS_KINDS = frozenset({"system_revalidation", "partner_prewarm"})
 LimitKind = Literal["guest", "daily", "monthly"]
@@ -45,12 +47,14 @@ _GUEST_DEFAULTS: dict[str, int] = {
     "assistant_message": 10,
     "photo_lookup": 30,
     "day_summary": 5,
+    "country_tasks": 5,
 }
 _GUEST_ENV: dict[str, str] = {
     "extraction": "GUEST_MAX_EXTRACTIONS",
     "assistant_message": "GUEST_MAX_ASSISTANT_MESSAGES",
     "photo_lookup": "GUEST_MAX_PHOTO_LOOKUPS",
     "day_summary": "GUEST_MAX_DAY_SUMMARIES",
+    "country_tasks": "GUEST_MAX_COUNTRY_TASKS",
 }
 
 _MESSAGES: dict[tuple[str, LimitKind], str] = {
@@ -86,6 +90,12 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("day_summary", "daily"): (
         "Has alcanzado el límite diario de descripciones por IA. Vuelve mañana."
+    ),
+    ("country_tasks", "guest"): (
+        "Has agotado las consultas de trámites de invitado. Crea una cuenta para continuar."
+    ),
+    ("country_tasks", "daily"): (
+        "Has alcanzado el límite diario de consultas de trámites. Vuelve mañana."
     ),
 }
 
@@ -305,6 +315,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "day_summary":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_DAY_SUMMARIES_DAY", 60):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "country_tasks":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_COUNTRY_TASKS_DAY", 30):
             _raise_limit(user, kind, "daily")
         return
 

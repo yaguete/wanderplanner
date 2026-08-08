@@ -47,8 +47,19 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {!hideClose ? (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-          <X className="h-4 w-4" />
+        <DialogPrimitive.Close
+          className={cn(
+            'absolute right-4 top-4 ring-offset-background transition-colors',
+            'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+            'disabled:pointer-events-none',
+            // Móvil: target amplio + círculo con fondo muted suave (como MobileNavMenu)
+            'inline-flex h-11 w-11 items-center justify-center rounded-full bg-muted/80 text-foreground hover:bg-muted',
+            // Desktop: ghost compacto
+            'sm:h-auto sm:w-auto sm:rounded-sm sm:bg-transparent sm:opacity-70 sm:hover:bg-transparent sm:hover:opacity-100',
+            'sm:data-[state=open]:bg-accent sm:data-[state=open]:text-muted-foreground',
+          )}
+        >
+          <X className="h-5 w-5 sm:h-4 sm:w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
       ) : null}

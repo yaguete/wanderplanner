@@ -2,7 +2,8 @@ frontend/node_modules
 node_modules/
 backend/venv
 .venv/
-backend/__pycache__/
+__pycache__/
+*.py[cod]
 *.tsbuildinfo
 .env
 .env.local
@@ -10,3 +11,5 @@ backend/__pycache__/
 .DS_Store
 backend/data/country_briefs/*.txt
 backend/data/country_briefs/index.json
+backend/data/travel_briefs/*.txt
+backend/data/travel_briefs/index.json

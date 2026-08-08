@@ -24,6 +24,9 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260803180000_trip_tasks.sql
 #   migrations/20260804010000_day_summary_usage.sql
 #   migrations/20260808000000_sources_total_days.sql
+#   migrations/20260808190000_partner_prewarm_usage.sql
+#   migrations/20260808200000_dismissed_country_tasks.sql
+#   migrations/20260808210000_country_task_suggestions.sql
 
 # Opción B (si tienes Supabase CLI vinculado):
 supabase db push
@@ -33,6 +36,8 @@ supabase db push
 
 `20260808000000_sources_total_days.sql` tiene la misma exigencia: `SOURCE_COLUMNS` pide `total_days` en todo `select` de `sources`, así que debe aplicarse **antes** de desplegar un frontend que ya la incluya (si no, PostgREST 400 al cargar `/trips` para cualquier usuario, no solo el flujo de partner). También aditiva e idempotente.
 
+`20260808200000_dismissed_country_tasks.sql` + `20260808210000_country_task_suggestions.sql` (T4.4): la primera añade `trips.dismissed_country_tasks` (el front la pide en `TRIP_COLUMNS`); la segunda crea la caché service_role de destilados y amplía `usage_events.kind` con `country_tasks`. Orden: **migraciones → backend (`GET /country-tasks`) → frontend**.
+
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 
 ```
@@ -40,7 +45,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://….supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ…
 ```
 
-5. **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (cachés `article_extractions`, `place_thumbs`, `destination_covers`, contadores `usage_events`) y, en producción, `REQUIRE_AUTH=true` + `SUPABASE_JWT_SECRET` (JWT Secret en Settings → API) o confiar en el JWKS del proyecto. Claves de imágenes solo en backend: `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`.
+5. **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (cachés `article_extractions`, `place_thumbs`, `destination_covers`, `country_task_suggestions`, contadores `usage_events`) y, en producción, `REQUIRE_AUTH=true` + `SUPABASE_JWT_SECRET` (JWT Secret en Settings → API) o confiar en el JWKS del proyecto. Claves de imágenes solo en backend: `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`.
 
 ## Opcional
 

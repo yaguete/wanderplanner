@@ -96,6 +96,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     ],
     tasks: {},
     extraTasks: [],
+    dismissedCountryTasks: [],
     numTravelers: null,
     currency: "EUR",
     archived: false,
@@ -504,6 +505,7 @@ assert.equal(cancellableApplies("basic"), false)
     basics: [],
     tasks: null,
     extra_tasks: null,
+    dismissed_country_tasks: null,
     num_travelers: null,
     currency: null,
   } as TripRow
@@ -511,6 +513,7 @@ assert.equal(cancellableApplies("basic"), false)
   const loaded = rowToTrip(legacy)
   assert.deepEqual(loaded.tasks, {})
   assert.deepEqual(loaded.extraTasks, [])
+  assert.deepEqual(loaded.dismissedCountryTasks, [])
   assert.equal(loaded.numTravelers, null)
   assert.equal(loaded.currency, "EUR")
 
@@ -531,6 +534,7 @@ assert.equal(cancellableApplies("basic"), false)
         updatedAt: "2026-08-01T00:00:00.000Z",
       },
     },
+    dismissedCountryTasks: ["country:th:tdac"],
   })
   const row = tripToRow(trip, "user-1")
   assert.ok(row.tasks)
@@ -539,6 +543,7 @@ assert.equal(cancellableApplies("basic"), false)
   assert.equal(row.currency, "EUR")
   assert.equal(row.num_travelers, null)
   assert.deepEqual(row.extra_tasks, [])
+  assert.deepEqual(row.dismissed_country_tasks, ["country:th:tdac"])
 }
 
 console.log("trip-tasks: ok")

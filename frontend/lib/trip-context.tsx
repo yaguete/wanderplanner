@@ -36,6 +36,7 @@ import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { draftTripNameFor, MAX_AUTO_DAYS } from "@/lib/partner-trip"
 import { createExtraTaskState, mergeTaskState, withPrunedTasks } from "@/lib/trip-tasks"
+import { countryCodeFromTaskId, isCountryTaskId } from "@/lib/country-tasks"
 
 /** Alinea numDays y endDate con days.length (+ startDate inclusive). */
 function syncTripSchedule(trip: Trip, days: UserDay[]): Trip {
@@ -156,6 +157,23 @@ interface TripContextValue {
     taskId: string,
     data: { title?: string; category?: TripTaskCategory },
   ) => void
+  /** Acepta una sugerencia MAE como ExtraTask con id estable. */
+  acceptCountryTask: (
+    tripId: string,
+    data: {
+      id: string
+      title: string
+      category: TripTaskCategory
+      state?: Partial<TripTaskState>
+    },
+  ) => ExtraTask | null
+  /** Descarta una sugerencia para que no reaparezca al recargar. */
+  dismissCountryTask: (tripId: string, taskId: string) => void
+  /**
+   * Quita de `dismissedCountryTasks` los ids de países actualmente activos
+   * (para resucitar sugerencias tras un descarte/eliminación accidental).
+   */
+  reevaluateCountryTasks: (tripId: string, activeCountryCodes: string[]) => void
 
   /** Viajeros del viaje (T4.3: coste por persona). `null` = no configurado. */
   setNumTravelers: (tripId: string, numTravelers: number | null) => void
@@ -322,6 +340,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         basics: [],
         tasks: {},
         extraTasks: [],
+        dismissedCountryTasks: [],
         numTravelers: null,
         currency: "EUR",
         archived: false,
@@ -870,13 +889,92 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const removeExtraTask = useCallback((tripId: string, taskId: string) => {
     setTrips((prev) =>
-      prev.map((t) =>
-        t.id !== tripId
-          ? t
-          : { ...t, extraTasks: t.extraTasks.filter((e) => e.id !== taskId) },
-      ),
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        const nextExtras = t.extraTasks.filter((e) => e.id !== taskId)
+        // Tareas de país eliminadas → descartadas para no resucitar al instante.
+        if (isCountryTaskId(taskId)) {
+          const dismissed = t.dismissedCountryTasks.includes(taskId)
+            ? t.dismissedCountryTasks
+            : [...t.dismissedCountryTasks, taskId]
+          return { ...t, extraTasks: nextExtras, dismissedCountryTasks: dismissed }
+        }
+        return { ...t, extraTasks: nextExtras }
+      }),
     )
   }, [])
+
+  const acceptCountryTask = useCallback(
+    (
+      tripId: string,
+      data: {
+        id: string
+        title: string
+        category: TripTaskCategory
+        state?: Partial<TripTaskState>
+      },
+    ): ExtraTask | null => {
+      const id = data.id.trim()
+      if (!id || !isCountryTaskId(id)) return null
+      let created: ExtraTask | null = null
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          if (t.extraTasks.some((e) => e.id === id)) return t
+          const extra: ExtraTask = {
+            id,
+            title: data.title.trim(),
+            category: data.category,
+            state: createExtraTaskState(data.state),
+          }
+          created = extra
+          return {
+            ...t,
+            extraTasks: [...t.extraTasks, extra],
+            dismissedCountryTasks: t.dismissedCountryTasks.filter((d) => d !== id),
+          }
+        }),
+      )
+      return created
+    },
+    [],
+  )
+
+  const dismissCountryTask = useCallback((tripId: string, taskId: string) => {
+    const id = taskId.trim()
+    if (!id) return
+    setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        if (t.dismissedCountryTasks.includes(id)) return t
+        return {
+          ...t,
+          dismissedCountryTasks: [...t.dismissedCountryTasks, id],
+        }
+      }),
+    )
+  }, [])
+
+  const reevaluateCountryTasks = useCallback(
+    (tripId: string, activeCountryCodes: string[]) => {
+      const active = new Set(
+        activeCountryCodes.map((c) => c.trim().toUpperCase()).filter(Boolean),
+      )
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          const next = t.dismissedCountryTasks.filter((id) => {
+            const code = countryCodeFromTaskId(id)
+            // Conserva descartes de países ya no activos; limpia los activos.
+            return code == null || !active.has(code)
+          })
+          if (next.length === t.dismissedCountryTasks.length) return t
+          return { ...t, dismissedCountryTasks: next }
+        }),
+      )
+    },
+    [],
+  )
 
   const updateExtraTask = useCallback(
     (
@@ -938,10 +1036,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       addExtraTask,
       removeExtraTask,
       updateExtraTask,
+      acceptCountryTask,
+      dismissCountryTask,
+      reevaluateCountryTasks,
       setNumTravelers,
       setTripCurrency,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, setNumTravelers, setTripCurrency],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

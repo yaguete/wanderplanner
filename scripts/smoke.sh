@@ -5,7 +5,8 @@
 #
 # Comprueba:
 #   1) GET / responde 2xx
-#   2) POST /itinerary y GET /thumb sin Authorization → 401 (REQUIRE_AUTH=true)
+#   2) POST /itinerary, GET /thumb y GET /country-tasks sin Authorization → 401
+#      (REQUIRE_AUTH=true)
 #   3) CORS rechaza un Origin no permitido (sin Access-Control-Allow-Origin)
 #   4) POST /partners/prewarm: URL inválida → 400; sin captcha → 403 o 503
 #      (503 = TURNSTILE_SECRET_KEY olvidada con REQUIRE_AUTH)
@@ -105,6 +106,21 @@ else
   bad "GET /thumb sin Authorization esperaba 401, obtuvo '${THUMB_CODE:-error de red}'"
   if [[ -s "$THUMB_BODY" ]]; then
     echo "  body: $(head -c 200 "$THUMB_BODY")" >&2
+  fi
+fi
+
+CT_BODY="$TMPDIR/country-tasks.body"
+CT_CODE="$(
+  http_code "$CT_BODY" \
+    "$BASE/country-tasks?codes=TH" \
+  || true
+)"
+if [[ "$CT_CODE" == "401" ]]; then
+  ok "GET /country-tasks sin Authorization → 401"
+else
+  bad "GET /country-tasks sin Authorization esperaba 401, obtuvo '${CT_CODE:-error de red}'"
+  if [[ -s "$CT_BODY" ]]; then
+    echo "  body: $(head -c 200 "$CT_BODY")" >&2
   fi
 fi
 
