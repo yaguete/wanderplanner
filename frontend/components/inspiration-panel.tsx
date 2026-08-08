@@ -231,6 +231,7 @@ export default function InspirationPanel({
       region: item.region ?? currentSource.area ?? null,
       affiliateUrl: item.affiliateUrl ?? null,
       vendor: item.vendor ?? null,
+      sourceRouteHint: item.sourceRouteHint,
     })
   }
 
@@ -252,7 +253,7 @@ export default function InspirationPanel({
   const tabs: { id: SourceTab; label: string }[] = [
     { id: "source", label: "Crónica" },
     { id: "itinerary", label: "Ruta" },
-    { id: "transport", label: "Transporte" },
+    { id: "transport", label: "Desplazamiento" },
     { id: "basics", label: "Descuentos" },
   ]
 
@@ -491,7 +492,7 @@ export default function InspirationPanel({
             ) : sourceTab === "transport" ? (
               <SourceGroupedList
                 groups={groupedTransportItems}
-                emptyTitle="Sin transportes en esta fuente"
+                emptyTitle="Sin desplazamientos en esta fuente"
                 emptyDescription="Vuelos, trenes o traslados detectados aparecerán aquí para añadirlos a tu ruta."
                 renderItem={(item) => (
                   <ItemRow
@@ -501,6 +502,7 @@ export default function InspirationPanel({
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
                     thumbnailMode="transportIcon"
+                    sourceTypeLabel="Desplazamiento"
                     onPick={() => setPickingItem(item)}
                   />
                 )}
@@ -799,6 +801,7 @@ function ItemRow({
   isAdded,
   addedDayNumbers,
   thumbnailMode,
+  sourceTypeLabel,
   onPick,
 }: {
   item: SourceItem
@@ -806,6 +809,7 @@ function ItemRow({
   isAdded: boolean
   addedDayNumbers: number[]
   thumbnailMode?: "default" | "transportIcon"
+  sourceTypeLabel?: string
   onPick: () => void
 }) {
   const isMobile = useIsMobile()
@@ -815,6 +819,7 @@ function ItemRow({
       title={item.name}
       detail={item.detail}
       type={item.type}
+      typeLabel={sourceTypeLabel}
       isAdded={isAdded}
       addedLabel={addedDayNumbers.length ? formatAddedDaysCompact(addedDayNumbers) : undefined}
       thumbnail={

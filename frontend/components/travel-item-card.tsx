@@ -1,14 +1,14 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Check, ExternalLink, Plus, X } from "lucide-react"
+import { Check, ExternalLink, Pencil, Plus, X, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
-function TypeBadge({ type }: { type: ItemType }) {
+function TypeBadge({ type, label }: { type: ItemType; label?: string }) {
   const colors = ITEM_COLORS[type]
   return (
     <span
@@ -20,7 +20,7 @@ function TypeBadge({ type }: { type: ItemType }) {
       )}
     >
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", colors.dot)} aria-hidden />
-      {ITEM_LABELS[type]}
+      {label ?? ITEM_LABELS[type]}
     </span>
   )
 }
@@ -39,6 +39,8 @@ type SourceCardProps = {
   title: string
   detail?: string | null
   type: ItemType
+  /** Override del badge (p. ej. «Desplazamiento» solo en Fuentes). */
+  typeLabel?: string
   thumbnail: ReactNode
   isAdded?: boolean
   addedLabel?: string
@@ -56,6 +58,15 @@ type PlannedCardProps = {
   regionLabel?: string | null
   href?: string | null
   onRemove: () => void
+  /** Editar tramo de ida/vuelta o traslado (T4B.3). */
+  onEdit?: () => void
+  /** Etiqueta accesible del botón editar. */
+  editAriaLabel?: string
+  /** Subtítulo extra bajo el título (p. ej. «Avión · Ida»). */
+  routeSummary?: string | null
+  /** Icono/etiqueta específicos de medio de transporte. */
+  transportIcon?: LucideIcon
+  transportIconLabel?: string
   moveControls?: ReactNode
   /**
    * Indicador de ejecución (reservado / pendiente / sin reserva).
@@ -108,7 +119,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
         {props.thumbnail}
         <div className="min-w-0 flex-1 pr-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <TypeBadge type={props.type} />
+            <TypeBadge type={props.type} label={props.typeLabel} />
             {props.addedLabel ? <AddedBadge label={props.addedLabel} /> : null}
           </div>
           <p className="mt-1.5 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
@@ -247,9 +258,11 @@ export function TravelItemCard(props: TravelItemCardProps) {
 
   // planned
   const colors = ITEM_COLORS[props.type]
-  const TypeIcon = ITEM_TYPE_ICONS[props.type]
+  const TypeIcon = props.transportIcon ?? ITEM_TYPE_ICONS[props.type]
   const typeLabel = ITEM_LABELS[props.type]
+  const iconA11y = props.transportIconLabel ?? typeLabel
   const region = props.regionLabel?.trim() ? props.regionLabel.trim() : null
+  const routeSummary = props.routeSummary?.trim() ? props.routeSummary.trim() : null
   const provenance = itemProvenanceLabel({
     sourceId: props.sourceId,
     sourceAuthor: props.sourceAuthor,
@@ -257,7 +270,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
   const icon = (
     <span
       className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-foreground"
-      aria-label={typeLabel}
+      aria-label={iconA11y}
     >
       <TypeIcon className="h-4 w-4" aria-hidden />
       <span
@@ -271,13 +284,16 @@ export function TravelItemCard(props: TravelItemCardProps) {
       <p className="line-clamp-2 text-[15px] font-bold leading-snug tracking-tight text-foreground">
         {props.title}
       </p>
+      {routeSummary ? (
+        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{routeSummary}</p>
+      ) : null}
       {props.sourceId === MANUAL_SOURCE_ID && props.detail?.trim() ? (
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail.trim()}</p>
       ) : null}
       <p className="mt-1 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
         <span className="truncate">
           <span className={cn("mr-1 font-medium", colors.text)}>{typeLabel}</span>
-          {region ? <span title={region}>{region} </span> : null}
+          {region && !routeSummary ? <span title={region}>{region} </span> : null}
           {provenance}
         </span>
         {props.href ? <ExternalLink className="h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
@@ -307,6 +323,20 @@ export function TravelItemCard(props: TravelItemCardProps) {
         <div className="flex shrink-0 items-center gap-1 pr-1">
           {props.taskIndicator}
           {props.moveControls}
+          {props.onEdit ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                props.onEdit?.()
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              aria-label={props.editAriaLabel ?? "Editar traslado"}
+            >
+              <Pencil className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={(e) => {

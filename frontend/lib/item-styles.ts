@@ -1,5 +1,20 @@
-import { Car, Home, MapPin, Plane, Shield, Sparkles, UtensilsCrossed, Wifi, type LucideIcon } from "lucide-react"
-import type { BasicCategory, ItemType } from "@/types/itinerary"
+import {
+  Bus,
+  Car,
+  Caravan,
+  CircleHelp,
+  Home,
+  MapPin,
+  Plane,
+  Shield,
+  Ship,
+  Sparkles,
+  Train,
+  UtensilsCrossed,
+  Wifi,
+  type LucideIcon,
+} from "lucide-react"
+import type { BasicCategory, ItemType, RouteMode, SourceRouteHint, UserDayItem } from "@/types/itinerary"
 
 /** Color solo como señal: punto + texto sutil sobre chip neutro. */
 export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: string; dot: string }> = {
@@ -41,6 +56,76 @@ export const ITEM_TYPE_ICONS: Record<ItemType, LucideIcon> = {
   stay: Home,
   food: UtensilsCrossed,
   activity: MapPin,
+}
+
+export type TransportModeVisualKey = RouteMode | "undecided"
+
+export const TRANSPORT_MODE_ICONS: Record<TransportModeVisualKey, LucideIcon> = {
+  flight: Plane,
+  train: Train,
+  bus: Bus,
+  ferry: Ship,
+  car: Car,
+  other: Caravan,
+  undecided: CircleHelp,
+}
+
+export const TRANSPORT_MODE_A11Y: Record<TransportModeVisualKey, string> = {
+  flight: "Avión",
+  train: "Tren",
+  bus: "Autobús",
+  ferry: "Ferry",
+  car: "Coche",
+  other: "Otro",
+  undecided: "Medio por decidir",
+}
+
+/** Inferencia legacy por texto (fuentes cacheadas sin hint). */
+export function inferTransportModeFromText(label: string): TransportModeVisualKey {
+  const t = label.toLowerCase()
+  if (/(vuelo|av[ií]on|flight|air|aeropuerto)/i.test(t)) return "flight"
+  if (/(tren|train|rail)/i.test(t)) return "train"
+  if (/(bus|autob[uú]s|coach|minivan|shuttle)/i.test(t)) return "bus"
+  if (/(ferry|barco|boat)/i.test(t)) return "ferry"
+  if (/(coche|car\b|drive|driving)/i.test(t)) return "car"
+  return "undecided"
+}
+
+/**
+ * Resolución de medio para iconografía.
+ * Mi viaje: route.mode → hint → texto → undecided.
+ * Fuentes (`preferHint`): hint → texto.
+ */
+export function resolveTransportModeVisual(params: {
+  routeMode?: RouteMode | null
+  hint?: SourceRouteHint | null
+  name?: string | null
+  detail?: string | null
+  preferHint?: boolean
+}): TransportModeVisualKey {
+  if (params.preferHint) {
+    if (params.hint?.mode) return params.hint.mode
+    return inferTransportModeFromText(`${params.name ?? ""} ${params.detail ?? ""}`)
+  }
+  if (params.routeMode) return params.routeMode
+  if (params.hint?.mode) return params.hint.mode
+  return inferTransportModeFromText(`${params.name ?? ""} ${params.detail ?? ""}`)
+}
+
+export function transportModeIcon(key: TransportModeVisualKey): LucideIcon {
+  return TRANSPORT_MODE_ICONS[key]
+}
+
+export function transportIconForItem(
+  item: Pick<UserDayItem, "route" | "sourceRouteHint" | "name" | "detail">,
+): { Icon: LucideIcon; label: string; mode: TransportModeVisualKey } {
+  const mode = resolveTransportModeVisual({
+    routeMode: item.route?.mode,
+    hint: item.sourceRouteHint,
+    name: item.name,
+    detail: item.detail,
+  })
+  return { Icon: TRANSPORT_MODE_ICONS[mode], label: TRANSPORT_MODE_A11Y[mode], mode }
 }
 
 export const BASIC_LABELS: Record<BasicCategory, string> = {

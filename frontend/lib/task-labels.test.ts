@@ -11,7 +11,7 @@ import type { DerivedTripTask } from "./trip-tasks"
 function task(
   partial: Partial<DerivedTripTask> &
     Pick<DerivedTripTask, "origin" | "sourceKind" | "title">,
-): Pick<DerivedTripTask, "origin" | "sourceKind" | "title"> {
+): Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route"> {
   return partial
 }
 
@@ -23,6 +23,72 @@ assert.equal(
 assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "transport", title: "el coche" })),
   "Comprar el coche",
+)
+
+// T4B.3: verbos según route.mode.
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Barcelona → Granada",
+      route: {
+        from: { label: "Barcelona", coords: { lng: 2, lat: 41 }, kind: "city" },
+        to: { label: "Granada", coords: { lng: -3, lat: 37 }, kind: "city" },
+        mode: null,
+        leg: "outbound",
+      },
+    }),
+  ),
+  "Decidir cómo llegar a Granada",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Barcelona → Granada",
+      route: {
+        from: { label: "Barcelona", coords: { lng: 2, lat: 41 }, kind: "city" },
+        to: { label: "Granada", coords: { lng: -3, lat: 37 }, kind: "city" },
+        mode: "flight",
+        leg: "outbound",
+      },
+    }),
+  ),
+  "Comprar los vuelos a Granada",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Granada → Barcelona",
+      route: {
+        from: { label: "Granada", coords: { lng: -3, lat: 37 }, kind: "city" },
+        to: { label: "Barcelona", coords: { lng: 2, lat: 41 }, kind: "city" },
+        mode: "train",
+        leg: "return",
+      },
+    }),
+  ),
+  "Reservar el tren a Barcelona",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Barcelona → Granada",
+      route: {
+        from: { label: "Barcelona", coords: { lng: 2, lat: 41 }, kind: "city" },
+        to: { label: "Granada", coords: { lng: -3, lat: 37 }, kind: "city" },
+        mode: "car",
+        leg: "outbound",
+      },
+    }),
+  ),
+  "Preparar el trayecto en coche a Granada",
 )
 assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "activity", title: "trekking" })),

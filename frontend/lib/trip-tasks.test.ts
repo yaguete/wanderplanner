@@ -597,4 +597,100 @@ assert.equal(cancellableApplies("basic"), false)
   )
 }
 
+// ── T4B.3: ida/vuelta — claves semánticas y costes independientes ────────────
+
+{
+  const outbound = dayItem({
+    id: "leg-out",
+    type: "transport",
+    name: "Barcelona → Granada",
+    route: {
+      from: { label: "Barcelona", coords: { lng: 2.17, lat: 41.38 }, kind: "city" },
+      to: { label: "Granada", coords: { lng: -3.6, lat: 37.17 }, kind: "city" },
+      mode: null,
+      leg: "outbound",
+    },
+  })
+  const ret = dayItem({
+    id: "leg-ret",
+    type: "transport",
+    name: "Granada → Barcelona",
+    route: {
+      from: { label: "Granada", coords: { lng: -3.6, lat: 37.17 }, kind: "city" },
+      to: { label: "Barcelona", coords: { lng: 2.17, lat: 41.38 }, kind: "city" },
+      mode: null,
+      leg: "return",
+    },
+  })
+
+  const outKey = taskKeyForItem(outbound)
+  const retKey = taskKeyForItem(ret)
+  assert.equal(outKey, "leg:outbound")
+  assert.equal(retKey, "leg:return")
+  assert.notEqual(outKey, retKey)
+
+  // Un ítem manual llamado «leg:outbound» NO colisiona (usa prefijo ItemType).
+  assert.notEqual(
+    taskKeyForItem({ type: "transport", name: "leg:outbound" }),
+    "leg:outbound",
+  )
+  assert.equal(
+    taskKeyForItem({ type: "transport", name: "leg:outbound" }),
+    "transport:leg:outbound",
+  )
+
+  const trip = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [outbound] },
+      { id: "day-2", label: "", items: [] },
+      { id: "day-3", label: "", items: [ret] },
+    ],
+    basics: [],
+    tasks: {
+      [outKey]: {
+        status: "booked",
+        cost: 120,
+        cancellable: true,
+        notes: null,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+      [retKey]: {
+        status: "pending",
+        cost: 95,
+        cancellable: true,
+        notes: null,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    },
+  })
+  const tasks = buildTripTasks(trip)
+  const transportTasks = tasks.filter((t) => t.category === "transport")
+  assert.equal(transportTasks.length, 2)
+  assert.equal(computeTripTaskTotals(tasks).totalCost, 215)
+
+  // Editar extremos/medio NO cambia la clave → coste intacto.
+  const renamed = {
+    ...outbound,
+    name: "Girona → Granada",
+    route: {
+      ...outbound.route!,
+      from: { label: "Girona", coords: { lng: 2.8, lat: 41.98 }, kind: "city" as const },
+      mode: "train" as const,
+    },
+  }
+  assert.equal(taskKeyForItem(renamed), outKey)
+
+  // Borrar ida poda su coste.
+  const withoutOut: Trip = {
+    ...trip,
+    days: trip.days.map((d) => ({
+      ...d,
+      items: d.items.filter((i) => i.id !== "leg-out"),
+    })),
+  }
+  const pruned = pruneTaskStates(withoutOut)
+  assert.equal(pruned[outKey], undefined)
+  assert.deepEqual(pruned[retKey]?.cost, 95)
+}
+
 console.log("trip-tasks: ok")

@@ -13,7 +13,9 @@
     "test:task-labels": "tsx lib/task-labels.test.ts",
     "test:day-summary": "tsx lib/day-summary.test.ts",
     "test:assistant-context": "tsx lib/assistant-context.test.ts",
-    "test:trip-origin": "tsx lib/trip-origin-resolve.test.ts"
+    "test:trip-origin": "tsx lib/trip-origin-resolve.test.ts",
+    "test:route-legs": "tsx lib/route-legs.test.ts",
+    "test:transport-routes": "tsx lib/transport-routes.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

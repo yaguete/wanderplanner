@@ -72,6 +72,7 @@ from partners import (  # noqa: E402
 )
 from photo_lookup import single_flight  # noqa: E402
 from place_thumbs import router as thumbs_router  # noqa: E402
+from place_search import router as place_search_router  # noqa: E402
 from usage import enforce_usage, record_event  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ app.include_router(thumbs_router)
 app.include_router(covers_router)
 app.include_router(day_summary_router)
 app.include_router(country_tasks_router)
+app.include_router(place_search_router)
 
 
 # Salida: itinerarios largos (p. ej. muchas franjas/ítems) superan 8K tokens de JSON; Haiku 4.5 admite ~64K.

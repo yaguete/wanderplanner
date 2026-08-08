@@ -1,11 +1,13 @@
 /**
  * Copy y formato de la vista Tareas. Los verbos salen de `sourceKind`
  * (ItemType / BasicCategory / categoría del extra); no duplican reglas de bucket.
+ * Tramos de ida/vuelta (T4B.3): el verbo depende de `route.mode`.
  */
 import type { DerivedTripTask } from "@/lib/trip-tasks"
 import type {
   BasicCategory,
   ItemType,
+  RouteMode,
   TripTaskCategory,
   TripTaskStatus,
 } from "@/types/itinerary"
@@ -76,9 +78,49 @@ function isBasicCategory(kind: string): kind is BasicCategory {
   )
 }
 
+function destinationFromTitle(title: string): string {
+  const parts = title.split(/\s*→\s*/)
+  if (parts.length >= 2) {
+    const dest = parts[parts.length - 1]!.trim()
+    if (dest) return dest
+  }
+  return title
+}
+
+function legActionTitle(
+  mode: RouteMode | null | undefined,
+  title: string,
+  routeToLabel?: string | null,
+): string {
+  const dest = routeToLabel?.trim() || destinationFromTitle(title)
+  switch (mode) {
+    case "flight":
+      return `Comprar los vuelos a ${dest}`
+    case "train":
+      return `Reservar el tren a ${dest}`
+    case "bus":
+      return `Reservar el autobús a ${dest}`
+    case "ferry":
+      return `Reservar el ferry a ${dest}`
+    case "car":
+      return `Preparar el trayecto en coche a ${dest}`
+    case "other":
+      return `Organizar el trayecto a ${dest}`
+    default:
+      return `Decidir cómo llegar a ${dest}`
+  }
+}
+
 /** Título de fila como acción («Reservar Full Moon Budapest»). Extras: texto del usuario. */
-export function taskActionTitle(task: Pick<DerivedTripTask, "origin" | "sourceKind" | "title">): string {
+export function taskActionTitle(
+  task: Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route">,
+): string {
   if (task.origin === "extra") return task.title
+
+  // Transporte con ruta estructurada (leg o interno): verbo según medio.
+  if (task.origin === "dayItem" && task.route?.from && task.route.to) {
+    return legActionTitle(task.route.mode, task.title, task.route.to.label)
+  }
 
   const kind = task.sourceKind
   if (isItemType(kind)) {

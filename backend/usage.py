@@ -38,6 +38,8 @@ Kind = Literal[
     "day_summary",
     "partner_prewarm",
     "country_tasks",
+    "place_suggest",
+    "transport_hub",
 ]
 _USERLESS_KINDS = frozenset({"system_revalidation", "partner_prewarm"})
 LimitKind = Literal["guest", "daily", "monthly"]
@@ -48,6 +50,8 @@ _GUEST_DEFAULTS: dict[str, int] = {
     "photo_lookup": 30,
     "day_summary": 5,
     "country_tasks": 5,
+    "place_suggest": 40,
+    "transport_hub": 20,
 }
 _GUEST_ENV: dict[str, str] = {
     "extraction": "GUEST_MAX_EXTRACTIONS",
@@ -55,6 +59,8 @@ _GUEST_ENV: dict[str, str] = {
     "photo_lookup": "GUEST_MAX_PHOTO_LOOKUPS",
     "day_summary": "GUEST_MAX_DAY_SUMMARIES",
     "country_tasks": "GUEST_MAX_COUNTRY_TASKS",
+    "place_suggest": "GUEST_MAX_PLACE_SUGGESTS",
+    "transport_hub": "GUEST_MAX_TRANSPORT_HUBS",
 }
 
 _MESSAGES: dict[tuple[str, LimitKind], str] = {
@@ -96,6 +102,18 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("country_tasks", "daily"): (
         "Has alcanzado el límite diario de consultas de trámites. Vuelve mañana."
+    ),
+    ("place_suggest", "guest"): (
+        "Has agotado las búsquedas de lugares de invitado. Crea una cuenta para continuar."
+    ),
+    ("place_suggest", "daily"): (
+        "Has alcanzado el límite diario de búsquedas de lugares. Vuelve mañana."
+    ),
+    ("transport_hub", "guest"): (
+        "Has agotado las búsquedas de aeropuertos/estaciones de invitado."
+    ),
+    ("transport_hub", "daily"): (
+        "Has alcanzado el límite diario de búsquedas de aeropuertos/estaciones."
     ),
 }
 
@@ -327,6 +345,18 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "refresh":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_REFRESHES_DAY", 20):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "place_suggest":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_PLACE_SUGGESTS_DAY", 200):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "transport_hub":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_TRANSPORT_HUBS_DAY", 80):
             _raise_limit(user, kind, "daily")
         return
 

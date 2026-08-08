@@ -20,6 +20,7 @@ import type {
   UserDay,
 } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
+import { sanitizeUserDays } from "@/lib/route-legs"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
 
@@ -69,9 +70,9 @@ export function parseTripOrigin(raw: unknown): TripOrigin | null {
   return { label, countryCode, coords: { lng, lat } }
 }
 
-/** Postgres rechaza \\u0000 en text/jsonb (error 22P05). */
+/** Postgres rechaza \\u0000 en text/jsonb (error 22P05). También limpia `route` corrupto. */
 function sanitizeDaysForDb(days: UserDay[]): UserDay[] {
-  return days.map((d) => {
+  return sanitizeUserDays(days).map((d) => {
     const label = d.label != null ? stripNullChars(d.label) : d.label
     const summarySignature =
       d.summarySignature != null ? stripNullChars(d.summarySignature) : d.summarySignature

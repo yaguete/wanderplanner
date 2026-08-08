@@ -4,6 +4,7 @@
  * No cambies `dayHint` sin entender `source_structured_by_days` y el panel de inspiración.
  */
 import type { BasicCategory, Itinerary, Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
+import { sourceRouteHintFromTransport } from "@/lib/transport-routes"
 
 let _counter = 0
 function uid(): string {
@@ -66,6 +67,7 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
         dayHint,
         region: t.region ?? null,
         thumbUrl: t.thumb_url ?? null,
+        sourceRouteHint: sourceRouteHintFromTransport(t),
       })
     }
 

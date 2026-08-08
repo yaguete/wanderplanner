@@ -215,6 +215,16 @@ export interface Source {
   ogImage: string | null
 }
 
+/**
+ * Pista estructurada de un transporte extraído de una fuente (T4B.3 §9.7).
+ * Texto + medio; sin coordenadas (no se geocodifica al cargar).
+ */
+export interface SourceRouteHint {
+  from: string | null
+  to: string | null
+  mode: RouteMode | null
+}
+
 export interface SourceItem {
   id: string
   type: ItemType
@@ -234,6 +244,8 @@ export interface SourceItem {
    * Miniatura (p. ej. Unsplash inyectada en el servidor o resuelta en el cliente con `buildThumbQuery`).
    */
   thumbUrl?: string | null
+  /** Transporte: from/to/mode de la extracción, antes de que el usuario confirme `route`. */
+  sourceRouteHint?: SourceRouteHint
 }
 
 export interface UserDay {
@@ -246,6 +258,42 @@ export interface UserDay {
    * (`dayItemsSignature`). Si coincide con la firma actual, el botón queda apagado.
    */
   summarySignature?: string | null
+}
+
+/**
+ * Tipo de lugar de un extremo de tramo (T4B.3).
+ * `airport` / `station` / `busStation` solo aparecen tras refinamiento por modo.
+ */
+export type RoutePlaceKind =
+  | "airport"
+  | "station"
+  | "busStation"
+  | "city"
+  | "address"
+  | "other"
+
+/** Extremo resuelto de un tramo de ida/vuelta. Coordenadas siempre objeto `{lng,lat}`. */
+export interface RoutePlace {
+  label: string
+  coords: { lng: number; lat: number }
+  kind: RoutePlaceKind
+}
+
+/** Medio elegido para el tramo; null/ausente = «aún no lo sé». */
+export type RouteMode = "car" | "train" | "bus" | "flight" | "ferry" | "other"
+
+/** Dirección del tramo respecto al viaje. */
+export type RouteLeg = "outbound" | "return"
+
+/**
+ * Cadena de un tramo de ida/vuelta (T4B.3). Vive en el ítem, no en el Trip.
+ * `mode` nullable a propósito: el tramo existe antes de decidir el medio.
+ */
+export interface TransportRoute {
+  from: RoutePlace
+  to: RoutePlace
+  mode?: RouteMode | null
+  leg?: RouteLeg
 }
 
 export interface UserDayItem {
@@ -261,10 +309,23 @@ export interface UserDayItem {
   /**
    * Coordenadas resueltas (p. ej. al elegir un candidato Mapbox en ítems manuales).
    * Objeto `{ lng, lat }` — no tupla — para el jsonb y el contrato de `LngLat`.
+   * En tramos con `route` (T4B.3): apunta a `route.to.coords` (destino del tramo;
+   * en la vuelta es la casa). El mapa (T4B.6) usará `route.from`/`route.to` directamente.
    */
   coords?: { lng: number; lat: number } | null
   affiliateUrl?: string | null
   vendor?: string | null
+  /**
+   * Tramo de ida/vuelta o traslado interno estructurado (T4B.3).
+   * Con `leg` = ida/vuelta del viaje; sin `leg` = desplazamiento interno.
+   * `from`/`to` son la fuente de verdad; `name` se deriva como «A → B».
+   */
+  route?: TransportRoute
+  /**
+   * Pista de la fuente al consolidar un transporte (T4B.3 §9.7).
+   * La UI/tareas usan `route` cuando existe; el hint solo precarga el formulario.
+   */
+  sourceRouteHint?: SourceRouteHint
 }
 
 export interface SourceBasicItem {

@@ -1,7 +1,19 @@
 /**
  * Mapbox: geocoding (nombres → coordenadas) y Directions (ruta por carretera).
  * Requiere `NEXT_PUBLIC_MAPBOX_TOKEN` (token público pk.…).
+ * Search Box `/category` (T4B.3) para hubs de transporte por proximidad.
+ *
+ * Licencia (T4B.3 §9.11):
+ * - Ciudades/direcciones persistidas: activar geocoding permanente con
+ *   `NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING=true` (producto Mapbox aparte).
+ * - Resultados de Search Box son efímeros salvo contrato explícito; ver
+ *   `place-search-guardrails.ts` (`ALLOW_TRANSPORT_HUB_PERSISTENCE`).
+ * - Kill switch: `NEXT_PUBLIC_TRANSPORT_PLACE_SEARCH_ENABLED=false`.
+ * - Proxy backend preferido: `GET /places/suggest` y `GET /transport-hubs`
+ *   (`TRANSPORT_PLACE_SEARCH_ENABLED` en el servidor).
  */
+import type { RoutePlaceKind } from "@/types/itinerary"
+import { isPlaceSearchEnabled } from "@/lib/place-search-guardrails"
 
 const CACHE_VERSION = 3
 const CACHE_PREFIX = "wp-mapbox-geo-v3"
@@ -200,6 +212,8 @@ export type GeocodeSuggestion = {
 
 /**
  * Autocompletado: varios candidatos (`autocomplete=true`). No usa la caché de un solo punto.
+ * Con `permanent: true` (default) pide geocodificación permanente — necesaria si el
+ * usuario puede persistir el candidato en `route` / `trip.origin`.
  */
 export async function suggestPlaces(
   text: string,
@@ -208,8 +222,11 @@ export async function suggestPlaces(
     countryCodes?: string[] | null
     limit?: number
     signal?: AbortSignal
+    /** Default true: coordenadas aptas para persistir (Mapbox permanent). */
+    permanent?: boolean
   },
 ): Promise<GeocodeSuggestion[]> {
+  if (!isPlaceSearchEnabled()) return []
   if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return []
   const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
   const params = new URLSearchParams({
@@ -218,6 +235,13 @@ export async function suggestPlaces(
     autocomplete: "true",
     language: "es",
   })
+  if (
+    options?.permanent !== false &&
+    (process.env.NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING ?? "").trim().toLowerCase() ===
+      "true"
+  ) {
+    params.set("permanent", "true")
+  }
   const proximity = options?.proximity ?? null
   if (proximity) {
     params.set("proximity", `${proximity[0]},${proximity[1]}`)
@@ -429,3 +453,183 @@ export async function getDirections(
   const geometry = mergeLineStrings(geometries)
   return { geometry, distanceMeters: distanceM }
 }
+
+// ── Search Box: hubs de transporte (T4B.3) ───────────────────────────────────
+// Geocoding v5 no sirve para «aeropuerto más cercano a estas coords».
+// Search Box `/category` sí: facturable por petición sobre el token público
+// (anotar en vigilancia T1.3). Categorías canónicas del SDK/list/category.
+
+/** Radio máximo por tipo de hub (km). Conservador: un pueblo sin hub cercano no inventa. */
+export const HUB_MAX_DISTANCE_KM: Record<"airport" | "station" | "busStation", number> = {
+  airport: 200,
+  station: 80,
+  busStation: 50,
+}
+
+/**
+ * Categorías Search Box. Varias IDs mejoran cobertura (p. ej. metro en Japón).
+ * @see https://docs.mapbox.com/api/search/search-box/#category-search
+ */
+const SEARCH_BOX_CATEGORY: Record<"airport" | "station" | "busStation", string> = {
+  airport: "airport",
+  station: "railway_station,metro_station,light_rail_station",
+  busStation: "bus_station,bus_stop",
+}
+
+/** ~1° lat ≈ 111 km; lng se ajusta por cos(lat). */
+export function hubSearchBbox(
+  center: LngLat,
+  radiusKm: number,
+): [number, number, number, number] {
+  const latDelta = radiusKm / 111
+  const cos = Math.cos((center.lat * Math.PI) / 180)
+  const lngDelta = radiusKm / (111 * Math.max(0.2, Math.abs(cos)))
+  return [
+    center.lng - lngDelta,
+    center.lat - latDelta,
+    center.lng + lngDelta,
+    center.lat + latDelta,
+  ]
+}
+
+export type TransportHubSuggestion = {
+  id: string
+  label: string
+  placeName: string
+  center: LngLat
+  kind: Extract<RoutePlaceKind, "airport" | "station" | "busStation">
+  distanceKm: number
+}
+
+/** Distancia Haversine en km. Exportada para tests. */
+export function haversineKm(a: LngLat, b: LngLat): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 6371
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const lat1 = toRad(a.lat)
+  const lat2 = toRad(b.lat)
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+type SearchBoxFeature = {
+  type?: string
+  geometry?: { type?: string; coordinates?: [number, number] }
+  properties?: {
+    mapbox_id?: string
+    name?: string
+    name_preferred?: string
+    full_address?: string
+    place_formatted?: string
+    feature_type?: string
+    poi_category?: string[]
+    poi_category_ids?: string[]
+    coordinates?: { longitude?: number; latitude?: number }
+  }
+}
+
+const hubSessionCache = new Map<string, TransportHubSuggestion[]>()
+
+function hubCacheKey(
+  kind: "airport" | "station" | "busStation",
+  proximity: LngLat,
+): string {
+  return `${kind}|${proximity.lng.toFixed(3)},${proximity.lat.toFixed(3)}`
+}
+
+/** Invalida la caché de hubs de la pestaña (p. ej. «Buscar de nuevo»). */
+export function clearTransportHubCache(
+  kind?: "airport" | "station" | "busStation",
+  proximity?: LngLat,
+): void {
+  if (kind && proximity) {
+    hubSessionCache.delete(hubCacheKey(kind, proximity))
+    return
+  }
+  hubSessionCache.clear()
+}
+
+/**
+ * Aeropuertos / estaciones cercanos vía Search Box `/category`.
+ * Usa `proximity` + `bbox` (el bias solo no basta en Asia: Mapbox puede devolver
+ * hubs lejanos que luego el filtro Haversine descarta → lista vacía).
+ * No cachea resultados vacíos (evita quedar atrapado tras un fallo puntual).
+ */
+export async function searchTransportHubs(
+  kind: "airport" | "station" | "busStation",
+  proximity: LngLat,
+  options?: { limit?: number; signal?: AbortSignal; countryCodes?: string[] | null },
+): Promise<TransportHubSuggestion[]> {
+  if (!isPlaceSearchEnabled()) return []
+  if (!MAPBOX_TOKEN?.trim()) return []
+  if (!Number.isFinite(proximity.lng) || !Number.isFinite(proximity.lat)) return []
+
+  const cacheKey = hubCacheKey(kind, proximity)
+  const cached = hubSessionCache.get(cacheKey)
+  if (cached && cached.length > 0) return cached
+
+  const limit = Math.min(Math.max(options?.limit ?? 10, 1), 10)
+  const category = SEARCH_BOX_CATEGORY[kind]
+  const maxKm = HUB_MAX_DISTANCE_KM[kind]
+  const bbox = hubSearchBbox(proximity, maxKm)
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    language: "es",
+    limit: String(limit),
+    proximity: `${proximity.lng},${proximity.lat}`,
+    bbox: bbox.map((n) => n.toFixed(5)).join(","),
+  })
+  // No filtrar por trip.countries: origen/traslado fronterizo pueden quedar fuera.
+  // countryCodes queda disponible por si un caller lo necesita explícitamente.
+  appendCountryParams(params, options?.countryCodes)
+
+  // Mantener comas en multi-categoría (encodeURIComponent las convierte en %2C y Mapbox falla).
+  const url = `https://api.mapbox.com/search/searchbox/v1/category/${encodeURIComponent(category).replace(/%2C/gi, ",")}?${params}`
+  try {
+    const res = await fetch(url, { signal: options?.signal })
+    if (!res.ok) return []
+    const data = (await res.json()) as { features?: SearchBoxFeature[] }
+    const out: TransportHubSuggestion[] = []
+
+    for (const f of data.features ?? []) {
+      const props = f.properties
+      const coords =
+        props?.coordinates?.longitude != null && props?.coordinates?.latitude != null
+          ? { lng: props.coordinates.longitude, lat: props.coordinates.latitude }
+          : f.geometry?.coordinates && f.geometry.coordinates.length >= 2
+            ? { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }
+            : null
+      if (!coords) continue
+      const distanceKm = haversineKm(proximity, coords)
+      if (distanceKm > maxKm) continue
+      const label =
+        props?.name_preferred?.trim() ||
+        props?.name?.trim() ||
+        ""
+      if (!label) continue
+      const placeName =
+        props?.full_address?.trim() ||
+        [label, props?.place_formatted?.trim()].filter(Boolean).join(", ") ||
+        label
+      out.push({
+        id: props?.mapbox_id ?? `${kind}-${coords.lng}-${coords.lat}`,
+        label,
+        placeName,
+        center: coords,
+        kind,
+        distanceKm,
+      })
+    }
+
+    out.sort((a, b) => a.distanceKm - b.distanceKm)
+    if (out.length > 0) hubSessionCache.set(cacheKey, out)
+    return out
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err
+    return []
+  }
+}
+

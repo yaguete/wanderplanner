@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
-import { Bus, Car, Plane, Ship, Train } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   buildBasicThumbQuery,
@@ -12,6 +11,11 @@ import {
 } from "@/lib/item-image"
 import { resolveThumbUrlOrNull } from "@/lib/thumbs"
 import { resolveVendorLogo } from "@/lib/vendor-logo"
+import {
+  resolveTransportModeVisual,
+  TRANSPORT_MODE_A11Y,
+  TRANSPORT_MODE_ICONS,
+} from "@/lib/item-styles"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
 
 type ItineraryItemProps = {
@@ -81,15 +85,6 @@ export function InspirationThumbnail({ className, ...props }: InspirationThumbna
   )
 }
 
-function transportIconForText(label: string) {
-  const t = label.toLowerCase()
-  if (/(vuelo|av[ií]on|flight|air|aeropuerto)/i.test(t)) return Plane
-  if (/(tren|train|rail)/i.test(t)) return Train
-  if (/(bus|autob[uú]s|coach|minivan|shuttle)/i.test(t)) return Bus
-  if (/(ferry|barco|boat)/i.test(t)) return Ship
-  return Car
-}
-
 function ItineraryItemInner({
   item,
   area,
@@ -100,9 +95,18 @@ function ItineraryItemInner({
   mode: "default" | "vendorLogo" | "transportIcon"
 }) {
   if (mode === "transportIcon") {
-    const Icon = transportIconForText(`${item.name} ${item.detail ?? ""}`)
+    const visual = resolveTransportModeVisual({
+      hint: item.sourceRouteHint,
+      name: item.name,
+      detail: item.detail,
+      preferHint: true,
+    })
+    const Icon = TRANSPORT_MODE_ICONS[visual]
     return (
-      <div className="flex h-full w-full items-center justify-center bg-muted" aria-label="Transporte">
+      <div
+        className="flex h-full w-full items-center justify-center bg-muted"
+        aria-label={TRANSPORT_MODE_A11Y[visual]}
+      >
         <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
       </div>
     )

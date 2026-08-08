@@ -48,6 +48,8 @@ export type AddManualItemDialogProps = {
   /** Texto libre del destino del viaje para proximity / bias. */
   destinationHint?: string | null
   onSubmit: (item: UserDayItem, dayId: string) => void
+  /** Transporte delega al diálogo de ruta estructurada (T4B.3 §9.6). */
+  onRequestTransport?: (dayId: string) => void
 }
 
 export function AddManualItemDialog({
@@ -58,6 +60,7 @@ export function AddManualItemDialog({
   countryCodes = [],
   destinationHint = null,
   onSubmit,
+  onRequestTransport,
 }: AddManualItemDialogProps) {
   const id = useId()
   const [type, setType] = useState<ItemType>("activity")
@@ -220,7 +223,21 @@ export function AddManualItemDialog({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => setType(t)}
+                    onClick={() => {
+                      if (t === "transport" && onRequestTransport) {
+                        const targetDay =
+                          dayId ||
+                          (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
+                          days[0]?.id ||
+                          ""
+                        if (targetDay) {
+                          onRequestTransport(targetDay)
+                          onOpenChange(false)
+                          return
+                        }
+                      }
+                      setType(t)
+                    }}
                     className={cn(
                       "inline-flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center transition-colors",
                       selected

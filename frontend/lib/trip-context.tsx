@@ -27,6 +27,8 @@ import type {
   TripTaskState,
   TripTaskCategory,
   ExtraTask,
+  RouteLeg,
+  TransportRoute,
 } from "@/types/itinerary"
 import { fetchItinerary, type ItineraryProgressStage } from "@/lib/api"
 import { buildSource } from "@/lib/itinerary-utils"
@@ -36,16 +38,28 @@ import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { draftTripNameFor, MAX_AUTO_DAYS } from "@/lib/partner-trip"
-import { createExtraTaskState, mergeTaskState, withPrunedTasks } from "@/lib/trip-tasks"
+import { createExtraTaskState, mergeTaskState, taskKeyForItem, withPrunedTasks } from "@/lib/trip-tasks"
 import { countryCodeFromTaskId, isCountryTaskId } from "@/lib/country-tasks"
+import {
+  buildRouteLegItem,
+  dayHasNonLegContent,
+  reanchorRouteLegs,
+  rescueLegsFromRemovedDays,
+  upsertLegInDays,
+} from "@/lib/route-legs"
+import {
+  buildTransportRouteItem,
+  migrateTaskKeyOnStructure,
+} from "@/lib/transport-routes"
 
-/** Alinea numDays y endDate con days.length (+ startDate inclusive). */
+/** Alinea numDays y endDate con days.length (+ startDate inclusive). Reancla legs. */
 function syncTripSchedule(trip: Trip, days: UserDay[]): Trip {
-  const numDays = days.length
+  const anchored = reanchorRouteLegs(days)
+  const numDays = anchored.length
   const endDate = trip.startDate
     ? endDateFromStartAndNumDays(trip.startDate, numDays)
     : null
-  return { ...trip, days, numDays, endDate }
+  return { ...trip, days: anchored, numDays, endDate }
 }
 
 function makeEmptyDays(count: number): UserDay[] {
@@ -69,11 +83,13 @@ function canRenameFromGuide(trip: Trip): boolean {
 /**
  * Solo viajes de partner que siguen tal cual los dejó `insertDraftTrip` SIN `&days=N`: nunca pisar
  * al usuario ni redimensionar dos veces un viaje que ya llegó con N días de `&days=N`.
+ * Los tramos de ida/vuelta (T4B.3) NO cuentan como contenido: el usuario puede rellenarlos
+ * antes de que llegue la fuente y aun así debe adoptar totalDays + startDate.
  */
 function canAdoptGuideSchedule(trip: Trip): boolean {
   if (!trip.referrer || trip.sourceIds.length > 0 || trip.startDate) return false
   if (trip.days.length > 1) return false
-  return trip.days.every((d) => d.items.length === 0 && !d.label.trim())
+  return trip.days.every((d) => !dayHasNonLegContent(d))
 }
 
 interface TripContextValue {
@@ -185,6 +201,35 @@ interface TripContextValue {
   setNumTravelers: (tripId: string, numTravelers: number | null) => void
   /** Divisa del viaje (ISO 4217). Vacío → EUR. */
   setTripCurrency: (tripId: string, currency: string) => void
+  /**
+   * Crea o edita el tramo de ida/vuelta (T4B.3) en una sola mutación.
+   * Si `origin` viene y el viaje aún no tiene, lo guarda en el mismo setTrips.
+   */
+  upsertRouteLeg: (
+    tripId: string,
+    data: {
+      leg: RouteLeg
+      route: Omit<TransportRoute, "leg"> & { from: TransportRoute["from"]; to: TransportRoute["to"] }
+      detail?: string | null
+      vendor?: string | null
+      /** Solo se aplica si el viaje aún no tiene origen. */
+      origin?: TripOrigin | null
+    },
+  ) => { ok: true } | { ok: false; error: string }
+  /**
+   * Crea o edita un traslado interno estructurado (sin `leg`).
+   * Migra la clave de tarea legacy → `route:${id}` en el mismo setTrips.
+   */
+  upsertTransportRouteItem: (
+    tripId: string,
+    data: {
+      dayId: string
+      itemId?: string
+      route: Omit<TransportRoute, "leg"> & { from: TransportRoute["from"]; to: TransportRoute["to"] }
+      detail?: string | null
+      vendor?: string | null
+    },
+  ) => { ok: true } | { ok: false; error: string }
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -723,8 +768,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setTrips((prev) =>
       prev.map((t) => {
         if (t.id !== tripId) return t
-        const days = t.days.filter((d) => d.id !== dayId)
-        if (days.length === 0) return t
+        const filtered = t.days.filter((d) => d.id !== dayId)
+        if (filtered.length === 0) return t
+        const days = rescueLegsFromRemovedDays(t.days, filtered)
         return withPrunedTasks(syncTripSchedule(t, days))
       }),
     )
@@ -740,11 +786,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           .map((d, i) => ({ d, i }))
           .filter(({ d }) => toRemove.has(d.id))
           .sort((a, b) => b.i - a.i)
-        let days = [...t.days]
+        let filtered = [...t.days]
         for (const { d } of marked) {
-          if (days.length <= 1) break
-          days = days.filter((x) => x.id !== d.id)
+          if (filtered.length <= 1) break
+          filtered = filtered.filter((x) => x.id !== d.id)
         }
+        const days = rescueLegsFromRemovedDays(t.days, filtered)
         return withPrunedTasks(syncTripSchedule(t, days))
       }),
     )
@@ -873,6 +920,145 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       ),
     )
   }, [])
+
+  const upsertRouteLeg = useCallback(
+    (
+      tripId: string,
+      data: {
+        leg: RouteLeg
+        route: Omit<TransportRoute, "leg"> & {
+          from: TransportRoute["from"]
+          to: TransportRoute["to"]
+        }
+        detail?: string | null
+        vendor?: string | null
+        origin?: TripOrigin | null
+      },
+    ): { ok: true } | { ok: false; error: string } => {
+      const trip = tripsRef.current.find((t) => t.id === tripId)
+      if (!trip) return { ok: false, error: "Viaje no encontrado." }
+      if (trip.days.length === 0) return { ok: false, error: "El viaje no tiene días." }
+
+      const existing = trip.days
+        .flatMap((d) => d.items)
+        .find((i) => i.type === "transport" && i.route?.leg === data.leg)
+
+      const route: TransportRoute = {
+        from: data.route.from,
+        to: data.route.to,
+        mode: data.route.mode ?? null,
+        leg: data.leg,
+      }
+
+      const item = buildRouteLegItem({
+        route: { ...route, leg: data.leg },
+        detail: data.detail,
+        vendor: data.vendor,
+        existingId: existing?.id,
+        existingSourceItemId: existing?.sourceItemId,
+      })
+
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          const nextOrigin =
+            t.origin == null && data.origin != null ? data.origin : t.origin
+          const days = upsertLegInDays(t.days, item)
+          return syncTripSchedule({ ...t, origin: nextOrigin }, days)
+        }),
+      )
+      return { ok: true }
+    },
+    [],
+  )
+
+  const upsertTransportRouteItem = useCallback(
+    (
+      tripId: string,
+      data: {
+        dayId: string
+        itemId?: string
+        route: Omit<TransportRoute, "leg"> & {
+          from: TransportRoute["from"]
+          to: TransportRoute["to"]
+        }
+        detail?: string | null
+        vendor?: string | null
+      },
+    ): { ok: true } | { ok: false; error: string } => {
+      const trip = tripsRef.current.find((t) => t.id === tripId)
+      if (!trip) return { ok: false, error: "Viaje no encontrado." }
+      if (!trip.days.some((d) => d.id === data.dayId)) {
+        return { ok: false, error: "Día no encontrado." }
+      }
+
+      let existing: UserDayItem | null = null
+      let oldDayId: string | null = null
+      let oldIndex = -1
+      if (data.itemId) {
+        for (const day of trip.days) {
+          const idx = day.items.findIndex((i) => i.id === data.itemId)
+          if (idx >= 0) {
+            existing = day.items[idx]!
+            oldDayId = day.id
+            oldIndex = idx
+            break
+          }
+        }
+        if (!existing) return { ok: false, error: "Ítem no encontrado." }
+        if (existing.type !== "transport") {
+          return { ok: false, error: "Solo se pueden estructurar transportes." }
+        }
+        if (existing.route?.leg) {
+          return { ok: false, error: "Los tramos de ida/vuelta se editan aparte." }
+        }
+      }
+
+      const oldKey = existing ? taskKeyForItem(existing) : null
+      const item = buildTransportRouteItem({
+        route: {
+          from: data.route.from,
+          to: data.route.to,
+          mode: data.route.mode ?? null,
+        },
+        detail: data.detail,
+        vendor: data.vendor,
+        existing,
+      })
+      const newKey = taskKeyForItem(item)
+
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+
+          const days = t.days.map((d) => {
+            let items = d.items
+            if (existing && d.id === oldDayId) {
+              items = items.filter((i) => i.id !== existing!.id)
+            }
+            if (d.id === data.dayId) {
+              if (existing && oldDayId === data.dayId && oldIndex >= 0) {
+                const next = [...items]
+                const insertAt = Math.min(oldIndex, next.length)
+                next.splice(insertAt, 0, item)
+                return { ...d, items: next }
+              }
+              return { ...d, items: [...items, item] }
+            }
+            return items === d.items ? d : { ...d, items }
+          })
+
+          let tasks = t.tasks
+          if (oldKey && oldKey !== newKey) {
+            tasks = migrateTaskKeyOnStructure({ tasks, oldKey, newKey })
+          }
+          return withPrunedTasks(syncTripSchedule({ ...t, tasks }, days))
+        }),
+      )
+      return { ok: true }
+    },
+    [],
+  )
 
   const setTaskState = useCallback(
     (tripId: string, taskKey: string, patch: Partial<TripTaskState>) => {
@@ -1077,8 +1263,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       reevaluateCountryTasks,
       setNumTravelers,
       setTripCurrency,
+      upsertRouteLeg,
+      upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

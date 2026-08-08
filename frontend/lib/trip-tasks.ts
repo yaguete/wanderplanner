@@ -11,6 +11,7 @@ import type {
   BasicCategory,
   ExtraTask,
   ItemType,
+  TransportRoute,
   Trip,
   TripTaskCategory,
   TripTaskState,
@@ -45,6 +46,8 @@ export type DerivedTripTask = {
   nights?: number
   sourceId?: string
   affiliateUrl?: string | null
+  /** Tramo de ida/vuelta (T4B.3); ausente en el resto. */
+  route?: TransportRoute
 }
 
 export type TripTaskTotals = {
@@ -80,8 +83,32 @@ export function normalizeName(name: string): string {
  * Única forma de construir la clave de un ítem de día.
  * Prefijo `ItemType` evita colisionar un restaurante con una actividad homónima.
  * No incluye `sourceId`: el mismo hotel desde dos blogs es UNA reserva.
+ *
+ * Tramos de ida/vuelta (T4B.3): clave semántica `leg:outbound` / `leg:return`
+ * (SIN prefijo `transport:`). Motivo: (1) ida y vuelta mantienen coste/estado
+ * independientes aunque se editen extremos o medio; (2) el namespace `leg:` no
+ * puede colisionar con la ruta normal `ItemType:…` aunque el usuario nombre
+ * un ítem «leg:outbound».
+ *
+ * Traslados internos estructurados (sin `leg`): `route:${item.id}` — estable
+ * al editar extremos/medio/día; dos reservas iguales no mezclan coste.
  */
-export function taskKeyForItem(item: Pick<UserDayItem, "type" | "name">): string {
+export function taskKeyForItem(
+  item: Pick<UserDayItem, "type" | "name" | "route"> & { id?: string },
+): string {
+  const leg = item.route?.leg
+  if (item.type === "transport" && (leg === "outbound" || leg === "return")) {
+    return `leg:${leg}`
+  }
+  if (
+    item.type === "transport" &&
+    item.route?.from &&
+    item.route.to &&
+    !leg &&
+    item.id
+  ) {
+    return `route:${item.id}`
+  }
   return `${item.type}:${normalizeName(item.name)}`
 }
 
@@ -191,6 +218,7 @@ type DayItemGroup = {
   dayIndexSet: Set<number>
   sourceId?: string
   affiliateUrl: string | null
+  route?: TransportRoute
 }
 
 function aggregateDayItems(trip: Trip): DerivedTripTask[] {
@@ -212,9 +240,14 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
           dayIndexSet: new Set(),
           sourceId: item.sourceId,
           affiliateUrl: item.affiliateUrl ?? null,
+          route: item.route,
         }
         groups.set(key, group)
         order.push(key)
+      } else if (item.route) {
+        // Mantener el route más reciente (p. ej. tras editar extremos).
+        group.title = item.name
+        group.route = item.route
       }
       group.itemIds.push(item.id)
       if (!group.dayIndexSet.has(dayIndex)) {
@@ -245,6 +278,7 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
       nights: g.type === "stay" ? g.dayIndexes.length : undefined,
       sourceId: g.sourceId,
       affiliateUrl: g.affiliateUrl,
+      route: g.route,
     }
   })
 }
