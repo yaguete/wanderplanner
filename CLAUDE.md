@@ -2,7 +2,7 @@
 
 ## Qué es
 
-WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y fuentes de inspiración por URL (`Source`), persistidos en **Supabase** (Postgres + Auth + RLS) con modelo documento (`jsonb`). Un backend Python expone `POST /itinerary` (extrae un artículo con Claude → JSON estructurado, SSE con heartbeats, caché global por URL en `article_extractions`; **sin** resolver miniaturas), `GET /thumb` (Places + caché `place_thumbs`), `GET /cover` (Unsplash + caché `destination_covers`) y `POST /assistant/chat` (asistente con DeepSeek + tools, SSE); todos pueden verificar el JWT de Supabase. El front muestra esas fuentes, deja consolidar ítems en días, conserva afiliación (`affiliateUrl` / `affiliate_url`) y ofrece un asistente con varias conversaciones por viaje que conoce el perfil del viajero (tipo de viaje + blogs favoritos).
+WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y fuentes de inspiración por URL (`Source`), persistidos en **Supabase** (Postgres + Auth + RLS) con modelo documento (`jsonb`). Un backend Python expone `POST /itinerary` (extrae un artículo con Claude → JSON estructurado, SSE con heartbeats, caché global por URL en `article_extractions`; **sin** resolver miniaturas), `POST /partners/prewarm` (pre-síntesis pública para el kit de partners; Turnstile + límites; solo metadatos), `GET /thumb` (Places + caché `place_thumbs`), `GET /cover` (Unsplash + caché `destination_covers`) y `POST /assistant/chat` (asistente con DeepSeek + tools, SSE); todos salvo `/partners/prewarm` pueden verificar el JWT de Supabase. El front muestra esas fuentes, deja consolidar ítems en días, conserva afiliación (`affiliateUrl` / `affiliate_url`) y ofrece un asistente con varias conversaciones por viaje que conoce el perfil del viajero (tipo de viaje + blogs favoritos).
 
 ## Stack
 
@@ -29,7 +29,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     migrations/            # SQL: esquema documento + RLS + grants + cleanup anónimos
     README.md              # Activar Anonymous Sign-Ins, aplicar migraciones, env
   backend/
-    main.py                # FastAPI: /itinerary (SSE) + CORS
+    main.py                # FastAPI: /itinerary + /partners/prewarm (SSE) + CORS
+    partners.py            # Turnstile, guardia SSRF y límites del prewarm
     place_thumbs.py        # GET /thumb (Places; caché place_thumbs)
     covers.py              # GET /cover (Unsplash; caché destination_covers)
     photo_lookup.py        # normalización, single-flight, tope diario
@@ -40,12 +41,14 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     Dockerfile
     agents/
   frontend/
-    app/                   # App Router: /, /login, /signup, /account, /start, /trips…
+    app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips…
     middleware.ts          # Sesión Supabase; protege /trips y /account
-    components/            # UI + auth/ (RegistrationGate, Turnstile…)
+    components/            # UI + auth/ (RegistrationGate, Turnstile…) + partners/
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
       trip-context.tsx     # Mutaciones síncronas; sync vía trips-repo
+      partner-button.ts    # cleanSourceUrl / buildStartUrl / snippet HTML del kit
+      partners-api.ts      # POST /partners/prewarm (SSE, sin Bearer)
       thumbs.ts            # GET /thumb (lazy; memoria + sessionStorage)
       unsplash.ts          # portadas vía GET /cover (sin clave en el navegador)
       db/                  # trips-repo, assistant-repo, profile-repo
@@ -57,6 +60,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - **`/`** — Landing placeholder ([`app/page.tsx`](frontend/app/page.tsx)): CTAs Entrar / Crear cuenta.
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas).
+- **`/partners`** — Kit público para bloggers ([`app/partners/page.tsx`](frontend/app/partners/page.tsx)): formulario URL + slug → enlace `/start` + snippet HTML; dispara `POST /partners/prewarm` para dejar la fuente en caché. Mismo cromo que `/login` (`AuthShell`, ancho `2xl`).
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado.
 - **Layout raíz** — Inter, `AuthProvider`, Analytics. **Sin** `TripProvider`.
 - **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx): `TripProvider` → `RegistrationGateProvider` → shell (header, sidebar, main). Único sitio de `useTrips()`.
@@ -86,11 +90,13 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/types/itinerary.ts`](frontend/types/itinerary.ts) — Dominio; `Trip.referrer` para CTAs; `Source.totalDays`.
 - [`frontend/lib/trip-context.tsx`](frontend/lib/trip-context.tsx) — Mutaciones + `isLoading` + sync Supabase; adopción de calendario de partner.
 - [`frontend/lib/partner-trip.ts`](frontend/lib/partner-trip.ts) — `draftTripNameFor` / `parseDaysParam` / `MAX_AUTO_DAYS` (CTA `/start`).
+- [`frontend/lib/partner-button.ts`](frontend/lib/partner-button.ts) / [`partners-api.ts`](frontend/lib/partners-api.ts) — kit `/partners`: URL limpia, snippet HTML, prewarm SSE.
+- [`frontend/components/partners/partner-button-builder.tsx`](frontend/components/partners/partner-button-builder.tsx).
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
 - [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously.
 - [`frontend/components/auth/registration-gate.tsx`](frontend/components/auth/registration-gate.tsx).
 - [`frontend/lib/api.ts`](frontend/lib/api.ts) / [`assistant-api.ts`](frontend/lib/assistant-api.ts) / [`api-auth.ts`](frontend/lib/api-auth.ts) / [`thumbs.ts`](frontend/lib/thumbs.ts) / [`unsplash.ts`](frontend/lib/unsplash.ts) — Bearer del access token; thumbs y covers.
-- [`backend/auth.py`](backend/auth.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
+- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
 - Migraciones en [`supabase/migrations/`](supabase/migrations/) (`article_extractions`, `place_thumbs`, `destination_covers`: solo service_role).
 
 ## Modelo de datos
@@ -106,10 +112,11 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 ## Flujo principal
 
 1. Auth (registrado o anónimo vía `/start`).
-2. CTA partner (`/start`): borrador con `referrer`; opcionalmente N días + inicio mañana si `&days=N`.
-3. `addSourceToTrip` → `POST /itinerary` (caché `article_extractions`; se guarda en cuanto Claude responde) → `buildSource` (incluye `totalDays`) → sync fila `sources` + `trips`. Si el viaje tiene `referrer` y sigue virgen, adopta `totalDays` + `startDate` mañana y renombra con `area`.
-4. Miniaturas visibles → `GET /thumb`; portada → `GET /cover`.
-5. Consolidar en días / básicos; asistente con briefing + `user_profile`.
+2. Kit partner (`/partners`): el blogger genera enlace + snippet; `POST /partners/prewarm` deja la URL en `article_extractions` (sin sesión; Turnstile + límites).
+3. CTA partner (`/start`): borrador con `referrer`; opcionalmente N días + inicio mañana si `&days=N`.
+4. `addSourceToTrip` → `POST /itinerary` (caché `article_extractions`; hit si ya se precalentó) → `buildSource` (incluye `totalDays`) → sync fila `sources` + `trips`. Si el viaje tiene `referrer` y sigue virgen, adopta `totalDays` + `startDate` mañana y renombra con `area`.
+5. Miniaturas visibles → `GET /thumb`; portada → `GET /cover`.
+6. Consolidar en días / básicos; asistente con briefing + `user_profile`.
 
 ## Convenciones
 
@@ -152,4 +159,5 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start` |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), perfil |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
+| Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
 | Thumbs / covers | [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`thumbs.ts`](frontend/lib/thumbs.ts), [`unsplash.ts`](frontend/lib/unsplash.ts) |

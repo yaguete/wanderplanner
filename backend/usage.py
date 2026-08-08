@@ -9,6 +9,7 @@ Kinds:
   - extraction / assistant_message / photo_lookup / day_summary: cuota de usuario (user_id obligatorio)
   - refresh: rate-limit de «Recargar» (user_id obligatorio)
   - system_revalidation: mantenimiento de caché en fondo (user_id null)
+  - partner_prewarm: pre-síntesis desde /partners (user_id null; cap global durable)
 """
 from __future__ import annotations
 
@@ -34,7 +35,9 @@ Kind = Literal[
     "refresh",
     "system_revalidation",
     "day_summary",
+    "partner_prewarm",
 ]
+_USERLESS_KINDS = frozenset({"system_revalidation", "partner_prewarm"})
 LimitKind = Literal["guest", "daily", "monthly"]
 
 _GUEST_DEFAULTS: dict[str, int] = {
@@ -114,6 +117,17 @@ def _guest_max(kind: str) -> int:
     return _env_int(_GUEST_ENV.get(kind, ""), _GUEST_DEFAULTS.get(kind, 0))
 
 
+def _parse_count(r: httpx.Response) -> int:
+    cr = r.headers.get("content-range") or ""
+    # content-range: 0-0/123  o  */0
+    if "/" in cr:
+        total = cr.rsplit("/", 1)[-1].strip()
+        if total.isdigit():
+            return int(total)
+    rows = r.json()
+    return len(rows) if isinstance(rows, list) else 0
+
+
 async def count_events(
     user_id: str,
     kind: Kind,
@@ -147,14 +161,43 @@ async def count_events(
             )
             if r.status_code not in (200, 206):
                 return 0
-            cr = r.headers.get("content-range") or ""
-            # content-range: 0-0/123  o  */0
-            if "/" in cr:
-                total = cr.rsplit("/", 1)[-1].strip()
-                if total.isdigit():
-                    return int(total)
-            rows = r.json()
-            return len(rows) if isinstance(rows, list) else 0
+            return _parse_count(r)
+    except Exception:
+        return 0
+
+
+async def count_kind_events(
+    kind: Kind,
+    *,
+    since: datetime | None = None,
+) -> int:
+    """Cuenta eventos de un kind (cualquier user_id, incl. null) desde `since`."""
+    cfg = _config()
+    if not cfg:
+        return 0
+    base, key = cfg
+    params: dict[str, str] = {
+        "kind": f"eq.{kind}",
+        "select": "id",
+    }
+    if since is not None:
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        params["created_at"] = f"gte.{since.astimezone(timezone.utc).isoformat()}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                f"{base}/rest/v1/{TABLE}",
+                params=params,
+                headers={
+                    **_headers(key),
+                    "Prefer": "count=exact",
+                    "Range": "0-0",
+                },
+            )
+            if r.status_code not in (200, 206):
+                return 0
+            return _parse_count(r)
     except Exception:
         return 0
 
@@ -168,9 +211,8 @@ async def record_event(
     cfg = _config()
     if not cfg:
         return
-    if kind == "system_revalidation":
-        if user_id is not None:
-            user_id = None
+    if kind in _USERLESS_KINDS:
+        user_id = None
     elif not user_id:
         return
     base, key = cfg
@@ -228,7 +270,7 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     """
     if user is None:
         return
-    if kind == "system_revalidation":
+    if kind in _USERLESS_KINDS:
         return
 
     if user.is_anonymous:

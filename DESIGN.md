@@ -60,7 +60,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Mientras se cargan los viajes desde Supabase, el bloque muestra un spinner en el mismo contenedor punteado que el empty state (nunca «No hay viajes activos» de forma prematura).
 
 ### Superficies de cuenta
-- `/` (landing placeholder), `/login`, `/signup` y `/account` comparten cromo propio, sin sidebar ni breadcrumb: marca arriba, una columna centrada (`max-w-md`) y fondo con un degradado radial tenue del primary.
+- `/` (landing placeholder), `/login`, `/signup`, `/partners` y `/account` comparten cromo propio, sin sidebar ni breadcrumb: marca arriba, una columna centrada (`max-w-md`, o `max-w-2xl` en `/partners`) y fondo con un degradado radial tenue del primary.
 - Avatar de la cabecera: en desktop abre un menú (nombre, email, ajustes, cerrar sesión); en móvil sigue abriendo `MobileNavMenu`, que incorpora el pie de sesión.
 - Invitados (sesión anónima): el avatar y el pie muestran «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de ajustes.
 - `RegistrationGate`: modal breve (nombre, email, contraseña, o enlace de confirmación vía `updateUser` sobre la misma sesión anónima) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio.

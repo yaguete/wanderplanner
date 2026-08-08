@@ -1,17 +1,21 @@
 import Link from "next/link"
 import { BrandMark } from "@/components/app-header"
+import { cn } from "@/lib/utils"
 
-/** Marco común de /login y /signup. */
+/** Marco común de /login, /signup y /partners. */
 export function AuthShell({
   title,
   subtitle,
   children,
   footer,
+  width = "md",
 }: {
   title: string
   subtitle?: string
   children: React.ReactNode
   footer?: React.ReactNode
+  /** `2xl` para páginas con más contenido (p. ej. /partners). */
+  width?: "md" | "2xl"
 }) {
   return (
     <main className="relative flex min-h-screen flex-col items-center px-5 py-10">
@@ -24,7 +28,12 @@ export function AuthShell({
         <span className="text-sm font-semibold tracking-tight">WanderPlanner</span>
       </Link>
 
-      <div className="mx-auto mt-10 w-full max-w-md">
+      <div
+        className={cn(
+          "mx-auto mt-10 w-full",
+          width === "2xl" ? "max-w-2xl" : "max-w-md",
+        )}
+      >
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {subtitle ? (
           <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>

@@ -7,6 +7,8 @@
 #   1) GET / responde 2xx
 #   2) POST /itinerary y GET /thumb sin Authorization → 401 (REQUIRE_AUTH=true)
 #   3) CORS rechaza un Origin no permitido (sin Access-Control-Allow-Origin)
+#   4) POST /partners/prewarm: URL inválida → 400; sin captcha → 403 o 503
+#      (503 = TURNSTILE_SECRET_KEY olvidada con REQUIRE_AUTH)
 #
 # Sale con código != 0 si algo no cuadra.
 
@@ -138,6 +140,49 @@ elif [[ "$CORS_CODE" =~ ^2[0-9][0-9]$ ]]; then
   ok "CORS: Origin $BAD_ORIGIN sin Access-Control-Allow-Origin (HTTP $CORS_CODE)"
 else
   bad "CORS: preflight OPTIONS falló (HTTP '${CORS_CODE:-error de red}')"
+fi
+
+# ── 4) Partners prewarm (público; sin Bearer) ────────────────────────────────
+# URL inválida → 400 (antes de Turnstile).
+PREWARM_BAD_BODY="$TMPDIR/prewarm-bad.body"
+PREWARM_BAD_CODE="$(
+  http_code "$PREWARM_BAD_BODY" \
+    -X POST "$BASE/partners/prewarm" \
+    -H "Content-Type: application/json" \
+    -d '{"url":"not-a-url"}' \
+  || true
+)"
+if [[ "$PREWARM_BAD_CODE" == "400" ]]; then
+  ok "POST /partners/prewarm URL inválida → 400"
+else
+  bad "POST /partners/prewarm URL inválida esperaba 400, obtuvo '${PREWARM_BAD_CODE:-error de red}'"
+  if [[ -s "$PREWARM_BAD_BODY" ]]; then
+    echo "  body: $(head -c 200 "$PREWARM_BAD_BODY")" >&2
+  fi
+fi
+
+# URL pública sin captcha → 403 (captcha inválido) o 503 (secret ausente con REQUIRE_AUTH).
+# Ambos indican que el endpoint está montado; 503 avisa de config incompleta.
+PREWARM_BODY="$TMPDIR/prewarm.body"
+PREWARM_CODE="$(
+  http_code "$PREWARM_BODY" \
+    -X POST "$BASE/partners/prewarm" \
+    -H "Content-Type: application/json" \
+    -d '{"url":"https://example.com/smoke-prewarm"}' \
+  || true
+)"
+if [[ "$PREWARM_CODE" == "403" ]]; then
+  ok "POST /partners/prewarm sin captcha → 403"
+elif [[ "$PREWARM_CODE" == "503" ]]; then
+  ok "POST /partners/prewarm sin captcha → 503 (TURNSTILE_SECRET_KEY ausente; revisar secrets)"
+elif [[ "$PREWARM_CODE" == "400" ]]; then
+  # example.com a veces se rechaza por la guardia SSRF si DNS falla en el entorno.
+  ok "POST /partners/prewarm sin captcha → 400 (guardia URL; endpoint vivo)"
+else
+  bad "POST /partners/prewarm sin captcha esperaba 403/503/400, obtuvo '${PREWARM_CODE:-error de red}'"
+  if [[ -s "$PREWARM_BODY" ]]; then
+    echo "  body: $(head -c 200 "$PREWARM_BODY")" >&2
+  fi
 fi
 
 echo

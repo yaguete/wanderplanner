@@ -1,9 +1,12 @@
 "use client"
 
 /**
- * Cloudflare Turnstile para proteger los flujos públicos de autenticación.
+ * Cloudflare Turnstile para proteger los flujos públicos de autenticación y /partners.
  * Si `NEXT_PUBLIC_TURNSTILE_SITE_KEY` no está definida, el componente no renderiza nada y
  * `isTurnstileEnabled()` devuelve false: en local se entra sin captcha.
+ *
+ * El token es de un solo uso. Flujos que se quedan en la misma página (p. ej. /partners)
+ * deben pasar un `resetKey` que cambie tras cada envío para re-montar el widget.
  */
 import { useEffect, useRef } from "react"
 
@@ -21,6 +24,7 @@ type TurnstileApi = {
     },
   ) => string
   remove: (id: string) => void
+  reset: (id: string) => void
 }
 
 declare global {
@@ -50,7 +54,14 @@ function loadScript(): Promise<void> {
   })
 }
 
-export function Turnstile({ onToken }: { onToken: (token: string | null) => void }) {
+export function Turnstile({
+  onToken,
+  resetKey = 0,
+}: {
+  onToken: (token: string | null) => void
+  /** Cambia este valor para re-montar el widget (token de un solo uso). */
+  resetKey?: number | string
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const onTokenRef = useRef(onToken)
   onTokenRef.current = onToken
@@ -59,6 +70,7 @@ export function Turnstile({ onToken }: { onToken: (token: string | null) => void
     if (!SITE_KEY) return
     let widgetId: string | null = null
     let cancelled = false
+    onTokenRef.current(null)
 
     void loadScript()
       .then(() => {
@@ -76,7 +88,7 @@ export function Turnstile({ onToken }: { onToken: (token: string | null) => void
       cancelled = true
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId)
     }
-  }, [])
+  }, [resetKey])
 
   if (!SITE_KEY) return null
   return <div ref={containerRef} />

@@ -58,6 +58,7 @@ _CONTENT_SELECTORS = [
 
 _MIN_CONTENT_LEN = 500
 
+# Mantener en espejo con frontend/lib/partner-button.ts (TRACKING_PARAMS).
 _TRACKING_PARAMS = {
     "utm_source",
     "utm_medium",

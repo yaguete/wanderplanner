@@ -51,6 +51,7 @@ fly secrets set \
   SUPABASE_URL=... \
   SUPABASE_SERVICE_ROLE_KEY=... \
   REQUIRE_AUTH=true \
+  TURNSTILE_SECRET_KEY=... \
   ALLOWED_ORIGINS=https://wanderplanner.ai
 ```
 
@@ -70,7 +71,8 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `UNSPLASH_ACCESS_KEY` | [unsplash.com/oauth/applications](https://unsplash.com/oauth/applications) | Portadas `/cover` (solo backend; **nunca** `NEXT_PUBLIC_*`) |
 | `SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Mismo proyecto que el front |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` | **Solo backend.** Cachés `article_extractions` / `place_thumbs` / `destination_covers` y `usage_events` |
-| `REQUIRE_AUTH` | — (configuración propia) | `true` en producción. Sin Bearer → 401 en `/itinerary`, `/thumb`, `/cover`, `/assistant/chat` |
+| `REQUIRE_AUTH` | — (configuración propia) | `true` en producción. Sin Bearer → 401 en `/itinerary`, `/thumb`, `/cover`, `/assistant/chat`. **No** afecta a `/partners/prewarm` (público por diseño) |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile → secret key (la misma que en Supabase Auth → Bot protection) | Obligatoria si `REQUIRE_AUTH=true`: sin ella `/partners/prewarm` responde **503** (fail-closed). En local sin `REQUIRE_AUTH` el prewarm acepta sin captcha |
 | `ALLOWED_ORIGINS` | — | CSV de orígenes CORS. Prod: `https://wanderplanner.ai`. Añade URLs de Preview de Vercel si quieres probar APIs desde previews |
 
 #### Opcionales
@@ -82,6 +84,8 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `ITINERARY_MAX_OUTPUT_TOKENS` | `32000` (tope 64000) |
 | `EXTRACTION_CACHE_TTL_DAYS` | `30` |
 | `MAX_PHOTO_LOOKUPS_DAY` | `2000` (cinturón global de misses `/thumb`+`/cover`) |
+| `PARTNER_PREWARM_MAX_IP_DAY` | `10` (tope por IP del prewarm; memoria de proceso) |
+| `PARTNER_PREWARM_MAX_DAY` | `200` (cap global durable vía `usage_events.kind=partner_prewarm`) |
 | `GUEST_MAX_EXTRACTIONS` | `1` |
 | `GUEST_MAX_ASSISTANT_MESSAGES` | `10` |
 | `GUEST_MAX_PHOTO_LOOKUPS` | `30` |
@@ -127,11 +131,12 @@ Configurar en Vercel → Project → Settings → Environment Variables. Todas s
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → URL | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon` `public` | Pública; RLS protege datos. **Nunca** la `service_role` |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | [account.mapbox.com](https://account.mapbox.com/) → Access tokens | Token `pk.…` **restringido por URL** a `wanderplanner.ai` (y previews si hace falta) |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile → site key | Clave pública del widget, visible en el navegador. Se usa en `/start`, `/login` y `/signup`; autoriza sus hostnames en Cloudflare. En Supabase Auth se configura la **secret key asociada**, nunca esta site key |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile → site key | Clave pública del widget, visible en el navegador. Se usa en `/start`, `/login`, `/signup` y `/partners`; autoriza sus hostnames en Cloudflare. En Supabase Auth **y** en Fly (`TURNSTILE_SECRET_KEY`) se configura la **secret key asociada**, nunca esta site key |
+| `NEXT_PUBLIC_APP_ORIGIN` | Dominio canónico del front | Opcional. Prod: `https://wanderplanner.ai`. Si falta, `/partners` usa `window.location.origin` (en Preview de Vercel incrustaría ese dominio efímero en el snippet del blogger) |
 
 Opcional: `NEXT_PUBLIC_VENDOR_LOGO_PROVIDER` (default `clearbit`).
 
-**No** poner en Vercel: `UNSPLASH_ACCESS_KEY`, `GOOGLE_PLACES_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, ni ninguna clave de IA.
+**No** poner en Vercel: `UNSPLASH_ACCESS_KEY`, `GOOGLE_PLACES_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TURNSTILE_SECRET_KEY`, ni ninguna clave de IA.
 
 ### Deploy manual (CLI)
 
