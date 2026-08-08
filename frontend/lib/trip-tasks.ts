@@ -51,12 +51,10 @@ export type DerivedTripTask = {
 }
 
 export type TripTaskTotals = {
-  byStatus: { pending: number; booked: number }
-  costByStatus: { pending: number; booked: number }
+  byStatus: { pending: number; booked: number; paid: number }
+  costByStatus: { pending: number; booked: number; paid: number }
   costByCategory: Partial<Record<TripTaskCategory, number>>
   totalCost: number
-  /** Suma de costes con `cancellable === false` (compromiso no cancelable). */
-  committedCost: number
 }
 
 /** Categorías que no pasan por triaje: entran directo a `main` si no están descartadas. */
@@ -163,8 +161,18 @@ export function resolveTaskStatus(state: TripTaskState | null): TripTaskStatus {
  * `null` / ausente → pending; `notNeeded` no debería llegar aquí (bucket dismissed).
  * No usar desde la Ruta: ahí va `resolveTaskStatus`.
  */
-export function effectiveStatus(state: TripTaskState | null): "pending" | "booked" {
-  return state?.status === "booked" ? "booked" : "pending"
+export function effectiveStatus(
+  state: TripTaskState | null,
+): "pending" | "booked" | "paid" {
+  if (state?.status === "booked") return "booked"
+  if (state?.status === "paid") return "paid"
+  return "pending"
+}
+
+/** True si la tarea cuenta como gestionada (reservada, pagada o hecha). */
+export function isTaskManaged(state: TripTaskState | null): boolean {
+  const s = effectiveStatus(state)
+  return s === "booked" || s === "paid"
 }
 
 /**
@@ -371,19 +379,27 @@ export function buildTripTasks(trip: Trip): DerivedTripTask[] {
 
 /**
  * Totales solo sobre el bucket `main`. Excluye `triage` y `dismissed`.
- * El "X de Y gestionadas" de T4.2 = `byStatus.booked` sobre
- * `byStatus.booked + byStatus.pending`. Costes `null` no entran en
- * `costByStatus` / `costByCategory` / `totalCost` / `committedCost`.
+ * El "X de Y gestionadas" = `booked + paid` sobre `booked + paid + pending`.
+ * Costes `null` no entran en `costByStatus` / `costByCategory` / `totalCost`.
+ * `categories`: si se pasa, solo cuenta tareas de esas categorías (vista por pestaña).
  */
-export function computeTripTaskTotals(tasks: DerivedTripTask[]): TripTaskTotals {
-  const byStatus = { pending: 0, booked: 0 }
-  const costByStatus = { pending: 0, booked: 0 }
+export function computeTripTaskTotals(
+  tasks: DerivedTripTask[],
+  options?: { categories?: ReadonlyArray<TripTaskCategory> },
+): TripTaskTotals {
+  const categorySet =
+    options?.categories && options.categories.length > 0
+      ? new Set(options.categories)
+      : null
+
+  const byStatus = { pending: 0, booked: 0, paid: 0 }
+  const costByStatus = { pending: 0, booked: 0, paid: 0 }
   const costByCategory: Partial<Record<TripTaskCategory, number>> = {}
   let totalCost = 0
-  let committedCost = 0
 
   for (const task of tasks) {
     if (task.bucket !== "main") continue
+    if (categorySet && !categorySet.has(task.category)) continue
 
     const status = effectiveStatus(task.state)
     byStatus[status] += 1
@@ -393,9 +409,6 @@ export function computeTripTaskTotals(tasks: DerivedTripTask[]): TripTaskTotals 
       costByStatus[status] += cost
       costByCategory[task.category] = (costByCategory[task.category] ?? 0) + cost
       totalCost += cost
-      if (task.state?.cancellable === false) {
-        committedCost += cost
-      }
     }
   }
 
@@ -404,7 +417,6 @@ export function computeTripTaskTotals(tasks: DerivedTripTask[]): TripTaskTotals 
     costByStatus,
     costByCategory,
     totalCost,
-    committedCost,
   }
 }
 

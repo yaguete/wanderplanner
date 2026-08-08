@@ -11,6 +11,7 @@ import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
 import { TripBreadcrumb } from "@/components/trip-breadcrumb"
+import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -29,7 +30,8 @@ function readPlanOpen(): boolean {
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip, getTripSources, isLoading, addSourceToTrip, isLoadingSource } = useTrips()
+  const { getTrip, getTripSources, isLoading, addSourceToTrip, isLoadingSource, updateTrip } =
+    useTrips()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
@@ -41,6 +43,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const [planOpen, setPlanOpen] = useState(readPlanOpen)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [addSourceOpen, setAddSourceOpen] = useState(false)
+  const [editTripOpen, setEditTripOpen] = useState(false)
   const [autoSourceError, setAutoSourceError] = useState<string | null>(null)
   const preparingFirstSource = isLoadingSource && sources.length === 0 && !autoSourceError
   /**
@@ -114,6 +117,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   /** Al cambiar de viaje, cierra overlays locales; el panel Mi viaje conserva su estado. */
   useEffect(() => {
     setAssistantOpen(false)
+    setEditTripOpen(false)
     if (!pendingSourceUrl) setAddSourceOpen(false)
   }, [tripId, pendingSourceUrl])
 
@@ -212,6 +216,38 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         trip={trip}
         planOpen={planOpen}
         onTogglePlan={togglePlan}
+        onEditTrip={() => setEditTripOpen(true)}
+      />
+
+      <NewTripDialog
+        open={editTripOpen}
+        mode="edit"
+        initial={{
+          name: trip.name,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          numDays: trip.numDays,
+          expectations: trip.expectations ?? null,
+          origin: trip.origin ?? null,
+          numTravelers: trip.numTravelers ?? null,
+          currency: trip.currency || "EUR",
+        }}
+        itineraryDayCount={trip.days.length}
+        onOpenChange={setEditTripOpen}
+        onSubmit={(data: NewTripData) => {
+          const result = updateTrip(trip.id, {
+            name: data.name,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            numDays: data.numDays,
+            expectations: data.expectations,
+            origin: data.origin,
+            numTravelers: data.numTravelers,
+            currency: data.currency,
+          })
+          if (!result.ok) return { error: result.error }
+          setEditTripOpen(false)
+        }}
       />
 
       {isMobile ? (

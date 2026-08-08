@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { getDayUserDescription } from "@/lib/day-heading"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
-import { ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
+import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import type { ItemType, UserDay } from "@/types/itinerary"
 
 /** A partir de aquí la lista se vuelve incómoda sin buscador. */
@@ -78,7 +78,6 @@ export function AddToDayDialog({
     : rows
 
   const TypeIcon = ITEM_TYPE_ICONS[itemType]
-  const colors = ITEM_COLORS[itemType]
   const showSearch = days.length >= SEARCH_FROM_DAYS
 
   const handleSelect = (dayId: string) => {
@@ -113,12 +112,6 @@ export function AddToDayDialog({
               aria-hidden
             >
               <TypeIcon className="h-4 w-4" />
-              <span
-                className={cn(
-                  "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-background",
-                  colors.dot,
-                )}
-              />
             </span>
             <div className="min-w-0">
               <p className="line-clamp-1 text-sm font-semibold leading-snug text-foreground">

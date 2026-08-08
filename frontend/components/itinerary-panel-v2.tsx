@@ -24,7 +24,7 @@ import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { countriesPlainList } from "@/lib/countries"
 import { dateISOForDayIndex, formatDayDate, formatTripMonthYear } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
-import { ITEM_COLORS, transportIconForItem } from "@/lib/item-styles"
+import { transportIconForItem } from "@/lib/item-styles"
 import { TASK_STATUS_LABELS } from "@/lib/task-labels"
 import { dayItemsSignature, generateDaySummary } from "@/lib/day-summary"
 import { ApiLimitError } from "@/lib/api"
@@ -38,6 +38,7 @@ import {
 import type { RouteLeg, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
 import {
   ItineraryViewModeTabs,
+  VIEW_MODE_ADD_ACTION_LABEL,
   VIEW_MODE_DEFAULT_TASK_CATEGORY,
   VIEW_MODE_TASK_CATEGORIES,
   type ItineraryViewMode,
@@ -541,25 +542,20 @@ export default function ItineraryPanel({
         </>
       ) : categoryView ? (
         <>
-          <div className="flex shrink-0 items-start justify-between gap-3 px-4 py-2.5">
-            <TripTasksSummaryDetail trip={trip} />
-            <button
-              type="button"
-              onClick={() => setExtraTaskDialogOpen(true)}
-              className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" />
-              Añadir tarea
-            </button>
+          <div className="flex shrink-0 justify-end px-4 py-2.5">
+            <TripTasksSummaryDetail
+              trip={trip}
+              categories={VIEW_MODE_TASK_CATEGORIES[categoryView]}
+            />
           </div>
           <TripTasksPanel
             trip={trip}
             categories={VIEW_MODE_TASK_CATEGORIES[categoryView]}
             defaultCategory={VIEW_MODE_DEFAULT_TASK_CATEGORY[categoryView]}
+            addActionLabel={VIEW_MODE_ADD_ACTION_LABEL[categoryView]}
             emptyTitle={CATEGORY_EMPTY[categoryView].title}
             emptyDescription={CATEGORY_EMPTY[categoryView].description}
             hideSummary
-            hideToolbar
             extraDialogOpen={extraTaskDialogOpen}
             onExtraDialogOpenChange={setExtraTaskDialogOpen}
             onSetTaskState={handleSetTaskState}
@@ -756,10 +752,7 @@ function DayItineraryTimeline({
             >
               <div className="z-10 hidden w-5 shrink-0 items-center justify-center sm:flex" aria-hidden>
                 <div
-                  className={cn(
-                    "h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-card",
-                    ITEM_COLORS[item.type].dot,
-                  )}
+                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/35 ring-4 ring-card"
                 />
               </div>
               <TravelItemCard
@@ -840,7 +833,7 @@ function RouteTaskIndicator({
   onRestore,
 }: {
   bucket: "main" | "dismissed"
-  status: "pending" | "booked" | "notNeeded"
+  status: "pending" | "booked" | "paid" | "notNeeded"
   onRestore?: () => void
 }) {
   if (bucket === "dismissed" && onRestore) {
@@ -861,12 +854,12 @@ function RouteTaskIndicator({
     )
   }
 
-  if (status === "booked") {
+  if (status === "booked" || status === "paid") {
     return (
       <span
         className="inline-flex h-8 items-center gap-0.5 rounded-md px-1.5 text-[10px] font-semibold text-emerald-700"
-        title={TASK_STATUS_LABELS.booked}
-        aria-label={TASK_STATUS_LABELS.booked}
+        title={status === "paid" ? TASK_STATUS_LABELS.paid : TASK_STATUS_LABELS.booked}
+        aria-label={status === "paid" ? TASK_STATUS_LABELS.paid : TASK_STATUS_LABELS.booked}
       >
         <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
       </span>

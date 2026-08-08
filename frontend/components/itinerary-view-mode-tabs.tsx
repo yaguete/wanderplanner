@@ -45,6 +45,17 @@ export const VIEW_MODE_DEFAULT_TASK_CATEGORY: Record<
   basics: "basic",
 }
 
+/** Copy del CTA «añadir» al final de la lista (no aplica a Ruta). */
+export const VIEW_MODE_ADD_ACTION_LABEL: Record<
+  Exclude<ItineraryViewMode, "itinerary">,
+  string
+> = {
+  activities: "Añadir actividad",
+  stay: "Añadir alojamiento",
+  transport: "Añadir transporte",
+  basics: "Añadir tarea",
+}
+
 /**
  * Pestañas del panel Mi viaje (segmented control único):
  * Ruta · Actividades · Alojamientos · Transporte · Básicos.

@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
+import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import {
   geocodeFreeText,
@@ -215,7 +215,6 @@ export function AddManualItemDialog({
             >
               {ITEM_TYPES.map((t) => {
                 const Icon = ITEM_TYPE_ICONS[t]
-                const colors = ITEM_COLORS[t]
                 const selected = type === t
                 return (
                   <button
@@ -247,13 +246,6 @@ export function AddManualItemDialog({
                   >
                     <span className="relative flex h-7 w-7 items-center justify-center">
                       <Icon className="h-4 w-4" aria-hidden />
-                      <span
-                        className={cn(
-                          "absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full",
-                          colors.dot,
-                        )}
-                        aria-hidden
-                      />
                     </span>
                     <span className="text-[11px] font-medium leading-tight">{ITEM_LABELS[t]}</span>
                   </button>

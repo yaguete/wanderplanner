@@ -6,13 +6,19 @@
  * llegan por callbacks desde ItineraryPanel.
  */
 import { useEffect, useMemo, useState } from "react"
-import { CheckSquare, ChevronDown, ExternalLink, Plus, Trash2 } from "lucide-react"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Check, CheckSquare, ChevronDown, ExternalLink, Plus, Trash2 } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/empty-state"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CountryTasksSection } from "@/components/country-tasks-section"
@@ -30,6 +36,7 @@ import {
   buildTripTasks,
   cancellableApplies,
   computeTripTaskTotals,
+  isTaskManaged,
   type DerivedTripTask,
   type TripTaskTotals,
 } from "@/lib/trip-tasks"
@@ -46,14 +53,14 @@ export type TripTasksPanelProps = {
   onRemoveBasic?: (basicIds: string[]) => void
   /** Categoría preseleccionada en «Añadir tarea». */
   defaultCategory?: TripTaskCategory
+  /** Copy del CTA al final de la lista (p. ej. «Añadir actividad»). */
+  addActionLabel?: string
   /** Copy del empty state. */
   emptyTitle?: string
   emptyDescription?: string
-  /** Si true, no renderiza el resumen embebido (va en la cabecera/toolbar del padre). */
+  /** Si true, no renderiza el resumen embebido (va en la cabecera del padre). */
   hideSummary?: boolean
-  /** Si true, no pinta la toolbar (el padre la coloca fuera del scroll). */
-  hideToolbar?: boolean
-  /** Control externo del diálogo de tarea manual (cuando hideToolbar). */
+  /** Control externo del diálogo de tarea manual. */
   extraDialogOpen?: boolean
   onExtraDialogOpenChange?: (open: boolean) => void
   /**
@@ -73,15 +80,26 @@ export type TripTasksPanelProps = {
   }
 }
 
-function useTaskTotals(trip: Trip): TripTaskTotals {
-  return useMemo(() => computeTripTaskTotals(buildTripTasks(trip)), [trip])
+function useTaskTotals(
+  trip: Trip,
+  categories?: ReadonlyArray<TripTaskCategory>,
+): TripTaskTotals {
+  return useMemo(
+    () => computeTripTaskTotals(buildTripTasks(trip), { categories }),
+    [trip, categories],
+  )
+}
+
+function managedCounts(totals: TripTaskTotals) {
+  const managed = totals.byStatus.booked + totals.byStatus.paid
+  const total = managed + totals.byStatus.pending
+  return { managed, total }
 }
 
 /** Fragmento «X de Y gestionadas» para la meta de cabecera; null si no hay tareas. */
 export function TripTasksManagedFragment({ trip }: { trip: Trip }) {
   const totals = useTaskTotals(trip)
-  const managed = totals.byStatus.booked
-  const total = totals.byStatus.booked + totals.byStatus.pending
+  const { managed, total } = managedCounts(totals)
   if (total === 0) return null
   return (
     <>
@@ -97,8 +115,7 @@ export function TripTasksManagedFragment({ trip }: { trip: Trip }) {
 /** Fila 2 de cabecera (legacy / embebido): «X de Y gestionadas · total». */
 export function TripTasksSummaryLine({ trip }: { trip: Trip }) {
   const totals = useTaskTotals(trip)
-  const managed = totals.byStatus.booked
-  const total = totals.byStatus.booked + totals.byStatus.pending
+  const { managed, total } = managedCounts(totals)
   const currency = trip.currency || "EUR"
 
   if (total === 0) {
@@ -123,63 +140,44 @@ export function TripTasksSummaryLine({ trip }: { trip: Trip }) {
   )
 }
 
-/** Desglose de costes (toolbar de pestañas de categoría). */
-export function TripTasksSummaryDetail({ trip }: { trip: Trip }) {
-  const totals = useTaskTotals(trip)
+/** Desglose de costes por pestaña: solo Reservado · Pagado de esas categorías. */
+export function TripTasksSummaryDetail({
+  trip,
+  categories,
+}: {
+  trip: Trip
+  categories?: ReadonlyArray<TripTaskCategory>
+}) {
+  const totals = useTaskTotals(trip, categories)
   const currency = trip.currency || "EUR"
-  const total = totals.byStatus.booked + totals.byStatus.pending
-  const perPerson =
-    trip.numTravelers != null && trip.numTravelers > 0 && totals.totalCost > 0
-      ? totals.totalCost / trip.numTravelers
-      : null
+  const booked = totals.costByStatus.booked
+  const paid = totals.costByStatus.paid
 
-  const hasCosts =
-    totals.costByStatus.booked > 0 || totals.costByStatus.pending > 0
-  const hasDetail =
-    total > 0 && (hasCosts || perPerson != null || totals.committedCost > 0)
-
-  if (!hasDetail) {
+  if (booked <= 0 && paid <= 0) {
     return <div className="min-h-0" />
   }
 
   return (
-    <div className="flex min-w-0 flex-col justify-center gap-0.5 text-xs tabular-nums text-muted-foreground">
-      {hasCosts ? (
-        <p className="truncate">
-          <span className="text-emerald-700">
-            Reservado {formatTripCurrency(totals.costByStatus.booked, currency)}
-          </span>
-          {totals.costByStatus.pending > 0 ? (
-            <>
-              {" · "}
-              <span>
-                Por reservar {formatTripCurrency(totals.costByStatus.pending, currency)}
-              </span>
-            </>
-          ) : null}
-        </p>
+    <p className="truncate text-right text-xs tabular-nums text-muted-foreground">
+      {booked > 0 ? (
+        <span>Reservado {formatTripCurrency(booked, currency)}</span>
       ) : null}
-      {perPerson != null ? (
-        <p className="truncate">
-          {formatTripCurrency(perPerson, currency)} / persona
-          {trip.numTravelers === 1 ? "" : ` (${trip.numTravelers})`}
-        </p>
+      {booked > 0 && paid > 0 ? " · " : null}
+      {paid > 0 ? (
+        <span className="text-emerald-700">
+          Pagado {formatTripCurrency(paid, currency)}
+        </span>
       ) : null}
-      {totals.committedCost > 0 ? (
-        <p className="truncate">
-          No cancelable: {formatTripCurrency(totals.committedCost, currency)}
-        </p>
-      ) : null}
-    </div>
+    </p>
   )
 }
 
 /** Hairline de progreso (1.5 px) para el borde inferior de la cabecera. */
 export function TripTasksProgressHairline({ trip }: { trip: Trip }) {
   const totals = useTaskTotals(trip)
-  const total = totals.byStatus.booked + totals.byStatus.pending
+  const { managed, total } = managedCounts(totals)
   if (total === 0) return null
-  const pct = Math.min(100, (totals.byStatus.booked / total) * 100)
+  const pct = Math.min(100, (managed / total) * 100)
 
   return (
     <div className="absolute inset-x-0 bottom-0 h-[1.5px] bg-muted" aria-hidden>
@@ -216,10 +214,10 @@ export function TripTasksPanel({
   onRemoveExtraTask,
   onRemoveBasic,
   defaultCategory = "other",
+  addActionLabel = "Añadir tarea",
   emptyTitle = "Sin tareas todavía",
   emptyDescription = "Consolida ítems en la Ruta o añade una tarea a mano.",
   hideSummary = false,
-  hideToolbar = false,
   extraDialogOpen: controlledOpen,
   onExtraDialogOpenChange,
   countryTasks,
@@ -249,24 +247,22 @@ export function TripTasksPanel({
   const isEmpty =
     mainTasks.length === 0 && triageTasks.length === 0 && dismissedTasks.length === 0
 
+  const addButton = (
+    <button
+      type="button"
+      onClick={() => setExtraDialogOpen(true)}
+      className="inline-flex min-h-8 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
+    >
+      <Plus className="h-3.5 w-3.5 shrink-0" />
+      {addActionLabel}
+    </button>
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {!hideSummary ? (
         <div className="shrink-0 border-b border-border px-4 py-2.5">
           <TripTasksSummary trip={trip} />
-        </div>
-      ) : null}
-
-      {!hideToolbar && !isEmpty ? (
-        <div className="flex shrink-0 items-center justify-end px-4 py-2.5">
-          <button
-            type="button"
-            onClick={() => setExtraDialogOpen(true)}
-            className="inline-flex min-h-8 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
-          >
-            <Plus className="h-3.5 w-3.5 shrink-0" />
-            Añadir tarea
-          </button>
         </div>
       ) : null}
 
@@ -282,23 +278,12 @@ export function TripTasksPanel({
             />
           ) : null}
 
-          {isEmpty && !countryTasks ? (
+          {isEmpty ? (
             <EmptyState
               icon={CheckSquare}
               title={emptyTitle}
               description={emptyDescription}
-              actionLabel="Añadir tarea"
-              onAction={() => setExtraDialogOpen(true)}
-              className="py-10"
-            />
-          ) : isEmpty ? (
-            <EmptyState
-              icon={CheckSquare}
-              title={emptyTitle}
-              description={emptyDescription}
-              actionLabel="Añadir tarea"
-              onAction={() => setExtraDialogOpen(true)}
-              className="py-6"
+              className={countryTasks ? "py-6" : "py-10"}
             />
           ) : (
             <>
@@ -315,6 +300,7 @@ export function TripTasksPanel({
                         <TaskRow
                           task={task}
                           currency={trip.currency || "EUR"}
+                          startDate={trip.startDate}
                           onSetTaskState={onSetTaskState}
                           onRemoveExtraTask={
                             task.origin === "extra" ? onRemoveExtraTask : undefined
@@ -330,7 +316,11 @@ export function TripTasksPanel({
               ))}
 
               {triageTasks.length > 0 ? (
-                <TriageSection tasks={triageTasks} onSetTaskState={onSetTaskState} />
+                <TriageSection
+                  tasks={triageTasks}
+                  startDate={trip.startDate}
+                  onSetTaskState={onSetTaskState}
+                />
               ) : null}
 
               {dismissedTasks.length > 0 ? (
@@ -341,6 +331,8 @@ export function TripTasksPanel({
               ) : null}
             </>
           )}
+
+          <div className="flex justify-end">{addButton}</div>
         </div>
       </div>
 
@@ -369,22 +361,119 @@ function groupByCategory(
   )
 }
 
+function isPaperworkTask(category: TripTaskCategory): boolean {
+  return category === "paperwork" || category === "health"
+}
+
+/** Toggle unido Reservado | Pagado (mismo cromo que el antiguo Cancelable). */
+function BookingStatusToggle({
+  value,
+  onChange,
+}: {
+  value: "pending" | "booked" | "paid" | "notNeeded"
+  onChange: (next: "booked" | "paid") => void
+}) {
+  return (
+    <div
+      className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5"
+      role="group"
+      aria-label="Estado de reserva"
+    >
+      <button
+        type="button"
+        aria-pressed={value === "booked"}
+        onClick={() => onChange("booked")}
+        className={cn(
+          "inline-flex min-h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          value === "booked"
+            ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
+            : "font-medium text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            value === "booked" ? "bg-muted-foreground" : "bg-muted-foreground/30",
+          )}
+          aria-hidden
+        />
+        Reservado
+      </button>
+      <button
+        type="button"
+        aria-pressed={value === "paid"}
+        onClick={() => onChange("paid")}
+        className={cn(
+          "inline-flex min-h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          value === "paid"
+            ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
+            : "font-medium text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {value === "paid" ? (
+          <Check className="h-3 w-3 shrink-0 text-emerald-600" strokeWidth={2.4} aria-hidden />
+        ) : (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
+        )}
+        Pagado
+      </button>
+    </div>
+  )
+}
+
+function DoneChip({
+  active,
+  onClick,
+}: {
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-7 items-center gap-1.5 rounded-md bg-muted px-2.5 text-[11px] transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "font-semibold text-foreground shadow-sm ring-1 ring-border bg-background"
+          : "font-medium text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {active ? (
+        <Check className="h-3 w-3 shrink-0 text-emerald-600" strokeWidth={2.4} aria-hidden />
+      ) : (
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
+      )}
+      Hecho
+    </button>
+  )
+}
+
 function TaskRow({
   task,
   currency,
+  startDate,
   onSetTaskState,
   onRemoveExtraTask,
   onRemoveBasic,
 }: {
   task: DerivedTripTask
   currency: string
+  startDate: string | null
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
   onRemoveExtraTask?: (taskId: string) => void
   onRemoveBasic?: (basicIds: string[]) => void
 }) {
-  const booked = task.state?.status === "booked"
-  const dayMeta = formatTaskDays(task.dayIndexes, task.nights)
-  const showCancellable = cancellableApplies(task.category)
+  const status = task.state?.status ?? "pending"
+  const managed = isTaskManaged(task.state)
+  const paperwork = isPaperworkTask(task.category)
+  const dayMeta = formatTaskDays(task.dayIndexes, task.nights, startDate)
+  const showCancellable =
+    cancellableApplies(task.category) && (status === "booked" || status === "paid")
   const cost = task.state?.cost ?? null
   const nights = task.nights && task.nights > 1 ? task.nights : null
   const perNight = cost != null && nights != null ? cost / nights : null
@@ -392,28 +481,35 @@ function TaskRow({
     (task.origin === "extra" && onRemoveExtraTask) ||
     (task.origin === "basic" && onRemoveBasic)
 
+  const toggleStatus = (next: "booked" | "paid") => {
+    onSetTaskState(task.id, { status: status === next ? "pending" : next })
+  }
+
   return (
     <div className="flex flex-col gap-2 py-3">
       <div className="flex items-start gap-2.5">
-        <div className="pt-0.5">
-          <Checkbox
-            checked={booked}
-            onCheckedChange={(c) =>
-              onSetTaskState(task.id, { status: c === true ? "booked" : "pending" })
-            }
-            className="size-4"
-            aria-label={booked ? "Marcar como pendiente" : "Marcar como reservado"}
-          />
-        </div>
         <div className="min-w-0 flex-1">
-          <p
-            className={cn(
-              "text-sm font-medium leading-snug text-foreground transition-[color,text-decoration-color] duration-200",
-              booked && "text-muted-foreground line-through decoration-muted-foreground/50",
-            )}
-          >
-            {taskActionTitle(task)}
-          </p>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p
+              className={cn(
+                "min-w-0 text-sm font-medium leading-snug text-foreground transition-[color,text-decoration-color] duration-200",
+                managed && "text-muted-foreground line-through decoration-muted-foreground/50",
+              )}
+            >
+              {taskActionTitle(task)}
+            </p>
+            {task.affiliateUrl ? (
+              <a
+                href={task.affiliateUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                {task.category === "basic" || task.origin === "basic" ? "Contratar" : "Reservar"}
+                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+              </a>
+            ) : null}
+          </div>
           {dayMeta ? (
             <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{dayMeta}</p>
           ) : null}
@@ -445,25 +541,26 @@ function TaskRow({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-7">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {paperwork ? (
+          <DoneChip
+            active={status === "booked" || status === "paid"}
+            onClick={() =>
+              onSetTaskState(task.id, {
+                status: status === "booked" || status === "paid" ? "pending" : "booked",
+              })
+            }
+          />
+        ) : (
+          <BookingStatusToggle value={status} onChange={toggleStatus} />
+        )}
         {perNight != null ? (
           <span className="text-[11px] tabular-nums text-muted-foreground">
             ≈ {formatTripCurrency(perNight, currency)}/noche
           </span>
         ) : null}
-        {task.affiliateUrl ? (
-          <a
-            href={task.affiliateUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-          >
-            {task.category === "basic" || task.origin === "basic" ? "Contratar" : "Reservar"}
-            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
-          </a>
-        ) : null}
         {showCancellable ? (
-          <CancellableToggle
+          <CancellableDropdown
             value={task.state?.cancellable ?? null}
             onChange={(next) => onSetTaskState(task.id, { cancellable: next })}
           />
@@ -530,70 +627,65 @@ function CostInput({
   )
 }
 
-function CancellableToggle({
+function CancellableDropdown({
   value,
   onChange,
 }: {
   value: boolean | null
   onChange: (next: boolean | null) => void
 }) {
+  const radioValue = value === true ? "yes" : value === false ? "no" : "unset"
+  const triggerLabel =
+    value === true ? "Cancelable" : value === false ? "No cancelable" : "Cancelabilidad"
+
   return (
-    <div
-      className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5"
-      role="group"
-      aria-label="Cancelabilidad"
-    >
-      <button
-        type="button"
-        aria-pressed={value === true}
-        onClick={() => onChange(value === true ? null : true)}
-        className={cn(
-          "inline-flex min-h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          value === true
-            ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
-            : "font-medium text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <span
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
           className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            value === true ? "bg-emerald-500" : "bg-muted-foreground/30",
+            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
+            "text-muted-foreground hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            value != null && "text-foreground",
           )}
-          aria-hidden
-        />
-        Cancelable
-      </button>
-      <button
-        type="button"
-        aria-pressed={value === false}
-        onClick={() => onChange(value === false ? null : false)}
-        className={cn(
-          "inline-flex min-h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          value === false
-            ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
-            : "font-medium text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <span
-          className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            value === false ? "bg-amber-500" : "bg-muted-foreground/30",
-          )}
-          aria-hidden
-        />
-        No cancelable
-      </button>
-    </div>
+          aria-label="Cancelabilidad"
+        >
+          {triggerLabel}
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[10.5rem]">
+        <DropdownMenuRadioGroup
+          value={radioValue}
+          onValueChange={(v) => {
+            if (v === "yes") onChange(true)
+            else if (v === "no") onChange(false)
+            else onChange(null)
+          }}
+        >
+          <DropdownMenuRadioItem value="yes" className="text-xs">
+            Cancelable
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="no" className="text-xs">
+            No cancelable
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="unset" className="text-xs">
+            Sin indicar
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
 function TriageSection({
   tasks,
+  startDate,
   onSetTaskState,
 }: {
   tasks: DerivedTripTask[]
+  startDate: string | null
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -638,9 +730,9 @@ function TriageSection({
                       <p className="text-sm font-medium text-foreground">
                         {taskActionTitle(task)}
                       </p>
-                      {formatTaskDays(task.dayIndexes) ? (
+                      {formatTaskDays(task.dayIndexes, undefined, startDate) ? (
                         <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                          {formatTaskDays(task.dayIndexes)}
+                          {formatTaskDays(task.dayIndexes, undefined, startDate)}
                         </p>
                       ) : null}
                     </div>

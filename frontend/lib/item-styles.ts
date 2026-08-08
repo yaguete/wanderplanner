@@ -16,31 +16,27 @@ import {
 } from "lucide-react"
 import type { BasicCategory, ItemType, RouteMode, SourceRouteHint, UserDayItem } from "@/types/itinerary"
 
-/** Color solo como señal: punto + texto sutil sobre chip neutro. */
-export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: string; dot: string }> = {
+/** Chip con borde neutro; el color de tipo va en el texto (y en iconos de Mi viaje). */
+export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: string }> = {
   transport: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-muted-foreground",
-    dot: "bg-sky-500",
+    text: "text-sky-600",
   },
   stay: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-muted-foreground",
-    dot: "bg-orange-500",
+    text: "text-orange-600",
   },
   food: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-muted-foreground",
-    dot: "bg-emerald-500",
+    text: "text-emerald-600",
   },
   activity: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-muted-foreground",
-    dot: "bg-violet-500",
+    text: "text-violet-600",
   },
 }
 

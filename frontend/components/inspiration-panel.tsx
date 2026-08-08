@@ -20,6 +20,7 @@ import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ApiLimitError } from "@/lib/api"
 import { ITEM_LABELS } from "@/lib/item-styles"
+import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { toast } from "sonner"
 
@@ -39,9 +40,15 @@ function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
 
-function formatAddedDaysCompact(days: number[]): string {
+/** Badge «añadido»: fecha corta si hay startDate; si no, «Día n». `days` es 1-based. */
+function formatAddedDaysCompact(days: number[], startDate?: string | null): string {
   if (!days.length) return ""
-  return days.map((d) => `Día ${d}`).join(", ")
+  return days
+    .map((d) => {
+      const iso = startDate ? dateISOForDayIndex(startDate, d - 1) : null
+      return (iso ? formatDayDate(iso) : null) ?? `Día ${d}`
+    })
+    .join(", ")
 }
 
 export default function InspirationPanel({
@@ -253,7 +260,7 @@ export default function InspirationPanel({
   const tabs: { id: SourceTab; label: string }[] = [
     { id: "source", label: "Crónica" },
     { id: "itinerary", label: "Ruta" },
-    { id: "transport", label: "Desplazamiento" },
+    { id: "transport", label: "Desplazamientos" },
     { id: "basics", label: "Descuentos" },
   ]
 
@@ -501,6 +508,7 @@ export default function InspirationPanel({
                     sourceArea={currentSource.area}
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
+                    tripStartDate={trip?.startDate ?? null}
                     thumbnailMode="transportIcon"
                     sourceTypeLabel="Desplazamiento"
                     onPick={() => setPickingItem(item)}
@@ -522,6 +530,7 @@ export default function InspirationPanel({
                     sourceArea={currentSource.area}
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
+                    tripStartDate={trip?.startDate ?? null}
                     onPick={() => setPickingItem(item)}
                   />
                 )}
@@ -800,6 +809,7 @@ function ItemRow({
   sourceArea,
   isAdded,
   addedDayNumbers,
+  tripStartDate,
   thumbnailMode,
   sourceTypeLabel,
   onPick,
@@ -808,6 +818,7 @@ function ItemRow({
   sourceArea: string | null
   isAdded: boolean
   addedDayNumbers: number[]
+  tripStartDate?: string | null
   thumbnailMode?: "default" | "transportIcon"
   sourceTypeLabel?: string
   onPick: () => void
@@ -821,7 +832,11 @@ function ItemRow({
       type={item.type}
       typeLabel={sourceTypeLabel}
       isAdded={isAdded}
-      addedLabel={addedDayNumbers.length ? formatAddedDaysCompact(addedDayNumbers) : undefined}
+      addedLabel={
+        addedDayNumbers.length
+          ? formatAddedDaysCompact(addedDayNumbers, tripStartDate)
+          : undefined
+      }
       thumbnail={
         <InspirationThumbnail
           kind="item"

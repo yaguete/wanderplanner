@@ -27,8 +27,9 @@ assert.equal(endDateFromStartAndNumDays("2026-12-30", 4), "2027-01-02")
 assert.equal(endDateFromStartAndNumDays("2026-10-24", 3), "2026-10-26")
 assert.equal(dateISOForDayIndex("2026-10-24", 2), "2026-10-26")
 
-// Formato de cabecera de día (sin año).
-assert.equal(formatDayDate("2026-09-14"), "14 sept")
+// Formato de cabecera de día (weekday + día + mes, sin año).
+assert.equal(formatDayDate("2026-09-14"), "lun 14 sept") // lunes
+assert.equal(formatDayDate("2026-08-09"), "dom 9 ago")
 
 // Añadir un día al viaje de aceptación: 14–20 → 14–21.
 assert.equal(endDateFromStartAndNumDays("2026-09-14", 8), "2026-09-21")

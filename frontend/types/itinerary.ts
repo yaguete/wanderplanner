@@ -102,9 +102,10 @@ export type TripTaskCategory =
 
 /**
  * Estado de una tarea. `notNeeded` = "esto no hay que reservarlo" (triaje);
- * los tres valores son excluyentes. Ausencia en el mapa = nunca tocada.
+ * `booked` = reservado (o «hecho» en trámites); `paid` = pagado.
+ * Los valores son excluyentes. Ausencia en el mapa = nunca tocada.
  */
-export type TripTaskStatus = "pending" | "booked" | "notNeeded"
+export type TripTaskStatus = "pending" | "booked" | "paid" | "notNeeded"
 
 /**
  * Estado de una tarea tocada por el usuario. Solo se persiste en `Trip.tasks`

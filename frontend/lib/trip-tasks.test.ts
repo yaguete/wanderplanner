@@ -168,9 +168,47 @@ assert.equal(cancellableApplies("basic"), false)
   const totals = computeTripTaskTotals(buildTripTasks(withCost))
   assert.equal(totals.totalCost, 180)
   assert.equal(totals.costByCategory.accommodation, 180)
-  assert.equal(totals.committedCost, 180)
+  assert.equal(totals.costByStatus.booked, 180)
   assert.equal(totals.byStatus.booked, 1)
-  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 3)
+  assert.equal(
+    totals.byStatus.pending + totals.byStatus.booked + totals.byStatus.paid,
+    3,
+  )
+
+  const paidState: TripTaskState = {
+    status: "paid",
+    cost: 50,
+    cancellable: null,
+    notes: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  }
+  const withPaid = makeTrip({
+    tasks: {
+      [stayKey]: booked,
+      [transportKey]: paidState,
+    },
+  })
+  const paidTotals = computeTripTaskTotals(buildTripTasks(withPaid))
+  assert.equal(paidTotals.byStatus.paid, 1)
+  assert.equal(paidTotals.costByStatus.paid, 50)
+  assert.equal(
+    computeTripTaskTotals(buildTripTasks(withPaid), {
+      categories: ["accommodation"],
+    }).costByStatus.booked,
+    180,
+  )
+  assert.equal(
+    computeTripTaskTotals(buildTripTasks(withPaid), {
+      categories: ["accommodation"],
+    }).costByStatus.paid,
+    0,
+  )
+  assert.equal(
+    computeTripTaskTotals(buildTripTasks(withPaid), {
+      categories: ["transport"],
+    }).costByStatus.paid,
+    50,
+  )
 }
 
 // ── 2. Mismo hotel desde dos fuentes → UNA tarea ─────────────────────────────
@@ -315,7 +353,7 @@ assert.equal(cancellableApplies("basic"), false)
   )
 
   let totals = computeTripTaskTotals(tasks)
-  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 3)
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked + totals.byStatus.paid, 3)
   assert.equal(totals.byStatus.pending, 3)
   assert.equal(totals.byStatus.booked, 0)
 
@@ -333,7 +371,7 @@ assert.equal(cancellableApplies("basic"), false)
   const promotedTask = buildTripTasks(promoted).find((t) => t.id === activityKey)!
   assert.equal(promotedTask.bucket, "main")
   totals = computeTripTaskTotals(buildTripTasks(promoted))
-  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 4)
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked + totals.byStatus.paid, 4)
   assert.equal(totals.totalCost, 40)
 
   const dismissed = makeTrip({
@@ -351,7 +389,7 @@ assert.equal(cancellableApplies("basic"), false)
   assert.equal(dismissedTask.bucket, "dismissed")
   assert.equal(dismissedTask.state?.cost, 40)
   totals = computeTripTaskTotals(buildTripTasks(dismissed))
-  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 3)
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked + totals.byStatus.paid, 3)
   assert.equal(totals.totalCost, 0)
 
   const restored = mergeTaskState(dismissed.tasks[activityKey], { status: "pending" })
@@ -381,7 +419,7 @@ assert.equal(cancellableApplies("basic"), false)
   const promotedTask = buildTripTasks(promoted).find((t) => t.id === foodKey)!
   assert.equal(promotedTask.bucket, "main")
   let totals = computeTripTaskTotals(buildTripTasks(promoted))
-  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 4)
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked + totals.byStatus.paid, 4)
   assert.equal(totals.totalCost, 25)
 
   const dismissed = makeTrip({
@@ -399,7 +437,7 @@ assert.equal(cancellableApplies("basic"), false)
   assert.equal(dismissedTask.bucket, "dismissed")
   assert.equal(dismissedTask.state?.cost, 25)
   totals = computeTripTaskTotals(buildTripTasks(dismissed))
-  assert.equal(totals.byStatus.pending + totals.byStatus.booked, 3)
+  assert.equal(totals.byStatus.pending + totals.byStatus.booked + totals.byStatus.paid, 3)
   assert.equal(totals.totalCost, 0)
 
   const restored = mergeTaskState(dismissed.tasks[foodKey], { status: "pending" })

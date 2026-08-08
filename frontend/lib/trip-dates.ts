@@ -53,11 +53,13 @@ export function formatTripMonthYear(startISO: string | null): string | null {
   return `${shortMonth(a)}. ${a.getFullYear()}`
 }
 
-/** Día del itinerario: "14 sept" (sin año); null si falta o es inválida. */
+const WEEKDAYS_SHORT = ["dom", "lun", "mar", "mier", "jue", "vie", "sab"] as const
+
+/** Día del itinerario: "lun 14 sept" (sin año); null si falta o es inválida. */
 export function formatDayDate(iso: string | null): string | null {
   const a = parseYMD(iso)
   if (!a) return null
-  return `${a.getDate()} ${shortMonth(a)}`
+  return `${WEEKDAYS_SHORT[a.getDay()]} ${a.getDate()} ${shortMonth(a)}`
 }
 
 /** Días de calendario del rango inclusive; null si faltan fechas o rango inválido. */

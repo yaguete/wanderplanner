@@ -4,6 +4,7 @@
  * Tramos de ida/vuelta (T4B.3): el verbo depende de `route.mode`.
  */
 import type { DerivedTripTask } from "@/lib/trip-tasks"
+import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import type {
   BasicCategory,
   ItemType,
@@ -45,6 +46,7 @@ export const EXTRA_TASK_CATEGORIES: TripTaskCategory[] = [
 
 export const TASK_STATUS_LABELS: Record<TripTaskStatus, string> = {
   booked: "Reservado",
+  paid: "Pagado",
   pending: "Pendiente",
   notNeeded: "Sin reserva",
 }
@@ -136,21 +138,42 @@ export function taskActionTitle(
  * Meta de días / noches. `dayIndexes` es 0-based.
  * Contiguos → «días 1–3»; discontinuos → «días 1, 3».
  * Alojamientos con `nights`: «3 noches · días 1–3».
+ * Con `startDate`: anexa calendario («día 1 · dom 9 ago»).
  */
 export function formatTaskDays(
   dayIndexes: number[],
   nights?: number,
+  startDate?: string | null,
 ): string | null {
   if (dayIndexes.length === 0) return null
 
   const days = dayIndexes.map((i) => i + 1)
   const dayPart = formatDayList(days)
+  const datePart = formatTaskCalendarRange(dayIndexes, startDate ?? null)
 
+  let base: string
   if (nights != null && nights > 0) {
     const nightLabel = nights === 1 ? "1 noche" : `${nights} noches`
-    return `${nightLabel} · ${dayPart}`
+    base = `${nightLabel} · ${dayPart}`
+  } else {
+    base = dayPart
   }
-  return dayPart
+
+  return datePart ? `${base} · ${datePart}` : base
+}
+
+function formatTaskCalendarRange(
+  dayIndexes: number[],
+  startDate: string | null,
+): string | null {
+  if (!startDate || dayIndexes.length === 0) return null
+  const sorted = [...dayIndexes].sort((a, b) => a - b)
+  const first = formatDayDate(dateISOForDayIndex(startDate, sorted[0]!))
+  if (!first) return null
+  if (sorted.length === 1) return first
+  const last = formatDayDate(dateISOForDayIndex(startDate, sorted[sorted.length - 1]!))
+  if (!last || last === first) return first
+  return `${first} – ${last}`
 }
 
 function formatDayList(days: number[]): string {

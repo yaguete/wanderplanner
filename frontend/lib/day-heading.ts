@@ -20,8 +20,8 @@ export function getDayUserDescription(stored: string): string {
 
 /**
  * Título legible:
- * - "Día 1 · 14 sept · Llegada" (con fecha y descripción)
- * - "Día 1 · 14 sept" (solo fecha)
+ * - "Día 1 · lun 14 sept · Llegada" (con fecha y descripción)
+ * - "Día 1 · lun 14 sept" (solo fecha)
  * - "Día 1 · Llegada" / "Día 1" (sin fecha, como antes)
  *
  * dayIndex0: índice 0-based; en UI el número es dayIndex0 + 1.

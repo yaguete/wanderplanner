@@ -1,6 +1,6 @@
 "use client"
 
-import { PanelRightClose, PanelRightOpen } from "lucide-react"
+import { PanelRightClose, PanelRightOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { countriesPlainList } from "@/lib/countries"
 import { formatTripDates } from "@/lib/trip-dates"
@@ -11,6 +11,7 @@ type TripBreadcrumbProps = {
   trip: Trip
   planOpen: boolean
   onTogglePlan: () => void
+  onEditTrip: () => void
   className?: string
 }
 
@@ -18,6 +19,7 @@ export function TripBreadcrumb({
   trip,
   planOpen,
   onTogglePlan,
+  onEditTrip,
   className,
 }: TripBreadcrumbProps) {
   const itemCount = trip.days.reduce((sum, d) => sum + d.items.length, 0)
@@ -32,19 +34,32 @@ export function TripBreadcrumb({
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
-        <h1 className="truncate font-medium text-foreground">{trip.name}</h1>
-        {(dates || place) && (
-          <>
-            <span className="hidden text-muted-foreground/50 sm:inline" aria-hidden>
-              ·
-            </span>
-            <span className="hidden truncate text-xs text-muted-foreground tabular-nums sm:inline">
-              {dates ?? place}
-              {dates && place ? ` · ${place}` : null}
-            </span>
-          </>
-        )}
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onEditTrip}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring -ml-1.5 px-1.5 py-1"
+          aria-label="Editar viaje"
+          title="Editar viaje"
+        >
+          <h1 className="truncate font-medium text-foreground">{trip.name}</h1>
+          {(dates || place) && (
+            <>
+              <span className="hidden shrink-0 text-muted-foreground/50 sm:inline" aria-hidden>
+                ·
+              </span>
+              <span className="hidden truncate text-xs text-muted-foreground tabular-nums sm:inline">
+                {dates ?? place}
+                {dates && place ? ` · ${place}` : null}
+              </span>
+            </>
+          )}
+          <Pencil
+            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+            strokeWidth={1.8}
+            aria-hidden
+          />
+        </button>
       </div>
 
       <p className="hidden shrink-0 text-xs text-muted-foreground tabular-nums md:inline">
