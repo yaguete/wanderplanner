@@ -75,7 +75,7 @@ function NavTabs({
             onClick={() => onChange(id)}
             className={cn(
               TAB_ITEM_CLASS,
-              selected ? "bg-primary/10 text-primary" : "text-muted-foreground",
+              selected ? "bg-muted text-primary" : "text-muted-foreground",
             )}
           >
             <Icon

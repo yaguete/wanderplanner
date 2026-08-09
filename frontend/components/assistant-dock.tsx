@@ -810,16 +810,7 @@ export function AssistantPanelLayer({
                 "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
               )}
             >
-              <div className="flex items-end gap-2 p-1.5">
-                <button
-                  type="button"
-                  disabled
-                  className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/50"
-                  aria-label="Adjuntar archivo (próximamente)"
-                  title="Adjuntar (próximamente)"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
+              <div className="flex items-end gap-2 p-1.5 pl-3">
                 <Textarea
                   ref={inputRef}
                   value={draft}
