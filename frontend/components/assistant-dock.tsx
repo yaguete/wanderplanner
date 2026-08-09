@@ -52,17 +52,12 @@ import { ITEM_LABELS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
+import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
 
 const ASSISTANT_WIDTH_NARROW = "min(560px, calc(100% - 1rem))"
 const ASSISTANT_WIDTH_WIDE = "min(760px, calc(100% - 1rem))"
 /** Tope de crecimiento del textarea antes de pasar a scroll interno (px). */
 const COMPOSER_MAX_HEIGHT = 168
-
-const SUGGESTIONS = [
-  "¿Necesito visado para este viaje?",
-  "¿Qué me falta para completar el plan?",
-  "Sugiéreme otra fuente útil",
-]
 
 type PanelView = "chat" | "history"
 
@@ -369,6 +364,10 @@ export function AssistantPanelLayer({
   const { getTrip, getTripSources, addSourceToTrip, addItemToDay, isLoadingSource } = useTrips()
   const trip = getTrip(tripId)
   const sources = getTripSources(tripId)
+  const suggestions = useMemo(
+    () => buildAssistantSuggestions(trip, sources),
+    [trip, sources],
+  )
   const addedSourceUrls = useMemo(
     () => new Set(sources.map((s) => normalizeSourceUrl(s.url))),
     [sources],
@@ -791,7 +790,7 @@ export function AssistantPanelLayer({
           >
             {hydrated && messages.length === 0 ? (
               <div className="pointer-events-auto mb-2 flex flex-col items-start gap-1.5">
-                {SUGGESTIONS.map((s) => (
+                {suggestions.map((s) => (
                   <button
                     key={s}
                     type="button"
