@@ -274,7 +274,7 @@ assert.equal(formatLegName("Barcelona", "Granada"), "Barcelona → Granada")
   const mad = { lng: -3.7, lat: 40.4 }
   const d = haversineKm(bcn, mad)
   assert.ok(d > 400 && d < 600)
-  assert.equal(HUB_MAX_DISTANCE_KM.airport, 180)
+  assert.equal(HUB_MAX_DISTANCE_KM.airport, 200)
   assert.equal(HUB_MAX_DISTANCE_KM.station, 80)
   assert.equal(HUB_MAX_DISTANCE_KM.busStation, 50)
   // Mismo punto → 0.
