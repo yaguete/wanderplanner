@@ -4,7 +4,7 @@
  * Campos de perfil de viajero (tipos + referencias favoritas). Compartidos por el registro,
  * la modal del RegistrationGate y los ajustes de cuenta.
  */
-import { Plus, X } from "lucide-react"
+import { Check, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -56,12 +56,13 @@ export function TravelerProfileFields({
                 onClick={() => toggleType(type.id)}
                 aria-pressed={active}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-sm transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
                   active
-                    ? "border-primary bg-primary text-primary-foreground"
+                    ? "border-foreground bg-foreground text-background"
                     : "border-border bg-background text-foreground/80 hover:bg-muted",
                 )}
               >
+                {active ? <Check className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
                 {type.label}
               </button>
             )
@@ -79,19 +80,12 @@ export function TravelerProfileFields({
           {references.map((ref, index) => (
             <div key={index} className="flex items-center gap-2">
               <Input
-                value={ref.label}
-                onChange={(e) => updateReference(index, { label: e.target.value })}
-                placeholder="La Cosmopolilla"
-                className="flex-1"
-                aria-label={`Nombre de la referencia ${index + 1}`}
-              />
-              <Input
                 value={ref.url ?? ""}
-                onChange={(e) => updateReference(index, { url: e.target.value })}
-                placeholder="lacosmopolilla.com"
+                onChange={(e) => updateReference(index, { url: e.target.value, label: "" })}
+                placeholder="https://mibloguerafavorita.com"
                 className="flex-1"
                 inputMode="url"
-                aria-label={`Web de la referencia ${index + 1}`}
+                aria-label={`URL de la referencia ${index + 1}`}
               />
               <Button
                 type="button"

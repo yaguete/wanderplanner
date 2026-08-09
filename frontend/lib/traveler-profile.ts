@@ -11,10 +11,13 @@ export const TRAVELER_TYPES = [
   { id: "relax", label: "Relax" },
   { id: "gastronomia", label: "Gastronomía" },
   { id: "cultura", label: "Cultura e historia" },
-  { id: "naturaleza", label: "Naturaleza" },
+  { id: "naturaleza", label: "Naturaleza y paisajes" },
+  { id: "fauna-exotica", label: "Fauna exótica" },
   { id: "mochilero", label: "Mochilero" },
   { id: "lujo", label: "Lujo" },
   { id: "roadtrip", label: "Road trip" },
+  { id: "mascota", label: "Con mascota" },
+  { id: "movilidad-reducida", label: "Movilidad reducida" },
 ] as const
 
 export type TravelerTypeId = (typeof TRAVELER_TYPES)[number]["id"]

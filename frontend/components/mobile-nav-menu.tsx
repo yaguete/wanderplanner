@@ -4,9 +4,17 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { Compass, LogOut, Map, Plus, UserPlus, X } from "lucide-react"
+import { Compass, LogOut, Map, Plus, Settings, UserPlus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useTrips } from "@/lib/trip-context"
 import { NewTripDialog } from "@/components/new-trip-dialog"
 import { useAuth } from "@/lib/auth-context"
@@ -182,46 +190,76 @@ export function MobileNavMenu({
             </div>
 
             <footer className="shrink-0 border-t border-border/60 px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
-              <div className="mx-auto flex w-full max-w-sm items-center gap-3">
-                <Avatar className="size-11">
-                  {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-                  <AvatarFallback className="bg-secondary text-sm font-medium text-secondary-foreground">
-                    {initialsFor(userName)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{userName}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {isGuest ? "Estás probando sin cuenta" : user?.email ?? "Tu cuenta"}
-                  </p>
-                </div>
-                {isGuest ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0"
-                    onClick={() => {
-                      close()
-                      router.push("/signup")
-                    }}
+              <div className="mx-auto w-full max-w-sm">
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl px-1 py-1 text-left",
+                      "outline-none ring-offset-2 transition-colors hover:bg-muted/50",
+                      "focus-visible:ring-2 focus-visible:ring-ring",
+                    )}
+                    aria-label="Abrir menú de cuenta"
                   >
-                    <UserPlus className="h-4 w-4" />
-                    Guardar
-                  </Button>
-                ) : (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="shrink-0 text-muted-foreground"
-                    aria-label="Cerrar sesión"
-                    onClick={() => {
-                      close()
-                      void signOut().then(() => router.push("/"))
-                    }}
+                    <Avatar className="size-11">
+                      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+                      <AvatarFallback className="bg-secondary text-sm font-medium text-secondary-foreground">
+                        {initialsFor(userName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{userName}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {isGuest ? "Estás probando sin cuenta" : user?.email ?? "Tu cuenta"}
+                      </p>
+                    </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    side="top"
+                    className="z-[60] w-56"
                   >
-                    <LogOut className="h-5 w-5" />
-                  </Button>
-                )}
+                    <DropdownMenuLabel className="flex flex-col gap-0.5">
+                      <span className="truncate text-sm font-medium">{userName}</span>
+                      <span className="truncate text-xs font-normal text-muted-foreground">
+                        {isGuest ? "Estás probando sin cuenta" : user?.email ?? ""}
+                      </span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {isGuest ? (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          close()
+                          router.push("/signup")
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4" />
+                        Guardar mi viaje
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          close()
+                          router.push("/account")
+                        }}
+                      >
+                        <Settings className="h-4 w-4" />
+                        Ajustes
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        close()
+                        void signOut().then(() => {
+                          router.push("/")
+                          router.refresh()
+                        })
+                      }}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Cerrar sesión
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </footer>
           </DialogPrimitive.Content>

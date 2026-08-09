@@ -36,26 +36,15 @@ export function BrandMark({ className }: { className?: string }) {
 
 type AppHeaderProps = {
   leading?: ReactNode
-  /** En móvil: al pulsar el avatar (abre el menú lateral). */
-  onAvatarClick?: () => void
 }
 
-export function AppHeader({ leading, onAvatarClick }: AppHeaderProps) {
+export function AppHeader({ leading }: AppHeaderProps) {
   const router = useRouter()
   const { user, profile, isGuest, signOut } = useAuth()
 
   const name = displayNameFor(user, profile)
   const initials = initialsFor(name)
   const avatarUrl = (user?.user_metadata?.avatar_url as string | undefined) ?? null
-
-  const avatar = (
-    <Avatar className="size-7">
-      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-      <AvatarFallback className="bg-secondary text-[10px] font-medium text-secondary-foreground">
-        {initials}
-      </AvatarFallback>
-    </Avatar>
-  )
 
   const handleSignOut = async () => {
     await signOut()
@@ -75,49 +64,43 @@ export function AppHeader({ leading, onAvatarClick }: AppHeaderProps) {
       </Link>
       <div className="flex-1" />
       <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
-      {onAvatarClick ? (
-        <button
-          type="button"
-          onClick={onAvatarClick}
+      <DropdownMenu>
+        <DropdownMenuTrigger
           className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Abrir menú"
+          aria-label="Abrir menú de cuenta"
         >
-          {avatar}
-        </button>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Abrir menú de cuenta"
-          >
-            {avatar}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="flex flex-col gap-0.5">
-              <span className="truncate text-sm font-medium">{name}</span>
-              <span className="truncate text-xs font-normal text-muted-foreground">
-                {isGuest ? "Estás probando sin cuenta" : user?.email ?? ""}
-              </span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {isGuest ? (
-              <DropdownMenuItem onSelect={() => router.push("/signup")}>
-                <UserPlus className="h-4 w-4" />
-                Guardar mi viaje
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem onSelect={() => router.push("/account")}>
-                <Settings className="h-4 w-4" />
-                Ajustes de cuenta
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={() => void handleSignOut()}>
-              <LogOut className="h-4 w-4" />
-              Cerrar sesión
+          <Avatar className="size-7">
+            {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+            <AvatarFallback className="bg-secondary text-[10px] font-medium text-secondary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="flex flex-col gap-0.5">
+            <span className="truncate text-sm font-medium">{name}</span>
+            <span className="truncate text-xs font-normal text-muted-foreground">
+              {isGuest ? "Estás probando sin cuenta" : user?.email ?? ""}
+            </span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {isGuest ? (
+            <DropdownMenuItem onSelect={() => router.push("/signup")}>
+              <UserPlus className="h-4 w-4" />
+              Guardar mi viaje
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+          ) : (
+            <DropdownMenuItem onSelect={() => router.push("/account")}>
+              <Settings className="h-4 w-4" />
+              Ajustes
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => void handleSignOut()}>
+            <LogOut className="h-4 w-4" />
+            Cerrar sesión
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   )
 }
