@@ -55,6 +55,11 @@ export type TripTasksPanelProps = {
   defaultCategory?: TripTaskCategory
   /** Copy del CTA al final de la lista (p. ej. «Añadir actividad»). */
   addActionLabel?: string
+  /**
+   * Si se pasa, el CTA lo invoca en lugar de abrir AddExtraTaskDialog.
+   * Útil en Transporte para abrir el diálogo de traslado.
+   */
+  onAddAction?: () => void
   /** Copy del empty state. */
   emptyTitle?: string
   emptyDescription?: string
@@ -215,6 +220,7 @@ export function TripTasksPanel({
   onRemoveBasic,
   defaultCategory = "other",
   addActionLabel = "Añadir tarea",
+  onAddAction,
   emptyTitle = "Sin tareas todavía",
   emptyDescription = "Consolida ítems en la Ruta o añade una tarea a mano.",
   hideSummary = false,
@@ -250,7 +256,13 @@ export function TripTasksPanel({
   const addButton = (
     <button
       type="button"
-      onClick={() => setExtraDialogOpen(true)}
+      onClick={() => {
+        if (onAddAction) {
+          onAddAction()
+          return
+        }
+        setExtraDialogOpen(true)
+      }}
       className="inline-flex min-h-8 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
     >
       <Plus className="h-3.5 w-3.5 shrink-0" />
@@ -266,7 +278,7 @@ export function TripTasksPanel({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
         <div className="flex flex-col gap-6">
           {countryTasks ? (
             <CountryTasksSection

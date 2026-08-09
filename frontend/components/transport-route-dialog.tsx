@@ -99,8 +99,8 @@ export function TransportRouteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
-        <DialogHeader className="shrink-0 space-y-1.5 border-b border-border px-6 py-4">
+      <DialogContent fullscreenOnMobile className="flex flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 space-y-1.5 border-b border-border px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">{title}</DialogTitle>
           <DialogDescription>
             Define origen, destino y medio. Abrir no consulta mapas hasta que escribas o elijas hub.
@@ -135,7 +135,7 @@ export function TransportRouteDialog({
           />
         </div>
 
-        <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
+        <DialogFooter className="shrink-0 border-t border-border px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

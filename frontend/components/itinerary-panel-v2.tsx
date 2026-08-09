@@ -19,6 +19,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { countriesPlainList } from "@/lib/countries"
@@ -112,6 +114,12 @@ export default function ItineraryPanel({
     upsertTransportRouteItem,
   } = useTrips()
   const trip = getTrip(tripId)
+  const isMobile = useIsMobile()
+  const {
+    containerRef: panelRef,
+    collapsed: headerCollapsed,
+    setCollapsed: setHeaderCollapsed,
+  } = useCollapsingHeader(isMobile)
   const dateSub = useMemo(() => (trip ? formatTripMonthYear(trip.startDate) : null), [trip])
   const itemCount = useMemo(
     () => (trip ? trip.days.reduce((sum, d) => sum + d.items.length, 0) : 0),
@@ -136,6 +144,10 @@ export default function ItineraryPanel({
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [listMode, setListMode] = useState<"list" | "map">("list")
+
+  useEffect(() => {
+    setHeaderCollapsed(false)
+  }, [viewMode, setHeaderCollapsed])
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [manualDialogDayId, setManualDialogDayId] = useState<string | null>(null)
   const [extraTaskDialogOpen, setExtraTaskDialogOpen] = useState(false)
@@ -372,38 +384,57 @@ export default function ItineraryPanel({
   }
 
   return (
-    <div className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background">
-      <div className="relative shrink-0 space-y-3 border-b border-border px-4 py-3.5">
-        {/* Fila 1: título + fecha + cerrar */}
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 className="text-sm font-semibold text-foreground">Mi viaje</h2>
-            {dateSub ? (
-              <p className="text-xs text-muted-foreground tabular-nums">{dateSub}</p>
+    <div
+      ref={panelRef}
+      className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
+    >
+      <div
+        className={cn(
+          "relative shrink-0 border-b border-border px-4",
+          isMobile && headerCollapsed ? "pb-2 pt-2" : "space-y-3 py-3.5",
+        )}
+      >
+        {/* Fila 1+2: título / fecha / meta — se repliegan en móvil al bajar */}
+        <div
+          className={cn(
+            isMobile &&
+              cn(
+                "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+                headerCollapsed ? "max-h-0 opacity-0" : "max-h-28 opacity-100",
+              ),
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="text-sm font-semibold text-foreground max-md:text-lg max-md:tracking-tight">
+                Mi viaje
+              </h2>
+              {dateSub ? (
+                <p className="text-xs text-muted-foreground tabular-nums">{dateSub}</p>
+              ) : null}
+            </div>
+            {onClose ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 max-sm:h-11 max-sm:w-11 max-sm:rounded-full max-sm:bg-muted/80 max-sm:hover:bg-muted"
+                onClick={onClose}
+                aria-label="Cerrar Mi viaje"
+              >
+                <X className="h-4 w-4 max-sm:h-5 max-sm:w-5" />
+              </Button>
             ) : null}
           </div>
-          {onClose ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 max-sm:h-11 max-sm:w-11 max-sm:rounded-full max-sm:bg-muted/80 max-sm:hover:bg-muted"
-              onClick={onClose}
-              aria-label="Cerrar Mi viaje"
-            >
-              <X className="h-4 w-4 max-sm:h-5 max-sm:w-5" />
-            </Button>
-          ) : null}
+
+          <p className="mt-3 text-xs text-muted-foreground tabular-nums">
+            {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
+            {trip.days.length === 1 ? "día" : "días"}
+            <TripTasksManagedFragment trip={trip} />
+          </p>
         </div>
 
-        {/* Fila 2: meta — ítems · días · gestionadas */}
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
-          {trip.days.length === 1 ? "día" : "días"}
-          <TripTasksManagedFragment trip={trip} />
-        </p>
-
-        {/* Fila 3: pestañas */}
+        {/* Fila 3: pestañas — siempre visibles */}
         <div className="min-h-8">
           <ItineraryViewModeTabs value={viewMode} onValueChange={setViewMode} />
         </div>
@@ -491,7 +522,7 @@ export default function ItineraryPanel({
           </div>
 
           {listMode === "list" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
               {trip.days.map((day, dayIndex) => (
                 <DaySection
                   key={day.id}
@@ -529,7 +560,7 @@ export default function ItineraryPanel({
               ))}
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
               <ItineraryMapView
                 tripId={tripId}
                 points={mapPoints}
@@ -558,6 +589,11 @@ export default function ItineraryPanel({
             hideSummary
             extraDialogOpen={extraTaskDialogOpen}
             onExtraDialogOpenChange={setExtraTaskDialogOpen}
+            onAddAction={
+              categoryView === "transport"
+                ? () => setTransportDialog({ dayId: null })
+                : undefined
+            }
             onSetTaskState={handleSetTaskState}
             onAddExtraTask={handleAddExtraTask}
             onRemoveExtraTask={handleRemoveExtraTask}
@@ -1020,8 +1056,8 @@ function DaySection({
 
   return (
     <div className="mb-7 last:mb-0">
-      <div className="mb-3 flex min-w-0 items-center gap-2.5">
-        <div className="flex shrink-0 items-center" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="mb-3 flex min-w-0 items-start gap-2.5 sm:items-center">
+        <div className="flex shrink-0 items-center pt-0.5 sm:pt-0" onPointerDown={(e) => e.stopPropagation()}>
           <Checkbox
             id={`day-select-${dayId}`}
             checked={isDaySelected}
@@ -1035,19 +1071,29 @@ function DaySection({
             }
           />
         </div>
-        <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5">
-          <span className="shrink-0 text-[15px] font-semibold tabular-nums leading-tight">Día {dayIndex + 1}</span>
+        <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 items-start gap-1.5 sm:items-center">
+          <div className="flex shrink-0 flex-col leading-tight">
+            <span className="text-[15px] font-semibold tabular-nums">Día {dayIndex + 1}</span>
+            {dayDateLabel ? (
+              <span className="text-[11px] font-medium tabular-nums text-muted-foreground sm:hidden">
+                {dayDateLabel}
+              </span>
+            ) : null}
+          </div>
           {dayDateLabel ? (
             <>
-              <span className="shrink-0 text-[15px] text-muted-foreground" aria-hidden>
+              <span className="hidden shrink-0 text-[15px] text-muted-foreground sm:inline" aria-hidden>
                 ·
               </span>
-              <span className="shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground">
+              <span className="hidden shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground sm:inline">
                 {dayDateLabel}
               </span>
             </>
           ) : null}
-          <span className="shrink-0 text-[15px] text-muted-foreground" aria-hidden>
+          <span
+            className="shrink-0 pt-0.5 text-[15px] leading-tight text-muted-foreground"
+            aria-hidden
+          >
             ·
           </span>
           {editingDescription ? (
@@ -1066,7 +1112,7 @@ function DaySection({
                     cancelDescription()
                   }
                 }}
-                className="min-w-0 flex-1 border-b border-primary bg-transparent py-0.5 text-[15px] font-semibold text-foreground outline-none placeholder:text-muted-foreground/60"
+                className="min-w-0 flex-1 truncate border-b border-primary bg-transparent py-0.5 text-[15px] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/60"
                 placeholder="Descripción del día"
                 aria-label="Descripción del día"
               />
@@ -1086,7 +1132,7 @@ function DaySection({
               type="button"
               onClick={startEdit}
               className={cn(
-                "min-w-0 flex-1 cursor-pointer select-none text-left text-[15px] leading-tight",
+                "min-w-0 flex-1 cursor-pointer select-none truncate text-left text-[15px] leading-tight",
                 "rounded-sm ring-offset-2 transition-colors",
                 "hover:bg-muted/60",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

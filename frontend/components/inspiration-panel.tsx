@@ -15,6 +15,7 @@ import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
 import { AddSourceDialog, AddSourceFlow } from "@/components/add-source-dialog"
 import { AddToDayDialog } from "@/components/add-to-day-dialog"
+import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
@@ -88,6 +89,11 @@ export default function InspirationPanel({
   const [refetchError, setRefetchError] = useState<string | null>(null)
   /** Ítem pendiente de «Añadir al día»; un solo Dialog para toda la lista (sobrevive al virtualizer). */
   const [pickingItem, setPickingItem] = useState<SourceItem | null>(null)
+  const {
+    containerRef: panelRef,
+    collapsed: headerCollapsed,
+    setCollapsed: setHeaderCollapsed,
+  } = useCollapsingHeader(isMobile)
 
   useEffect(() => {
     if (sources.length === 0) {
@@ -203,7 +209,8 @@ export default function InspirationPanel({
 
   useEffect(() => {
     setPickingItem(null)
-  }, [activeSourceId, sourceTab])
+    setHeaderCollapsed(false)
+  }, [activeSourceId, sourceTab, setHeaderCollapsed])
 
   const handleRefetchArticle = async () => {
     if (!currentSource) return
@@ -264,11 +271,33 @@ export default function InspirationPanel({
     { id: "basics", label: "Descuentos" },
   ]
 
+  /** Móvil: repliegue por altura; en desktop no aplica. */
+  const collapsibleClass = (expandedMaxHeight: string) =>
+    isMobile
+      ? cn(
+          "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+          headerCollapsed ? "max-h-0 opacity-0" : `${expandedMaxHeight} opacity-100`,
+        )
+      : undefined
+
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
-      <div className="shrink-0">
+    <div
+      ref={panelRef}
+      className="flex h-full min-w-0 flex-col overflow-hidden bg-background"
+    >
+      <div className={cn("shrink-0", collapsibleClass("max-h-40"))}>
+        {isMobile ? (
+          <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">Fuentes</h2>
+            {sources.length > 0 ? (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {sources.length} {sources.length === 1 ? "fuente" : "fuentes"}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {sources.length > 0 ? (
-          <div className="px-3 pt-2.5 sm:px-4">
+          <div className={cn("px-3 sm:px-4", isMobile ? "pt-1.5" : "pt-2.5")}>
             <div
               className={cn(
                 "flex min-w-0 gap-1.5 overflow-x-auto overflow-y-hidden pb-2.5",
@@ -343,7 +372,7 @@ export default function InspirationPanel({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentSource ? (
             <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1 sm:px-6">
-              <div className="flex items-start gap-3">
+              <div className={cn("flex items-start gap-3", collapsibleClass("max-h-24"))}>
                 {!isMobile && currentSource.ogImage ? (
                   <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
                     <img
@@ -369,7 +398,12 @@ export default function InspirationPanel({
                   ) : null}
                 </div>
               </div>
-              <div className="mt-4 flex gap-4 overflow-x-auto sm:mt-5 sm:gap-5">
+              <div
+                className={cn(
+                  "flex gap-4 overflow-x-auto transition-[margin] duration-200 ease-out sm:mt-5 sm:gap-5",
+                  isMobile && headerCollapsed ? "mt-2" : "mt-4",
+                )}
+              >
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -428,7 +462,7 @@ export default function InspirationPanel({
                 />
               )
             ) : sourceTab === "basics" ? (
-              <div className="space-y-3 px-4 pb-6 pt-4 sm:px-6">
+              <div className="space-y-3 px-4 pb-6 pt-4 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
                 {!currentSource.basics.length ? (
                   <EmptyState
                     icon={Sparkles}
@@ -460,7 +494,7 @@ export default function InspirationPanel({
                 )}
               </div>
             ) : sourceTab === "source" ? (
-              <div className="px-4 pb-6 pt-4 sm:px-6">
+              <div className="px-4 pb-6 pt-4 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
                 {currentSource.articleHtml ? (
                   <div
                     className="prose-article"
@@ -586,7 +620,7 @@ export default function InspirationPanel({
           <div
             role="dialog"
             aria-label={mobileAnalyzing ? "Analizando fuente" : "Añadir fuente"}
-            className="fixed bottom-[4.75rem] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
+            className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
           >
             <AddSourceFlow
               tripId={tripId}
@@ -654,7 +688,7 @@ function SourceGroupedList({
   // Transporte (sin buscador): listas cortas; montaje completo vale.
   if (!showSearch) {
     return (
-      <div className="space-y-5 px-4 pb-6 pt-4 sm:px-6">
+      <div className="space-y-5 px-4 pb-6 pt-4 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
             {group.day != null ? (
@@ -770,7 +804,7 @@ function VirtualSourceRows({
   return (
     <div
       ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 sm:px-6"
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
     >
       <div
         className="relative w-full"

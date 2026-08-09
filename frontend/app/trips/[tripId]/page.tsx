@@ -2,15 +2,17 @@
 
 import { Suspense, use, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { PanelRightClose, PanelRightOpen, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import { cn } from "@/lib/utils"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
 import { TripBreadcrumb } from "@/components/trip-breadcrumb"
+import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -30,28 +32,22 @@ function readPlanOpen(): boolean {
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip, getTripSources, isLoading, addSourceToTrip, isLoadingSource, updateTrip } =
-    useTrips()
+  const { getTrip, isLoading, addSourceToTrip, updateTrip } = useTrips()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
-  const sources = getTripSources(tripId)
   const pendingSourceUrl = searchParams.get("source")
   const autoSourceRequested = useRef<string | null>(null)
   const isMobile = useIsMobile()
+  const { open: keyboardOpen } = useVirtualKeyboard()
   /** Lectura síncrona: evita true→false tras hidratar y el flash de cierre. */
   const [planOpen, setPlanOpen] = useState(readPlanOpen)
   const [assistantOpen, setAssistantOpen] = useState(false)
+  /** Sección activa en la navegación móvil (hermanas, no overlays). */
+  const [mobileSection, setMobileSection] = useState<TripMobileSection>("sources")
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [editTripOpen, setEditTripOpen] = useState(false)
   const [autoSourceError, setAutoSourceError] = useState<string | null>(null)
-  const preparingFirstSource = isLoadingSource && sources.length === 0 && !autoSourceError
-  /**
-   * La transición solo tras el primer paint (o un toggle).
-   * Si no, al cambiar de viaje el remount anima el panel “escapándose” a la derecha.
-   * Solo aplica al overlay móvil.
-   */
-  const [planAnimEnabled, setPlanAnimEnabled] = useState(false)
   const planPanelRef = useRef<ImperativePanelHandle>(null)
 
   // Solo se concluye que el viaje no existe cuando la carga ha terminado.
@@ -85,13 +81,6 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   }, [pendingSourceUrl, trip, tripId, router])
 
   useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => setPlanAnimEnabled(true))
-    })
-    return () => cancelAnimationFrame(id)
-  }, [])
-
-  useEffect(() => {
     try {
       localStorage.setItem(PLAN_OPEN_KEY, planOpen ? "1" : "0")
     } catch {
@@ -118,25 +107,19 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   useEffect(() => {
     setAssistantOpen(false)
     setEditTripOpen(false)
+    setMobileSection("sources")
     if (!pendingSourceUrl) setAddSourceOpen(false)
   }, [tripId, pendingSourceUrl])
 
   useEffect(() => {
-    if (!planOpen && !assistantOpen) return
+    if (isMobile || !assistantOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      if (assistantOpen) {
-        setAssistantOpen(false)
-        return
-      }
-      if (planOpen) {
-        setPlanAnimEnabled(true)
-        setPlanOpen(false)
-      }
+      setAssistantOpen(false)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [planOpen, assistantOpen])
+  }, [assistantOpen, isMobile])
 
   if (isLoading && !trip) {
     return (
@@ -149,18 +132,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   if (!trip) return null
 
   const closePlan = () => {
-    setPlanAnimEnabled(true)
     setPlanOpen(false)
   }
 
   const togglePlan = () => {
     setAddSourceOpen(false)
-    if (isMobile) {
-      setAssistantOpen(false)
-      setPlanAnimEnabled(true)
-      setPlanOpen((v) => !v)
-      return
-    }
     const panel = planPanelRef.current
     if (!panel) {
       setPlanOpen((v) => !v)
@@ -172,9 +148,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   const openAddSource = (open: boolean) => {
     if (open) {
-      setAssistantOpen(false)
-      setPlanAnimEnabled(true)
-      setPlanOpen(false)
+      if (isMobile) {
+        setMobileSection("sources")
+      } else {
+        setAssistantOpen(false)
+      }
     }
     setAddSourceOpen(open)
   }
@@ -202,11 +180,14 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         </Button>
       ) : null}
 
-      <AssistantPanelLayer
-        open={assistantOpen}
-        onOpenChange={setAssistantOpen}
-        tripId={tripId}
-      />
+      {!isMobile ? (
+        <AssistantPanelLayer
+          open={assistantOpen}
+          onOpenChange={setAssistantOpen}
+          tripId={tripId}
+          variant="overlay"
+        />
+      ) : null}
     </div>
   )
 
@@ -252,71 +233,47 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
       {isMobile ? (
         <div className="relative min-h-0 flex-1 overflow-hidden">
-          {inspirationColumn}
-
-          {planOpen ? (
-            <button
-              type="button"
-              className="absolute inset-0 z-20 bg-foreground/20"
-              aria-label="Cerrar Mi viaje"
-              onClick={closePlan}
-            />
-          ) : null}
-
-          <aside
-            id="trip-plan-panel"
-            aria-label="Mi viaje"
-            aria-hidden={!planOpen}
+          <div
             className={cn(
-              "absolute z-30 flex flex-col overflow-hidden bg-background",
-              planAnimEnabled && "transition-transform duration-200 ease-out",
-              "inset-0 w-full border-l border-border",
-              planOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
+              "absolute inset-0",
+              mobileSection === "sources" ? "visible z-[1]" : "invisible pointer-events-none",
             )}
+            aria-hidden={mobileSection !== "sources"}
           >
-            <ItineraryPanel tripId={tripId} onClose={closePlan} />
-          </aside>
+            <InspirationPanel
+              tripId={tripId}
+              addSourceOpen={addSourceOpen}
+              onAddSourceOpenChange={openAddSource}
+              initialSourceUrl={pendingSourceUrl}
+              autoSourceError={autoSourceError}
+            />
+          </div>
 
-          {!assistantOpen ? (
-            <div className="absolute bottom-4 right-3 z-[50] flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-11 w-11 rounded-full bg-background shadow-md"
-                onClick={() => {
-                  setPlanAnimEnabled(true)
-                  setPlanOpen(false)
-                  setAddSourceOpen(false)
-                  setAssistantOpen(true)
-                }}
-                aria-controls="inspiration-assistant-panel"
-                aria-expanded={false}
-                aria-label="Abrir asistente"
-              >
-                <Sparkles className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant={planOpen ? "secondary" : "default"}
-                size="icon"
-                className={cn(
-                  "h-11 w-11 rounded-full shadow-md",
-                  planOpen ? "bg-muted text-foreground hover:bg-muted/80" : "shadow-primary/20",
-                )}
-                onClick={togglePlan}
-                aria-pressed={planOpen}
-                aria-controls="trip-plan-panel"
-                aria-label={planOpen ? "Cerrar Mi viaje" : "Abrir Mi viaje"}
-              >
-                {planOpen ? (
-                  <PanelRightClose className="h-4 w-4" />
-                ) : (
-                  <PanelRightOpen className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          ) : null}
+          <div
+            className={cn(
+              "absolute inset-0",
+              mobileSection === "plan" ? "visible z-[1]" : "invisible pointer-events-none",
+            )}
+            aria-hidden={mobileSection !== "plan"}
+          >
+            <ItineraryPanel tripId={tripId} />
+          </div>
+
+          <AssistantPanelLayer
+            open={mobileSection === "assistant"}
+            onOpenChange={(open) => {
+              if (open) setMobileSection("assistant")
+              else setMobileSection("sources")
+            }}
+            tripId={tripId}
+            variant="section"
+          />
+
+          <TripMobileNav
+            active={mobileSection}
+            onChange={setMobileSection}
+            hidden={keyboardOpen}
+          />
         </div>
       ) : (
         <ResizablePanelGroup

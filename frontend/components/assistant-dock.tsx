@@ -1,8 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react"
 import {
   ArrowLeft,
+  ArrowUp,
   History,
   Link2,
   Loader2,
@@ -10,7 +18,6 @@ import {
   Minimize2,
   Minus,
   Plus,
-  SendHorizontal,
   Sparkles,
   Square,
   Trash2,
@@ -29,7 +36,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AssistantMarkdown } from "@/components/assistant-markdown"
+import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import {
   useAssistantChat,
   type AssistantConversationSummary,
@@ -45,6 +54,8 @@ import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 
 const ASSISTANT_WIDTH_NARROW = "min(560px, calc(100% - 1rem))"
 const ASSISTANT_WIDTH_WIDE = "min(760px, calc(100% - 1rem))"
+/** Tope de crecimiento del textarea antes de pasar a scroll interno (px). */
+const COMPOSER_MAX_HEIGHT = 168
 
 const SUGGESTIONS = [
   "¿Necesito visado para este viaje?",
@@ -58,6 +69,12 @@ type AssistantPanelLayerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   tripId: string
+  /**
+   * `overlay` (default): capa modal sobre Fuentes (desktop + legacy).
+   * `section`: sección hermana en la navegación móvil; se mantiene montada
+   * aunque no esté visible para no cortar el streaming.
+   */
+  variant?: "overlay" | "section"
 }
 
 function StatusPill({ label }: { label: string }) {
@@ -320,10 +337,19 @@ export function AssistantPanelLayer({
   open,
   onOpenChange,
   tripId,
+  variant = "overlay",
 }: AssistantPanelLayerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
+  const isSection = variant === "section"
+  const { open: keyboardOpen, inset: keyboardInset } = useVirtualKeyboard()
+  /** Alto real del composer flotante: reserva espacio al final de la conversación. */
+  const [composerHeight, setComposerHeight] = useState(0)
+  const { containerRef: panelRef, collapsed: headerCollapsed } = useCollapsingHeader(
+    isMobile && isSection,
+  )
   const [draft, setDraft] = useState("")
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
   const [busySourceUrl, setBusySourceUrl] = useState<string | null>(null)
@@ -368,8 +394,29 @@ export function AssistantPanelLayer({
     return () => cancelAnimationFrame(t)
   }, [open, view])
 
+  /** El textarea crece con el contenido hasta `COMPOSER_MAX_HEIGHT`; a partir de ahí, scroll. */
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`
+  }, [draft, view])
+
   useEffect(() => {
-    if (!open) return
+    const el = composerRef.current
+    if (!el) {
+      setComposerHeight(0)
+      return
+    }
+    const measure = () => setComposerHeight(el.offsetHeight)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [view, isSection])
+
+  useEffect(() => {
+    if (!open || isSection) return
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
         if (view === "history") {
@@ -381,7 +428,7 @@ export function AssistantPanelLayer({
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onOpenChange, view])
+  }, [open, onOpenChange, view, isSection])
 
   useEffect(() => {
     if (view !== "chat") return
@@ -477,7 +524,8 @@ export function AssistantPanelLayer({
     setPendingDelete(null)
   }
 
-  if (!open) return null
+  // Overlay: desmontar al cerrar. Section: permanece montado (streaming) y se oculta con CSS.
+  if (!open && !isSection) return null
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
   /** Bocadillo vacío en curso: muestra spinner dentro; si hay statusLabel, manda el pill. */
@@ -490,25 +538,46 @@ export function AssistantPanelLayer({
 
   return (
     <div
+      ref={panelRef}
       id="inspiration-assistant-panel"
-      role="dialog"
-      aria-modal={isMobile ? true : undefined}
+      role={isSection ? "region" : "dialog"}
+      aria-modal={isSection ? undefined : isMobile ? true : undefined}
       aria-label="Asistente de viaje"
+      aria-hidden={isSection && !open ? true : undefined}
       className={cn(
-        "absolute z-40 flex min-h-0 flex-col overflow-hidden bg-background",
-        "inset-0 border-t border-border",
-        "sm:inset-auto sm:top-2 sm:right-2 sm:bottom-2",
-        "sm:rounded-xl sm:border sm:shadow-[0_16px_48px_rgba(0,0,0,0.14)]",
-        "duration-200 animate-in fade-in-0 slide-in-from-bottom-2",
-        "sm:transition-[width] sm:duration-200 sm:ease-out",
+        "flex min-h-0 flex-col overflow-hidden bg-background",
+        isSection
+          ? cn(
+              "absolute inset-0 z-10",
+              open ? "visible" : "invisible pointer-events-none",
+            )
+          : cn(
+              "absolute z-40",
+              "inset-0 border-t border-border",
+              "sm:inset-auto sm:top-2 sm:right-2 sm:bottom-2",
+              "sm:rounded-xl sm:border sm:shadow-[0_16px_48px_rgba(0,0,0,0.14)]",
+              "duration-200 animate-in fade-in-0 slide-in-from-bottom-2",
+              "sm:transition-[width] sm:duration-200 sm:ease-out",
+            ),
       )}
       style={
-        isMobile
+        isSection || isMobile
           ? undefined
           : { width: wide ? ASSISTANT_WIDTH_WIDE : ASSISTANT_WIDTH_NARROW }
       }
     >
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2",
+          isSection
+            ? "overflow-hidden px-4 transition-[max-height,opacity,padding] duration-200 ease-out"
+            : "h-12 border-b border-border px-3 sm:px-4",
+          isSection &&
+            (headerCollapsed
+              ? "max-h-0 py-0 opacity-0"
+              : "max-h-20 pb-2 pt-3.5 opacity-100"),
+        )}
+      >
         {showHistory ? (
           <>
             <button
@@ -520,17 +589,29 @@ export function AssistantPanelLayer({
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+            <p
+              className={cn(
+                "min-w-0 flex-1 truncate font-semibold text-foreground",
+                isSection ? "text-lg tracking-tight" : "text-sm",
+              )}
+            >
               Conversaciones
             </p>
           </>
         ) : (
           <>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden />
-            </span>
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-              Asistente del viaje
+            {!isSection ? (
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+              </span>
+            ) : null}
+            <p
+              className={cn(
+                "min-w-0 flex-1 truncate font-semibold text-foreground",
+                isSection ? "text-lg tracking-tight" : "text-sm",
+              )}
+            >
+              Asistente
             </p>
             <Button
               type="button"
@@ -553,7 +634,7 @@ export function AssistantPanelLayer({
             >
               <History className="h-3.5 w-3.5" />
             </button>
-            {!isMobile ? (
+            {!isMobile && !isSection ? (
               <button
                 type="button"
                 onClick={() => setWide((v) => !v)}
@@ -567,20 +648,27 @@ export function AssistantPanelLayer({
             ) : null}
           </>
         )}
-        <button
-          type="button"
-          onClick={() => onOpenChange(false)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Minimizar asistente"
-          title="Minimizar"
-        >
-          <Minus className="h-4 w-4" strokeWidth={2.25} />
-        </button>
+        {!isSection ? (
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Minimizar asistente"
+            title="Minimizar"
+          >
+            <Minus className="h-4 w-4" strokeWidth={2.25} />
+          </button>
+        ) : null}
       </div>
 
       {showHistory ? (
         <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-3 p-4">
+          <div
+            className={cn(
+              "space-y-3 p-4",
+              isSection && "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]",
+            )}
+          >
             <ConversationHistoryList
               conversations={conversations}
               activeConversationId={activeConversationId}
@@ -601,7 +689,10 @@ export function AssistantPanelLayer({
       ) : (
         <>
           <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-3 p-4">
+            <div
+              className="space-y-3 p-4"
+              style={{ paddingBottom: composerHeight ? composerHeight + 8 : undefined }}
+            >
               {!hydrated ? null : messages.length === 0 ? (
                 <div className="space-y-4">
                   <p className="max-w-[300px] text-xs leading-relaxed text-muted-foreground">
@@ -660,8 +751,29 @@ export function AssistantPanelLayer({
             </div>
           </ScrollArea>
 
-          <div className="shrink-0 border-t border-border bg-background p-3">
-            <div className="flex items-end gap-2 rounded-2xl border border-border bg-background p-1.5 shadow-sm">
+          {/* Composer flotante: fondo transparente para que la conversación corra por detrás. */}
+          <div
+            ref={composerRef}
+            className={cn(
+              "pointer-events-none absolute inset-x-0 z-20 px-3 pt-3 transition-[bottom] duration-200 ease-out",
+              // Móvil + teclado: pegado al teclado. Sin teclado: hueco para el dock.
+              isSection && keyboardOpen
+                ? "pb-2"
+                : isSection
+                  ? "pb-[calc(3.85rem+max(env(safe-area-inset-bottom),0.875rem))]"
+                  : "pb-3",
+            )}
+            style={{
+              bottom: isSection && keyboardOpen ? keyboardInset : 0,
+            }}
+          >
+            <div
+              className={cn(
+                "pointer-events-auto flex items-end gap-2 rounded-2xl p-1.5",
+                "border border-border/60 bg-background/80 backdrop-blur-xl",
+                "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+              )}
+            >
               <button
                 type="button"
                 disabled
@@ -678,7 +790,8 @@ export function AssistantPanelLayer({
                 onKeyDown={onKeyDown}
                 placeholder="Pregunta sobre tu viaje…"
                 rows={1}
-                className="max-h-28 min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-sm shadow-none focus-visible:ring-0"
+                className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-sm shadow-none focus-visible:ring-0"
+                style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
                 aria-label="Mensaje al asistente"
                 disabled={!trip}
               />
@@ -699,13 +812,10 @@ export function AssistantPanelLayer({
                   className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
                   aria-label="Enviar mensaje"
                 >
-                  <SendHorizontal className="h-3.5 w-3.5" />
+                  <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
                 </button>
               )}
             </div>
-            <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-              Los enlaces se abren en una pestaña; «Añadir fuente» los incorpora al viaje
-            </p>
           </div>
         </>
       )}

@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/lib/auth-context"
@@ -13,6 +13,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "WanderPlanner",
   description: "Consolida rutas de blogueros y periodistas en tu propio itinerario",
+}
+
+/** En móvil, el layout se encoge con el teclado (Chrome/Android) en vez de solaparlo. */
+export const viewport: Viewport = {
+  interactiveWidget: "resizes-content",
 }
 
 export default function RootLayout({
