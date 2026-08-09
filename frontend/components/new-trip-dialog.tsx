@@ -401,8 +401,12 @@ export function NewTripDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(90vh,40rem)] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent
+        fullscreenOnMobile
+        hideClose
+        className="sm:max-h-[min(90vh,40rem)] sm:max-w-lg"
+      >
+        <DialogHeader className="shrink-0 space-y-1.5 px-6 pb-2 pt-6 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
             {isEdit ? "Editar viaje" : "Nuevo viaje"}
           </DialogTitle>
@@ -412,7 +416,7 @@ export function NewTripDialog({
               : "Crea un proyecto para consolidar fuentes de blogueros y revistas. El destino concreto irá emergiendo de los artículos que incorpores."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-2">
           <div className="space-y-2">
             <Label htmlFor={nameId}>Nombre del viaje</Label>
             <Input
@@ -629,7 +633,7 @@ export function NewTripDialog({
             </p>
           ) : null}
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button variant="ghost" type="button" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

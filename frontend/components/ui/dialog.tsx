@@ -47,8 +47,9 @@ const DialogContent = React.forwardRef<
       className={cn(
         fullscreenOnMobile
           ? [
-              'fixed inset-0 left-0 top-0 z-50 grid h-[100dvh] max-h-[100dvh] w-full max-w-none',
-              'translate-x-0 translate-y-0 gap-4 rounded-none border-0 bg-background p-6 shadow-lg',
+              // Columna flex: permite cabecera/footer fijos y cuerpo con scroll.
+              'fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col',
+              'translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-lg',
               'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out',
               'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
               // Desktop: diálogo centrado con animación estándar

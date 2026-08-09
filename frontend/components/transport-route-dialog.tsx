@@ -99,7 +99,7 @@ export function TransportRouteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent fullscreenOnMobile className="flex flex-col gap-0 overflow-hidden p-0">
+      <DialogContent fullscreenOnMobile hideClose className="sm:max-w-lg">
         <DialogHeader className="shrink-0 space-y-1.5 border-b border-border px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">{title}</DialogTitle>
           <DialogDescription>
@@ -135,7 +135,7 @@ export function TransportRouteDialog({
           />
         </div>
 
-        <DialogFooter className="shrink-0 border-t border-border px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

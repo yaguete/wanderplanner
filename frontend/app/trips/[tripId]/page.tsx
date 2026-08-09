@@ -256,7 +256,10 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             )}
             aria-hidden={mobileSection !== "plan"}
           >
-            <ItineraryPanel tripId={tripId} />
+            <ItineraryPanel
+              tripId={tripId}
+              onEditTrip={() => setEditTripOpen(true)}
+            />
           </div>
 
           <AssistantPanelLayer
@@ -311,7 +314,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             aria-hidden={!planOpen}
           >
             <div className={cn("flex h-full min-h-0 flex-col", !planOpen && "invisible")}>
-              <ItineraryPanel tripId={tripId} onClose={closePlan} />
+              <ItineraryPanel
+                tripId={tripId}
+                onClose={closePlan}
+                onEditTrip={() => setEditTripOpen(true)}
+              />
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

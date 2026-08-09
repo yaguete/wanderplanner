@@ -287,11 +287,13 @@ export default function InspirationPanel({
     >
       <div className={cn("shrink-0", collapsibleClass("max-h-40"))}>
         {isMobile ? (
-          <div className="flex items-baseline gap-2 px-4 pb-1 pt-3.5">
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">Fuentes</h2>
+          <div className="flex items-baseline gap-1.5 px-4 pb-1 pt-3.5">
+            <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-foreground">
+              {currentSource?.title ?? "Fuentes"}
+            </h2>
             {sources.length > 0 ? (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {sources.length} {sources.length === 1 ? "fuente" : "fuentes"}
+              <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                · {sources.length} {sources.length === 1 ? "fuente" : "fuentes"}
               </p>
             ) : null}
           </div>
@@ -372,21 +374,22 @@ export default function InspirationPanel({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentSource ? (
             <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1 sm:px-6">
-              <div className={cn("flex items-start gap-3", collapsibleClass("max-h-24"))}>
-                {!isMobile && currentSource.ogImage ? (
-                  <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                    <img
-                      src={currentSource.ogImage}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  </div>
-                ) : null}
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                    {currentSource.title}
-                  </h3>
-                  {!isMobile ? (
+              {/* Desktop: titular + miniatura. En móvil el título va en la cabecera («Japan — 21 días · N fuentes»). */}
+              {!isMobile ? (
+                <div className="flex items-start gap-3">
+                  {currentSource.ogImage ? (
+                    <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                      <img
+                        src={currentSource.ogImage}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : null}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
+                      {currentSource.title}
+                    </h3>
                     <a
                       href={currentSource.url}
                       target="_blank"
@@ -395,13 +398,13 @@ export default function InspirationPanel({
                     >
                       {currentSource.url}
                     </a>
-                  ) : null}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <div
                 className={cn(
                   "flex gap-4 overflow-x-auto transition-[margin] duration-200 ease-out sm:mt-5 sm:gap-5",
-                  isMobile && headerCollapsed ? "mt-2" : "mt-4",
+                  isMobile ? "mt-2" : "mt-4",
                 )}
               >
                 {tabs.map((tab) => (

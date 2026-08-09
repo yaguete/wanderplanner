@@ -13,6 +13,7 @@ import {
   List,
   Loader2,
   Map as MapIcon,
+  Pencil,
   Plus,
   Sparkles,
   X,
@@ -24,7 +25,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { countriesPlainList } from "@/lib/countries"
-import { dateISOForDayIndex, formatDayDate, formatTripMonthYear } from "@/lib/trip-dates"
+import { dateISOForDayIndex, formatDayDate, formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
 import { transportIconForItem } from "@/lib/item-styles"
 import { TASK_STATUS_LABELS } from "@/lib/task-labels"
@@ -91,9 +92,12 @@ function normalizeDayLabel(raw: string): string {
 export default function ItineraryPanel({
   tripId,
   onClose,
+  onEditTrip,
 }: {
   tripId: string
   onClose?: () => void
+  /** Abre el diálogo de edición del viaje (fechas, nombre, etc.). */
+  onEditTrip?: () => void
 }) {
   const {
     getTrip,
@@ -120,7 +124,10 @@ export default function ItineraryPanel({
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
   } = useCollapsingHeader(isMobile)
-  const dateSub = useMemo(() => (trip ? formatTripMonthYear(trip.startDate) : null), [trip])
+  const dateSub = useMemo(
+    () => (trip ? formatTripDates(trip.startDate, trip.endDate) : null),
+    [trip],
+  )
   const itemCount = useMemo(
     () => (trip ? trip.days.reduce((sum, d) => sum + d.items.length, 0) : 0),
     [trip],
@@ -405,11 +412,36 @@ export default function ItineraryPanel({
           )}
         >
           <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
               <h2 className="text-sm font-semibold text-foreground max-md:text-lg max-md:tracking-tight">
                 Mi viaje
               </h2>
-              {dateSub ? (
+              {onEditTrip ? (
+                <button
+                  type="button"
+                  onClick={onEditTrip}
+                  className={cn(
+                    "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 py-0.5",
+                    "text-left outline-none transition-colors",
+                    "hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring",
+                  )}
+                  aria-label="Editar viaje"
+                  title="Editar viaje"
+                >
+                  {dateSub ? (
+                    <span className="truncate text-xs text-muted-foreground tabular-nums">
+                      {dateSub}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Fechas</span>
+                  )}
+                  <Pencil
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  />
+                </button>
+              ) : dateSub ? (
                 <p className="text-xs text-muted-foreground tabular-nums">{dateSub}</p>
               ) : null}
             </div>
