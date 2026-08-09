@@ -6,7 +6,6 @@ import { Sparkles } from "lucide-react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import { cn } from "@/lib/utils"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
@@ -39,7 +38,6 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const pendingSourceUrl = searchParams.get("source")
   const autoSourceRequested = useRef<string | null>(null)
   const isMobile = useIsMobile()
-  const { open: keyboardOpen } = useVirtualKeyboard()
   /** Lectura síncrona: evita true→false tras hidratar y el flash de cierre. */
   const [planOpen, setPlanOpen] = useState(readPlanOpen)
   const [assistantOpen, setAssistantOpen] = useState(false)
@@ -281,11 +279,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
           {/* En el Asistente el nav va incrustado en la tarjeta del composer. */}
           {mobileSection !== "assistant" ? (
-            <TripMobileNav
-              active={mobileSection}
-              onChange={setMobileSection}
-              hidden={keyboardOpen}
-            />
+            <TripMobileNav active={mobileSection} onChange={setMobileSection} />
           ) : null}
         </div>
       ) : (

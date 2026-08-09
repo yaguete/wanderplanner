@@ -1,6 +1,8 @@
 "use client"
 
 import {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -8,6 +10,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react"
 import {
   ArrowLeft,
@@ -197,7 +200,11 @@ function normalizeSourceUrl(url: string): string {
   }
 }
 
-function MessageBubble({
+/**
+ * Memoizado con callbacks estables (reciben `messageId`): durante el streaming solo
+ * se re-renderiza la burbuja cola, y escribir en el composer no re-parsea el markdown.
+ */
+const MessageBubble = memo(function MessageBubble({
   message,
   isStreamingTail,
   actionBusyId,
@@ -210,8 +217,8 @@ function MessageBubble({
   message: ChatMessage
   isStreamingTail: boolean
   actionBusyId: string | null
-  onAcceptAction: (action: ChatAction) => void
-  onDismissAction: (action: ChatAction) => void
+  onAcceptAction: (messageId: string, action: ChatAction) => void
+  onDismissAction: (messageId: string, action: ChatAction) => void
   onAddSourceLink: (url: string) => void
   busySourceUrl: string | null
   addedSourceUrls: ReadonlySet<string>
@@ -259,15 +266,107 @@ function MessageBubble({
               key={action.id}
               action={action}
               busy={actionBusyId === action.id}
-              onAccept={() => onAcceptAction(action)}
-              onDismiss={() => onDismissAction(action)}
+              onAccept={() => onAcceptAction(message.id, action)}
+              onDismiss={() => onDismissAction(message.id, action)}
             />
           ))}
         </div>
       ) : null}
     </div>
   )
-}
+})
+
+/**
+ * Composer con estado propio: cada tecla re-renderiza solo este componente,
+ * no el panel entero (con todo el markdown de la conversación). Clave para
+ * que escribir en móvil vaya fluido.
+ */
+const ChatComposer = memo(function ChatComposer({
+  inputRef,
+  disabled,
+  isStreaming,
+  onSend,
+  onStop,
+  conversationKey,
+}: {
+  inputRef: RefObject<HTMLTextAreaElement | null>
+  disabled: boolean
+  isStreaming: boolean
+  onSend: (text: string) => void
+  onStop: () => void
+  /** Al cambiar de conversación se descarta el borrador. */
+  conversationKey: string | null
+}) {
+  const [draft, setDraft] = useState("")
+
+  // Descarta el borrador al cambiar de conversación (ajuste de estado en render,
+  // sin efecto: https://react.dev/learn/you-might-not-need-an-effect).
+  const [prevKey, setPrevKey] = useState(conversationKey)
+  if (prevKey !== conversationKey) {
+    setPrevKey(conversationKey)
+    setDraft("")
+  }
+
+  /** El textarea crece con el contenido hasta `COMPOSER_MAX_HEIGHT`; a partir de ahí, scroll. */
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`
+  }, [draft, inputRef])
+
+  const handleSend = () => {
+    const text = draft.trim()
+    if (!text || isStreaming) return
+    setDraft("")
+    onSend(text)
+  }
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  return (
+    <div className="flex items-end gap-2 p-1.5 pl-3">
+      <Textarea
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Pregunta sobre tu viaje…"
+        rows={1}
+        // text-base en móvil: <16px provoca auto-zoom de iOS al enfocar (y no se deshace).
+        className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-base shadow-none focus-visible:ring-0 md:text-sm"
+        style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
+        aria-label="Mensaje al asistente"
+        disabled={disabled}
+      />
+      {isStreaming ? (
+        <button
+          type="button"
+          onClick={onStop}
+          className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
+          aria-label="Detener"
+        >
+          <Square className="h-3 w-3 fill-current" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!draft.trim() || disabled}
+          className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
+          aria-label="Enviar mensaje"
+        >
+          <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+        </button>
+      )}
+    </div>
+  )
+})
 
 function ConversationHistoryList({
   conversations,
@@ -352,7 +451,6 @@ export function AssistantPanelLayer({
   const { containerRef: panelRef, collapsed: headerCollapsed } = useCollapsingHeader(
     isMobile && isSection,
   )
-  const [draft, setDraft] = useState("")
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
   const [busySourceUrl, setBusySourceUrl] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
@@ -401,14 +499,6 @@ export function AssistantPanelLayer({
     return () => cancelAnimationFrame(t)
   }, [open, view, isMobile])
 
-  /** El textarea crece con el contenido hasta `COMPOSER_MAX_HEIGHT`; a partir de ahí, scroll. */
-  useLayoutEffect(() => {
-    const el = inputRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`
-  }, [draft, view])
-
   useEffect(() => {
     const el = composerRef.current
     if (!el) {
@@ -442,36 +532,32 @@ export function AssistantPanelLayer({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages, statusLabel, isStreaming, open, view, keyboardOpen, keyboardInset])
 
-  const handleSend = async () => {
-    const text = draft.trim()
-    if (!text || isStreaming) return
-    setDraft("")
-    await send(text)
-  }
+  const handleComposerSend = useCallback(
+    (text: string) => {
+      void send(text)
+    },
+    [send],
+  )
 
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      void handleSend()
-    }
-  }
+  const handleAddSourceLink = useCallback(
+    async (url: string) => {
+      const normalized = normalizeSourceUrl(url)
+      if (!trip || isLoadingSource || busySourceUrl) return
+      if (addedSourceUrls.has(normalized)) return
+      setLinkError(null)
+      setBusySourceUrl(url)
+      try {
+        await addSourceToTrip(tripId, url)
+      } catch (e) {
+        setLinkError(e instanceof Error ? e.message : "No se pudo añadir la fuente")
+      } finally {
+        setBusySourceUrl(null)
+      }
+    },
+    [trip, isLoadingSource, busySourceUrl, addedSourceUrls, addSourceToTrip, tripId],
+  )
 
-  const handleAddSourceLink = async (url: string) => {
-    const normalized = normalizeSourceUrl(url)
-    if (!trip || isLoadingSource || busySourceUrl) return
-    if (addedSourceUrls.has(normalized)) return
-    setLinkError(null)
-    setBusySourceUrl(url)
-    try {
-      await addSourceToTrip(tripId, url)
-    } catch (e) {
-      setLinkError(e instanceof Error ? e.message : "No se pudo añadir la fuente")
-    } finally {
-      setBusySourceUrl(null)
-    }
-  }
-
-  const handleAcceptAction = async (messageId: string, action: ChatAction) => {
+  const handleAcceptAction = useCallback(async (messageId: string, action: ChatAction) => {
     if (action.status !== "pending" || !trip) return
     setActionBusyId(action.id)
     setLinkError(null)
@@ -511,17 +597,22 @@ export function AssistantPanelLayer({
     } finally {
       setActionBusyId(null)
     }
-  }
+  }, [trip, addedSourceUrls, addSourceToTrip, addItemToDay, setActionStatus, tripId])
+
+  const handleDismissAction = useCallback(
+    (messageId: string, action: ChatAction) => {
+      setActionStatus(messageId, action.id, "dismissed")
+    },
+    [setActionStatus],
+  )
 
   const handleNewConversation = () => {
     newConversation()
-    setDraft("")
     setView("chat")
   }
 
   const handleOpenConversation = (id: string) => {
     openConversation(id)
-    setDraft("")
     setView("chat")
   }
 
@@ -726,9 +817,9 @@ export function AssistantPanelLayer({
                     message={m}
                     isStreamingTail={m.id === streamingTailId}
                     actionBusyId={actionBusyId}
-                    onAcceptAction={(action) => void handleAcceptAction(m.id, action)}
-                    onDismissAction={(action) => setActionStatus(m.id, action.id, "dismissed")}
-                    onAddSourceLink={(url) => void handleAddSourceLink(url)}
+                    onAcceptAction={handleAcceptAction}
+                    onDismissAction={handleDismissAction}
+                    onAddSourceLink={handleAddSourceLink}
                     busySourceUrl={busySourceUrl}
                     addedSourceUrls={addedSourceUrls}
                   />
@@ -810,41 +901,14 @@ export function AssistantPanelLayer({
                 "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
               )}
             >
-              <div className="flex items-end gap-2 p-1.5 pl-3">
-                <Textarea
-                  ref={inputRef}
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  placeholder="Pregunta sobre tu viaje…"
-                  rows={1}
-                  // text-base en móvil: <16px provoca auto-zoom de iOS al enfocar (y no se deshace).
-                  className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-base shadow-none focus-visible:ring-0 md:text-sm"
-                  style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
-                  aria-label="Mensaje al asistente"
-                  disabled={!trip}
-                />
-                {isStreaming ? (
-                  <button
-                    type="button"
-                    onClick={stop}
-                    className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
-                    aria-label="Detener"
-                  >
-                    <Square className="h-3 w-3 fill-current" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void handleSend()}
-                    disabled={!draft.trim() || !trip}
-                    className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
-                    aria-label="Enviar mensaje"
-                  >
-                    <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
-                  </button>
-                )}
-              </div>
+              <ChatComposer
+                inputRef={inputRef}
+                disabled={!trip}
+                isStreaming={isStreaming}
+                onSend={handleComposerSend}
+                onStop={stop}
+                conversationKey={activeConversationId}
+              />
 
               {/* Nav incrustado: composer + pestañas como un único elemento flotante. */}
               {isSection && bottomNav && !keyboardOpen ? (

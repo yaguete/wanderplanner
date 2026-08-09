@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Compass, Newspaper, Route, Sparkles } from "lucide-react"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import { cn } from "@/lib/utils"
 
 export type TripMobileSection = "sources" | "plan" | "assistant"
@@ -34,7 +35,11 @@ const TABS: {
 type TripMobileNavProps = {
   active: TripMobileSection
   onChange: (section: TripMobileSection) => void
-  /** Oculta el dock (p. ej. teclado virtual abierto) con una salida suave. */
+  /**
+   * Oculta el dock con una salida suave. Con el teclado virtual abierto se
+   * oculta solo (variante `floating`): la suscripción vive aquí para no
+   * re-renderizar la página entera en cada cambio del teclado.
+   */
   hidden?: boolean
   /**
    * `floating`: tarjeta flotante independiente (Fuentes / Mi viaje).
@@ -97,6 +102,8 @@ export function TripMobileNav({
   variant = "floating",
   className,
 }: TripMobileNavProps) {
+  const { open: keyboardOpen } = useVirtualKeyboard()
+
   if (variant === "embedded") {
     return (
       <nav aria-label="Navegación del viaje" className={className}>
@@ -105,16 +112,18 @@ export function TripMobileNav({
     )
   }
 
+  const isHidden = hidden || keyboardOpen
+
   return (
     <nav
       aria-label="Navegación del viaje"
-      aria-hidden={hidden || undefined}
+      aria-hidden={isHidden || undefined}
       className={cn(
         // Overlay: sin fondo propio; los toques fuera de la tarjeta atraviesan al contenido.
         "pointer-events-none absolute inset-x-0 bottom-0 z-40",
         "px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]",
         "transition-[opacity,transform] duration-200 ease-out",
-        hidden && "translate-y-[120%] opacity-0",
+        isHidden && "translate-y-[120%] opacity-0",
         className,
       )}
     >
