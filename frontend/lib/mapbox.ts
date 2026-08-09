@@ -407,51 +407,139 @@ function mergeLineStrings(parts: { type: "LineString"; coordinates: [number, num
 }
 
 const MAX_WAYPOINTS = 25
+/** Solo memoria: las geometrías overview=full no caben en localStorage sin riesgo de cuota. */
+const DIRECTIONS_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/** Clave legacy a limpiar una vez (Fase 5.4). */
+const DIRECTIONS_LEGACY_LS_KEY = "wp-mapbox-dir-v1"
 
 type DirectionsResponse = {
-  routes?: { distance: number; geometry: { type: "LineString"; coordinates: [number, number][] } }[]
+  routes?: {
+    distance: number
+    geometry: { type: "LineString"; coordinates: [number, number][] }
+    legs?: { distance: number }[]
+  }[]
   code?: string
+}
+
+export type DirectionsResult = {
+  geometry: { type: "LineString"; coordinates: [number, number][] }
+  distanceMeters: number
+  /** false si algún chunk falló: no etiquetar el total como «por carretera». */
+  complete: boolean
+  failedChunks: number
+  /** Distancia por tramo entre waypoints consecutivos (cuando la API la aporta). */
+  legDistancesMeters: number[]
+}
+
+function directionsCacheKey(coords: LngLat[], profile: string): string {
+  const sig = coords.map((c) => `${c.lng.toFixed(5)},${c.lat.toFixed(5)}`).join(";")
+  return `${profile}|${sig}`
+}
+
+const directionsMemoryCache = new Map<string, { value: DirectionsResult; exp: number }>()
+
+let clearedLegacyDirectionsCache = false
+function clearLegacyDirectionsLocalStorage(): void {
+  if (clearedLegacyDirectionsCache) return
+  clearedLegacyDirectionsCache = true
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(DIRECTIONS_LEGACY_LS_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function readDirectionsCache(key: string): DirectionsResult | null {
+  clearLegacyDirectionsLocalStorage()
+  const mem = directionsMemoryCache.get(key)
+  if (!mem) return null
+  if (mem.exp < Date.now()) {
+    directionsMemoryCache.delete(key)
+    return null
+  }
+  return mem.value
+}
+
+function writeDirectionsCache(key: string, value: DirectionsResult): void {
+  // Solo rutas completas en memoria (misma sesión / reabrir el modo).
+  if (!value.complete) return
+  directionsMemoryCache.set(key, { value, exp: Date.now() + DIRECTIONS_TTL_MS })
 }
 
 /**
  * Ruta en coche (driving) entre waypoints; si hay &gt;25, parte en tramos y une geometrías.
- * Devuelve `null` si no hay al menos 2 puntos o la API no devuelve ruta.
+ * Devuelve `null` si no hay al menos 2 puntos o ningún chunk devolvió ruta.
+ * `complete === false` indica que algún chunk falló (no etiquetar como «por carretera»).
  */
 export async function getDirections(
   coords: LngLat[],
-  options?: { profile?: "driving" },
-): Promise<{ geometry: { type: "LineString"; coordinates: [number, number][] }; distanceMeters: number } | null> {
+  options?: { profile?: "driving"; signal?: AbortSignal },
+): Promise<DirectionsResult | null> {
   if (!MAPBOX_TOKEN?.trim() || coords.length < 2) return null
   const profile = options?.profile ?? "driving"
+  const cacheKey = directionsCacheKey(coords, profile)
+  const cached = readDirectionsCache(cacheKey)
+  if (cached) return cached
+
   const chunks = chunkCoordsForDirections(coords, MAX_WAYPOINTS)
   const geometries: { type: "LineString"; coordinates: [number, number][] }[] = []
+  const legDistancesMeters: number[] = []
   let distanceM = 0
+  let failedChunks = 0
+  let expectedChunks = 0
 
   for (const part of chunks) {
-    if (part.length < 2) {
-      if (geometries.length === 0) continue
-      // Un solo punto en tramo de continuación: saltar
-      continue
-    }
+    if (part.length < 2) continue
+    expectedChunks += 1
     const path = part.map((c) => `${c.lng},${c.lat}`).join(";")
     const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${path}?${new URLSearchParams({
       access_token: MAPBOX_TOKEN,
       geometries: "geojson",
       overview: "full",
     })}`
-    const res = await fetch(url)
-    if (!res.ok) continue
-    const data = (await res.json()) as DirectionsResponse
-    const route = data.routes?.[0]
-    if (!route?.geometry) continue
-    if (route.geometry.type !== "LineString") continue
-    geometries.push(route.geometry)
-    distanceM += route.distance
+    try {
+      const res = await fetch(url, { signal: options?.signal })
+      if (!res.ok) {
+        failedChunks += 1
+        continue
+      }
+      const data = (await res.json()) as DirectionsResponse
+      if (data.code && data.code !== "Ok") {
+        failedChunks += 1
+        continue
+      }
+      const route = data.routes?.[0]
+      if (!route?.geometry || route.geometry.type !== "LineString") {
+        failedChunks += 1
+        continue
+      }
+      geometries.push(route.geometry)
+      distanceM += route.distance
+      if (route.legs?.length) {
+        for (const leg of route.legs) {
+          legDistancesMeters.push(leg.distance)
+        }
+      } else if (part.length === 2) {
+        legDistancesMeters.push(route.distance)
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") throw err
+      failedChunks += 1
+    }
   }
 
   if (geometries.length === 0) return null
   const geometry = mergeLineStrings(geometries)
-  return { geometry, distanceMeters: distanceM }
+  const result: DirectionsResult = {
+    geometry,
+    distanceMeters: distanceM,
+    complete: failedChunks === 0 && expectedChunks > 0,
+    failedChunks,
+    legDistancesMeters,
+  }
+  writeDirectionsCache(cacheKey, result)
+  return result
 }
 
 // ── Search Box: hubs de transporte (T4B.3) ───────────────────────────────────

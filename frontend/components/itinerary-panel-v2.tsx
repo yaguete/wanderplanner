@@ -27,7 +27,7 @@ import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { countriesPlainList } from "@/lib/countries"
 import { dateISOForDayIndex, formatDayDate, formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
-import { transportIconForItem } from "@/lib/item-styles"
+import { ITEM_DOT_COLORS, transportIconForItem } from "@/lib/item-styles"
 import { TASK_STATUS_LABELS } from "@/lib/task-labels"
 import { dayItemsSignature, generateDaySummary } from "@/lib/day-summary"
 import { ApiLimitError } from "@/lib/api"
@@ -46,13 +46,18 @@ import {
   VIEW_MODE_TASK_CATEGORIES,
   type ItineraryViewMode,
 } from "@/components/itinerary-view-mode-tabs"
-import { ItineraryMapView, type ItineraryMapPoint } from "@/components/itinerary-map-view"
+import { ItineraryMapView, MapModeDropdown, persistMapMode, readStoredMapMode, type ItineraryMapPoint, type MapViewMode } from "@/components/itinerary-map-view"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
 import { RouteLegDialog } from "@/components/route-leg-dialog"
 import { TransportRouteDialog } from "@/components/transport-route-dialog"
 import { formatRouteSummary } from "@/lib/transport-routes"
-import { collectMapGatewayAnchors, collectMapSegments } from "@/lib/map-route-geometry"
+import {
+  collectItineraryPlaces,
+  collectMapGatewayAnchors,
+  collectMapSegments,
+  collectTransportDistances,
+} from "@/lib/map-route-geometry"
 import {
   TripTasksManagedFragment,
   TripTasksPanel,
@@ -151,6 +156,20 @@ export default function ItineraryPanel({
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [listMode, setListMode] = useState<"list" | "map">("list")
+  // Recorrido por defecto; preferencia de localStorage tras hidratar.
+  const [mapMode, setMapMode] = useState<MapViewMode>("places")
+
+  useEffect(() => {
+    const stored = readStoredMapMode()
+    queueMicrotask(() => {
+      if (stored !== "places") setMapMode(stored)
+    })
+  }, [])
+
+  const handleMapModeChange = useCallback((next: MapViewMode) => {
+    setMapMode(next)
+    persistMapMode(next)
+  }, [])
 
   useEffect(() => {
     setHeaderCollapsed(false)
@@ -253,40 +272,51 @@ export default function ItineraryPanel({
     })
   }, [trip])
 
-  // Stay/activity + hubs de llegada/salida cuando ida/vuelta no van por carretera.
-  const mapPoints: ItineraryMapPoint[] = useMemo(() => {
+  // Lugares del recorrido (stay/food/activity) en orden de introducción.
+  const mapPlaces: ItineraryMapPoint[] = useMemo(() => {
     if (!trip) return []
-    const out: ItineraryMapPoint[] = []
-    for (let i = 0; i < trip.days.length; i++) {
-      const d = trip.days[i]!
-      for (const it of d.items) {
-        if (it.type === "stay" || it.type === "activity") {
-          out.push({
-            id: it.id,
-            name: it.name,
-            type: it.type,
-            dayNumber: i + 1,
-            region: resolveRegion(it),
-            coords: it.coords ?? null,
-          })
-        }
+    return collectItineraryPlaces(trip.days).map((p) => {
+      const item = trip.days[p.dayNumber - 1]?.items.find((it) => it.id === p.id)
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        dayNumber: p.dayNumber,
+        region: item ? resolveRegion(item) : p.region,
+        coords: p.coords ?? null,
       }
-    }
-    for (const g of collectMapGatewayAnchors(trip.days)) {
-      out.push({
-        id: `hub:${g.role}:${g.itemId}`,
-        name: g.label,
-        type: "hub",
-        dayNumber: g.dayNumber,
-        coords: { lng: g.lng, lat: g.lat },
-        hubRole: g.role,
-      })
-    }
-    return out
+    })
   }, [trip, resolveRegion])
+
+  // Anclas de llegada/salida cuando ida/vuelta no van por carretera.
+  const mapHubs: ItineraryMapPoint[] = useMemo(() => {
+    if (!trip) return []
+    return collectMapGatewayAnchors(trip.days).map((g) => ({
+      id: `hub:${g.role}:${g.itemId}`,
+      name: g.label,
+      type: "hub" as const,
+      dayNumber: g.dayNumber,
+      coords: { lng: g.lng, lat: g.lat },
+      hubRole: g.role,
+    }))
+  }, [trip])
 
   const mapSegments = useMemo(
     () => (trip ? collectMapSegments(trip.days) : []),
+    [trip],
+  )
+
+  const mapTransportDistances = useMemo(
+    () =>
+      trip
+        ? collectTransportDistances(trip.days)
+        : {
+            byMode: {},
+            drawnKm: 0,
+            undrawn: [],
+            undrawnKm: 0,
+            totalKm: 0,
+          },
     [trip],
   )
 
@@ -517,6 +547,9 @@ export default function ItineraryPanel({
                 Mapa
               </button>
             </div>
+            {listMode === "map" ? (
+              <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
+            ) : null}
             {listMode === "list" ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
                 <button
@@ -602,9 +635,11 @@ export default function ItineraryPanel({
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
               <ItineraryMapView
-                tripId={tripId}
-                points={mapPoints}
+                places={mapPlaces}
+                hubs={mapHubs}
                 segments={mapSegments}
+                transportDistances={mapTransportDistances}
+                mapMode={mapMode}
                 countryCodes={trip.countries}
                 destination={trip.countries.length ? countriesPlainList(trip.countries) : trip.name}
               />
@@ -850,7 +885,10 @@ function DayItineraryTimeline({
             >
               <div className="z-10 hidden w-5 shrink-0 items-center justify-center sm:flex" aria-hidden>
                 <div
-                  className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/35 ring-4 ring-card"
+                  className={cn(
+                    "h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-card",
+                    ITEM_DOT_COLORS[item.type],
+                  )}
                 />
               </div>
               <TravelItemCard

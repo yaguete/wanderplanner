@@ -25,11 +25,19 @@ import {
 import {
   collectMapSegments,
   collectMapGatewayAnchors,
+  collectItineraryPlaces,
+  collectTransportDistances,
+  buildPlacesRoute,
+  formatKm,
   geodesicLine,
+  groupRoadCandidateSubsequences,
   legIncludedInMapItinerary,
   modeAllowsRoadDirections,
+  PLACES_ROAD_MAX_KM,
   segmentFromItem,
+  summarizeTransportKm,
 } from "./map-route-geometry"
+import { geocodeDisplayResult, reduceGeocode } from "./map-geocode-state"
 import {
   allowTransportHubPersistence,
   createPlaceSearchBudget,
@@ -523,6 +531,267 @@ describe("mapa geometría", () => {
     assert.equal(modeAllowsRoadDirections("train"), false)
     assert.equal(modeAllowsRoadDirections("car"), true)
     assert.equal(modeAllowsRoadDirections("bus"), true)
+  })
+})
+
+describe("mapa recorrido de lugares", () => {
+  const baseItem = (
+    id: string,
+    type: "stay" | "food" | "activity" | "transport",
+    name: string,
+    coords?: { lng: number; lat: number } | null,
+  ): UserDayItem => ({
+    id,
+    sourceItemId: id,
+    sourceId: "m",
+    type,
+    name,
+    detail: null,
+    sourceAuthor: "Tú",
+    coords: coords ?? null,
+  })
+
+  it("orden entre días; food entra y transport no", () => {
+    const days: UserDay[] = [
+      {
+        id: "d1",
+        label: "",
+        items: [
+          baseItem("t1", "transport", "A → B"),
+          baseItem("s1", "stay", "Hotel A", { lng: 2.1, lat: 41.3 }),
+          baseItem("f1", "food", "Restaurante", { lng: 2.15, lat: 41.32 }),
+        ],
+      },
+      {
+        id: "d2",
+        label: "",
+        items: [baseItem("a1", "activity", "Mirador", { lng: 2.2, lat: 41.35 })],
+      },
+    ]
+    const places = collectItineraryPlaces(days)
+    assert.deepEqual(
+      places.map((p) => p.id),
+      ["s1", "f1", "a1"],
+    )
+    assert.equal(places[1]!.type, "food")
+    assert.equal(places[0]!.dayNumber, 1)
+    assert.equal(places[2]!.dayNumber, 2)
+  })
+
+  it("punto sin coords se salta; une vecinos y aparece en skipped", () => {
+    const places = [
+      {
+        id: "a",
+        name: "A",
+        type: "activity" as const,
+        dayNumber: 1,
+        coords: { lng: 2.0, lat: 41.0 },
+      },
+      { id: "b", name: "B", type: "activity" as const, dayNumber: 1, coords: null },
+      {
+        id: "c",
+        name: "C",
+        type: "activity" as const,
+        dayNumber: 1,
+        coords: { lng: 2.1, lat: 41.1 },
+      },
+    ]
+    const route = buildPlacesRoute(places)
+    assert.equal(route.skipped.length, 1)
+    assert.equal(route.skipped[0]!.id, "b")
+    assert.equal(route.legs.length, 1)
+    assert.equal(route.legs[0]!.fromId, "a")
+    assert.equal(route.legs[0]!.toId, "c")
+    assert.ok(route.routeKm > 0)
+  })
+
+  it("alojamiento repetido → leg zero, 0 km", () => {
+    const same = { lng: 2.17, lat: 41.38 }
+    const places = [
+      { id: "h1", name: "Hotel", type: "stay" as const, dayNumber: 1, coords: same },
+      { id: "h2", name: "Hotel", type: "stay" as const, dayNumber: 2, coords: same },
+      {
+        id: "a1",
+        name: "Actividad",
+        type: "activity" as const,
+        dayNumber: 2,
+        coords: { lng: 2.2, lat: 41.4 },
+      },
+    ]
+    const route = buildPlacesRoute(places)
+    assert.equal(route.legs[0]!.kind, "zero")
+    assert.ok(route.legs[0]!.km <= 0.05)
+    assert.equal(route.legs[1]!.kind, "road-candidate")
+    assert.ok(route.routeKm > 0)
+  })
+
+  it("par por encima de PLACES_ROAD_MAX_KM → long-hop", () => {
+    // Tokio → Sapporo ~830 km
+    const places = [
+      {
+        id: "tky",
+        name: "Tokio",
+        type: "stay" as const,
+        dayNumber: 1,
+        coords: { lng: 139.69, lat: 35.68 },
+      },
+      {
+        id: "spk",
+        name: "Sapporo",
+        type: "stay" as const,
+        dayNumber: 2,
+        coords: { lng: 141.35, lat: 43.06 },
+      },
+    ]
+    const route = buildPlacesRoute(places)
+    assert.ok(route.legs[0]!.km > PLACES_ROAD_MAX_KM)
+    assert.equal(route.legs[0]!.kind, "long-hop")
+    assert.equal(route.routeKm, 0)
+    assert.ok(route.longHopKm > PLACES_ROAD_MAX_KM)
+  })
+
+  it("groupRoadCandidateSubsequences parte en long-hops", () => {
+    const places = [
+      {
+        id: "a",
+        name: "A",
+        type: "activity" as const,
+        dayNumber: 1,
+        coords: { lng: 2.0, lat: 41.0 },
+      },
+      {
+        id: "b",
+        name: "B",
+        type: "activity" as const,
+        dayNumber: 1,
+        coords: { lng: 2.05, lat: 41.05 },
+      },
+      {
+        id: "c",
+        name: "C",
+        type: "stay" as const,
+        dayNumber: 2,
+        coords: { lng: 139.7, lat: 35.7 },
+      },
+      {
+        id: "d",
+        name: "D",
+        type: "activity" as const,
+        dayNumber: 2,
+        coords: { lng: 139.75, lat: 35.72 },
+      },
+    ]
+    const route = buildPlacesRoute(places)
+    const groups = groupRoadCandidateSubsequences(route.legs)
+    assert.equal(groups.length, 2)
+    assert.equal(groups[0]!.coords.length, 2)
+    assert.equal(groups[1]!.coords.length, 2)
+  })
+
+  it("collectTransportDistances cuenta ida/vuelta y largos; segments los excluye", () => {
+    const days: UserDay[] = [
+      {
+        id: "d1",
+        label: "",
+        items: [
+          {
+            id: "out",
+            sourceItemId: "s",
+            sourceId: "m",
+            type: "transport",
+            name: "BCN → NRT",
+            detail: null,
+            sourceAuthor: "Tú",
+            route: {
+              from: { label: "El Prat", coords: { lng: 2.08, lat: 41.29 }, kind: "airport" },
+              to: { label: "Narita", coords: { lng: 140.39, lat: 35.77 }, kind: "airport" },
+              mode: "flight",
+              leg: "outbound",
+            },
+          },
+          {
+            id: "local",
+            sourceItemId: "s2",
+            sourceId: "m",
+            type: "transport",
+            name: "Takayama → Kanazawa",
+            detail: null,
+            sourceAuthor: "Tú",
+            route: {
+              from: { label: "Takayama", coords: { lng: 137.25, lat: 36.14 }, kind: "station" },
+              to: { label: "Kanazawa", coords: { lng: 136.65, lat: 36.56 }, kind: "station" },
+              mode: "train",
+            },
+          },
+        ],
+      },
+    ]
+    assert.equal(collectMapSegments(days).length, 1)
+    const dist = collectTransportDistances(days)
+    assert.equal(dist.byMode.flight?.count, 1)
+    assert.equal(dist.byMode.train?.count, 1)
+    assert.ok((dist.byMode.flight?.km ?? 0) > 3000)
+    assert.equal(dist.undrawn.length, 1)
+    assert.equal(dist.undrawn[0]!.reason, "gateway-leg")
+    assert.ok(dist.drawnKm > 0)
+    assert.ok(dist.undrawnKm > dist.drawnKm)
+
+    const again = collectTransportDistances(days)
+    assert.equal(again.totalKm, dist.totalKm)
+    assert.equal(summarizeTransportKm(dist.byMode).includes("avión"), true)
+  })
+
+  it("formatKm en tres rangos", () => {
+    assert.equal(formatKm(3.4), "3,4 km")
+    assert.equal(formatKm(45.6), "46 km")
+    assert.equal(formatKm(21400), "21.400 km")
+  })
+})
+
+describe("geocode state (mapa)", () => {
+  const point = {
+    id: "a",
+    name: "A",
+    type: "activity" as const,
+    dayNumber: 1,
+  }
+  const resolved = [{ point, coord: { lng: 2, lat: 41 } }]
+
+  it("begin sin previo → loading; con previo → refreshing conservando resolved", () => {
+    let state = reduceGeocode({ status: "idle" }, { type: "begin", hasPrevious: false })
+    assert.equal(state.status, "loading")
+    assert.equal(geocodeDisplayResult(state), null)
+
+    state = reduceGeocode(
+      { status: "ready", resolved, failed: [] },
+      { type: "begin", hasPrevious: true },
+    )
+    assert.equal(state.status, "refreshing")
+    const display = geocodeDisplayResult(state)
+    assert.ok(display)
+    assert.equal(display!.resolved.length, 1)
+    assert.equal(display!.resolved[0]!.point.id, "a")
+  })
+
+  it("success tras refreshing deja ready con nuevos datos", () => {
+    const refreshing = reduceGeocode(
+      { status: "ready", resolved, failed: [] },
+      { type: "begin", hasPrevious: true },
+    )
+    const next = reduceGeocode(refreshing, {
+      type: "success",
+      resolved: [
+        ...resolved,
+        {
+          point: { id: "b", name: "B", type: "stay", dayNumber: 2 },
+          coord: { lng: 2.1, lat: 41.1 },
+        },
+      ],
+      failed: [],
+    })
+    assert.equal(next.status, "ready")
+    if (next.status !== "ready") throw new Error("expected ready")
+    assert.equal(next.resolved.length, 2)
   })
 })
 

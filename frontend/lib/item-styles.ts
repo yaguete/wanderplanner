@@ -40,6 +40,14 @@ export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: s
   },
 }
 
+/** Punto de timeline en la lista de Ruta: opaco, alineado con el color de categoría. */
+export const ITEM_DOT_COLORS: Record<ItemType, string> = {
+  transport: "bg-sky-600",
+  stay: "bg-orange-600",
+  food: "bg-emerald-600",
+  activity: "bg-violet-600",
+}
+
 export const ITEM_LABELS: Record<ItemType, string> = {
   transport: "Transporte",
   stay: "Alojamiento",

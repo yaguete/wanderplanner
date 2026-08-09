@@ -784,7 +784,7 @@ function TriageSection({
         )}
       >
         <span>
-          ¿Algo más que reservar?{" "}
+          Podrían requerir reserva{" "}
           <span className="font-normal text-muted-foreground">({tasks.length})</span>
         </span>
         <ChevronDown
@@ -803,7 +803,7 @@ function TriageSection({
                   {TASK_CATEGORY_LABELS[category]}
                 </p>
               ) : null}
-              <ul className="m-0 list-none divide-y divide-border/70 border-y border-border/70 p-0">
+              <ul className="m-0 list-none divide-y divide-border/70 p-0">
                 {list.map((task) => (
                   <li
                     key={task.id}

@@ -1,16 +1,24 @@
 "use client"
 
 /**
- * Mapa del itinerario: puntos stay/activity/hubs + segmentos locales (T4B.3 §9.12).
- * Ida/vuelta en avión/tren/ferry no se trazan: anclan llegada/salida.
- * Geometría local por defecto — 0 Directions salvo coche/bus lazy.
+ * Mapa del itinerario: dos modos excluyentes.
+ * - Desplazamientos: tramos de transporte + anclas de ida/vuelta (T4B.3 §9.12).
+ * - Recorrido: lugares (stay/food/activity) en orden, geodésica por defecto.
+ * Ciclo de vida: el mapa se instancia una vez; fuentes/marcadores se actualizan.
  */
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
-import { Loader2 } from "lucide-react"
+import { ChevronDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { collectCountryCodesFromHint } from "@/lib/countries"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   geocodeName,
   geocodeFreeText,
@@ -19,19 +27,107 @@ import {
   type LngLat,
 } from "@/lib/mapbox"
 import {
+  geocodeDisplayResult,
+  reduceGeocode,
+  type GeocodePoint,
+  type GeocodeState,
+} from "@/lib/map-geocode-state"
+import {
+  buildPlacesRoute,
+  formatKm,
+  groupRoadCandidateSubsequences,
   modeAllowsRoadDirections,
+  placesRouteToFeatureCollections,
   segmentsToFeatureCollection,
-  summarizeSegmentModes,
+  summarizeTransportKm,
+  summarizeUndrawnTransports,
   type ItineraryMapSegment,
+  type ItineraryPlace,
+  type PlacesRouteLeg,
+  type TransportDistances,
 } from "@/lib/map-route-geometry"
 import { routeModeLabel } from "@/lib/route-legs"
+import type { RouteMode } from "@/types/itinerary"
 
 mapboxgl.accessToken = MAPBOX_TOKEN
+
+const MAP_MODE_KEY = "wp-map-mode"
+
+export type MapViewMode = "transport" | "places"
+
+const MAP_MODE_LABELS: Record<MapViewMode, string> = {
+  places: "Recorrido",
+  transport: "Desplazamientos",
+}
+
+/** Preferencia guardada; por defecto Recorrido. Seguro en SSR (sin localStorage). */
+export function readStoredMapMode(): MapViewMode {
+  if (typeof window === "undefined") return "places"
+  try {
+    const v = localStorage.getItem(MAP_MODE_KEY)
+    if (v === "transport") return "transport"
+    if (v === "places") return "places"
+    return "places"
+  } catch {
+    return "places"
+  }
+}
+
+export function persistMapMode(mode: MapViewMode): void {
+  try {
+    localStorage.setItem(MAP_MODE_KEY, mode)
+  } catch {
+    // ignore
+  }
+}
+
+/** Dropdown de modo del mapa (mismo cromo que Cancelabilidad). */
+export function MapModeDropdown({
+  value,
+  onChange,
+}: {
+  value: MapViewMode
+  onChange: (next: MapViewMode) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
+            "text-muted-foreground hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+          aria-label="Modo del mapa"
+        >
+          {MAP_MODE_LABELS[value]}
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[10.5rem]">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(v) => {
+            if (v === "places" || v === "transport") onChange(v)
+          }}
+        >
+          <DropdownMenuRadioItem value="places" className="text-xs">
+            Recorrido
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="transport" className="text-xs">
+            Desplazamientos
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export type ItineraryMapPoint = {
   id: string
   name: string
-  type: "stay" | "activity" | "hub"
+  type: "stay" | "activity" | "food" | "hub" | "endpoint"
   dayNumber: number
   region?: string | null
   coords?: { lng: number; lat: number } | null
@@ -43,75 +139,253 @@ export type { ItineraryMapSegment }
 
 const PIN: Record<ItineraryMapPoint["type"], { fill: string; border: string }> = {
   stay: { fill: "#f97316", border: "#c2410c" },
-  activity: { fill: "#f59e0b", border: "#b45309" },
+  activity: { fill: "#7c3aed", border: "#5b21b6" },
+  food: { fill: "#10b981", border: "#047857" },
   hub: { fill: "#0ea5e9", border: "#0369a1" },
+  endpoint: { fill: "#64748b", border: "#334155" },
 }
 
-type ViewStatus =
-  | { status: "idle" }
-  | { status: "loading" }
-  | {
-      status: "ready"
-      resolved: { point: ItineraryMapPoint; coord: LngLat }[]
-      failed: { point: ItineraryMapPoint }[]
-    }
-  | { status: "error"; message: string }
+function emptySourceData(): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: [] }
+}
+
+function setSourceData(
+  map: mapboxgl.Map,
+  sourceId: string,
+  data: GeoJSON.FeatureCollection,
+) {
+  const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource | undefined
+  if (source) source.setData(data)
+}
+
+function popupHtml(name: string, label: string): string {
+  return `<div class="p-1 text-sm"><strong class="block">${escapeHtml(
+    name,
+  )}</strong><span class="text-muted-foreground">${escapeHtml(label)}</span></div>`
+}
+
+function ensureMapLayers(map: mapboxgl.Map) {
+  if (!map.getSource("transport-segments")) {
+    map.addSource("transport-segments", { type: "geojson", data: emptySourceData() })
+  }
+  if (!map.getSource("places-route")) {
+    map.addSource("places-route", { type: "geojson", data: emptySourceData() })
+  }
+  if (!map.getSource("places-route-long")) {
+    map.addSource("places-route-long", { type: "geojson", data: emptySourceData() })
+  }
+
+  if (!map.getLayer("transport-segments-line")) {
+    map.addLayer({
+      id: "transport-segments-line",
+      type: "line",
+      source: "transport-segments",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+        // Recorrido es el modo por defecto.
+        visibility: "none",
+      },
+      paint: {
+        "line-color": ["get", "color"],
+        "line-width": ["get", "width"],
+        "line-opacity": 0.9,
+        "line-dasharray": [
+          "case",
+          ["==", ["get", "dash"], ""],
+          ["literal", [1, 0]],
+          [
+            "case",
+            ["==", ["get", "mode"], "flight"],
+            ["literal", [2, 2]],
+            ["==", ["get", "mode"], "train"],
+            ["literal", [4, 2]],
+            ["==", ["get", "mode"], "bus"],
+            ["literal", [1.5, 1.5]],
+            ["==", ["get", "mode"], "ferry"],
+            ["literal", [3, 2]],
+            ["literal", [1, 2]],
+          ],
+        ],
+      },
+    })
+  }
+
+  if (!map.getLayer("places-route-line")) {
+    map.addLayer({
+      id: "places-route-line",
+      type: "line",
+      source: "places-route",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+        visibility: "visible",
+      },
+      paint: {
+        "line-color": ["get", "color"],
+        "line-width": ["get", "width"],
+        "line-opacity": 0.9,
+      },
+    })
+  }
+
+  if (!map.getLayer("places-route-long-line")) {
+    map.addLayer({
+      id: "places-route-long-line",
+      type: "line",
+      source: "places-route-long",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+        visibility: "visible",
+      },
+      paint: {
+        "line-color": ["get", "color"],
+        "line-width": ["get", "width"],
+        "line-opacity": 0.75,
+        "line-dasharray": [2, 2],
+      },
+    })
+  }
+}
+
+function asGeocodePoint(p: ItineraryMapPoint): GeocodePoint {
+  return {
+    id: p.id,
+    name: p.name,
+    type: p.type,
+    dayNumber: p.dayNumber,
+    region: p.region,
+    coords: p.coords,
+    hubRole: p.hubRole,
+  }
+}
 
 export function ItineraryMapView({
-  tripId: _tripId,
-  points,
+  places,
+  hubs = [],
   segments = [],
+  transportDistances,
   destination,
   countryCodes = [],
+  mapMode,
 }: {
-  tripId: string
-  points: ItineraryMapPoint[]
+  /** Lugares del recorrido: stay / food / activity (sin hubs). */
+  places: ItineraryMapPoint[]
+  /** Anclas de llegada/salida para el modo Desplazamientos. */
+  hubs?: ItineraryMapPoint[]
   segments?: ItineraryMapSegment[]
+  transportDistances: TransportDistances
   destination: string
   countryCodes?: string[]
+  /** Modo controlado desde el panel (dropdown junto a Lista/Mapa). */
+  mapMode: MapViewMode
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null)
-  const markersRef = useRef<mapboxgl.Marker[]>([])
-  const [view, setView] = useState<ViewStatus>({ status: "idle" })
-  const [roadOverride, setRoadOverride] = useState<Record<string, GeoJSON.LineString>>({})
-  const [roadLoadingId, setRoadLoadingId] = useState<string | null>(null)
-  const pointsKey = points.map((p) => p.id).join(",")
+  const markersByIdRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
+  const popupHtmlByIdRef = useRef<Map<string, string>>(new Map())
+  const coordCacheRef = useRef<Map<string, LngLat>>(new Map())
+  const mapReadyRef = useRef(false)
+  const fittedSignatureRef = useRef<string | null>(null)
+  const geocodeRef = useRef<GeocodeState>({ status: "idle" })
+
+  const placesKey = places.map((p) => p.id).join(",")
+  const placesContentKey = places
+    .map(
+      (p) =>
+        `${p.id}:${p.name}:${p.coords?.lng ?? ""}:${p.coords?.lat ?? ""}:${p.region ?? ""}`,
+    )
+    .join("|")
+  const countriesKey = [...countryCodes]
+    .map((c) => c.trim().toLowerCase())
+    .filter((c) => c.length === 2)
+    .sort()
+    .join(",")
+  const destinationKey = destination.trim()
+  /** Clave estable de contenido: evita re-geocodificar por identidad de array. */
+  const geocodeInputKey = `${placesContentKey}::${countriesKey}::${destinationKey}`
+
+  const hubsKey = hubs.map((p) => p.id).join(",")
   const segmentsKey = segments
     .map((s) => `${s.itemId}:${s.mode}:${s.from.lng},${s.from.lat}:${s.to.lng},${s.to.lat}`)
     .join("|")
+
+  const [mapReady, setMapReady] = useState(false)
+  const [mapError, setMapError] = useState<string | null>(null)
+  const [geocode, dispatchGeocode] = useReducer(reduceGeocode, { status: "idle" } as GeocodeState)
+  const [roadOverride, setRoadOverride] = useState<Record<string, GeoJSON.LineString>>({})
+  const [roadLoadingId, setRoadLoadingId] = useState<string | null>(null)
+  const [placesRoadGeometry, setPlacesRoadGeometry] =
+    useState<GeoJSON.FeatureCollection<GeoJSON.LineString> | null>(null)
+  const [placesRoadKm, setPlacesRoadKm] = useState<number | null>(null)
+  const [placesRoadComplete, setPlacesRoadComplete] = useState(false)
+  const [placesRoadLoading, setPlacesRoadLoading] = useState(false)
+  const [placesRoadKey, setPlacesRoadKey] = useState(placesKey)
   const describeId = useId()
   const describeLabelId = `${describeId}-label`
 
-  const modeSummary = useMemo(() => summarizeSegmentModes(segments), [segments, segmentsKey])
+  useEffect(() => {
+    geocodeRef.current = geocode
+  }, [geocode])
 
-  const runGeocode = useCallback(
-    async (signal: AbortSignal) => {
-      if (!MAPBOX_TOKEN?.trim()) {
-        setView({
-          status: "error",
-          message:
-            "Configura NEXT_PUBLIC_MAPBOX_TOKEN en frontend/.env.local (token público pk.…) y reinicia el servidor de desarrollo.",
-        })
+  if (placesRoadKey !== placesKey) {
+    setPlacesRoadKey(placesKey)
+    setPlacesRoadGeometry(null)
+    setPlacesRoadKm(null)
+    setPlacesRoadComplete(false)
+  }
+
+  const transportKmSummary = useMemo(
+    () => summarizeTransportKm(transportDistances.byMode),
+    [transportDistances],
+  )
+  const undrawnSummary = useMemo(
+    () => summarizeUndrawnTransports(transportDistances.undrawn),
+    [transportDistances],
+  )
+
+  const geocodeResult = geocodeDisplayResult(geocode)
+
+  // Geocodificar por clave de contenido; conservar pines durante refresco.
+  useEffect(() => {
+    if (!MAPBOX_TOKEN?.trim()) {
+      dispatchGeocode({
+        type: "error",
+        message:
+          "Configura NEXT_PUBLIC_MAPBOX_TOKEN en frontend/.env.local (token público pk.…) y reinicia el servidor de desarrollo.",
+      })
+      return
+    }
+
+    const ac = new AbortController()
+    // Capturados del render que produjo geocodeInputKey (contenido estable).
+    const placesNow = places
+    const codesNow = countryCodes
+    const destinationNow = destination
+
+    const run = async () => {
+      if (ac.signal.aborted) return
+
+      if (placesNow.length === 0) {
+        coordCacheRef.current.clear()
+        dispatchGeocode({ type: "reset-empty" })
         return
       }
-      if (points.length === 0 && segments.length === 0) {
-        setView({ status: "ready", resolved: [], failed: [] })
-        return
-      }
 
-      setView({ status: "loading" })
+      const hasPrevious = geocodeDisplayResult(geocodeRef.current) != null
+      dispatchGeocode({ type: "begin", hasPrevious })
 
       const fromTrip = new Set<string>(
-        (countryCodes ?? [])
+        (codesNow ?? [])
           .map((c) => c.trim().toLowerCase())
           .filter((c) => c.length === 2),
       )
-      const dest = destination?.trim()
+      const dest = destinationNow?.trim()
       if (dest) {
         for (const c of collectCountryCodesFromHint(dest)) fromTrip.add(c)
       }
-      for (const p of points) {
+      for (const p of placesNow) {
         for (const c of collectCountryCodesFromHint(p.region)) fromTrip.add(c)
       }
       const unionForBias = Array.from(fromTrip)
@@ -127,13 +401,18 @@ export function ItineraryMapView({
           proximity = null
         }
       }
-      if (signal.aborted) return
+      if (ac.signal.aborted) return
 
-      const resolved: { point: ItineraryMapPoint; coord: LngLat }[] = []
-      const failed: { point: ItineraryMapPoint }[] = []
+      const resolved: { point: GeocodePoint; coord: LngLat }[] = []
+      const failed: { point: GeocodePoint }[] = []
+      const liveIds = new Set(placesNow.map((p) => p.id))
+
+      for (const id of [...coordCacheRef.current.keys()]) {
+        if (!liveIds.has(id)) coordCacheRef.current.delete(id)
+      }
 
       const results = await Promise.allSettled(
-        points.map(async (p): Promise<LngLat | null> => {
+        placesNow.map(async (p): Promise<LngLat | null> => {
           const saved = p.coords
           if (
             saved &&
@@ -142,110 +421,213 @@ export function ItineraryMapView({
             Number.isFinite(saved.lng) &&
             Number.isFinite(saved.lat)
           ) {
-            return { lng: saved.lng, lat: saved.lat }
+            const coord = { lng: saved.lng, lat: saved.lat }
+            coordCacheRef.current.set(p.id, coord)
+            return coord
           }
+          const cached = coordCacheRef.current.get(p.id)
+          if (cached) return cached
+
           const tripDestination = p.region?.trim() ? p.region.trim() : dest || null
           const forPoint = new Set<string>([
-            ...countryCodes.map((c) => c.trim().toLowerCase()).filter((c) => c.length === 2),
+            ...codesNow.map((c) => c.trim().toLowerCase()).filter((c) => c.length === 2),
           ])
           for (const c of collectCountryCodesFromHint(tripDestination)) forPoint.add(c)
           for (const c of collectCountryCodesFromHint(p.region)) forPoint.add(c)
           const codes = forPoint.size > 0 ? Array.from(forPoint) : unionForBias
-          return geocodeName(p.name, {
+          const coord = await geocodeName(p.name, {
             proximity,
             tripDestination,
             countryCodes: codes.length > 0 ? codes : undefined,
           })
+          if (coord) coordCacheRef.current.set(p.id, coord)
+          return coord
         }),
       )
 
-      for (let i = 0; i < points.length; i++) {
-        if (signal.aborted) return
-        const p = points[i]!
+      if (ac.signal.aborted) return
+
+      for (let i = 0; i < placesNow.length; i++) {
+        const p = placesNow[i]!
         const r = results[i]!
         if (r.status === "fulfilled" && r.value) {
-          resolved.push({ point: p, coord: r.value })
+          resolved.push({ point: asGeocodePoint(p), coord: r.value })
         } else {
-          failed.push({ point: p })
+          failed.push({ point: asGeocodePoint(p) })
         }
       }
 
-      if (signal.aborted) return
-      setView({ status: "ready", resolved, failed })
-    },
-    [countryCodes, destination, points, pointsKey, segments.length],
-  )
+      if (ac.signal.aborted) return
+      dispatchGeocode({ type: "success", resolved, failed })
+    }
 
-  useEffect(() => {
-    const ac = new AbortController()
-    void runGeocode(ac.signal)
+    const t = window.setTimeout(() => {
+      void run()
+    }, 0)
     return () => {
+      window.clearTimeout(t)
       ac.abort()
     }
-  }, [runGeocode])
+    // places/countryCodes/destination van embebidos en geocodeInputKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geocodeInputKey])
 
-  const followRoad = useCallback(async (segment: ItineraryMapSegment) => {
-    if (!modeAllowsRoadDirections(segment.mode)) return
-    if (roadOverride[segment.itemId]) return
-    setRoadLoadingId(segment.itemId)
+  const placesForRoute: ItineraryPlace[] = useMemo(() => {
+    if (!geocodeResult) {
+      return places.map((p) => ({
+        id: p.id,
+        name: p.name,
+        type: p.type === "hub" || p.type === "endpoint" ? "activity" : p.type,
+        dayNumber: p.dayNumber,
+        region: p.region,
+        coords: p.coords ?? null,
+      }))
+    }
+    const failedIds = new Set(geocodeResult.failed.map((f) => f.point.id))
+    const resolvedById = new Map(geocodeResult.resolved.map((r) => [r.point.id, r.coord]))
+    return places.map((p) => {
+      const hit = resolvedById.get(p.id)
+      return {
+        id: p.id,
+        name: p.name,
+        type: (p.type === "hub" || p.type === "endpoint" ? "activity" : p.type) as ItineraryPlace["type"],
+        dayNumber: p.dayNumber,
+        region: p.region,
+        coords: hit ?? (failedIds.has(p.id) ? null : (p.coords ?? null)),
+      }
+    })
+  }, [geocodeResult, places])
+
+  const placesRoute = useMemo(
+    () => buildPlacesRoute(placesForRoute),
+    [placesForRoute],
+  )
+
+  /** Numeración sobre la secuencia dibujada (solo localizados). */
+  const drawnStopNumberById = useMemo(() => {
+    const map = new Map<string, number>()
+    if (!geocodeResult) return map
+    geocodeResult.resolved.forEach((r, i) => {
+      map.set(r.point.id, i + 1)
+    })
+    return map
+  }, [geocodeResult])
+
+  /** Posición en el itinerario completo (para popup). */
+  const itineraryOrderById = useMemo(() => {
+    const map = new Map<string, number>()
+    places.forEach((p, i) => map.set(p.id, i + 1))
+    return map
+  }, [places])
+
+  const followRoad = useCallback(
+    async (segment: ItineraryMapSegment) => {
+      if (!modeAllowsRoadDirections(segment.mode)) return
+      if (roadOverride[segment.itemId]) return
+      setRoadLoadingId(segment.itemId)
+      try {
+        const dir = await getDirections(
+          [
+            { lng: segment.from.lng, lat: segment.from.lat },
+            { lng: segment.to.lng, lat: segment.to.lat },
+          ],
+          { profile: "driving" },
+        )
+        if (dir?.geometry) {
+          setRoadOverride((prev) => ({ ...prev, [segment.itemId]: dir.geometry }))
+        }
+      } finally {
+        setRoadLoadingId(null)
+      }
+    },
+    [roadOverride],
+  )
+
+  const adjustPlacesToRoad = useCallback(async () => {
+    if (placesRoadLoading) return
+    const subsequences = groupRoadCandidateSubsequences(placesRoute.legs)
+    if (subsequences.length === 0) return
+
+    setPlacesRoadLoading(true)
     try {
-      const dir = await getDirections(
-        [
-          { lng: segment.from.lng, lat: segment.from.lat },
-          { lng: segment.to.lng, lat: segment.to.lat },
-        ],
-        { profile: "driving" },
-      )
-      if (dir?.geometry) {
-        setRoadOverride((prev) => ({ ...prev, [segment.itemId]: dir.geometry }))
+      const features: GeoJSON.Feature<GeoJSON.LineString>[] = []
+      let roadKm = 0
+      let allComplete = true
+      let anyGeometry = false
+
+      for (const sub of subsequences) {
+        const dir = await getDirections(sub.coords, { profile: "driving" })
+        if (!dir?.geometry) {
+          allComplete = false
+          for (const idx of sub.legIndices) {
+            const leg = placesRoute.legs[idx]!
+            features.push({
+              type: "Feature",
+              properties: {
+                fromId: leg.fromId,
+                toId: leg.toId,
+                kind: "road-candidate",
+                km: leg.km,
+                color: "#7c3aed",
+                width: 2.5,
+                fallback: true,
+              },
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [leg.from.lng, leg.from.lat],
+                  [leg.to.lng, leg.to.lat],
+                ],
+              },
+            })
+            roadKm += leg.km
+            anyGeometry = true
+          }
+          continue
+        }
+        if (!dir.complete) allComplete = false
+        features.push({
+          type: "Feature",
+          properties: {
+            kind: "road",
+            color: "#7c3aed",
+            width: 2.5,
+          },
+          geometry: dir.geometry,
+        })
+        anyGeometry = true
+
+        if (dir.legDistancesMeters.length === sub.legIndices.length) {
+          for (const meters of dir.legDistancesMeters) roadKm += meters / 1000
+        } else {
+          roadKm += dir.distanceMeters / 1000
+        }
       }
+
+      if (!anyGeometry) return
+      setPlacesRoadGeometry({ type: "FeatureCollection", features })
+      setPlacesRoadKm(roadKm)
+      setPlacesRoadComplete(allComplete)
     } finally {
-      setRoadLoadingId(null)
+      setPlacesRoadLoading(false)
     }
-  }, [roadOverride])
+  }, [placesRoadLoading, placesRoute.legs])
 
-  useLayoutEffect(() => {
-    const mapCleanup = (ro: ResizeObserver | null) => {
-      if (ro && mapContainerRef.current) {
-        ro.unobserve(mapContainerRef.current)
-      }
-      for (const m of markersRef.current) m.remove()
-      markersRef.current = []
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove()
-        mapInstanceRef.current = null
-      }
-    }
+  // ── Ciclo de vida del mapa: una sola instancia ─────────────────────────────
+  useEffect(() => {
+    if (!MAPBOX_TOKEN?.trim()) return
+    const container = mapContainerRef.current
+    if (!container) return
+    if (mapInstanceRef.current) return
 
-    if (view.status !== "ready" || !MAPBOX_TOKEN?.trim()) {
-      mapCleanup(null)
-      return
-    }
-    if (!mapContainerRef.current) {
-      mapCleanup(null)
-      return
-    }
-
-    const { resolved } = view
-    const hasAnything = resolved.length > 0 || segments.length > 0
-    if (!hasAnything) {
-      mapCleanup(null)
-      return
-    }
-
-    mapCleanup(null)
-
-    const start =
-      resolved[0]?.coord ??
-      (segments[0]
-        ? { lng: segments[0].from.lng, lat: segments[0].from.lat }
-        : { lng: 0, lat: 0 })
+    const markersById = markersByIdRef.current
+    const popupHtmlById = popupHtmlByIdRef.current
 
     const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
+      container,
       style: "mapbox://styles/mapbox/streets-v12",
-      center: [start.lng, start.lat],
-      zoom: 10,
+      center: [0, 20],
+      zoom: 1.5,
     })
     mapInstanceRef.current = map
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right")
@@ -259,135 +641,285 @@ export function ItineraryMapView({
     }
     const ro: ResizeObserver | null =
       typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null
-    if (ro && mapContainerRef.current) ro.observe(mapContainerRef.current)
+    if (ro) ro.observe(container)
 
-    map.on("load", () => {
+    const onError = (e: { error?: { message?: string }; message?: string }) => {
+      // Ignorar errores de tiles una vez cargado el estilo; solo fallos de arranque.
+      if (mapReadyRef.current) return
+      const msg =
+        e?.error?.message ||
+        e?.message ||
+        "No se pudo cargar el mapa. Comprueba el token de Mapbox o la conexión."
+      setMapError(msg)
+    }
+
+    const onLoad = () => {
+      ensureMapLayers(map)
       onResize()
+      mapReadyRef.current = true
+      setMapError(null)
+      setMapReady(true)
 
-      const collection = segmentsToFeatureCollection(segments)
-      // Sustituir geometría local por Directions lazy cuando exista override.
-      for (const f of collection.features) {
-        const id = String(f.properties?.itemId ?? "")
-        const override = roadOverride[id]
-        if (override) f.geometry = override
-      }
-
-      if (collection.features.length > 0) {
-        map.addSource("transport-segments", { type: "geojson", data: collection })
-        map.addLayer({
-          id: "transport-segments-line",
-          type: "line",
-          source: "transport-segments",
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": ["get", "color"],
-            "line-width": ["get", "width"],
-            "line-opacity": 0.9,
-            "line-dasharray": [
-              "case",
-              ["==", ["get", "dash"], ""],
-              ["literal", [1, 0]],
-              [
-                "case",
-                ["==", ["get", "mode"], "flight"],
-                ["literal", [2, 2]],
-                ["==", ["get", "mode"], "train"],
-                ["literal", [4, 2]],
-                ["==", ["get", "mode"], "bus"],
-                ["literal", [1.5, 1.5]],
-                ["==", ["get", "mode"], "ferry"],
-                ["literal", [3, 2]],
-                ["literal", [1, 2]],
-              ],
-            ],
-          },
-        })
-
-        map.on("click", "transport-segments-line", (e) => {
-          const f = e.features?.[0]
-          if (!f?.properties) return
-          const p = f.properties
-          const title = escapeHtml(String(p.title ?? ""))
-          const mode = routeModeLabel(
-            p.mode === "undecided" ? null : (p.mode as import("@/types/itinerary").RouteMode),
-          )
-          const leg =
-            p.leg === "outbound" ? "Ida" : p.leg === "return" ? "Vuelta" : null
-          const vendor = p.vendor ? escapeHtml(String(p.vendor)) : null
-          const meta = [mode, leg, vendor].filter(Boolean).join(" · ")
-          new mapboxgl.Popup({ offset: 8 })
-            .setLngLat(e.lngLat)
-            .setHTML(
-              `<div class="p-1 text-sm"><strong class="block">${title}</strong><span class="text-muted-foreground">Día ${p.dayNumber} · ${escapeHtml(meta)}</span></div>`,
-            )
-            .addTo(map)
-        })
-        map.on("mouseenter", "transport-segments-line", () => {
-          map.getCanvas().style.cursor = "pointer"
-        })
-        map.on("mouseleave", "transport-segments-line", () => {
-          map.getCanvas().style.cursor = ""
-        })
-      }
-
-      const bounds = new mapboxgl.LngLatBounds()
-      let hasBounds = false
-
-      for (const { point, coord } of resolved) {
-        bounds.extend([coord.lng, coord.lat])
-        hasBounds = true
-        const pin = document.createElement("div")
-        pin.setAttribute("role", "listitem")
-        const colors = PIN[point.type]
-        pin.className = cn(
-          "flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold text-white shadow-md",
+      map.on("click", "transport-segments-line", (e) => {
+        const f = e.features?.[0]
+        if (!f?.properties) return
+        const p = f.properties
+        const title = escapeHtml(String(p.title ?? ""))
+        const mode = routeModeLabel(
+          p.mode === "undecided" ? null : (p.mode as RouteMode),
         )
-        pin.style.background = colors.fill
-        pin.style.border = `2px solid ${colors.border}`
-        const stopNumber =
-          point.type === "hub"
-            ? null
-            : points.filter((p) => p.type !== "hub").findIndex((x) => x.id === point.id) + 1
-        pin.textContent =
-          point.type === "hub"
-            ? point.hubRole === "arrival"
-              ? "↓"
-              : "↑"
-            : String(stopNumber)
-        const hubMeta =
-          point.type === "hub"
-            ? point.hubRole === "arrival"
-              ? "Llegada · inicio del itinerario"
-              : "Salida · fin del itinerario"
-            : `Día ${point.dayNumber}`
-        const marker = new mapboxgl.Marker({ element: pin })
-          .setLngLat([coord.lng, coord.lat])
-          .setPopup(
-            new mapboxgl.Popup({ offset: 16 }).setHTML(
-              `<div class="p-1 text-sm"><strong class="block">${escapeHtml(
-                point.name,
-              )}</strong><span class="text-muted-foreground">${escapeHtml(hubMeta)}</span></div>`,
-            ),
+        const leg = p.leg === "outbound" ? "Ida" : p.leg === "return" ? "Vuelta" : null
+        const vendor = p.vendor ? escapeHtml(String(p.vendor)) : null
+        const meta = [mode, leg, vendor].filter(Boolean).join(" · ")
+        new mapboxgl.Popup({ offset: 8 })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div class="p-1 text-sm"><strong class="block">${title}</strong><span class="text-muted-foreground">Día ${p.dayNumber} · ${escapeHtml(meta)}</span></div>`,
           )
           .addTo(map)
-        markersRef.current.push(marker)
+      })
+      map.on("mouseenter", "transport-segments-line", () => {
+        map.getCanvas().style.cursor = "pointer"
+      })
+      map.on("mouseleave", "transport-segments-line", () => {
+        map.getCanvas().style.cursor = ""
+      })
+    }
+
+    map.on("error", onError)
+    if (map.loaded()) onLoad()
+    else map.on("load", onLoad)
+
+    return () => {
+      if (ro) ro.disconnect()
+      map.off("error", onError)
+      for (const marker of markersById.values()) marker.remove()
+      markersById.clear()
+      popupHtmlById.clear()
+      mapReadyRef.current = false
+      setMapReady(false)
+      map.remove()
+      mapInstanceRef.current = null
+    }
+  }, [])
+
+  // Visibilidad por modo.
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || !mapReady) return
+    const transportVis = mapMode === "transport" ? "visible" : "none"
+    const placesVis = mapMode === "places" ? "visible" : "none"
+    if (map.getLayer("transport-segments-line")) {
+      map.setLayoutProperty("transport-segments-line", "visibility", transportVis)
+    }
+    if (map.getLayer("places-route-line")) {
+      map.setLayoutProperty("places-route-line", "visibility", placesVis)
+    }
+    if (map.getLayer("places-route-long-line")) {
+      map.setLayoutProperty("places-route-long-line", "visibility", placesVis)
+    }
+  }, [mapMode, mapReady])
+
+  // Fuente de desplazamientos.
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || !mapReady) return
+    const collection = segmentsToFeatureCollection(segments)
+    for (const f of collection.features) {
+      const id = String(f.properties?.itemId ?? "")
+      const override = roadOverride[id]
+      if (override) f.geometry = override
+    }
+    setSourceData(map, "transport-segments", collection)
+  }, [mapReady, segments, segmentsKey, roadOverride])
+
+  // Fuentes del recorrido de lugares.
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || !mapReady) return
+    const base = placesRouteToFeatureCollections(placesRoute.legs)
+    setSourceData(map, "places-route", placesRoadGeometry ?? base.road)
+    setSourceData(map, "places-route-long", base.longHop)
+  }, [mapReady, placesRoute, placesRoadGeometry])
+
+  // Marcadores: diff por id; en Recorrido usa ready|refreshing (nunca vaciar en loading).
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || !mapReady) return
+
+    type Visible = {
+      id: string
+      point: ItineraryMapPoint
+      coord: LngLat
+      label: string
+      pinText: string
+    }
+    const visible: Visible[] = []
+
+    if (mapMode === "transport") {
+      for (const h of hubs) {
+        if (
+          h.coords &&
+          Number.isFinite(h.coords.lng) &&
+          Number.isFinite(h.coords.lat)
+        ) {
+          visible.push({
+            id: h.id,
+            point: h,
+            coord: { lng: h.coords.lng, lat: h.coords.lat },
+            label:
+              h.hubRole === "arrival"
+                ? "Llegada · inicio del itinerario"
+                : "Salida · fin del itinerario",
+            pinText: h.hubRole === "arrival" ? "↓" : "↑",
+          })
+        }
+      }
+      const seen = new Set(
+        visible.map((v) => `${v.coord.lng.toFixed(5)},${v.coord.lat.toFixed(5)}`),
+      )
+      for (const s of segments) {
+        for (const end of [
+          { id: `${s.itemId}:from`, label: s.from.label, lng: s.from.lng, lat: s.from.lat },
+          { id: `${s.itemId}:to`, label: s.to.label, lng: s.to.lng, lat: s.to.lat },
+        ]) {
+          const key = `${end.lng.toFixed(5)},${end.lat.toFixed(5)}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          visible.push({
+            id: end.id,
+            point: {
+              id: end.id,
+              name: end.label,
+              type: "endpoint",
+              dayNumber: s.dayNumber,
+            },
+            coord: { lng: end.lng, lat: end.lat },
+            label: `Día ${s.dayNumber} · ${routeModeLabel(s.mode)}`,
+            pinText: "",
+          })
+        }
+      }
+    } else if (geocodeResult) {
+      for (const { point, coord } of geocodeResult.resolved) {
+        const drawn = drawnStopNumberById.get(point.id)
+        const order = itineraryOrderById.get(point.id)
+        visible.push({
+          id: point.id,
+          point: point as ItineraryMapPoint,
+          coord,
+          label:
+            order != null
+              ? `Día ${point.dayNumber} · #${order} en el itinerario`
+              : `Día ${point.dayNumber}`,
+          pinText: drawn != null ? String(drawn) : "",
+        })
+      }
+    }
+
+    const nextIds = new Set(visible.map((v) => v.id))
+    for (const [id, marker] of markersByIdRef.current) {
+      if (!nextIds.has(id)) {
+        marker.remove()
+        markersByIdRef.current.delete(id)
+        popupHtmlByIdRef.current.delete(id)
+      }
+    }
+
+    for (const v of visible) {
+      const colors = PIN[v.point.type] ?? PIN.endpoint
+      const html = popupHtml(v.point.name, v.label)
+      const existing = markersByIdRef.current.get(v.id)
+
+      if (existing) {
+        existing.setLngLat([v.coord.lng, v.coord.lat])
+        const el = existing.getElement()
+        el.textContent = v.pinText
+        el.style.background = colors.fill
+        el.style.border = `2px solid ${colors.border}`
+        if (popupHtmlByIdRef.current.get(v.id) !== html) {
+          const popup = existing.getPopup()
+          if (popup) {
+            popup.setHTML(html)
+          } else {
+            existing.setPopup(new mapboxgl.Popup({ offset: 16 }).setHTML(html))
+          }
+          popupHtmlByIdRef.current.set(v.id, html)
+        }
+        continue
       }
 
+      const pin = document.createElement("div")
+      pin.setAttribute("role", "listitem")
+      pin.className = cn(
+        "flex items-center justify-center rounded-full font-bold text-white shadow-md",
+        v.point.type === "endpoint" ? "h-3.5 w-3.5 text-[0px]" : "h-7 w-7 text-[12px]",
+      )
+      pin.style.background = colors.fill
+      pin.style.border = `2px solid ${colors.border}`
+      pin.textContent = v.pinText
+      const marker = new mapboxgl.Marker({ element: pin })
+        .setLngLat([v.coord.lng, v.coord.lat])
+        .setPopup(new mapboxgl.Popup({ offset: 16 }).setHTML(html))
+        .addTo(map)
+      markersByIdRef.current.set(v.id, marker)
+      popupHtmlByIdRef.current.set(v.id, html)
+    }
+  }, [
+    mapReady,
+    mapMode,
+    hubs,
+    hubsKey,
+    segments,
+    segmentsKey,
+    geocodeResult,
+    drawnStopNumberById,
+    itineraryOrderById,
+  ])
+
+  // fitBounds: una vez por modo + conjunto de contenido (no en cada refresh de geocode).
+  const placesResolvedIds =
+    geocodeResult?.resolved.map((r) => r.point.id).join(",") ?? ""
+  const fitContentKey =
+    mapMode === "transport"
+      ? `t:${segmentsKey}|${hubsKey}`
+      : placesResolvedIds
+        ? `p:${placesResolvedIds}`
+        : null
+
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map || !mapReady || mapError || !fitContentKey) return
+
+    const signature = `${mapMode}|${fitContentKey}`
+    if (fittedSignatureRef.current === signature) return
+
+    const bounds = new mapboxgl.LngLatBounds()
+    let hasBounds = false
+
+    if (mapMode === "transport") {
+      for (const h of hubs) {
+        if (h.coords && Number.isFinite(h.coords.lng) && Number.isFinite(h.coords.lat)) {
+          bounds.extend([h.coords.lng, h.coords.lat])
+          hasBounds = true
+        }
+      }
       for (const s of segments) {
         bounds.extend([s.from.lng, s.from.lat])
         bounds.extend([s.to.lng, s.to.lat])
         hasBounds = true
       }
-
-      if (hasBounds) {
-        map.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 })
+    } else if (geocodeResult) {
+      for (const { coord } of geocodeResult.resolved) {
+        bounds.extend([coord.lng, coord.lat])
+        hasBounds = true
       }
-    })
-
-    return () => {
-      mapCleanup(ro)
     }
-  }, [points, pointsKey, segments, segmentsKey, view, roadOverride])
+
+    if (!hasBounds) return
+    fittedSignatureRef.current = signature
+    map.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 })
+  }, [mapReady, mapError, mapMode, fitContentKey, hubs, segments, geocodeResult])
 
   if (!MAPBOX_TOKEN?.trim()) {
     return (
@@ -404,68 +936,119 @@ export function ItineraryMapView({
     )
   }
 
-  if (points.length === 0 && segments.length === 0) {
-    return (
-      <div className="flex min-h-[200px] flex-1 flex-col items-center justify-center px-6 text-center text-sm text-muted-foreground">
-        Añade actividades, alojamientos o traslados al itinerario para verlos en el mapa.
-      </div>
-    )
-  }
-
-  if (view.status === "loading" || view.status === "idle") {
-    return (
-      <div className="flex min-h-[280px] flex-1 flex-col">
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-hidden>
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-card px-2.5 py-1">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Cargando mapa…
-          </span>
-        </div>
-        <div className="min-h-0 flex-1 rounded-lg border border-border/80 bg-muted/20" style={{ minHeight: 240 }} />
-      </div>
-    )
-  }
-
-  if (view.status === "error") {
-    return (
-      <div className="flex min-h-[200px] flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-        {view.message}
-      </div>
-    )
-  }
-
-  const { resolved, failed } = view
   const roadable = segments.filter((s) => modeAllowsRoadDirections(s.mode))
+  const hasTransportContent = segments.length > 0 || hubs.length > 0
+  const hasPlacesContent = places.length > 0
+  const modeEmpty =
+    mapMode === "transport" ? !hasTransportContent : !hasPlacesContent
+
+  const failed = geocodeResult?.failed ?? []
+  const placesRouteIncomplete =
+    mapMode === "places" &&
+    (placesRoute.skipped.length > 0 || failed.length > 0)
+
+  const showMapMetrics = mapReady && !mapError
+
+  const placesTotalLabel = (() => {
+    if (!showMapMetrics) return null
+    if (placesRoadKm != null) {
+      const prefix = placesRoadComplete ? "" : "≈ "
+      const nature = placesRoadComplete ? "por carretera" : "mixtos (carretera incompleta)"
+      return `${prefix}${formatKm(placesRoadKm)} ${nature}`
+    }
+    if (placesRoute.routeKm > 0 || placesRoute.longHopKm > 0) {
+      return `≈ ${formatKm(placesRoute.routeKm)} en línea recta`
+    }
+    return null
+  })()
+
+  const placesRoadTitle = [
+    placesRoute.longHopKm > 0
+      ? `Excluye ≈ ${formatKm(placesRoute.longHopKm)} en traslados largos`
+      : null,
+    placesRoute.legs.some((l) => l.kind === "zero")
+      ? "Pares colapsados (misma coordenada) no suman"
+      : null,
+  ]
+    .filter(Boolean)
+    .join(". ")
+
+  const isGeocoding =
+    geocode.status === "loading" || geocode.status === "idle" || geocode.status === "refreshing"
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3" role="region" aria-label="Itinerario en el mapa">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
-        {segments.length > 0 && modeSummary ? (
-          <span className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground">
-            {modeSummary}
-          </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" aria-live="polite">
+        {showMapMetrics && mapMode === "transport" ? (
+          <>
+            {(transportKmSummary || undrawnSummary) && (
+              <p className="m-0 tabular-nums">
+                {[transportKmSummary, undrawnSummary].filter(Boolean).join(" · ")}
+              </p>
+            )}
+            {roadable.map((s) => (
+              <button
+                key={s.itemId}
+                type="button"
+                className="rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground hover:bg-muted"
+                disabled={roadLoadingId === s.itemId || Boolean(roadOverride[s.itemId])}
+                onClick={() => void followRoad(s)}
+              >
+                {roadOverride[s.itemId]
+                  ? `Carretera · ${s.from.label.split(",")[0]}`
+                  : roadLoadingId === s.itemId
+                    ? "Calculando…"
+                    : `Seguir carretera · ${routeModeLabel(s.mode)}`}
+              </button>
+            ))}
+          </>
         ) : null}
-        {resolved.length > 0 ? (
-          <span className="inline-flex items-center gap-1 rounded-md border border-border/80 bg-card px-2.5 py-1">
-            {resolved.length} parada{resolved.length === 1 ? "" : "s"}
-          </span>
+
+        {showMapMetrics && mapMode === "places" ? (
+          <>
+            {(() => {
+              const parts: string[] = []
+              if (geocodeResult && geocodeResult.resolved.length > 0) {
+                const n = geocodeResult.resolved.length
+                parts.push(`${n} parada${n === 1 ? "" : "s"}`)
+              }
+              if (placesTotalLabel) parts.push(placesTotalLabel)
+              if (placesRoute.longHopKm > 0) {
+                parts.push(`+ ≈ ${formatKm(placesRoute.longHopKm)} en traslados largos`)
+              }
+              if (parts.length === 0) return null
+              return (
+                <p className="m-0 tabular-nums" title={placesRoadTitle || undefined}>
+                  {parts.join(" · ")}
+                </p>
+              )
+            })()}
+            {placesRoute.legs.some((l: PlacesRouteLeg) => l.kind === "road-candidate") ? (
+              <button
+                type="button"
+                className="rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground hover:bg-muted disabled:opacity-60"
+                disabled={placesRoadLoading || placesRoadComplete}
+                onClick={() => void adjustPlacesToRoad()}
+                title={placesRoadTitle || undefined}
+              >
+                {placesRoadLoading
+                  ? "Calculando…"
+                  : placesRoadGeometry
+                    ? placesRoadComplete
+                      ? "Ajustado a carretera"
+                      : "Reintentar carretera"
+                    : "Ajustar a carretera"}
+              </button>
+            ) : null}
+            {placesRouteIncomplete ? (
+              <span className="text-amber-800 dark:text-amber-200/90">
+                Total incompleto: faltan lugares sin localizar
+              </span>
+            ) : null}
+          </>
         ) : null}
-        {roadable.map((s) => (
-          <button
-            key={s.itemId}
-            type="button"
-            className="rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground hover:bg-muted"
-            disabled={roadLoadingId === s.itemId || Boolean(roadOverride[s.itemId])}
-            onClick={() => void followRoad(s)}
-          >
-            {roadOverride[s.itemId]
-              ? `Carretera · ${s.from.label.split(",")[0]}`
-              : roadLoadingId === s.itemId
-                ? "Calculando…"
-                : `Seguir carretera · ${routeModeLabel(s.mode)}`}
-          </button>
-        ))}
-        {failed.length > 0 && (
+
+        {mapMode === "places" && failed.length > 0 && (
           <details
             className="rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100/90"
             id={describeId}
@@ -486,18 +1069,40 @@ export function ItineraryMapView({
             </ul>
           </details>
         )}
+
+        {mapMode === "places" && isGeocoding && !geocodeResult ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Localizando lugares…
+          </span>
+        ) : null}
+        {mapMode === "places" && geocode.status === "refreshing" ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Actualizando…
+          </span>
+        ) : null}
       </div>
 
-      {resolved.length > 0 || segments.length > 0 ? (
-        <div
-          ref={mapContainerRef}
-          className="min-h-0 w-full min-h-[280px] flex-1 overflow-hidden rounded-lg border border-border/80 shadow-sm"
-        />
-      ) : (
-        <p className="text-center text-sm text-muted-foreground">
-          No se pudo situar ningún punto. Revisa los nombres o el destino del viaje.
-        </p>
-      )}
+      <div className="relative min-h-[280px] w-full flex-1 overflow-hidden rounded-lg border border-border/80 shadow-sm">
+        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+        {mapError ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/85 px-6 text-center text-sm text-muted-foreground backdrop-blur-[1px]">
+            No se pudo cargar el mapa. {mapError}
+          </div>
+        ) : modeEmpty ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 px-6 text-center text-sm text-muted-foreground backdrop-blur-[1px]">
+            {mapMode === "transport"
+              ? "Aún no has añadido desplazamientos estructurados al itinerario."
+              : "Aún no has añadido lugares al itinerario."}
+          </div>
+        ) : null}
+        {geocode.status === "error" ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 px-6 text-center text-sm text-muted-foreground">
+            {geocode.message}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
