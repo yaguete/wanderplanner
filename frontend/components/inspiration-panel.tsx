@@ -320,7 +320,8 @@ export default function InspirationPanel({
                           "inline-flex min-h-7 shrink-0 items-center rounded-full border py-1 pl-2.5 pr-6 text-left text-xs font-medium leading-none transition-colors",
                           active
                             ? "border-transparent bg-foreground text-background"
-                            : "border-border bg-background text-foreground hover:bg-muted",
+                            : // hover solo en desktop: en táctil el sticky :hover obliga a un segundo toque
+                              "border-border bg-background text-foreground md:hover:bg-muted",
                         )}
                       >
                         <span className="leading-[1.1]">@{s.author}</span>
@@ -329,12 +330,15 @@ export default function InspirationPanel({
                         type="button"
                         aria-label="Quitar fuente"
                         className={cn(
-                          "absolute right-0.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-full",
-                          "opacity-0 pointer-events-none transition group-hover:pointer-events-auto group-hover:opacity-100",
+                          "absolute right-0.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-full transition",
+                          // Móvil: siempre visible (evita sticky group-hover / doble tap).
+                          // Desktop: revelar al hover del chip.
+                          "opacity-100",
+                          "md:opacity-0 md:pointer-events-none md:group-hover:pointer-events-auto md:group-hover:opacity-100",
                           "focus:opacity-100 focus:pointer-events-auto focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
                           active
-                            ? "text-background/80 hover:text-destructive"
-                            : "text-muted-foreground hover:text-destructive",
+                            ? "text-background/80 md:hover:text-destructive"
+                            : "text-muted-foreground md:hover:text-destructive",
                         )}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -718,7 +722,7 @@ function SourceGroupedList({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={searchPlaceholder}
-            className={cn("h-9 pl-8 text-sm", hasFilter && "pr-9")}
+            className={cn("h-9 pl-8 text-base md:text-sm", hasFilter && "pr-9")}
             aria-label="Buscar en la ruta"
           />
           {hasFilter ? (

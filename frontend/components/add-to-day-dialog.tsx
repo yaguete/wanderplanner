@@ -132,7 +132,7 @@ export function AddToDayDialog({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Buscar día por número, fecha o descripción"
-                className="h-9 pl-8 text-sm"
+                className="h-9 pl-8 text-base md:text-sm"
                 aria-label="Buscar día"
               />
             </div>

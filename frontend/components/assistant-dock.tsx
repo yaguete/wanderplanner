@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from "react"
 import {
   ArrowLeft,
@@ -75,16 +76,21 @@ type AssistantPanelLayerProps = {
    * aunque no esté visible para no cortar el streaming.
    */
   variant?: "overlay" | "section"
+  /**
+   * Solo `section` (móvil): fila de navegación que se incrusta bajo el composer
+   * para formar un único elemento flotante (se retira con el teclado abierto).
+   */
+  bottomNav?: ReactNode
 }
 
 function StatusPill({ label }: { label: string }) {
   return (
     <div
-      className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground"
+      className="inline-flex items-center gap-1.5 py-1 text-xs text-muted-foreground"
       role="status"
       aria-live="polite"
     >
-      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+      <span className="assistant-status-loader shrink-0" aria-hidden />
       <span>{label}</span>
     </div>
   )
@@ -338,6 +344,7 @@ export function AssistantPanelLayer({
   onOpenChange,
   tripId,
   variant = "overlay",
+  bottomNav,
 }: AssistantPanelLayerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -389,10 +396,11 @@ export function AssistantPanelLayer({
   }, [open, tripId])
 
   useEffect(() => {
-    if (!open || view !== "chat") return
+    // En móvil no auto-enfocamos: levantaría el teclado al entrar en la pestaña.
+    if (!open || view !== "chat" || isMobile) return
     const t = requestAnimationFrame(() => inputRef.current?.focus())
     return () => cancelAnimationFrame(t)
-  }, [open, view])
+  }, [open, view, isMobile])
 
   /** El textarea crece con el contenido hasta `COMPOSER_MAX_HEIGHT`; a partir de ahí, scroll. */
   useLayoutEffect(() => {
@@ -433,7 +441,7 @@ export function AssistantPanelLayer({
   useEffect(() => {
     if (view !== "chat") return
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [messages, statusLabel, isStreaming, open, view])
+  }, [messages, statusLabel, isStreaming, open, view, keyboardOpen, keyboardInset])
 
   const handleSend = async () => {
     const text = draft.trim()
@@ -686,30 +694,32 @@ export function AssistantPanelLayer({
             </button>
           </div>
         </ScrollArea>
-      ) : (
+      ) : null}
+
+      {/* Historial (móvil): sin composer, el nav mantiene su propia tarjeta flotante. */}
+      {showHistory && isSection && bottomNav ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+          <div
+            className={cn(
+              "pointer-events-auto rounded-2xl",
+              "border border-border/60 bg-background/80 backdrop-blur-xl",
+              "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+            )}
+          >
+            {bottomNav}
+          </div>
+        </div>
+      ) : null}
+
+      {!showHistory ? (
         <>
           <ScrollArea className="min-h-0 flex-1">
             <div className="space-y-3 p-4">
               {!hydrated ? null : messages.length === 0 ? (
-                <div className="space-y-4">
-                  <p className="max-w-[300px] text-xs leading-relaxed text-muted-foreground">
-                    Pregúntame sobre tus fuentes, el plan o requisitos oficiales. Puedo buscar en
-                    internet y proponer fuentes o ítems para que tú confirmes.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {SUGGESTIONS.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => void send(s)}
-                        disabled={isStreaming || !trip}
-                        className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Pregúntame sobre tus fuentes, el plan o requisitos oficiales. Puedo buscar en
+                  internet y proponer fuentes o ítems para que tú confirmes.
+                </p>
               ) : (
                 messages.map((m) => (
                   <MessageBubble
@@ -752,7 +762,13 @@ export function AssistantPanelLayer({
                 ref={bottomRef}
                 aria-hidden
                 className="shrink-0"
-                style={{ height: Math.max(composerHeight, 64) + 20 }}
+                style={{
+                  // Con teclado overlay (iOS), el inset también tapa conversación.
+                  height:
+                    Math.max(composerHeight, 64) +
+                    20 +
+                    (isSection && keyboardOpen ? keyboardInset : 0),
+                }}
               />
             </div>
           </ScrollArea>
@@ -762,69 +778,92 @@ export function AssistantPanelLayer({
             ref={composerRef}
             className={cn(
               "pointer-events-none absolute inset-x-0 z-20 px-3 pt-3 transition-[bottom] duration-200 ease-out",
-              // Móvil + teclado: pegado al teclado. Sin teclado: hueco para el dock.
+              // Móvil + teclado: pegado al teclado. Sin teclado: alineado con el dock flotante.
               isSection && keyboardOpen
                 ? "pb-2"
                 : isSection
-                  ? "pb-[calc(3.85rem+max(env(safe-area-inset-bottom),0.875rem))]"
+                  ? "pb-[max(env(safe-area-inset-bottom),0.75rem)]"
                   : "pb-3",
             )}
             style={{
               bottom: isSection && keyboardOpen ? keyboardInset : 0,
             }}
           >
+            {hydrated && messages.length === 0 ? (
+              <div className="pointer-events-auto mb-2 flex flex-col items-start gap-1.5">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => void send(s)}
+                    disabled={isStreaming || !trip}
+                    className="w-fit rounded-xl border border-border bg-muted/30 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div
               className={cn(
-                "pointer-events-auto flex items-end gap-2 rounded-2xl p-1.5",
+                "pointer-events-auto overflow-hidden rounded-2xl",
                 "border border-border/60 bg-background/80 backdrop-blur-xl",
                 "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
               )}
             >
-              <button
-                type="button"
-                disabled
-                className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/50"
-                aria-label="Adjuntar archivo (próximamente)"
-                title="Adjuntar (próximamente)"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-              <Textarea
-                ref={inputRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Pregunta sobre tu viaje…"
-                rows={1}
-                className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-sm shadow-none focus-visible:ring-0"
-                style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
-                aria-label="Mensaje al asistente"
-                disabled={!trip}
-              />
-              {isStreaming ? (
+              <div className="flex items-end gap-2 p-1.5">
                 <button
                   type="button"
-                  onClick={stop}
-                  className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
-                  aria-label="Detener"
+                  disabled
+                  className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground/50"
+                  aria-label="Adjuntar archivo (próximamente)"
+                  title="Adjuntar (próximamente)"
                 >
-                  <Square className="h-3 w-3 fill-current" />
+                  <Plus className="h-4 w-4" />
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleSend()}
-                  disabled={!draft.trim() || !trip}
-                  className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
-                  aria-label="Enviar mensaje"
-                >
-                  <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
-                </button>
-              )}
+                <Textarea
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder="Pregunta sobre tu viaje…"
+                  rows={1}
+                  // text-base en móvil: <16px provoca auto-zoom de iOS al enfocar (y no se deshace).
+                  className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-base shadow-none focus-visible:ring-0 md:text-sm"
+                  style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
+                  aria-label="Mensaje al asistente"
+                  disabled={!trip}
+                />
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={stop}
+                    className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
+                    aria-label="Detener"
+                  >
+                    <Square className="h-3 w-3 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={!draft.trim() || !trip}
+                    className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
+                    aria-label="Enviar mensaje"
+                  >
+                    <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+                  </button>
+                )}
+              </div>
+
+              {/* Nav incrustado: composer + pestañas como un único elemento flotante. */}
+              {isSection && bottomNav && !keyboardOpen ? (
+                <div className="border-t border-border/50">{bottomNav}</div>
+              ) : null}
             </div>
           </div>
         </>
-      )}
+      ) : null}
 
       <AlertDialog
         open={!!pendingDelete}

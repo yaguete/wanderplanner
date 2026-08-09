@@ -1,6 +1,8 @@
 "use client"
 
-import { Newspaper, Route, Sparkles } from "lucide-react"
+import Link from "next/link"
+import { Compass, Newspaper, Route, Sparkles } from "lucide-react"
+import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { cn } from "@/lib/utils"
 
 export type TripMobileSection = "sources" | "plan" | "assistant"
@@ -15,6 +17,9 @@ export const TRIP_MOBILE_NAV_CLEARANCE =
 /** Clase Tailwind para padding-bottom de listas / composers en móvil. */
 export const tripMobileNavClearanceClass =
   "max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+
+const TAB_ITEM_CLASS =
+  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
 const TABS: {
   id: TripMobileSection
@@ -31,23 +36,83 @@ type TripMobileNavProps = {
   onChange: (section: TripMobileSection) => void
   /** Oculta el dock (p. ej. teclado virtual abierto) con una salida suave. */
   hidden?: boolean
+  /**
+   * `floating`: tarjeta flotante independiente (Fuentes / Mi viaje).
+   * `embedded`: solo la fila de pestañas, para incrustarla en otra tarjeta
+   * (p. ej. el composer del asistente) y formar un único elemento flotante.
+   */
+  variant?: "floating" | "embedded"
   className?: string
+}
+
+/** Fila de pestañas: Inicio + secciones del viaje, a ancho completo. */
+function NavTabs({
+  active,
+  onChange,
+}: Pick<TripMobileNavProps, "active" | "onChange">) {
+  const { requireAccount } = useRegistrationGate()
+
+  return (
+    <div className="grid grid-cols-4 gap-0.5 p-1">
+      <Link
+        href="/trips"
+        onClick={(e) => {
+          if (!requireAccount("home")) e.preventDefault()
+        }}
+        className={cn(TAB_ITEM_CLASS, "text-muted-foreground")}
+      >
+        <Compass className="h-[1.125rem] w-[1.125rem]" aria-hidden />
+        <span>Inicio</span>
+      </Link>
+
+      {TABS.map(({ id, label, icon: Icon }) => {
+        const selected = active === id
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-current={selected ? "page" : undefined}
+            onClick={() => onChange(id)}
+            className={cn(
+              TAB_ITEM_CLASS,
+              selected ? "bg-primary/10 text-primary" : "text-muted-foreground",
+            )}
+          >
+            <Icon
+              className={cn("h-[1.125rem] w-[1.125rem]", selected && "stroke-[2.25]")}
+              aria-hidden
+            />
+            <span>{label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 export function TripMobileNav({
   active,
   onChange,
   hidden = false,
+  variant = "floating",
   className,
 }: TripMobileNavProps) {
+  if (variant === "embedded") {
+    return (
+      <nav aria-label="Navegación del viaje" className={className}>
+        <NavTabs active={active} onChange={onChange} />
+      </nav>
+    )
+  }
+
   return (
     <nav
-      aria-label="Secciones del viaje"
+      aria-label="Navegación del viaje"
       aria-hidden={hidden || undefined}
       className={cn(
-        // Overlay: sin fondo propio; los toques fuera de la píldora atraviesan al contenido.
+        // Overlay: sin fondo propio; los toques fuera de la tarjeta atraviesan al contenido.
         "pointer-events-none absolute inset-x-0 bottom-0 z-40",
-        "px-8 pt-2 pb-[max(env(safe-area-inset-bottom),0.875rem)]",
+        "px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]",
         "transition-[opacity,transform] duration-200 ease-out",
         hidden && "translate-y-[120%] opacity-0",
         className,
@@ -55,39 +120,12 @@ export function TripMobileNav({
     >
       <div
         className={cn(
-          "pointer-events-auto mx-auto flex w-full max-w-[20rem] items-stretch gap-0.5 rounded-full p-1",
-          "border border-border/50 bg-background/70 backdrop-blur-xl",
+          "pointer-events-auto rounded-2xl",
+          "border border-border/60 bg-background/80 backdrop-blur-xl",
           "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
         )}
-        role="tablist"
       >
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const selected = active === id
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-current={selected ? "page" : undefined}
-              onClick={() => onChange(id)}
-              className={cn(
-                "flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-full px-1 py-1.5",
-                "text-[10.5px] font-medium leading-none transition-colors duration-150",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                selected
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon
-                className={cn("h-[1.125rem] w-[1.125rem]", selected && "stroke-[2.25]")}
-                aria-hidden
-              />
-              <span>{label}</span>
-            </button>
-          )
-        })}
+        <NavTabs active={active} onChange={onChange} />
       </div>
     </nav>
   )

@@ -270,13 +270,23 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             }}
             tripId={tripId}
             variant="section"
+            bottomNav={
+              <TripMobileNav
+                variant="embedded"
+                active={mobileSection}
+                onChange={setMobileSection}
+              />
+            }
           />
 
-          <TripMobileNav
-            active={mobileSection}
-            onChange={setMobileSection}
-            hidden={keyboardOpen}
-          />
+          {/* En el Asistente el nav va incrustado en la tarjeta del composer. */}
+          {mobileSection !== "assistant" ? (
+            <TripMobileNav
+              active={mobileSection}
+              onChange={setMobileSection}
+              hidden={keyboardOpen}
+            />
+          ) : null}
         </div>
       ) : (
         <ResizablePanelGroup

@@ -302,7 +302,7 @@ export function PartnerButtonBuilder() {
                 id="partner-start-url"
                 readOnly
                 value={generated.startUrl}
-                className="font-mono text-xs"
+                className="font-mono text-base md:text-xs"
               />
               <Button
                 type="button"
