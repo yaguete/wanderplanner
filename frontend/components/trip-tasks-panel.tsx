@@ -6,7 +6,15 @@
  * llegan por callbacks desde ItineraryPanel.
  */
 import { useEffect, useMemo, useState } from "react"
-import { Check, CheckSquare, ChevronDown, ExternalLink, Plus, Trash2 } from "lucide-react"
+import {
+  Check,
+  CheckSquare,
+  ChevronDown,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,11 +44,12 @@ import {
   buildTripTasks,
   cancellableApplies,
   computeTripTaskTotals,
+  isBookableTransportMode,
   isTaskManaged,
   type DerivedTripTask,
   type TripTaskTotals,
 } from "@/lib/trip-tasks"
-import type { Source, Trip, TripTaskCategory, TripTaskState } from "@/types/itinerary"
+import type { Source, Trip, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
 
 export type TripTasksPanelProps = {
   trip: Trip
@@ -60,6 +69,10 @@ export type TripTasksPanelProps = {
    * Útil en Transporte para abrir el diálogo de traslado.
    */
   onAddAction?: () => void
+  /**
+   * Editar un traslado desde la fila de tarea (abre la modal de transporte / ida-vuelta).
+   */
+  onEditTransportItem?: (payload: { dayId: string; item: UserDayItem }) => void
   /** Copy del empty state. */
   emptyTitle?: string
   emptyDescription?: string
@@ -145,7 +158,7 @@ export function TripTasksSummaryLine({ trip }: { trip: Trip }) {
   )
 }
 
-/** Desglose de costes por pestaña: solo Reservado · Pagado de esas categorías. */
+/** Desglose de costes por pestaña: Reservado · Gastado (las cards siguen diciendo Pagado). */
 export function TripTasksSummaryDetail({
   trip,
   categories,
@@ -170,7 +183,7 @@ export function TripTasksSummaryDetail({
       {booked > 0 && paid > 0 ? " · " : null}
       {paid > 0 ? (
         <span className="text-emerald-700">
-          Pagado {formatTripCurrency(paid, currency)}
+          Gastado {formatTripCurrency(paid, currency)}
         </span>
       ) : null}
     </p>
@@ -211,6 +224,30 @@ function matchesCategories(
   return categories.has(task.category) || categories.has(taskGroupKey(task.category))
 }
 
+function findTransportItem(
+  trip: Trip,
+  task: DerivedTripTask,
+): { dayId: string; item: UserDayItem } | null {
+  for (const dayIndex of task.dayIndexes) {
+    const day = trip.days[dayIndex]
+    if (!day) continue
+    const item = day.items.find(
+      (i) => i.type === "transport" && task.itemIds.includes(i.id),
+    )
+    if (item) return { dayId: day.id, item }
+  }
+  return null
+}
+
+/** Chip «Hecho» (trámites / trayectos sin billete) vs Reservado·Pagado. */
+function usesDoneChip(task: DerivedTripTask): boolean {
+  if (task.category === "paperwork" || task.category === "health") return true
+  if (task.category === "transport" && !isBookableTransportMode(task.route?.mode)) {
+    return true
+  }
+  return false
+}
+
 export function TripTasksPanel({
   trip,
   categories,
@@ -221,6 +258,7 @@ export function TripTasksPanel({
   defaultCategory = "other",
   addActionLabel = "Añadir tarea",
   onAddAction,
+  onEditTransportItem,
   emptyTitle = "Sin tareas todavía",
   emptyDescription = "Consolida ítems en la Ruta o añade una tarea a mano.",
   hideSummary = false,
@@ -278,7 +316,12 @@ export function TripTasksPanel({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-4 pb-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]",
+          hideSummary ? "pt-0" : "pt-2",
+        )}
+      >
         <div className="flex flex-col gap-6">
           {countryTasks ? (
             <CountryTasksSection
@@ -306,19 +349,30 @@ export function TripTasksPanel({
                       {TASK_CATEGORY_LABELS[category]}
                     </p>
                   ) : null}
-                  <ul className="m-0 list-none divide-y divide-border/70 border-y border-border/70 p-0">
-                    {list.map((task) => (
+                  <ul className="m-0 list-none divide-y divide-border/70 p-0">
+                    {list.map((task, index) => (
                       <li key={task.id} className="m-0 p-0">
                         <TaskRow
                           task={task}
                           currency={trip.currency || "EUR"}
                           startDate={trip.startDate}
+                          compactTop={index === 0 && groupedMain.length === 1}
                           onSetTaskState={onSetTaskState}
                           onRemoveExtraTask={
                             task.origin === "extra" ? onRemoveExtraTask : undefined
                           }
                           onRemoveBasic={
                             task.origin === "basic" ? onRemoveBasic : undefined
+                          }
+                          onEditTransport={
+                            onEditTransportItem &&
+                            task.origin === "dayItem" &&
+                            task.category === "transport"
+                              ? () => {
+                                  const found = findTransportItem(trip, task)
+                                  if (found) onEditTransportItem(found)
+                                }
+                              : undefined
                           }
                         />
                       </li>
@@ -371,10 +425,6 @@ function groupByCategory(
   return TASK_CATEGORY_ORDER.filter((c) => (buckets.get(c)?.length ?? 0) > 0).map(
     (category) => ({ category, list: buckets.get(category)! }),
   )
-}
-
-function isPaperworkTask(category: TripTaskCategory): boolean {
-  return category === "paperwork" || category === "health"
 }
 
 /** Toggle unido Reservado | Pagado (mismo cromo que el antiguo Cancelable). */
@@ -469,23 +519,29 @@ function TaskRow({
   task,
   currency,
   startDate,
+  compactTop = false,
   onSetTaskState,
   onRemoveExtraTask,
   onRemoveBasic,
+  onEditTransport,
 }: {
   task: DerivedTripTask
   currency: string
   startDate: string | null
+  /** Primera fila tras el resumen: menos padding superior y sin borde de lista arriba. */
+  compactTop?: boolean
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
   onRemoveExtraTask?: (taskId: string) => void
   onRemoveBasic?: (basicIds: string[]) => void
+  onEditTransport?: () => void
 }) {
   const status = task.state?.status ?? "pending"
   const managed = isTaskManaged(task.state)
-  const paperwork = isPaperworkTask(task.category)
+  const doneChip = usesDoneChip(task)
   const dayMeta = formatTaskDays(task.dayIndexes, task.nights, startDate)
   const showCancellable =
-    cancellableApplies(task.category) && (status === "booked" || status === "paid")
+    cancellableApplies(task.category, task.route?.mode) &&
+    (status === "booked" || status === "paid")
   const cost = task.state?.cost ?? null
   const nights = task.nights && task.nights > 1 ? task.nights : null
   const perNight = cost != null && nights != null ? cost / nights : null
@@ -498,7 +554,7 @@ function TaskRow({
   }
 
   return (
-    <div className="flex flex-col gap-2 py-3">
+    <div className={cn("flex flex-col gap-2 pb-3", compactTop ? "pt-1" : "pt-3")}>
       <div className="flex items-start gap-2.5">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -554,12 +610,13 @@ function TaskRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {paperwork ? (
+        {doneChip ? (
           <DoneChip
             active={status === "booked" || status === "paid"}
             onClick={() =>
               onSetTaskState(task.id, {
-                status: status === "booked" || status === "paid" ? "pending" : "booked",
+                // «Hecho» cuenta como gastado (paid), no como reservado.
+                status: status === "booked" || status === "paid" ? "pending" : "paid",
               })
             }
           />
@@ -576,6 +633,20 @@ function TaskRow({
             value={task.state?.cancellable ?? null}
             onChange={(next) => onSetTaskState(task.id, { cancellable: next })}
           />
+        ) : null}
+        {onEditTransport ? (
+          <button
+            type="button"
+            onClick={onEditTransport}
+            className={cn(
+              "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
+              "text-muted-foreground hover:text-foreground hover:underline",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <Pencil className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden />
+            Editar
+          </button>
         ) : null}
       </div>
     </div>
@@ -754,7 +825,7 @@ function TriageSection({
                         onClick={() => onSetTaskState(task.id, { status: "pending" })}
                         className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                       >
-                        Reservar
+                        {usesDoneChip(task) ? "Incluir" : "Reservar"}
                       </button>
                       <button
                         type="button"

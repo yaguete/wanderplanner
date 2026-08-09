@@ -689,10 +689,7 @@ export function AssistantPanelLayer({
       ) : (
         <>
           <ScrollArea className="min-h-0 flex-1">
-            <div
-              className="space-y-3 p-4"
-              style={{ paddingBottom: composerHeight ? composerHeight + 8 : undefined }}
-            >
+            <div className="space-y-3 p-4">
               {!hydrated ? null : messages.length === 0 ? (
                 <div className="space-y-4">
                   <p className="max-w-[300px] text-xs leading-relaxed text-muted-foreground">
@@ -747,7 +744,16 @@ export function AssistantPanelLayer({
                 </p>
               ) : null}
 
-              <div ref={bottomRef} />
+              {/*
+                Spacer con altura explícita (no padding): el Viewport de Radix ScrollArea
+                a veces no reserva bien el padding-bottom y el texto acaba bajo el composer.
+              */}
+              <div
+                ref={bottomRef}
+                aria-hidden
+                className="shrink-0"
+                style={{ height: Math.max(composerHeight, 64) + 20 }}
+              />
             </div>
           </ScrollArea>
 

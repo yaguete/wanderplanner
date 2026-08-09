@@ -11,6 +11,7 @@ import type {
   BasicCategory,
   ExtraTask,
   ItemType,
+  RouteMode,
   TransportRoute,
   Trip,
   TripTaskCategory,
@@ -138,9 +139,22 @@ export function categoryFromBasic(_category: BasicCategory): TripTaskCategory {
   return "basic"
 }
 
-/** `cancellable` solo aplica (y se enseña) en alojamiento y transporte. */
-export function cancellableApplies(category: TripTaskCategory): boolean {
-  return category === "accommodation" || category === "transport"
+/**
+ * Medios que sí se reservan/compran (billete). El resto (coche, other, sin medio)
+ * va a triaje y, en main, usa el chip «Hecho» en vez de Reservado/Pagado.
+ */
+export function isBookableTransportMode(mode: RouteMode | null | undefined): boolean {
+  return mode === "flight" || mode === "train" || mode === "bus" || mode === "ferry"
+}
+
+/** `cancellable` solo aplica en alojamiento y transporte con billete. */
+export function cancellableApplies(
+  category: TripTaskCategory,
+  routeMode?: RouteMode | null,
+): boolean {
+  if (category === "accommodation") return true
+  if (category === "transport") return isBookableTransportMode(routeMode)
+  return false
 }
 
 function needsTriage(category: TripTaskCategory): boolean {
@@ -178,14 +192,24 @@ export function isTaskManaged(state: TripTaskState | null): boolean {
 /**
  * Bucket de accionabilidad. T4.2 solo pinta; no decide pertenencia.
  * Extras no pasan por triaje (nunca `"triage"`), pero `notNeeded` → `"dismissed"`.
+ * Transporte sin billete (coche / other / sin medio) entra en triaje si no se ha tocado.
  */
 export function taskBucket(
   category: TripTaskCategory,
   state: TripTaskState | null,
   origin: DerivedTaskOrigin,
+  routeMode?: RouteMode | null,
 ): TaskBucket {
   if (state?.status === "notNeeded") return "dismissed"
   if (origin === "extra") return "main"
+  if (
+    category === "transport" &&
+    origin === "dayItem" &&
+    !isBookableTransportMode(routeMode) &&
+    state === null
+  ) {
+    return "triage"
+  }
   if (needsTriage(category) && state === null) return "triage"
   return "main"
 }
@@ -279,7 +303,7 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
       sourceKind: g.type,
       title: g.title,
       state,
-      bucket: taskBucket(g.category, state, origin),
+      bucket: taskBucket(g.category, state, origin, g.route?.mode),
       itemIds: g.itemIds,
       dayIndexes: g.dayIndexes,
       occurrences: g.itemIds.length,

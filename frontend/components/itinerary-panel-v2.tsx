@@ -626,6 +626,20 @@ export default function ItineraryPanel({
                 ? () => setTransportDialog({ dayId: null })
                 : undefined
             }
+            onEditTransportItem={
+              categoryView === "transport"
+                ? ({ dayId, item }) => {
+                    if (isRouteLegItem(item)) {
+                      const leg = item.route?.leg
+                      if (leg === "outbound" || leg === "return") {
+                        openRouteLegDialog(leg, item)
+                        return
+                      }
+                    }
+                    openTransportDialog(dayId, item)
+                  }
+                : undefined
+            }
             onSetTaskState={handleSetTaskState}
             onAddExtraTask={handleAddExtraTask}
             onRemoveExtraTask={handleRemoveExtraTask}

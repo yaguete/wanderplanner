@@ -15,6 +15,7 @@ import {
   computeTripTaskTotals,
   createExtraTaskState,
   effectiveStatus,
+  isBookableTransportMode,
   mergeTaskState,
   normalizeName,
   pruneTaskStates,
@@ -73,7 +74,16 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
             name: "Pensión Paco",
             affiliateUrl: "https://aff.example/paco",
           }),
-          dayItem({ id: "transport-1", type: "transport", name: "Tren" }),
+          dayItem({
+            id: "transport-1",
+            type: "transport",
+            name: "Madrid → Sevilla",
+            route: {
+              from: { label: "Madrid", coords: { lng: -3.7, lat: 40.4 }, kind: "city" },
+              to: { label: "Sevilla", coords: { lng: -5.99, lat: 37.39 }, kind: "city" },
+              mode: "train",
+            },
+          }),
         ],
       },
       {
@@ -106,7 +116,16 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
 }
 
 const stayKey = taskKeyForItem({ type: "stay", name: "Pensión Paco" })
-const transportKey = taskKeyForItem({ type: "transport", name: "Tren" })
+const transportKey = taskKeyForItem({
+  id: "transport-1",
+  type: "transport",
+  name: "Madrid → Sevilla",
+  route: {
+    from: { label: "Madrid", coords: { lng: -3.7, lat: 40.4 }, kind: "city" },
+    to: { label: "Sevilla", coords: { lng: -5.99, lat: 37.39 }, kind: "city" },
+    mode: "train",
+  },
+})
 const activityKey = taskKeyForItem({ type: "activity", name: "Paseo por la playa" })
 const foodKey = taskKeyForItem({ type: "food", name: "Taberna" })
 const insuranceKey = taskKeyForBasic({ category: "insurance", name: "Seguro IATI" })
@@ -136,9 +155,20 @@ assert.equal(categoryFromBasic("insurance"), "basic")
 assert.equal(categoryFromBasic("sim"), "basic")
 
 assert.equal(cancellableApplies("accommodation"), true)
-assert.equal(cancellableApplies("transport"), true)
+assert.equal(cancellableApplies("transport", "train"), true)
+assert.equal(cancellableApplies("transport", "flight"), true)
+assert.equal(cancellableApplies("transport", "car"), false)
+assert.equal(cancellableApplies("transport"), false)
 assert.equal(cancellableApplies("activity"), false)
 assert.equal(cancellableApplies("basic"), false)
+
+assert.equal(isBookableTransportMode("flight"), true)
+assert.equal(isBookableTransportMode("train"), true)
+assert.equal(isBookableTransportMode("bus"), true)
+assert.equal(isBookableTransportMode("ferry"), true)
+assert.equal(isBookableTransportMode("car"), false)
+assert.equal(isBookableTransportMode("other"), false)
+assert.equal(isBookableTransportMode(null), false)
 
 // ── 1. Alojamiento multi-día → UNA tarea ─────────────────────────────────────
 
@@ -322,7 +352,7 @@ assert.equal(cancellableApplies("basic"), false)
   const byId = Object.fromEntries(tasks.map((t) => [t.id, t]))
 
   assert.equal(byId[stayKey].bucket, "main")
-  assert.equal(byId[transportKey].bucket, "main")
+  assert.equal(byId[transportKey].bucket, "main") // tren = bookable
   assert.equal(byId[insuranceKey].bucket, "main")
   assert.equal(byId[activityKey].bucket, "triage")
   assert.equal(byId[foodKey].bucket, "triage")
@@ -330,6 +360,59 @@ assert.equal(cancellableApplies("basic"), false)
   assert.equal(effectiveStatus(byId[stayKey].state), "pending")
   assert.equal(resolveTaskStatus(null), "pending")
   assert.equal(resolveTaskStatus(byId[stayKey].state), "pending")
+
+  // Coche / sin medio → triaje; al incluir (pending) pasa a main.
+  const carItem = dayItem({
+    id: "car-1",
+    type: "transport",
+    name: "Tokio → Nikko",
+    route: {
+      from: { label: "Tokio", coords: { lng: 139.7, lat: 35.7 }, kind: "city" },
+      to: { label: "Nikko", coords: { lng: 139.7, lat: 36.75 }, kind: "city" },
+      mode: "car",
+    },
+  })
+  const carKey = taskKeyForItem(carItem)
+  const carTrip = makeTrip({
+    days: [{ id: "day-1", label: "", items: [carItem] }],
+    basics: [],
+  })
+  assert.equal(buildTripTasks(carTrip).find((t) => t.id === carKey)!.bucket, "triage")
+  const carIncluded = makeTrip({
+    days: [{ id: "day-1", label: "", items: [carItem] }],
+    basics: [],
+    tasks: {
+      [carKey]: {
+        status: "pending",
+        cost: null,
+        cancellable: null,
+        notes: null,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    },
+  })
+  assert.equal(buildTripTasks(carIncluded).find((t) => t.id === carKey)!.bucket, "main")
+
+  const undecidedLeg = dayItem({
+    id: "leg-out-undecided",
+    type: "transport",
+    name: "Barcelona → Tokio",
+    route: {
+      from: { label: "Barcelona", coords: { lng: 2.17, lat: 41.38 }, kind: "city" },
+      to: { label: "Tokio", coords: { lng: 139.7, lat: 35.7 }, kind: "city" },
+      mode: null,
+      leg: "outbound",
+    },
+  })
+  assert.equal(
+    buildTripTasks(
+      makeTrip({
+        days: [{ id: "day-1", label: "", items: [undecidedLeg] }],
+        basics: [],
+      }),
+    ).find((t) => t.id === taskKeyForItem(undecidedLeg))!.bucket,
+    "triage",
+  )
 
   const notNeededState: TripTaskState = {
     status: "notNeeded",
