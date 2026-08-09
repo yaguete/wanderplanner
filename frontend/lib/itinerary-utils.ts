@@ -146,6 +146,43 @@ export function flattenBasics(itinerary: Itinerary): SourceBasicItem[] {
 }
 
 /**
+ * Etiqueta de guía: «Japan — 21 días». Usada como nombre de viaje partner y cabecera móvil.
+ */
+export function formatGuideLabel(
+  source: Pick<Source, "area" | "totalDays" | "title">,
+): string {
+  const area = source.area?.trim()
+  if (area && source.totalDays && source.totalDays > 0) {
+    return `${area} — ${source.totalDays} días`
+  }
+  if (area) return area
+  return source.title
+}
+
+function titleFromUrl(url: string): string | null {
+  try {
+    const seg = new URL(url).pathname.split("/").filter(Boolean).pop()
+    if (!seg) return null
+    const decoded = decodeURIComponent(seg).replace(/[-_]+/g, " ").trim()
+    if (!decoded || decoded.length < 3) return null
+    return decoded.charAt(0).toUpperCase() + decoded.slice(1)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Titular del artículo en el panel Fuentes (desktop).
+ * Prefiere `source.title` si ya es el og:title; si aún es la etiqueta sintética legacy, cae al slug de la URL.
+ */
+export function sourceArticleHeading(source: Source): string {
+  const guide = formatGuideLabel(source)
+  const title = source.title.trim()
+  if (title && title !== guide) return title
+  return titleFromUrl(source.url) ?? (title || guide)
+}
+
+/**
  * Build a Source from a backend Itinerary response + metadata.
  */
 export function buildSource(
@@ -159,17 +196,23 @@ export function buildSource(
     author = url
   }
 
+  const area = itinerary.destination?.trim() ? itinerary.destination.trim() : null
+  const totalDays =
+    Number.isFinite(itinerary.total_days) && itinerary.total_days > 0
+      ? Math.floor(itinerary.total_days)
+      : null
+  const guideLabel =
+    area && totalDays ? `${area} — ${totalDays} días` : area || "Fuente"
+  const ogTitle = itinerary.og_title?.trim() || null
+
   return {
     id: crypto.randomUUID(),
     url,
     author,
-    title: `${itinerary.destination} — ${itinerary.total_days} días`,
+    title: ogTitle || titleFromUrl(url) || guideLabel,
     // `area` = destino del artículo; usado como fallback de geocoding cuando un ítem no trae `region`.
-    area: itinerary.destination?.trim() ? itinerary.destination.trim() : null,
-    totalDays:
-      Number.isFinite(itinerary.total_days) && itinerary.total_days > 0
-        ? Math.floor(itinerary.total_days)
-        : null,
+    area,
+    totalDays,
     items: flattenItinerary(itinerary),
     basics: flattenBasics(itinerary),
     articleHtml: itinerary.article_html ?? "",

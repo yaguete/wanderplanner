@@ -100,16 +100,16 @@ export function TransportRouteDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent fullscreenOnMobile hideClose className="sm:max-w-lg">
-        <DialogHeader className="shrink-0 space-y-1.5 border-b border-border px-6 py-4 text-left">
+        <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">{title}</DialogTitle>
           <DialogDescription>
-            Define origen, destino y medio. Abrir no consulta mapas hasta que escribas o elijas hub.
+            Define origen, destino y medio de transporte si lo sabes.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 pb-10">
           <div className="space-y-2">
-            <Label htmlFor={dayFieldId}>Día</Label>
+            <Label htmlFor={dayFieldId}>Día del traslado</Label>
             <Select value={dayId} onValueChange={setDayId}>
               <SelectTrigger id={dayFieldId}>
                 <SelectValue placeholder="Elige un día" />
@@ -128,14 +128,14 @@ export function TransportRouteDialog({
           <TransportRouteForm
             formId={formId}
             initial={initial}
-            fromLabel="Salida"
-            toLabel="Llegada"
+            fromLabel="Origen"
+            toLabel="Destino"
             onValidityChange={setCanSubmit}
             onSubmit={handleFormSubmit}
           />
         </div>
 
-        <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

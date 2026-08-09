@@ -12,24 +12,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  EXTRA_TASK_CATEGORIES,
-  TASK_CATEGORY_LABELS,
-} from "@/lib/task-labels"
 import type { TripTaskCategory } from "@/types/itinerary"
 
 export type AddExtraTaskDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (data: { title: string; category: TripTaskCategory }) => void
-  /** Categoría preseleccionada al abrir (pestaña activa). */
+  /** Categoría fija al crear (pestaña Básicos → `basic`). */
   defaultCategory?: TripTaskCategory
 }
 
@@ -37,69 +26,57 @@ export function AddExtraTaskDialog({
   open,
   onOpenChange,
   onSubmit,
-  defaultCategory = "other",
+  defaultCategory = "basic",
 }: AddExtraTaskDialogProps) {
   const id = useId()
   const [title, setTitle] = useState("")
-  const [category, setCategory] = useState<TripTaskCategory>(defaultCategory)
 
   useEffect(() => {
     if (!open) return
     setTitle("")
-    setCategory(defaultCategory)
-  }, [open, defaultCategory])
+  }, [open])
 
   const titleId = `${id}-title`
-  const categoryId = `${id}-category`
   const canSubmit = title.trim().length > 0
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     const trimmed = title.trim()
     if (!trimmed) return
-    onSubmit({ title: trimmed, category })
+    onSubmit({ title: trimmed, category: defaultCategory })
     onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Añadir tarea</DialogTitle>
+      <DialogContent fullscreenOnMobile hideClose className="sm:max-w-md">
+        <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
+          <DialogTitle className="text-lg font-semibold tracking-tight">
+            Añadir tarea
+          </DialogTitle>
           <DialogDescription>
-            Escribe la acción tal como la harías («Reservar visita guiada»).
+            Escribe la acción tal como la harías («Contratar seguro de viaje»).
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={titleId}>Acción</Label>
-            <Input
-              id={titleId}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Reservar visita guiada"
-              autoFocus
-            />
+
+        <form
+          onSubmit={handleSubmit}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 pb-10">
+            <div className="space-y-2">
+              <Label htmlFor={titleId}>Acción</Label>
+              <Input
+                id={titleId}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Contratar seguro de viaje"
+                autoFocus
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor={categoryId}>Categoría</Label>
-            <Select
-              value={category}
-              onValueChange={(v) => setCategory(v as TripTaskCategory)}
-            >
-              <SelectTrigger id={categoryId}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EXTRA_TASK_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {TASK_CATEGORY_LABELS[cat]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
+
+          <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>

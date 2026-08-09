@@ -1,6 +1,6 @@
 """
 WanderPlanner API: descarga HTML de un artículo, produce texto con enlaces para el LLM, llama a Claude
-con `agents/itinerary_builder.md` y devuelve JSON enriquecido con `article_html` y `og_image`.
+con `agents/itinerary_builder.md` y devuelve JSON enriquecido con `article_html`, `og_image` y `og_title`.
 Cualquier cambio de esquema JSON del modelo debe alinearse con `frontend/types/itinerary` y con `itinerary-utils`.
 
 POST /itinerary responde como SSE (`text/event-stream`), no como un único JSON HTTP:
@@ -362,6 +362,8 @@ async def _distill_article(
             payload["article_html"] = fetched.cleaned_html
         if fetched.og_image:
             payload["og_image"] = fetched.og_image
+        if fetched.og_title:
+            payload["og_title"] = fetched.og_title
         _strip_thumb_urls(payload)
         await store_extraction(
             url,
@@ -381,6 +383,8 @@ async def _distill_article(
     )
     claude_ms = int((time.perf_counter() - t1) * 1000)
     itinerary["og_image"] = fetched.og_image
+    if fetched.og_title:
+        itinerary["og_title"] = fetched.og_title
     itinerary["article_html"] = fetched.cleaned_html
     _strip_thumb_urls(itinerary)
     await _store_from_fetch(
@@ -425,6 +429,8 @@ async def _distill_sync(
             call_claude, fetched.plain_text
         )
         itinerary["og_image"] = fetched.og_image
+        if fetched.og_title:
+            itinerary["og_title"] = fetched.og_title
         itinerary["article_html"] = fetched.cleaned_html
         _strip_thumb_urls(itinerary)
         await _store_from_fetch(
@@ -514,6 +520,8 @@ async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
                 call_claude, fetched.plain_text
             )
             itinerary["og_image"] = fetched.og_image
+            if fetched.og_title:
+                itinerary["og_title"] = fetched.og_title
             itinerary["article_html"] = fetched.cleaned_html
             _strip_thumb_urls(itinerary)
             await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
@@ -613,6 +621,8 @@ async def _validate_sync_for_refresh(
     )
     claude_ms = int((time.perf_counter() - t1) * 1000)
     itinerary["og_image"] = fetched.og_image
+    if fetched.og_title:
+        itinerary["og_title"] = fetched.og_title
     itinerary["article_html"] = fetched.cleaned_html
     _strip_thumb_urls(itinerary)
     await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
@@ -813,12 +823,14 @@ def _prewarm_meta(payload: dict, *, status: str) -> dict[str, Any]:
     destination = payload.get("destination")
     total_days = payload.get("total_days")
     og_image = payload.get("og_image")
+    og_title = payload.get("og_title")
     return {
         "status": status,
         "destination": destination if isinstance(destination, str) else None,
         "total_days": total_days if isinstance(total_days, (int, float)) else None,
         "items": _count_items(payload),
         "og_image": og_image if isinstance(og_image, str) else None,
+        "og_title": og_title if isinstance(og_title, str) else None,
     }
 
 

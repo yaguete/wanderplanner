@@ -38,7 +38,7 @@ import {
   taskBucket,
   taskKeyForItem,
 } from "@/lib/trip-tasks"
-import type { RouteLeg, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
+import type { ItemType, RouteLeg, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
@@ -157,6 +157,7 @@ export default function ItineraryPanel({
   }, [viewMode, setHeaderCollapsed])
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [manualDialogDayId, setManualDialogDayId] = useState<string | null>(null)
+  const [manualDialogInitialType, setManualDialogInitialType] = useState<ItemType | null>(null)
   const [extraTaskDialogOpen, setExtraTaskDialogOpen] = useState(false)
   const [routeLegDialog, setRouteLegDialog] = useState<{
     leg: RouteLeg
@@ -221,8 +222,9 @@ export default function ItineraryPanel({
     [removeBasicFromTrip, tripId],
   )
 
-  const openManualDialog = useCallback((dayId?: string | null) => {
+  const openManualDialog = useCallback((dayId?: string | null, type?: ItemType | null) => {
     setManualDialogDayId(dayId ?? null)
+    setManualDialogInitialType(type ?? null)
     setManualDialogOpen(true)
   }, [])
 
@@ -535,12 +537,18 @@ export default function ItineraryPanel({
                       ? "text-destructive hover:text-destructive/90"
                       : "text-foreground hover:text-muted-foreground",
                   )}
-                  aria-label={hasDaySelection ? "Eliminar día" : "Añadir día"}
+                  aria-label={
+                    hasDaySelection
+                      ? selectedDayIds.size > 1
+                        ? "Eliminar días"
+                        : "Eliminar día"
+                      : "Añadir día"
+                  }
                 >
                   {hasDaySelection ? (
                     <>
                       <X className="h-3.5 w-3.5 shrink-0" />
-                      Eliminar día
+                      {selectedDayIds.size > 1 ? "Eliminar días" : "Eliminar día"}
                     </>
                   ) : (
                     <>
@@ -624,7 +632,11 @@ export default function ItineraryPanel({
             onAddAction={
               categoryView === "transport"
                 ? () => setTransportDialog({ dayId: null })
-                : undefined
+                : categoryView === "activities"
+                  ? () => openManualDialog(null, "activity")
+                  : categoryView === "stay"
+                    ? () => openManualDialog(null, "stay")
+                    : undefined
             }
             onEditTransportItem={
               categoryView === "transport"
@@ -662,10 +674,14 @@ export default function ItineraryPanel({
         open={manualDialogOpen}
         onOpenChange={(next) => {
           setManualDialogOpen(next)
-          if (!next) setManualDialogDayId(null)
+          if (!next) {
+            setManualDialogDayId(null)
+            setManualDialogInitialType(null)
+          }
         }}
         days={trip.days}
         initialDayId={manualDialogDayId}
+        initialType={manualDialogInitialType}
         countryCodes={trip.countries}
         destinationHint={
           trip.countries.length ? countriesPlainList(trip.countries) : trip.name

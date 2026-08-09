@@ -73,6 +73,7 @@ def test_parse_article_html_sets_hash_and_version():
     html = """
     <html><head>
       <meta property="og:image" content="https://cdn.example/img.jpg" />
+      <meta property="og:title" content="Itinerario por Austria en 10 días | Mi Blog" />
       <meta property="article:modified_time" content="2026-08-01T10:00:00Z" />
     </head><body>
       <main class="entry-content"><p>""" + ("Austria " * 80) + """</p></main>
@@ -82,5 +83,6 @@ def test_parse_article_html_sets_hash_and_version():
     assert result.content_version == CONTENT_VERSION
     assert result.content_hash == content_hash(result.plain_text)
     assert result.og_image == "https://cdn.example/img.jpg"
+    assert result.og_title == "Itinerario por Austria en 10 días"
     assert result.article_modified_at is not None
     assert "Austria" in result.plain_text

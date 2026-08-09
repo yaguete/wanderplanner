@@ -1,9 +1,7 @@
 "use client"
 
-import { PanelRightClose, PanelRightOpen, Pencil } from "lucide-react"
+import { PanelRightClose, PanelRightOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { countriesPlainList } from "@/lib/countries"
-import { formatTripDates } from "@/lib/trip-dates"
 import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
 
@@ -22,9 +20,7 @@ export function TripBreadcrumb({
   onEditTrip,
   className,
 }: TripBreadcrumbProps) {
-  const itemCount = trip.days.reduce((sum, d) => sum + d.items.length, 0)
-  const dates = formatTripDates(trip.startDate, trip.endDate)
-  const place = trip.countries.length ? countriesPlainList(trip.countries) : null
+  const sourceCount = trip.sourceIds.length
 
   return (
     <div
@@ -34,41 +30,22 @@ export function TripBreadcrumb({
         className,
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <button
           type="button"
           onClick={onEditTrip}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring -ml-1.5 px-1.5 py-1"
+          className="inline-flex min-w-0 max-w-full items-center rounded-md text-left text-sm outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring -ml-1.5 px-1.5 py-1"
           aria-label="Editar viaje"
           title="Editar viaje"
         >
           <h1 className="truncate font-medium text-foreground">{trip.name}</h1>
-          {(dates || place) && (
-            <>
-              <span className="hidden shrink-0 text-muted-foreground/50 sm:inline" aria-hidden>
-                ·
-              </span>
-              <span className="hidden truncate text-xs text-muted-foreground tabular-nums sm:inline">
-                {dates ?? place}
-                {dates && place ? ` · ${place}` : null}
-              </span>
-            </>
-          )}
-          <Pencil
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            strokeWidth={1.8}
-            aria-hidden
-          />
         </button>
+        {sourceCount > 0 ? (
+          <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            · {sourceCount} {sourceCount === 1 ? "fuente" : "fuentes"}
+          </p>
+        ) : null}
       </div>
-
-      <p className="hidden shrink-0 text-xs text-muted-foreground tabular-nums md:inline">
-        {trip.sourceIds.length} {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
-        {" · "}
-        {trip.days.length} {trip.days.length === 1 ? "día" : "días"}
-        {" · "}
-        {itemCount} {itemCount === 1 ? "ítem" : "ítems"}
-      </p>
 
       <Button
         type="button"

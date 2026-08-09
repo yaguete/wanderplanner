@@ -31,7 +31,7 @@ import type {
   TransportRoute,
 } from "@/types/itinerary"
 import { fetchItinerary, type ItineraryProgressStage } from "@/lib/api"
-import { buildSource } from "@/lib/itinerary-utils"
+import { buildSource, formatGuideLabel } from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { useAuth } from "@/lib/auth-context"
@@ -71,13 +71,19 @@ function makeEmptyDays(count: number): UserDay[] {
 }
 
 /**
- * Puede renombrarse con el `area` de la fuente: primer source de un viaje de partner cuyo nombre
- * sigue siendo el que puso `insertDraftTrip`. Deliberadamente NO exige `!trip.startDate`: con
- * `&days=N` el borrador ya llega con `startDate` puesto (lo fija `insertDraftTrip`) y aun así sigue
- * siendo "virgen" — el rename no debe depender de si el calendario se auto-dimensiona o no.
+ * Puede renombrarse con la etiqueta de guía (`destino — N días`): primer source de un viaje
+ * de partner cuyo nombre sigue siendo el borrador de `/start` o el `area` legacy.
+ * Deliberadamente NO exige `!trip.startDate`: con `&days=N` el borrador ya llega con
+ * `startDate` puesto y aun así sigue siendo "virgen".
  */
-function canRenameFromGuide(trip: Trip): boolean {
-  return Boolean(trip.referrer) && trip.sourceIds.length === 0
+function canRenameFromGuide(trip: Trip, source: Source): boolean {
+  if (!trip.referrer || trip.sourceIds.length > 0) return false
+  // Solo al añadir la primera fuente (caller pasa el trip antes del push).
+  const draft = draftTripNameFor(source.url)
+  if (trip.name === draft) return true
+  // Legacy: rename antiguo usaba solo `area` («Japan»); subir a «Japan — 21 días».
+  if (source.area && trip.name === source.area) return true
+  return false
 }
 
 /**
@@ -106,6 +112,7 @@ interface TripContextValue {
     expectations: string | null
     origin?: TripOrigin | null
     numTravelers?: number | null
+    currency?: string
   }) => Trip
   updateTrip: (
     tripId: string,
@@ -369,6 +376,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       expectations: string | null
       origin?: TripOrigin | null
       numTravelers?: number | null
+      currency?: string
     }): Trip => {
     const dayCount = data.numDays && data.numDays > 0 ? data.numDays : 1
     const days: UserDay[] = Array.from({ length: dayCount }, () => ({
@@ -381,6 +389,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       data.numTravelers == null || !Number.isFinite(data.numTravelers) || data.numTravelers < 1
         ? null
         : Math.floor(data.numTravelers)
+
+    const currency =
+      data.currency?.trim() ? data.currency.trim().toUpperCase() : "EUR"
 
     const trip = syncTripSchedule(
       {
@@ -400,7 +411,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         extraTasks: [],
         dismissedCountryTasks: [],
         numTravelers,
-        currency: "EUR",
+        currency,
         origin: data.origin ?? null,
         archived: false,
       },
@@ -641,11 +652,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             if (t.id !== tripId) return t
             const next: Trip = { ...t, sourceIds: [...t.sourceIds, source.id] }
             // Rename: independiente de si hay startDate (puede venir de &days=N).
+            const guideLabel = formatGuideLabel(source)
             const named =
-              canRenameFromGuide(t) &&
-              source.area &&
-              t.name === draftTripNameFor(source.url)
-                ? { ...next, name: source.area }
+              canRenameFromGuide(t, source) && guideLabel
+                ? { ...next, name: guideLabel }
                 : next
             // Redimensionado de días: solo si el viaje sigue completamente virgen (sin startDate propio).
             if (!canAdoptGuideSchedule(t)) return named

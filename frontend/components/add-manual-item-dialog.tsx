@@ -35,6 +35,13 @@ import { getDayUserDescription } from "@/lib/day-heading"
 
 const ITEM_TYPES: ItemType[] = ["activity", "stay", "food", "transport"]
 
+const NAME_PLACEHOLDERS: Record<ItemType, string> = {
+  activity: "p. ej. Crucero por el Danubio",
+  stay: "p. ej. Hostel One Budapest",
+  food: "p. ej. Restaurante Casa Paco",
+  transport: "p. ej. Tren a Viena",
+}
+
 const SUGGEST_DEBOUNCE_MS = 300
 const SUGGEST_MIN_CHARS = 3
 
@@ -44,6 +51,8 @@ export type AddManualItemDialogProps = {
   days: UserDay[]
   /** Día preseleccionado al abrir (p. ej. desde empty state). */
   initialDayId?: string | null
+  /** Tipo preseleccionado (p. ej. desde pestaña Actividades / Alojamientos). */
+  initialType?: ItemType | null
   countryCodes?: string[]
   /** Texto libre del destino del viaje para proximity / bias. */
   destinationHint?: string | null
@@ -57,6 +66,7 @@ export function AddManualItemDialog({
   onOpenChange,
   days,
   initialDayId = null,
+  initialType = null,
   countryCodes = [],
   destinationHint = null,
   onSubmit,
@@ -87,7 +97,7 @@ export function AddManualItemDialog({
 
   useEffect(() => {
     if (!open) return
-    setType("activity")
+    setType(initialType ?? "activity")
     setName("")
     setDetail("")
     setPlaceQuery("")
@@ -195,8 +205,8 @@ export function AddManualItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent fullscreenOnMobile hideClose className="sm:max-w-md">
+        <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
             Añadir ítem
           </DialogTitle>
@@ -205,7 +215,7 @@ export function AddManualItemDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 pb-10">
           <div className="space-y-2">
             <Label>Tipo</Label>
             <div
@@ -260,7 +270,7 @@ export function AddManualItemDialog({
               id={nameId}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="p. ej. Crucero por el Danubio"
+              placeholder={NAME_PLACEHOLDERS[type]}
               autoFocus
             />
           </div>
@@ -360,7 +370,7 @@ export function AddManualItemDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>

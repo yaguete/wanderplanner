@@ -87,11 +87,42 @@ class ArticleFetchResult:
     plain_text: str = ""
     cleaned_html: str = ""
     og_image: str | None = None
+    og_title: str | None = None
     etag: str | None = None
     last_modified: str | None = None
     article_modified_at: datetime | None = None
     content_hash: str | None = None
     content_version: int = CONTENT_VERSION
+
+
+def _clean_og_title(raw: str | None) -> str | None:
+    if not raw or not isinstance(raw, str):
+        return None
+    text = " ".join(raw.split()).strip()
+    if not text:
+        return None
+    # Quitar sufijos típicos de plantilla ("… | Blog", "… - Autor").
+    for sep in (" | ", " — ", " – ", " - "):
+        if sep in text:
+            left, right = text.rsplit(sep, 1)
+            if len(left.strip()) >= 12 and len(right.strip()) <= 40:
+                text = left.strip()
+                break
+    return text or None
+
+
+def extract_og_title(soup: BeautifulSoup) -> str | None:
+    """og:title / twitter:title / <title> del documento."""
+    for prop in ("og:title", "twitter:title"):
+        tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
+        if tag:
+            cleaned = _clean_og_title(tag.get("content"))
+            if cleaned:
+                return cleaned
+    title_tag = soup.find("title")
+    if title_tag:
+        return _clean_og_title(title_tag.get_text())
+    return None
 
 
 def normalize_article_url(raw: str) -> str:
@@ -336,6 +367,8 @@ def parse_article_html(html: str, page_url: str) -> ArticleFetchResult:
     if og_tag:
         og_image = og_tag.get("content")
 
+    og_title = extract_og_title(soup)
+
     for tag in soup(["script", "style", "nav", "footer", "header", "aside", "form"]):
         tag.decompose()
 
@@ -355,6 +388,7 @@ def parse_article_html(html: str, page_url: str) -> ArticleFetchResult:
         plain_text=plain_text,
         cleaned_html=cleaned_html,
         og_image=og_image,
+        og_title=og_title,
         article_modified_at=article_modified_at,
         content_hash=content_hash(plain_text),
         content_version=CONTENT_VERSION,

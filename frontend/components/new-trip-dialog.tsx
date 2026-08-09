@@ -55,7 +55,6 @@ export type NewTripData = {
   expectations: string | null
   origin: TripOrigin | null
   numTravelers: number | null
-  /** Solo relevante en edición; en creación el contexto fija EUR. */
   currency?: string
 }
 
@@ -350,7 +349,7 @@ export function NewTripDialog({
       expectations: expectations.trim() ? expectations.trim() : null,
       origin,
       numTravelers: parseTravelers(numTravelers),
-      ...(isEdit ? { currency } : {}),
+      currency,
     }
   }
 
@@ -406,17 +405,17 @@ export function NewTripDialog({
         hideClose
         className="sm:max-h-[min(90vh,40rem)] sm:max-w-lg"
       >
-        <DialogHeader className="shrink-0 space-y-1.5 px-6 pb-2 pt-6 text-left">
-          <DialogTitle className="text-lg font-semibold tracking-tight">
-            {isEdit ? "Editar viaje" : "Nuevo viaje"}
-          </DialogTitle>
-          <DialogDescription>
-            {isEdit
-              ? "Actualiza el nombre, el origen, las fechas, los días o qué esperas del viaje."
-              : "Crea un proyecto para consolidar fuentes de blogueros y revistas. El destino concreto irá emergiendo de los artículos que incorpores."}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-10 pt-6">
+          <DialogHeader className="space-y-1.5 text-left">
+            <DialogTitle className="text-lg font-semibold tracking-tight">
+              {isEdit ? "Editar viaje" : "Nuevo viaje"}
+            </DialogTitle>
+            <DialogDescription>
+              {isEdit
+                ? "Actualiza el nombre, el origen, las fechas, los días o qué esperas del viaje. Podrás cambiar esta información en cualquier momento."
+                : "Crea un viaje y consolida las fuentes de blogueros y revistas. No hace falta que nos digas el destino: irá emergiendo de los artículos y referencias que incorpores."}
+            </DialogDescription>
+          </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor={nameId}>Nombre del viaje</Label>
             <Input
@@ -427,7 +426,7 @@ export function NewTripDialog({
               autoFocus
             />
             <p className="text-xs text-muted-foreground">
-              Sirve de pista para portada y mapa hasta que tengas fuentes con región.
+              Pon el nombre que quieras que aparezca en la portada.
             </p>
           </div>
 
@@ -497,7 +496,7 @@ export function NewTripDialog({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Opcional. Ciudad o dirección de salida; elige una opción del desplegable.
+                Introduce un punto de partida o elige una opción del desplegable (opcional).
               </p>
             )}
           </div>
@@ -513,33 +512,29 @@ export function NewTripDialog({
               placeholder="2"
             />
             <p className="text-xs text-muted-foreground">
-              Opcional. Sirve para el coste por persona en las tareas del viaje.
+              Si lo indicas calcularemos el coste por persona en las tareas del viaje.
             </p>
           </div>
 
-          {isEdit ? (
-            <div className="space-y-2">
-              <Label htmlFor={currencyId}>Divisa del viaje</Label>
-              <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger id={currencyId} className="w-full">
-                  <SelectValue placeholder="EUR" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencyOptions.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Una sola divisa para que el total de tareas sea una suma válida.
-              </p>
-            </div>
-          ) : null}
-
           <div className="space-y-2">
-            <Label id={datesId}>¿Cuándo te gustaría ir?</Label>
+            <Label htmlFor={daysId}>¿Cuántos días vas a estar de viaje?</Label>
+            <Input
+              id={daysId}
+              type="number"
+              min={1}
+              value={numDays}
+              onChange={(e) => {
+                setFormError(null)
+                setNumDays(e.target.value)
+              }}
+              placeholder="Introduce un número"
+            />
+            <p className="text-xs text-muted-foreground">
+              Son el número de días que con el que iniciaremos tu panel de viaje (podrás quitar o añadir días en cualquier momento).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label id={datesId}>¿Qué día te gustaría empezar tu viaje?</Label>
             <Popover open={datePopOpen} onOpenChange={setDatePopOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -556,7 +551,7 @@ export function NewTripDialog({
                     ? rangeLabel
                     : startDate
                       ? formatDayDate(toISODate(startDate)) ?? toISODate(startDate)
-                      : "Selecciona la fecha de inicio (opcional)"}
+                      : "Selecciona la fecha de inicio"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -591,26 +586,7 @@ export function NewTripDialog({
               </PopoverContent>
             </Popover>
             <p className="text-xs text-muted-foreground">
-              Opcional. La fecha de fin se calcula con el número de días del viaje.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={daysId}>¿Cuántos días te gustaría estar de viaje?</Label>
-            <Input
-              id={daysId}
-              type="number"
-              min={1}
-              value={numDays}
-              onChange={(e) => {
-                setFormError(null)
-                setNumDays(e.target.value)
-              }}
-              placeholder="5"
-            />
-            <p className="text-xs text-muted-foreground">
-              {isEdit
-                ? "Define los días del itinerario y, con fecha de inicio, la fecha de fin. Si reduces por debajo de los días que ya tienes, deberás borrar días en el panel del viaje primero."
-                : "Define cuántos días se abren en el itinerario y, con fecha de inicio, cuándo termina el viaje."}
+            Si también has indicado el número de días, podremos calcular las fechas de tu viaje (podrás cambiarlo en cualquier momento). Esta información nos permitirá hacerte sugerencias y recomendaciones mucho más precisas.
             </p>
           </div>
           <div className="space-y-2">
@@ -624,7 +600,25 @@ export function NewTripDialog({
               className="min-h-[80px] resize-y text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              Opcional. Ayuda al asistente a afinar recomendaciones según tus prioridades.
+              Afinaremos las recomendaciones e información que te proporcionaremos, según tus prioridades.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={currencyId}>Divisa del viaje</Label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger id={currencyId} className="w-full">
+                <SelectValue placeholder="EUR" />
+              </SelectTrigger>
+              <SelectContent>
+                {currencyOptions.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Elige la divisa en la que quieres que se muestren los costes de tu viaje.
             </p>
           </div>
           {formError ? (
@@ -633,7 +627,7 @@ export function NewTripDialog({
             </p>
           ) : null}
         </div>
-        <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button variant="ghost" type="button" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
@@ -650,7 +644,7 @@ export function NewTripDialog({
             ) : isEdit ? (
               "Guardar"
             ) : (
-              "Crear"
+              "Crear viaje"
             )}
           </Button>
         </DialogFooter>

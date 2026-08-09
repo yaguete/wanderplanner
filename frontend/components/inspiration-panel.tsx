@@ -22,6 +22,7 @@ import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ApiLimitError } from "@/lib/api"
 import { ITEM_LABELS } from "@/lib/item-styles"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
+import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
 import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { toast } from "sonner"
 
@@ -289,7 +290,7 @@ export default function InspirationPanel({
         {isMobile ? (
           <div className="flex items-baseline gap-1.5 px-4 pb-1 pt-3.5">
             <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-foreground">
-              {currentSource?.title ?? "Fuentes"}
+              {currentSource ? formatGuideLabel(currentSource) : "Fuentes"}
             </h2>
             {sources.length > 0 ? (
               <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
@@ -378,7 +379,7 @@ export default function InspirationPanel({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentSource ? (
             <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1 sm:px-6">
-              {/* Desktop: titular + miniatura. En móvil el título va en la cabecera («Japan — 21 días · N fuentes»). */}
+              {/* Desktop: titular del artículo + miniatura. En móvil la etiqueta de guía va en la cabecera. */}
               {!isMobile ? (
                 <div className="flex items-start gap-3">
                   {currentSource.ogImage ? (
@@ -392,7 +393,7 @@ export default function InspirationPanel({
                   ) : null}
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                      {currentSource.title}
+                      {sourceArticleHeading(currentSource)}
                     </h3>
                     <a
                       href={currentSource.url}

@@ -7,6 +7,8 @@ import type { ImperativePanelHandle } from "react-resizable-panels"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+import { draftTripNameFor } from "@/lib/partner-trip"
+import { formatGuideLabel } from "@/lib/itinerary-utils"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
@@ -31,7 +33,7 @@ function readPlanOpen(): boolean {
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip, isLoading, addSourceToTrip, updateTrip } = useTrips()
+  const { getTrip, isLoading, addSourceToTrip, updateTrip, getTripSources } = useTrips()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
@@ -71,6 +73,27 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       setAddSourceOpen(true)
     })
   }, [pendingSourceUrl, trip, tripId, addSourceToTrip])
+
+  // Partner legacy: nombre = solo `area` («Japan») → subir a «Japan — 21 días».
+  useEffect(() => {
+    if (!trip?.referrer) return
+    const first = getTripSources(tripId)[0]
+    if (!first) return
+    const guide = formatGuideLabel(first)
+    if (!guide || trip.name === guide) return
+    if (trip.name === first.area || trip.name === draftTripNameFor(first.url)) {
+      updateTrip(trip.id, {
+        name: guide,
+        startDate: trip.startDate,
+        endDate: trip.endDate,
+        numDays: trip.numDays,
+        expectations: trip.expectations ?? null,
+        origin: trip.origin ?? null,
+        numTravelers: trip.numTravelers ?? null,
+        currency: trip.currency || "EUR",
+      })
+    }
+  }, [trip, tripId, getTripSources, updateTrip])
 
   // No consumir `?source=` hasta que la fuente exista: así un fallo conserva la URL para reintentar.
   useEffect(() => {

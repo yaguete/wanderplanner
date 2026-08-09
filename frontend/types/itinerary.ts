@@ -75,6 +75,8 @@ export interface Itinerary {
   /** Seguros, SIM, alquiler, vuelos, etc. a nivel de artículo (no por día). */
   basics?: BasicItem[]
   og_image?: string | null
+  /** Título del artículo (og:title / <title>); lo inyecta el fetch, no el LLM. */
+  og_title?: string | null
   article_html?: string
 }
 
@@ -201,6 +203,7 @@ export interface Source {
   id: string
   url: string
   author: string
+  /** Título del artículo (og:title) o, si falta, etiqueta de guía `destino — N días`. */
   title: string
   /**
    * Zona geográfica del artículo (= `itinerary.destination` del backend, p. ej. "La Alpujarra granadina, Granada, Spain").
