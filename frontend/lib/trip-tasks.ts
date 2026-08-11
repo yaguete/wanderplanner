@@ -47,6 +47,10 @@ export type DerivedTripTask = {
   nights?: number
   sourceId?: string
   affiliateUrl?: string | null
+  /** Compañía / proveedor (p. ej. Vueling), si el ítem lo trae. */
+  vendor?: string | null
+  /** Nota o referencia del usuario (p. ej. localizador). */
+  detail?: string | null
   /** Tramo de ida/vuelta (T4B.3); ausente en el resto. */
   route?: TransportRoute
 }
@@ -250,6 +254,8 @@ type DayItemGroup = {
   dayIndexSet: Set<number>
   sourceId?: string
   affiliateUrl: string | null
+  vendor: string | null
+  detail: string | null
   route?: TransportRoute
 }
 
@@ -272,6 +278,8 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
           dayIndexSet: new Set(),
           sourceId: item.sourceId,
           affiliateUrl: item.affiliateUrl ?? null,
+          vendor: item.vendor?.trim() || null,
+          detail: item.detail?.trim() || null,
           route: item.route,
         }
         groups.set(key, group)
@@ -289,6 +297,10 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
       if (!group.affiliateUrl && item.affiliateUrl) {
         group.affiliateUrl = item.affiliateUrl
       }
+      const vendor = item.vendor?.trim()
+      if (vendor) group.vendor = vendor
+      const detail = item.detail?.trim()
+      if (detail) group.detail = detail
     }
   })
 
@@ -310,6 +322,8 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
       nights: g.type === "stay" ? g.dayIndexes.length : undefined,
       sourceId: g.sourceId,
       affiliateUrl: g.affiliateUrl,
+      vendor: g.vendor,
+      detail: g.detail,
       route: g.route,
     }
   })
@@ -322,6 +336,8 @@ type BasicGroup = {
   itemIds: string[]
   sourceId?: string
   affiliateUrl: string | null
+  vendor: string | null
+  detail: string | null
 }
 
 function aggregateBasics(trip: Trip): DerivedTripTask[] {
@@ -339,6 +355,8 @@ function aggregateBasics(trip: Trip): DerivedTripTask[] {
         itemIds: [],
         sourceId: basic.sourceId,
         affiliateUrl: basic.affiliateUrl,
+        vendor: basic.vendor?.trim() || null,
+        detail: basic.detail?.trim() || null,
       }
       groups.set(key, group)
       order.push(key)
@@ -347,6 +365,10 @@ function aggregateBasics(trip: Trip): DerivedTripTask[] {
     if (!group.affiliateUrl && basic.affiliateUrl) {
       group.affiliateUrl = basic.affiliateUrl
     }
+    const vendor = basic.vendor?.trim()
+    if (vendor) group.vendor = vendor
+    const detail = basic.detail?.trim()
+    if (detail) group.detail = detail
   }
 
   return order.map((key) => {
@@ -367,6 +389,8 @@ function aggregateBasics(trip: Trip): DerivedTripTask[] {
       occurrences: g.itemIds.length,
       sourceId: g.sourceId,
       affiliateUrl: g.affiliateUrl,
+      vendor: g.vendor,
+      detail: g.detail,
     }
   })
 }

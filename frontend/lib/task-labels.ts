@@ -162,6 +162,18 @@ export function formatTaskDays(
   return datePart ? `${base} · ${datePart}` : base
 }
 
+/** Une meta de días + compañía + nota («día 9 · Vueling · ABCDE»). */
+export function formatTaskMeta(parts: {
+  dayMeta?: string | null
+  vendor?: string | null
+  detail?: string | null
+}): string | null {
+  const bits = [parts.dayMeta, parts.vendor, parts.detail]
+    .map((p) => p?.trim())
+    .filter((p): p is string => Boolean(p))
+  return bits.length > 0 ? bits.join(" · ") : null
+}
+
 function formatTaskCalendarRange(
   dayIndexes: number[],
   startDate: string | null,

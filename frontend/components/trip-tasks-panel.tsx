@@ -36,6 +36,7 @@ import {
   TASK_CATEGORY_LABELS,
   TASK_CATEGORY_ORDER,
   formatTaskDays,
+  formatTaskMeta,
   formatTripCurrency,
   parseCostInput,
   taskActionTitle,
@@ -545,6 +546,11 @@ function TaskRow({
   const managed = isTaskManaged(task.state)
   const doneChip = usesDoneChip(task)
   const dayMeta = formatTaskDays(task.dayIndexes, task.nights, startDate)
+  const meta = formatTaskMeta({
+    dayMeta,
+    vendor: task.vendor,
+    detail: task.detail,
+  })
   const showCancellable =
     cancellableApplies(task.category, task.route?.mode) &&
     (status === "booked" || status === "paid")
@@ -584,8 +590,8 @@ function TaskRow({
               </a>
             ) : null}
           </div>
-          {dayMeta ? (
-            <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{dayMeta}</p>
+          {meta ? (
+            <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{meta}</p>
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">

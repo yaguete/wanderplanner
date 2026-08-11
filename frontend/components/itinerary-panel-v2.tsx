@@ -86,12 +86,11 @@ const CATEGORY_EMPTY: Record<
 > = {
   activities: {
     title: "Sin actividades que gestionar",
-    description:
-      "Consolida actividades o restaurantes en la Ruta, o añade una tarea a mano.",
+    description: "Consolida actividades o restaurantes en la Ruta.",
   },
   stay: {
     title: "Sin alojamientos que gestionar",
-    description: "Consolida estancias en la Ruta o añade una tarea a mano.",
+    description: "Consolida estancias en la Ruta.",
   },
   transport: {
     title: "Sin transporte que gestionar",
