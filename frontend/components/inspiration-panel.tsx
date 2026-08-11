@@ -19,6 +19,7 @@ import {
   Tag,
   ChevronUp,
   ChevronDown,
+  AlertCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -26,7 +27,13 @@ import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/empty-state"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
-import { AddSourceDialog, AddSourceFlow } from "@/components/add-source-dialog"
+import {
+  AddSourceDialog,
+  AddSourceFlow,
+  AddSourceProgress,
+  AddSourceErrorState,
+  MaxSourcesDialog,
+} from "@/components/add-source-dialog"
 import { AddToDayDialog } from "@/components/add-to-day-dialog"
 import { PanelTabs } from "@/components/panel-tabs"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
@@ -37,6 +44,7 @@ import { ApiLimitError } from "@/lib/api"
 import { ITEM_LABELS } from "@/lib/item-styles"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
+import { canAddSource } from "@/lib/trip-sources"
 import {
   clearTextHighlights,
   highlightTextInElement,
@@ -77,22 +85,28 @@ export default function InspirationPanel({
   addSourceOpen = false,
   onAddSourceOpenChange,
   initialSourceUrl,
-  autoSourceError,
+  onRevealSources,
 }: {
   tripId: string
   addSourceOpen?: boolean
   onAddSourceOpenChange?: (open: boolean) => void
   initialSourceUrl?: string | null
-  autoSourceError?: string | null
+  /** Activa el panel/sección Fuentes (toast «Ver»). */
+  onRevealSources?: () => void
 }) {
   const {
     getTrip,
     getTripSources,
-    addSourceToTrip,
+    startSourceExtraction,
+    cancelPendingSource,
+    retryPendingSource,
+    dismissPendingSource,
+    pendingSources,
+    lastExtractionEvent,
+    ackExtractionEvent,
     refetchSource,
+    isRefetchingSource,
     removeSourceFromTrip,
-    isLoadingSource,
-    loadingSourceStage,
     ensureArticleHtml,
     isArticleHtmlLoading,
     addItemToDay,
@@ -100,12 +114,16 @@ export default function InspirationPanel({
   } = useTrips()
   const { requireAccount } = useRegistrationGate()
   const trip = getTrip(tripId)
-  const sources = getTripSources(tripId)
+  const sources = useMemo(() => getTripSources(tripId), [getTripSources, tripId])
+  const tripPendings = useMemo(
+    () => pendingSources.filter((p) => p.tripId === tripId),
+    [pendingSources, tripId],
+  )
   const isMobile = useIsMobile()
 
   const [activeSourceId, setActiveSourceId] = useState<string | null>(sources[0]?.id ?? null)
   const [sourceTab, setSourceTab] = useState<SourceTab>("source")
-  const [mobileAnalyzing, setMobileAnalyzing] = useState(false)
+  const [maxSourcesOpen, setMaxSourcesOpen] = useState(false)
   const [refetchError, setRefetchError] = useState<string | null>(null)
   /** Ítem pendiente de «Añadir al día»; un solo Dialog para toda la lista (sobrevive al virtualizer). */
   const [pickingItem, setPickingItem] = useState<SourceItem | null>(null)
@@ -114,10 +132,13 @@ export default function InspirationPanel({
   const [matchIndex, setMatchIndex] = useState(0)
   const [matchCount, setMatchCount] = useState(0)
   const articleRef = useRef<HTMLDivElement>(null)
+  const chipsRef = useRef<HTMLDivElement>(null)
   const marksRef = useRef<HTMLElement[]>([])
   const matchIndexRef = useRef(0)
   const lastScrolledQueryRef = useRef<string | null>(null)
   const lastScrolledIndexRef = useRef<number | null>(null)
+  const activeSourceIdRef = useRef(activeSourceId)
+  const seenExtractionSeqRef = useRef(0)
   const {
     containerRef: panelRef,
     collapsed: headerCollapsed,
@@ -125,49 +146,131 @@ export default function InspirationPanel({
   } = useCollapsingHeader(isMobile)
 
   useEffect(() => {
-    if (sources.length === 0) {
+    activeSourceIdRef.current = activeSourceId
+  }, [activeSourceId])
+
+  useEffect(() => {
+    const pendingIds = new Set(tripPendings.map((p) => p.id))
+    if (sources.length === 0 && tripPendings.length === 0) {
       setActiveSourceId(null)
       return
     }
-    setActiveSourceId((id) => (id && sources.some((s) => s.id === id) ? id : sources[0]!.id))
-  }, [sources])
-
-  const preparingFirstSource =
-    isLoadingSource && sources.length === 0 && !autoSourceError && !addSourceOpen
-
+    setActiveSourceId((id) => {
+      if (id && sources.some((s) => s.id === id)) return id
+      if (id && pendingIds.has(id)) return id
+      // Pending que acaba de resolverse → la fuente nueva suele ser la última.
+      if (sources.length > 0) return sources[sources.length - 1]!.id
+      return tripPendings[0]?.id ?? null
+    })
+  }, [sources, tripPendings])
   const setAddSourceOpen = (open: boolean) => {
     onAddSourceOpenChange?.(open)
-    if (!open) setMobileAnalyzing(false)
   }
 
-  const currentSource = sources.find((s) => s.id === activeSourceId) ?? sources[0] ?? null
+  const activePending = tripPendings.find((p) => p.id === activeSourceId) ?? null
+  const currentSource = activePending
+    ? null
+    : (sources.find((s) => s.id === activeSourceId) ?? sources[0] ?? null)
 
-  const guardBeforeExtract = useCallback(() => {
+  const loadingPendingCount = tripPendings.filter((p) => p.status === "loading").length
+  const atSourceCap = !canAddSource({
+    sourceCount: sources.length,
+    loadingPendingCount,
+  })
+
+  const guardBeforeSubmit = useCallback(() => {
     if (sources.length > 0 && !requireAccount("second-source")) return false
     return true
   }, [sources.length, requireAccount])
 
-  const handleExtract = useCallback(
-    async (url: string, signal: AbortSignal) => {
-      return addSourceToTrip(tripId, url, { signal })
-    },
-    [addSourceToTrip, tripId],
-  )
-
-  const handleExtractSuccess = useCallback(
-    (source: Source) => {
-      setActiveSourceId(source.id)
-      setSourceTab("source")
+  const handleStartExtract = useCallback(
+    (url: string) => {
+      const result = startSourceExtraction(tripId, url)
+      if (!result.ok) {
+        if (result.reason === "max-sources") {
+          setMaxSourcesOpen(true)
+          return
+        }
+        if (result.reason === "already-loading") {
+          toast.message("Espera a que termine la fuente en curso")
+          return
+        }
+        toast.error("No se pudo iniciar la extracción")
+        return
+      }
+      setActiveSourceId(result.pendingId)
       setAddSourceOpen(false)
     },
     // setAddSourceOpen closes over onAddSourceOpenChange
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [onAddSourceOpenChange],
+    [startSourceExtraction, tripId, onAddSourceOpenChange],
   )
 
-  const handleGuestLimit = useCallback(() => {
-    requireAccount("source-limit")
-  }, [requireAccount])
+  const handlePlusClick = useCallback(() => {
+    if (loadingPendingCount > 0) {
+      toast.message("Espera a que termine la fuente en curso")
+      return
+    }
+    if (atSourceCap) {
+      setMaxSourcesOpen(true)
+      return
+    }
+    setAddSourceOpen(true)
+  }, [atSourceCap, loadingPendingCount])
+
+  // Toasts + gate invitado cuando la extracción termina fuera de vista.
+  useEffect(() => {
+    if (!lastExtractionEvent || lastExtractionEvent.tripId !== tripId) return
+    if (lastExtractionEvent.seq <= seenExtractionSeqRef.current) return
+    seenExtractionSeqRef.current = lastExtractionEvent.seq
+    const seq = lastExtractionEvent.seq
+    const fresh = Date.now() - lastExtractionEvent.at <= 30_000
+
+    if (lastExtractionEvent.type === "success") {
+      const { source, pendingId } = lastExtractionEvent
+      if (activeSourceIdRef.current === pendingId) {
+        setActiveSourceId(source.id)
+        setSourceTab("source")
+      }
+      toast.success(`Fuente añadida · @${source.author}`, {
+        action: {
+          label: "Ver",
+          onClick: () => {
+            onRevealSources?.()
+            setActiveSourceId(source.id)
+            setSourceTab("source")
+          },
+        },
+      })
+      ackExtractionEvent(seq)
+      return
+    }
+
+    // Gate solo si el evento es fresco: al volver al viaje no abrir registro solo.
+    if (fresh && lastExtractionEvent.errorKind === "guest-limit") {
+      requireAccount("source-limit")
+    }
+    toast.error("No hemos podido leer la fuente", {
+      description: lastExtractionEvent.message,
+      action: {
+        label: "Ver",
+        onClick: () => {
+          onRevealSources?.()
+          setActiveSourceId(lastExtractionEvent.pendingId)
+        },
+      },
+    })
+    ackExtractionEvent(seq)
+  }, [lastExtractionEvent, tripId, onRevealSources, requireAccount, ackExtractionEvent])
+
+  // Chip activo / pendiente a la vista (máscara del scroller).
+  useEffect(() => {
+    if (!activeSourceId) return
+    const el = chipsRef.current?.querySelector<HTMLElement>(
+      `[data-chip-id="${activeSourceId}"]`,
+    )
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [activeSourceId, tripPendings.length, sources.length])
 
   // El HTML del artículo no viene en la carga inicial: se pide al abrir la Crónica.
   useEffect(() => {
@@ -451,22 +554,28 @@ export default function InspirationPanel({
         {isMobile ? (
           <div className="flex items-baseline gap-1.5 px-4 pb-1 pt-3.5">
             <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-foreground">
-              {currentSource ? formatGuideLabel(currentSource) : "Fuentes"}
+              {activePending
+                ? `@${activePending.author}`
+                : currentSource
+                  ? formatGuideLabel(currentSource)
+                  : "Fuentes"}
             </h2>
-            {sources.length > 0 ? (
+            {sources.length > 0 || tripPendings.length > 0 ? (
               <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                · {sources.length} {sources.length === 1 ? "fuente" : "fuentes"}
+                · {sources.length}
+                {tripPendings.length > 0 ? `+${tripPendings.length}` : ""}{" "}
+                {sources.length + tripPendings.length === 1 ? "fuente" : "fuentes"}
               </p>
             ) : null}
           </div>
         ) : null}
-        {sources.length > 0 ? (
+        {sources.length > 0 || tripPendings.length > 0 ? (
           <div className={cn(isMobile ? "pt-1.5" : "pt-2.5")}>
-            <div className="source-chips-scroller">
+            <div className="source-chips-scroller" ref={chipsRef}>
               {sources.map((s) => {
                 const active = activeSourceId === s.id
                 return (
-                  <div key={s.id} className="shrink-0">
+                  <div key={s.id} className="shrink-0" data-chip-id={s.id}>
                     <div className="group relative inline-flex">
                       <button
                         type="button"
@@ -475,8 +584,7 @@ export default function InspirationPanel({
                           "inline-flex min-h-7 shrink-0 items-center rounded-full border py-1 pl-2.5 pr-6 text-left text-xs font-medium leading-none transition-colors",
                           active
                             ? "border-transparent bg-foreground text-background"
-                            : // hover solo en desktop: en táctil el sticky :hover obliga a un segundo toque
-                              "border-border bg-background text-foreground md:hover:bg-muted",
+                            : "border-border bg-background text-foreground md:hover:bg-muted",
                         )}
                       >
                         <span className="leading-[1.1]">@{s.author}</span>
@@ -486,8 +594,6 @@ export default function InspirationPanel({
                         aria-label="Quitar fuente"
                         className={cn(
                           "absolute right-0.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-full transition",
-                          // Móvil: siempre visible (evita sticky group-hover / doble tap).
-                          // Desktop: revelar al hover del chip.
                           "opacity-100",
                           "md:opacity-0 md:pointer-events-none md:group-hover:pointer-events-auto md:group-hover:opacity-100",
                           "focus:opacity-100 focus:pointer-events-auto focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
@@ -506,19 +612,68 @@ export default function InspirationPanel({
                   </div>
                 )
               })}
+              {tripPendings.map((p) => {
+                const active = activeSourceId === p.id
+                const isErr = p.status === "error"
+                return (
+                  <div key={p.id} className="shrink-0" data-chip-id={p.id}>
+                    <div className="group relative inline-flex">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSourceId(p.id)}
+                        aria-busy={p.status === "loading"}
+                        className={cn(
+                          "inline-flex min-h-7 shrink-0 items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-6 text-left text-xs font-medium leading-none transition-colors",
+                          active
+                            ? isErr
+                              ? "border-transparent bg-destructive text-destructive-foreground"
+                              : "border-transparent bg-foreground text-background"
+                            : isErr
+                              ? "border-destructive/40 bg-background text-destructive md:hover:bg-destructive/10"
+                              : "border-border bg-background text-foreground md:hover:bg-muted",
+                        )}
+                      >
+                        {p.status === "loading" ? (
+                          <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden />
+                        ) : (
+                          <AlertCircle className="size-3 shrink-0" aria-hidden />
+                        )}
+                        <span className="leading-[1.1]">@{p.author}</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={
+                          p.status === "loading" ? "Cancelar análisis" : "Descartar"
+                        }
+                        className={cn(
+                          "absolute right-0.5 top-1/2 z-10 flex size-5 -translate-y-1/2 items-center justify-center rounded-full transition",
+                          "opacity-100",
+                          "md:opacity-0 md:pointer-events-none md:group-hover:pointer-events-auto md:group-hover:opacity-100",
+                          "focus:opacity-100 focus:pointer-events-auto focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+                          active
+                            ? "text-background/80 md:hover:text-destructive"
+                            : "text-muted-foreground md:hover:text-destructive",
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (p.status === "loading") cancelPendingSource(p.id)
+                          else dismissPendingSource(p.id)
+                        }}
+                      >
+                        <X className="size-2.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
               <button
                 type="button"
-                onClick={() => {
-                  if (preparingFirstSource) return
-                  setAddSourceOpen(true)
-                }}
-                disabled={preparingFirstSource}
+                onClick={handlePlusClick}
                 className={cn(
                   "inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-input",
                   "bg-background text-foreground transition-colors",
                   "hover:bg-accent hover:text-accent-foreground",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  "disabled:pointer-events-none disabled:opacity-50",
                 )}
                 aria-label="Añadir fuente"
               >
@@ -531,44 +686,63 @@ export default function InspirationPanel({
 
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {currentSource ? (
+          {currentSource || activePending ? (
             <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1">
               <div className="panel-column">
               {/* Desktop: titular del artículo + miniatura. En móvil la etiqueta de guía va en la cabecera. */}
               {!isMobile ? (
-                <div className="flex items-start gap-3">
-                  {currentSource.ogImage ? (
-                    <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                      <img
-                        src={currentSource.ogImage}
-                        alt=""
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    </div>
-                  ) : null}
+                activePending ? (
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                      {sourceArticleHeading(currentSource)}
+                      @{activePending.author}
                     </h3>
-                    <a
-                      href={currentSource.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
-                    >
-                      {currentSource.url}
-                    </a>
+                    <p className="block truncate text-xs text-muted-foreground">
+                      {activePending.url}
+                    </p>
                   </div>
-                </div>
+                ) : currentSource ? (
+                  <div className="flex items-start gap-3">
+                    {currentSource.ogImage ? (
+                      <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                        <img
+                          src={currentSource.ogImage}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : null}
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
+                        {sourceArticleHeading(currentSource)}
+                      </h3>
+                      <a
+                        href={currentSource.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
+                      >
+                        {currentSource.url}
+                      </a>
+                    </div>
+                  </div>
+                ) : null
               ) : null}
-              <div className={cn("transition-[margin] duration-200 ease-out", isMobile ? "mt-2" : "mt-4 @md:mt-5")}>
-                <PanelTabs
-                  items={tabs}
-                  value={sourceTab}
-                  onValueChange={setSourceTab}
-                  ariaLabel="Vista de la fuente"
+              {currentSource ? (
+                <div className={cn("transition-[margin] duration-200 ease-out", isMobile ? "mt-2" : "mt-4 @md:mt-5")}>
+                  <PanelTabs
+                    items={tabs}
+                    value={sourceTab}
+                    onValueChange={setSourceTab}
+                    ariaLabel="Vista de la fuente"
+                  />
+                </div>
+              ) : (
+                // Reserva altura de tabs (PanelTabs ≈ min-h-8) para no colapsar el panel.
+                <div
+                  className={cn("h-8", isMobile ? "mt-2" : "mt-4 @md:mt-5")}
+                  aria-hidden
                 />
-              </div>
+              )}
               </div>
             </div>
           ) : null}
@@ -582,37 +756,38 @@ export default function InspirationPanel({
                 : "overflow-y-auto",
             )}
           >
-            {!currentSource ? (
-              preparingFirstSource ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-                  <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden />
-                  <div className="space-y-1.5">
-                    <p className="max-w-sm text-balance text-sm font-medium text-foreground">
-                      Preparando tu viaje con el artículo que estabas leyendo…
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {loadingSourceStage === "extracting"
-                        ? "Destilando la ruta…"
-                        : "Leyendo el artículo…"}
-                    </p>
-                    <p className="max-w-sm text-balance text-xs text-muted-foreground">
-                      Puede tardar más de 30 segundos si el artículo es largo.
-                    </p>
-                  </div>
-                </div>
+            {activePending ? (
+              activePending.status === "loading" ? (
+                <AddSourceProgress
+                  stage={activePending.stage}
+                  onCancel={() => cancelPendingSource(activePending.id)}
+                />
               ) : (
-                <EmptyState
-                  icon={Plus}
-                  title="Añade tu primera fuente"
-                  description={
-                    autoSourceError
-                      ? autoSourceError
-                      : "Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
+                <AddSourceErrorState
+                  message={
+                    activePending.errorKind === "guest-limit"
+                      ? "Crea una cuenta para añadir más fuentes."
+                      : activePending.errorMessage
                   }
-                  actionLabel="Añadir fuente"
-                  onAction={() => setAddSourceOpen(true)}
+                  onRetry={() => {
+                    const result = retryPendingSource(activePending.id)
+                    if (!result.ok && result.reason === "already-loading") {
+                      toast.message("Espera a que termine la fuente en curso")
+                    } else if (!result.ok && result.reason === "max-sources") {
+                      setMaxSourcesOpen(true)
+                    }
+                  }}
+                  onDismiss={() => dismissPendingSource(activePending.id)}
                 />
               )
+            ) : !currentSource ? (
+              <EmptyState
+                icon={Plus}
+                title="Añade tu primera fuente"
+                description="Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
+                actionLabel="Añadir fuente"
+                onAction={handlePlusClick}
+              />
             ) : sourceTab === "basics" ? (
               <div className="space-y-3 px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
                 <div className="panel-column space-y-3">
@@ -694,9 +869,9 @@ export default function InspirationPanel({
                         size="sm"
                         className="mt-4 rounded-xl"
                         onClick={() => void handleRefetchArticle()}
-                        disabled={isLoadingSource}
+                        disabled={isRefetchingSource}
                       >
-                        {isLoadingSource ? (
+                        {isRefetchingSource ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <RefreshCw className="h-3.5 w-3.5" />
@@ -787,51 +962,39 @@ export default function InspirationPanel({
         />
       ) : null}
 
-      {/* Desktop: diálogo bloqueante. Móvil: sheet inferior con el mismo flujo. */}
+      {/* Desktop: diálogo URL. Móvil: sheet inferior. */}
       {!isMobile ? (
         <AddSourceDialog
-          open={addSourceOpen && !preparingFirstSource}
+          open={addSourceOpen}
           onOpenChange={setAddSourceOpen}
-          tripId={tripId}
           initialUrl={initialSourceUrl}
-          loadingStage={loadingSourceStage}
-          onExtract={handleExtract}
-          onSuccess={handleExtractSuccess}
-          guardBeforeExtract={guardBeforeExtract}
-          onGuestLimit={handleGuestLimit}
+          onSubmit={handleStartExtract}
+          guardBeforeSubmit={guardBeforeSubmit}
         />
-      ) : addSourceOpen && !preparingFirstSource ? (
+      ) : addSourceOpen ? (
         <>
           <button
             type="button"
             className="fixed inset-0 z-[45] bg-foreground/25 sm:hidden"
             aria-label="Cerrar añadir fuente"
-            disabled={mobileAnalyzing}
-            onClick={() => {
-              if (mobileAnalyzing) return
-              setAddSourceOpen(false)
-            }}
+            onClick={() => setAddSourceOpen(false)}
           />
           <div
             role="dialog"
-            aria-label={mobileAnalyzing ? "Analizando fuente" : "Añadir fuente"}
+            aria-label="Añadir fuente"
             className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
           >
             <AddSourceFlow
-              tripId={tripId}
               initialUrl={initialSourceUrl}
-              loadingStage={loadingSourceStage}
-              onExtract={handleExtract}
-              onSuccess={handleExtractSuccess}
+              onSubmit={handleStartExtract}
               onCancel={() => setAddSourceOpen(false)}
-              analyzing={mobileAnalyzing}
-              setAnalyzing={setMobileAnalyzing}
-              guardBeforeExtract={guardBeforeExtract}
-              onGuestBlocked={handleGuestLimit}
+              guardBeforeSubmit={guardBeforeSubmit}
             />
           </div>
         </>
       ) : null}
+
+      <MaxSourcesDialog open={maxSourcesOpen} onOpenChange={setMaxSourcesOpen} />
     </div>
   )
 }

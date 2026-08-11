@@ -1,11 +1,12 @@
 "use client"
 
 /**
- * Flujo «Añadir fuente»: formulario de URL + fase de análisis bloqueante.
- * Desktop usa Dialog; móvil reutiliza el sheet del InspirationPanel con este contenido.
+ * Flujo «Añadir fuente»: solo formulario de URL.
+ * La extracción vive en trip-context (`startSourceExtraction`); el progreso/error
+ * se muestran como chip pendiente en InspirationPanel.
  */
-import { useEffect, useId, useRef, useState, type FormEvent } from "react"
-import { Loader2 } from "lucide-react"
+import { useEffect, useId, useState, type FormEvent } from "react"
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,8 +18,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ApiLimitError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
-import type { Source } from "@/types/itinerary"
+import type { ItineraryProgressStage } from "@/lib/api"
+import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
 
 export function validateSourceUrl(raw: string): string | null {
   const trimmed = raw.trim()
@@ -43,7 +44,7 @@ export function AddSourceProgress({
   onCancel: () => void
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 py-2 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden />
       <div className="space-y-1.5">
         <p className="text-sm font-medium text-foreground">Analizando la fuente…</p>
@@ -51,7 +52,8 @@ export function AddSourceProgress({
           {stage === "extracting" ? "Destilando la ruta…" : "Leyendo el artículo…"}
         </p>
         <p className="max-w-sm text-balance text-xs text-muted-foreground">
-          Puede tardar más de 30 segundos si el artículo es largo. No cierres esta ventana.
+          Puede tardar más de 30 segundos si el artículo es largo. Puedes seguir trabajando
+          en Mi viaje o el asistente.
         </p>
       </div>
       <Button type="button" variant="outline" size="sm" onClick={onCancel}>
@@ -61,115 +63,83 @@ export function AddSourceProgress({
   )
 }
 
-export type AddSourceSubmitResult = {
-  source: Source
+export function AddSourceErrorState({
+  message,
+  onRetry,
+  onDismiss,
+}: {
+  message?: string | null
+  onRetry: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+      <AlertCircle className="size-6 text-destructive" aria-hidden />
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium text-foreground">
+          Algo ha salido mal. Inténtalo de nuevo.
+        </p>
+        {message ? (
+          <p className="max-w-sm text-balance text-xs text-muted-foreground">{message}</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button type="button" size="sm" onClick={onRetry}>
+          <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
+          Recargar
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onDismiss}>
+          Descartar
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 type AddSourceFlowProps = {
-  tripId: string
   initialUrl?: string | null
-  loadingStage: ItineraryProgressStage | null
-  onExtract: (url: string, signal: AbortSignal) => Promise<Source>
-  onSuccess: (source: Source) => void
+  onSubmit: (url: string) => void
   onCancel: () => void
-  onGuestBlocked?: () => void
-  /** Si true, no se puede cerrar por fuera (fase análisis). */
-  analyzing: boolean
-  setAnalyzing: (v: boolean) => void
   /** Gate de segunda fuente / límite invitado; return false para abortar. */
-  guardBeforeExtract?: () => boolean
+  guardBeforeSubmit?: () => boolean
 }
 
-/** Contenido compartido (fase URL o análisis) para Dialog y sheet móvil. */
+/** Formulario de URL compartido (Dialog desktop y sheet móvil). */
 export function AddSourceFlow({
   initialUrl,
-  loadingStage,
-  onExtract,
-  onSuccess,
+  onSubmit,
   onCancel,
-  onGuestBlocked,
-  analyzing,
-  setAnalyzing,
-  guardBeforeExtract,
+  guardBeforeSubmit,
 }: AddSourceFlowProps) {
   const id = useId()
   const [url, setUrl] = useState(initialUrl?.trim() ?? "")
   const [error, setError] = useState<string | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    if (!analyzing) {
-      setUrl(initialUrl?.trim() ?? "")
-      setError(null)
-    }
-  }, [initialUrl, analyzing])
+    setUrl(initialUrl?.trim() ?? "")
+    setError(null)
+  }, [initialUrl])
 
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [])
-
-  const handleCancel = () => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    setAnalyzing(false)
-    onCancel()
-  }
-
-  const handleSubmit = async (e?: FormEvent) => {
+  const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault()
     const validation = validateSourceUrl(url)
     if (validation) {
       setError(validation)
       return
     }
-    if (guardBeforeExtract && !guardBeforeExtract()) {
+    if (guardBeforeSubmit && !guardBeforeSubmit()) {
       onCancel()
       return
     }
     setError(null)
-    const ac = new AbortController()
-    abortRef.current = ac
-    setAnalyzing(true)
-    try {
-      const source = await onExtract(url.trim(), ac.signal)
-      abortRef.current = null
-      setAnalyzing(false)
-      onSuccess(source)
-    } catch (err) {
-      abortRef.current = null
-      setAnalyzing(false)
-      if (isAbortError(err)) {
-        onCancel()
-        return
-      }
-      if (err instanceof ApiLimitError && err.limit === "guest") {
-        onGuestBlocked?.()
-        onCancel()
-        return
-      }
-      if (err instanceof ApiLimitError) {
-        setError(err.message)
-        return
-      }
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo extraer la fuente. Comprueba la URL y que el backend esté en marcha.",
-      )
-    }
-  }
-
-  if (analyzing) {
-    return <AddSourceProgress stage={loadingStage} onCancel={handleCancel} />
+    onSubmit(url.trim())
   }
 
   const urlId = `${id}-url`
   const canSubmit = url.trim().length > 0
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor={urlId}>URL del artículo</Label>
         <Input
@@ -204,78 +174,69 @@ export function AddSourceFlow({
 export type AddSourceDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  tripId: string
   initialUrl?: string | null
-  loadingStage: ItineraryProgressStage | null
-  onExtract: (url: string, signal: AbortSignal) => Promise<Source>
-  onSuccess: (source: Source) => void
-  guardBeforeExtract?: () => boolean
-  onGuestLimit?: () => void
+  onSubmit: (url: string) => void
+  guardBeforeSubmit?: () => boolean
 }
 
-/** Diálogo desktop (bloqueante en fase análisis). */
+/** Diálogo desktop: solo URL. */
 export function AddSourceDialog({
   open,
   onOpenChange,
-  tripId,
   initialUrl,
-  loadingStage,
-  onExtract,
-  onSuccess,
-  guardBeforeExtract,
-  onGuestLimit,
+  onSubmit,
+  guardBeforeSubmit,
 }: AddSourceDialogProps) {
-  const [analyzing, setAnalyzing] = useState(false)
-
-  useEffect(() => {
-    if (!open) setAnalyzing(false)
-  }, [open])
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (analyzing && !next) return
-        onOpenChange(next)
-      }}
-    >
-      <DialogContent
-        hideClose={analyzing}
-        className="sm:max-w-md"
-        onInteractOutside={(e) => {
-          if (analyzing) e.preventDefault()
-        }}
-        onEscapeKeyDown={(e) => {
-          if (analyzing) e.preventDefault()
-        }}
-      >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{analyzing ? "Analizando fuente" : "Añadir fuente"}</DialogTitle>
-          {!analyzing ? (
-            <DialogDescription>
-              Pega la URL de un artículo de viajes. Destilaremos la ruta para consolidarla en tu
-              viaje.
-              <span className="mt-1.5 block">
-                (Ten paciencia, el proceso puede tardar entre 20 y 40s)
-              </span>
-            </DialogDescription>
-          ) : null}
+          <DialogTitle>Añadir fuente</DialogTitle>
+          <DialogDescription>
+            Pega la URL de un artículo de viajes. Destilaremos la ruta para consolidarla en tu
+            viaje.
+            <span className="mt-1.5 block">
+              Tarda entre 20 y 40 s. Puedes seguir trabajando mientras tanto.
+            </span>
+          </DialogDescription>
         </DialogHeader>
         <AddSourceFlow
-          tripId={tripId}
           initialUrl={initialUrl}
-          loadingStage={loadingStage}
-          onExtract={onExtract}
-          onSuccess={(source) => {
-            onSuccess(source)
+          onSubmit={(url) => {
+            onSubmit(url)
             onOpenChange(false)
           }}
           onCancel={() => onOpenChange(false)}
-          analyzing={analyzing}
-          setAnalyzing={setAnalyzing}
-          guardBeforeExtract={guardBeforeExtract}
-          onGuestBlocked={onGuestLimit}
+          guardBeforeSubmit={guardBeforeSubmit}
         />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Modal cuando el viaje ya tiene el máximo de fuentes. */
+export function MaxSourcesDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Máximo de fuentes</DialogTitle>
+          <DialogDescription>
+            Has llegado al máximo de {MAX_SOURCES_PER_TRIP} fuentes en este viaje. Quita alguna
+            para poder añadir otra.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Entendido
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

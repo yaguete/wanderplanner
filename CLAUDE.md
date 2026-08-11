@@ -115,6 +115,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - `sources.total_days` (= `Source.totalDays`): duración declarada por la guía (`itinerary.total_days`); permite que un viaje de partner adopte los días del artículo.
 - [`trip-context.tsx`](frontend/lib/trip-context.tsx): mutaciones **síncronas** sobre `useState`; [`TripsSyncer`](frontend/lib/db/trips-repo.ts) hace upsert/delete por diffing (debounce ~1 s, cola, flush `pagehide`). Last-write-wins.
 - Viajes de partner (`trip.referrer`): al añadir la primera fuente, si el viaje sigue virgen (sin fechas, ≤1 día vacío), se redimensiona a `totalDays` (tope 60), se fija `startDate` = mañana y se renombra con `source.area`. Con `&days=N` el calendario ya viene fijado en `/start` y solo se renombra. Nunca pisa viajes creados por el usuario.
+- Extracción de fuente: `startSourceExtraction` (fire-and-forget) → chip pendiente en Fuentes (`pendingSources`); sin modal bloqueante. Tope **5 fuentes/viaje** ([`trip-sources.ts`](frontend/lib/trip-sources.ts)). Quitar una fuente **no** borra ítems/basics ya consolidados en Mi viaje.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
 - Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`) y cachés de thumbs/Mapbox/country-tasks en session/local storage.
@@ -144,7 +145,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 ## Archivos críticos
 
 - [`frontend/types/itinerary.ts`](frontend/types/itinerary.ts) — Dominio; `Trip.referrer` para CTAs; `Source.totalDays`.
-- [`frontend/lib/trip-context.tsx`](frontend/lib/trip-context.tsx) — Mutaciones + `isLoading` + sync Supabase; adopción de calendario de partner.
+- [`frontend/lib/trip-context.tsx`](frontend/lib/trip-context.tsx) — Mutaciones + `isLoading` + sync Supabase; `startSourceExtraction` / `pendingSources`; adopción de calendario de partner.
+- [`frontend/lib/trip-sources.ts`](frontend/lib/trip-sources.ts) — `MAX_SOURCES_PER_TRIP` / `canAddSource`.
 - [`frontend/lib/partner-trip.ts`](frontend/lib/partner-trip.ts) — `draftTripNameFor` / `parseDaysParam` / `MAX_AUTO_DAYS` (CTA `/start`).
 - [`frontend/lib/partner-button.ts`](frontend/lib/partner-button.ts) / [`partners-api.ts`](frontend/lib/partners-api.ts) — kit `/partners`: URL limpia, snippet HTML, prewarm SSE.
 - [`frontend/components/partners/partner-button-builder.tsx`](frontend/components/partners/partner-button-builder.tsx).
@@ -176,7 +178,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 1. Auth (registrado o anónimo vía `/start`).
 2. Kit partner (`/partners`): el blogger genera enlace + snippet; `POST /partners/prewarm` deja la URL en `article_extractions` (sin sesión; Turnstile + límites).
 3. CTA partner (`/start`): borrador con `referrer`; opcionalmente N días + inicio mañana si `&days=N`.
-4. `addSourceToTrip` → `POST /itinerary` (caché `article_extractions`; hit si ya se precalentó) → `buildSource` (incluye `totalDays`) → sync fila `sources` + `trips`. Si el viaje tiene `referrer` y sigue virgen, adopta `totalDays` + `startDate` mañana y renombra con `area`.
+4. `startSourceExtraction` → chip pendiente → `POST /itinerary` (caché `article_extractions`; hit si ya se precalentó) → `buildSource` (incluye `totalDays`) → sync fila `sources` + `trips`. Si el viaje tiene `referrer` y sigue virgen, adopta `totalDays` + `startDate` mañana y renombra con `area`.
 5. Miniaturas visibles → `GET /thumb`; portada → `GET /cover`.
 6. Consolidar en días / básicos; asistente con briefing + `user_profile`.
 

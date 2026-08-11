@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -32,12 +33,13 @@ type TripChromeContextValue = {
   /** Colapso forzado por viewport estrecho (3 paneles); no se persiste. */
   autoCollapsed: boolean
   setAutoCollapsed: (collapsed: boolean) => void
+  /** True tras leer `wp-sidebar-collapsed` (evita flash del ancho de marca/sidebar). */
+  chromeHydrated: boolean
 }
 
 const SIDEBAR_KEY = "wp-sidebar-collapsed"
 
 function readSidebarCollapsed(): boolean {
-  if (typeof window === "undefined") return false
   try {
     return localStorage.getItem(SIDEBAR_KEY) === "1"
   } catch {
@@ -49,8 +51,15 @@ const TripChromeContext = createContext<TripChromeContextValue | null>(null)
 
 export function TripChromeProvider({ children }: { children: ReactNode }) {
   const [chrome, setChrome] = useState<TripChrome | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsedState] = useState(readSidebarCollapsed)
+  // false en SSR y primer paint; localStorage tras montar (evita hydration mismatch).
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState(false)
+  const [chromeHydrated, setChromeHydrated] = useState(false)
   const [autoCollapsed, setAutoCollapsed] = useState(false)
+
+  useEffect(() => {
+    setSidebarCollapsedState(readSidebarCollapsed())
+    setChromeHydrated(true)
+  }, [])
 
   const setSidebarCollapsed = useCallback((collapsed: boolean) => {
     setSidebarCollapsedState(collapsed)
@@ -82,6 +91,7 @@ export function TripChromeProvider({ children }: { children: ReactNode }) {
       toggleSidebar,
       autoCollapsed,
       setAutoCollapsed,
+      chromeHydrated,
     }),
     [
       chrome,
@@ -89,6 +99,7 @@ export function TripChromeProvider({ children }: { children: ReactNode }) {
       setSidebarCollapsed,
       toggleSidebar,
       autoCollapsed,
+      chromeHydrated,
     ],
   )
 

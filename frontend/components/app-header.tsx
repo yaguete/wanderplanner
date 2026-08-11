@@ -45,7 +45,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
   const router = useRouter()
   const { user, profile, isGuest, signOut } = useAuth()
   const isMobile = useIsMobile()
-  const { chrome } = useTripChrome()
+  const { chrome, chromeHydrated } = useTripChrome()
   const rail = useSidebarRail()
 
   const name = displayNameFor(user, profile)
@@ -77,6 +77,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
           "flex shrink-0 items-center",
           !isMobile && (rail ? "w-14 justify-center" : "w-56 px-2"),
           isMobile && "min-w-0",
+          !isMobile && !chromeHydrated && "invisible",
         )}
       >
         <Link

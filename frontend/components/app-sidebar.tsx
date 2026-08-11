@@ -111,6 +111,7 @@ export function AppSidebar({
   const { trips, createTrip } = useTrips()
   const { requireAccount } = useRegistrationGate()
   const rail = useSidebarRail()
+  const { chromeHydrated } = useTripChrome()
   const [newTripOpen, setNewTripOpen] = useState(false)
   /** Si la lista no cabe, el CTA se fija al borde inferior y los viajes pasan por detrás. */
   const [pinNewTrip, setPinNewTrip] = useState(false)
@@ -157,6 +158,7 @@ export function AppSidebar({
         "relative flex h-full shrink-0 flex-col bg-transparent text-sidebar-foreground",
         // Ancho sin transición: animar width re-maqueta el canvas (paneles + Crónica) cada frame.
         rail ? "w-14" : "w-56",
+        !chromeHydrated && "invisible",
         className,
       )}
     >

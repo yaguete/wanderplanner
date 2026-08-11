@@ -56,6 +56,8 @@ import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
+import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
+import { toast } from "sonner"
 
 const COMPOSER_MAX_HEIGHT = 168
 /** Distancia al fondo (px) para considerar que el usuario quiere auto-follow. */
@@ -480,8 +482,8 @@ export function AssistantPanelLayer({
     isMobile && isSection,
   )
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
-  const [busySourceUrl, setBusySourceUrl] = useState<string | null>(null)
-  const [linkError, setLinkError] = useState<string | null>(null)
+  /** Pending iniciado desde este dock (pill / busy de enlaces); no el del panel Fuentes. */
+  const [assistantPendingId, setAssistantPendingId] = useState<string | null>(null)
   const [view, setView] = useState<PanelView>("chat")
   const [pendingDelete, setPendingDelete] = useState<AssistantConversationSummary | null>(null)
   // Reset de vista solo al cambiar de viaje — no al abrir/cerrar el panel.
@@ -489,12 +491,35 @@ export function AssistantPanelLayer({
   if (viewTripId !== tripId) {
     setViewTripId(tripId)
     setView("chat")
+    setAssistantPendingId(null)
   }
 
-  const { getTrip, getTripSources, addSourceToTrip, addItemToDay, isLoadingSource } = useTrips()
+  const {
+    getTrip,
+    getTripSources,
+    startSourceExtraction,
+    pendingSources,
+    addItemToDay,
+  } = useTrips()
   const { user } = useAuth()
   const trip = getTrip(tripId)
   const sources = getTripSources(tripId)
+  const tripLoadingPending = useMemo(
+    () => pendingSources.find((p) => p.tripId === tripId && p.status === "loading") ?? null,
+    [pendingSources, tripId],
+  )
+
+  useEffect(() => {
+    if (!assistantPendingId) return
+    const stillLoading = pendingSources.some(
+      (p) => p.id === assistantPendingId && p.status === "loading",
+    )
+    if (!stillLoading) setAssistantPendingId(null)
+  }, [pendingSources, assistantPendingId])
+
+  const assistantLoading =
+    tripLoadingPending?.id === assistantPendingId ? tripLoadingPending : null
+  const busySourceUrl = assistantLoading?.url ?? null
   const suggestions = useMemo(
     () => buildAssistantSuggestions(trip, sources),
     [trip, sources],
@@ -608,64 +633,80 @@ export function AssistantPanelLayer({
   )
 
   const handleAddSourceLink = useCallback(
-    async (url: string) => {
+    (url: string) => {
       const normalized = normalizeSourceUrl(url)
-      if (!trip || isLoadingSource || busySourceUrl) return
+      if (!trip || tripLoadingPending) return
       if (addedSourceUrls.has(normalized)) return
-      setLinkError(null)
-      setBusySourceUrl(url)
-      try {
-        await addSourceToTrip(tripId, url)
-      } catch (e) {
-        setLinkError(e instanceof Error ? e.message : "No se pudo añadir la fuente")
-      } finally {
-        setBusySourceUrl(null)
+      const result = startSourceExtraction(tripId, url)
+      if (!result.ok) {
+        if (result.reason === "max-sources") {
+          toast.error(
+            `Has llegado al máximo de ${MAX_SOURCES_PER_TRIP} fuentes en este viaje. Quita alguna para añadir otra.`,
+          )
+        } else if (result.reason === "already-loading") {
+          toast.message("Espera a que termine la fuente en curso")
+        } else {
+          toast.error("No se pudo iniciar la extracción")
+        }
+        return
       }
+      setAssistantPendingId(result.pendingId)
     },
-    [trip, isLoadingSource, busySourceUrl, addedSourceUrls, addSourceToTrip, tripId],
+    [trip, tripLoadingPending, addedSourceUrls, startSourceExtraction, tripId],
   )
 
-  const handleAcceptAction = useCallback(async (messageId: string, action: ChatAction) => {
-    if (action.status !== "pending" || !trip) return
-    setActionBusyId(action.id)
-    setLinkError(null)
-    try {
-      if (action.kind === "add_source") {
-        const normalized = normalizeSourceUrl(action.url)
-        if (!addedSourceUrls.has(normalized)) {
-          await addSourceToTrip(tripId, action.url)
+  const handleAcceptAction = useCallback(
+    (messageId: string, action: ChatAction) => {
+      if (action.status !== "pending" || !trip) return
+      setActionBusyId(action.id)
+      try {
+        if (action.kind === "add_source") {
+          const normalized = normalizeSourceUrl(action.url)
+          if (!addedSourceUrls.has(normalized)) {
+            const result = startSourceExtraction(tripId, action.url)
+            if (!result.ok) {
+              if (result.reason === "max-sources") {
+                toast.error(
+                  `Has llegado al máximo de ${MAX_SOURCES_PER_TRIP} fuentes en este viaje. Quita alguna para añadir otra.`,
+                )
+              } else if (result.reason === "already-loading") {
+                toast.message("Espera a que termine la fuente en curso")
+              }
+              return
+            }
+            setAssistantPendingId(result.pendingId)
+          }
+          setActionStatus(messageId, action.id, "accepted")
+        } else {
+          const dayExists = trip.days.some((d) => d.id === action.day_id)
+          if (!dayExists) {
+            setActionStatus(messageId, action.id, "dismissed")
+            return
+          }
+          const itemType = (["transport", "stay", "food", "activity"] as ItemType[]).includes(
+            action.type as ItemType,
+          )
+            ? (action.type as ItemType)
+            : "activity"
+          const item: UserDayItem = {
+            id: crypto.randomUUID(),
+            sourceItemId: `assistant-${crypto.randomUUID()}`,
+            sourceId: ASSISTANT_SOURCE_ID,
+            type: itemType,
+            name: action.name,
+            detail: action.detail ?? null,
+            sourceAuthor: "Asistente",
+            region: action.region ?? null,
+          }
+          addItemToDay(tripId, action.day_id, item)
+          setActionStatus(messageId, action.id, "accepted")
         }
-        setActionStatus(messageId, action.id, "accepted")
-      } else {
-        const dayExists = trip.days.some((d) => d.id === action.day_id)
-        if (!dayExists) {
-          setActionStatus(messageId, action.id, "dismissed")
-          return
-        }
-        const itemType = (["transport", "stay", "food", "activity"] as ItemType[]).includes(
-          action.type as ItemType,
-        )
-          ? (action.type as ItemType)
-          : "activity"
-        const item: UserDayItem = {
-          id: crypto.randomUUID(),
-          sourceItemId: `assistant-${crypto.randomUUID()}`,
-          sourceId: ASSISTANT_SOURCE_ID,
-          type: itemType,
-          name: action.name,
-          detail: action.detail ?? null,
-          sourceAuthor: "Asistente",
-          region: action.region ?? null,
-        }
-        addItemToDay(tripId, action.day_id, item)
-        setActionStatus(messageId, action.id, "accepted")
+      } finally {
+        setActionBusyId(null)
       }
-    } catch {
-      /* el error de addSource se propaga; dejamos la acción pendiente */
-    } finally {
-      setActionBusyId(null)
-    }
-  }, [trip, addedSourceUrls, addSourceToTrip, addItemToDay, setActionStatus, tripId])
+    },
+    [trip, addedSourceUrls, startSourceExtraction, addItemToDay, setActionStatus, tripId],
+  )
 
   const handleDismissAction = useCallback(
     (messageId: string, action: ChatAction) => {
@@ -865,15 +906,15 @@ export function AssistantPanelLayer({
                   </div>
                 ) : null}
 
-                {busySourceUrl && !statusLabel ? (
+                {assistantLoading && !statusLabel ? (
                   <div className="flex justify-start">
                     <StatusPill label="Añadiendo fuente…" />
                   </div>
                 ) : null}
 
-                {error || linkError ? (
+                {error ? (
                   <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                    {linkError || error}
+                    {error}
                   </p>
                 ) : null}
 

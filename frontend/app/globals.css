@@ -154,6 +154,7 @@
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x proximity;
+    scroll-padding-inline: 0.75rem;
     padding-block-end: 0.625rem;
     padding-inline: max(1rem, calc((100% - min(100%, 56rem)) / 2));
     scrollbar-color: hsl(var(--border)) transparent;

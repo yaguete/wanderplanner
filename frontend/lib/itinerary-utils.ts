@@ -182,6 +182,15 @@ export function sourceArticleHeading(source: Source): string {
   return titleFromUrl(source.url) ?? (title || guide)
 }
 
+/** Autor sintético desde la URL (hostname sin www, primer label). Misma regla que el chip pendiente. */
+export function authorFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").split(".")[0] || url
+  } catch {
+    return url
+  }
+}
+
 /**
  * Build a Source from a backend Itinerary response + metadata.
  */
@@ -189,12 +198,7 @@ export function buildSource(
   url: string,
   itinerary: Itinerary,
 ): Source {
-  let author: string
-  try {
-    author = new URL(url).hostname.replace("www.", "").split(".")[0]
-  } catch {
-    author = url
-  }
+  const author = authorFromUrl(url)
 
   const area = itinerary.destination?.trim() ? itinerary.destination.trim() : null
   const totalDays =

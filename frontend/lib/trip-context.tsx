@@ -30,15 +30,15 @@ import type {
   RouteLeg,
   TransportRoute,
 } from "@/types/itinerary"
-import { fetchItinerary, type ItineraryProgressStage } from "@/lib/api"
-import { buildSource, formatGuideLabel } from "@/lib/itinerary-utils"
+import { fetchItinerary, ApiLimitError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
+import { authorFromUrl, buildSource, formatGuideLabel } from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { draftTripNameFor, MAX_AUTO_DAYS } from "@/lib/partner-trip"
-import { createExtraTaskState, mergeTaskState, taskKeyForItem, withPrunedTasks } from "@/lib/trip-tasks"
+import { createExtraTaskState, mergeTaskState, normalizeName, taskKeyForItem, withPrunedTasks } from "@/lib/trip-tasks"
 import { countryCodeFromTaskId, isCountryTaskId } from "@/lib/country-tasks"
 import {
   buildRouteLegItem,
@@ -51,6 +51,48 @@ import {
   buildTransportRouteItem,
   migrateTaskKeyOnStructure,
 } from "@/lib/transport-routes"
+import { canAddSource } from "@/lib/trip-sources"
+
+export type PendingSourceErrorKind = "guest-limit" | "limit" | "generic"
+
+export type PendingSource = {
+  id: string
+  tripId: string
+  url: string
+  author: string
+  status: "loading" | "error"
+  errorMessage?: string
+  errorKind?: PendingSourceErrorKind
+  stage: ItineraryProgressStage | null
+}
+
+export type StartSourceExtractionResult =
+  | { ok: true; pendingId: string }
+  | {
+      ok: false
+      reason: "max-sources" | "already-loading" | "trip-not-found" | "invalid-state"
+    }
+
+/** Evento de resolución para toasts / foco en el panel Fuentes. */
+export type SourceExtractionEvent =
+  | {
+      type: "success"
+      tripId: string
+      pendingId: string
+      source: Source
+      seq: number
+      /** Epoch ms; el panel ignora el gate de invitado si el evento es viejo. */
+      at: number
+    }
+  | {
+      type: "error"
+      tripId: string
+      pendingId: string
+      errorKind: PendingSourceErrorKind
+      message: string
+      seq: number
+      at: number
+    }
 
 /** Alinea numDays y endDate con days.length (+ startDate inclusive). Reancla legs. */
 function syncTripSchedule(trip: Trip, days: UserDay[]): Trip {
@@ -133,17 +175,21 @@ interface TripContextValue {
 
   getTrip: (tripId: string) => Trip | undefined
   getTripSources: (tripId: string) => Source[]
-  addSourceToTrip: (
-    tripId: string,
-    url: string,
-    options?: { signal?: AbortSignal },
-  ) => Promise<Source>
+  /** Arranca extracción fire-and-forget; el resultado llega vía pendingSources / lastExtractionEvent. */
+  startSourceExtraction: (tripId: string, url: string) => StartSourceExtractionResult
+  cancelPendingSource: (pendingId: string) => void
+  retryPendingSource: (pendingId: string) => StartSourceExtractionResult
+  dismissPendingSource: (pendingId: string) => void
+  pendingSources: PendingSource[]
+  /** Último éxito/error de extracción (para toasts); `seq` monótono. */
+  lastExtractionEvent: SourceExtractionEvent | null
+  /** Marca el evento como consumido (evita toast/gate al remontar el panel). */
+  ackExtractionEvent: (seq: number) => void
   /** Vuelve a descargar itinerario + HTML del artículo; conserva el id de la fuente. */
   refetchSource: (sourceId: string, url: string) => Promise<void>
+  /** True mientras un refetch de Crónica está en curso. */
+  isRefetchingSource: boolean
   removeSourceFromTrip: (tripId: string, sourceId: string) => void
-  isLoadingSource: boolean
-  /** Etapa SSE de la extracción en curso (null si no hay ninguna). */
-  loadingSourceStage: ItineraryProgressStage | null
   /** Descarga el HTML del artículo (excluido de la carga inicial) al abrir la Crónica. */
   ensureArticleHtml: (sourceId: string) => Promise<void>
   isArticleHtmlLoading: (sourceId: string) => boolean
@@ -247,13 +293,17 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const [sources, setSources] = useState<Source[]>([])
   const [rehydrated, setRehydrated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingSource, setIsLoadingSource] = useState(false)
-  const [loadingSourceStage, setLoadingSourceStage] = useState<ItineraryProgressStage | null>(
+  const [pendingSources, setPendingSources] = useState<PendingSource[]>([])
+  const [lastExtractionEvent, setLastExtractionEvent] = useState<SourceExtractionEvent | null>(
     null,
   )
+  const [isRefetchingSource, setIsRefetchingSource] = useState(false)
   const [loadingArticleIds, setLoadingArticleIds] = useState<string[]>([])
   const tripsRef = useRef(trips)
   const sourcesRef = useRef(sources)
+  const pendingSourcesRef = useRef(pendingSources)
+  const abortByPendingIdRef = useRef(new Map<string, AbortController>())
+  const extractionSeqRef = useRef(0)
   const coverBackfillAttempted = useRef(new Set<string>())
   const syncerRef = useRef<TripsSyncer | null>(null)
   const hydratedFor = useRef<string | null>(null)
@@ -266,6 +316,18 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     sourcesRef.current = sources
   }, [sources])
 
+  useEffect(() => {
+    pendingSourcesRef.current = pendingSources
+  }, [pendingSources])
+
+  // Al desmontar el provider (salir de /trips): abortar extracciones en vuelo.
+  useEffect(() => {
+    const aborts = abortByPendingIdRef.current
+    return () => {
+      for (const ac of aborts.values()) ac.abort()
+      aborts.clear()
+    }
+  }, [])
   // Hidratación por usuario: al cerrar sesión se vacía el estado y se descarta el sincronizador.
   useEffect(() => {
     if (authLoading) return
@@ -276,8 +338,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       syncerRef.current = null
       hydratedFor.current = null
       coverBackfillAttempted.current.clear()
+      for (const ac of abortByPendingIdRef.current.values()) ac.abort()
+      abortByPendingIdRef.current.clear()
       setTrips([])
       setSources([])
+      setPendingSources([])
+      setLastExtractionEvent(null)
       setRehydrated(false)
       setIsLoading(false)
       return
@@ -596,22 +662,17 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       const tripBefore = tripsRef.current.find((t) => t.id === tripId)
       const wasFirst = tripBefore?.sourceIds[0] === sourceId
 
+      // Conservar ítems/basics ya consolidados en Mi viaje (sourceAuthor denormalizado).
       const nextTrips: Trip[] = tripsRef.current.map((t) => {
         if (t.id !== tripId) return t
-        return withPrunedTasks({
+        return {
           ...t,
           sourceIds: t.sourceIds.filter((id) => id !== sourceId),
-          days: t.days.map((d) => ({
-            ...d,
-            items: d.items.filter((i) => i.sourceId !== sourceId),
-          })),
-          basics: t.basics.filter((b) => b.sourceId !== sourceId),
           ...(wasFirst ? { coverUrl: null } : {}),
-        })
+        }
       })
       setTrips(nextTrips)
       setSources((prev) => {
-        // No guardar `Source` que ya ningún `Trip` referencia (evita fuentes huérfanas en el array global).
         const used = new Set(nextTrips.flatMap((t) => t.sourceIds))
         return prev.filter((s) => used.has(s.id))
       })
@@ -624,98 +685,264 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           if (nextSource) void applyCoverFromSource(tripId, nextSource)
         }
       }
+      toast.message("Fuente quitada · los ítems siguen en tu viaje")
     },
     [applyCoverFromSource],
   )
 
-  const addSourceToTrip = useCallback(
-    async (
-      tripId: string,
-      url: string,
-      options?: { signal?: AbortSignal },
-    ): Promise<Source> => {
-      setIsLoadingSource(true)
-      setLoadingSourceStage("fetching")
+  const commitSourceToTrip = useCallback(
+    (tripId: string, source: Source) => {
+      if (!tripsRef.current.some((t) => t.id === tripId)) return false
+      const wasEmpty =
+        (tripsRef.current.find((t) => t.id === tripId)?.sourceIds.length ?? 0) === 0
+
+      setSources((prev) => [...prev, source])
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          const next: Trip = { ...t, sourceIds: [...t.sourceIds, source.id] }
+          const guideLabel = formatGuideLabel(source)
+          const named =
+            canRenameFromGuide(t, source) && guideLabel
+              ? { ...next, name: guideLabel }
+              : next
+          if (!canAdoptGuideSchedule(t)) return named
+          const total = source.totalDays
+          if (!total || total < 1 || total > MAX_AUTO_DAYS) return named
+          const days = [
+            ...named.days,
+            ...makeEmptyDays(Math.max(0, total - named.days.length)),
+          ]
+          return syncTripSchedule({ ...named, startDate: tomorrowISO() }, days)
+        }),
+      )
+
+      if (wasEmpty) {
+        void applyCoverFromSource(tripId, source)
+      }
+      return true
+    },
+    [applyCoverFromSource],
+  )
+
+  const runPendingExtraction = useCallback(
+    async (pendingId: string, tripId: string, url: string) => {
+      const ac = new AbortController()
+      abortByPendingIdRef.current.get(pendingId)?.abort()
+      abortByPendingIdRef.current.set(pendingId, ac)
+
+      setPendingSources((prev) =>
+        prev.map((p) =>
+          p.id === pendingId
+            ? {
+                ...p,
+                status: "loading",
+                stage: "fetching",
+                errorMessage: undefined,
+                errorKind: undefined,
+              }
+            : p,
+        ),
+      )
+
       try {
         const itinerary = await fetchItinerary(
           url,
-          (stage) => setLoadingSourceStage(stage),
-          { signal: options?.signal },
+          (stage) => {
+            setPendingSources((prev) =>
+              prev.map((p) => (p.id === pendingId ? { ...p, stage } : p)),
+            )
+          },
+          { signal: ac.signal },
         )
+        if (ac.signal.aborted) return
+
         const source = buildSource(url, itinerary)
-        const wasEmpty =
-          (tripsRef.current.find((t) => t.id === tripId)?.sourceIds.length ?? 0) === 0
+        const committed = commitSourceToTrip(tripId, source)
+        abortByPendingIdRef.current.delete(pendingId)
+        setPendingSources((prev) => prev.filter((p) => p.id !== pendingId))
 
-        setSources((prev) => [...prev, source])
-        setTrips((prev) =>
-          prev.map((t) => {
-            if (t.id !== tripId) return t
-            const next: Trip = { ...t, sourceIds: [...t.sourceIds, source.id] }
-            // Rename: independiente de si hay startDate (puede venir de &days=N).
-            const guideLabel = formatGuideLabel(source)
-            const named =
-              canRenameFromGuide(t, source) && guideLabel
-                ? { ...next, name: guideLabel }
-                : next
-            // Redimensionado de días: solo si el viaje sigue completamente virgen (sin startDate propio).
-            if (!canAdoptGuideSchedule(t)) return named
-            const total = source.totalDays
-            if (!total || total < 1 || total > MAX_AUTO_DAYS) return named
-            const days = [
-              ...named.days,
-              ...makeEmptyDays(Math.max(0, total - named.days.length)),
-            ]
-            return syncTripSchedule({ ...named, startDate: tomorrowISO() }, days)
-          }),
-        )
-
-        if (wasEmpty) {
-          void applyCoverFromSource(tripId, source)
+        if (committed) {
+          const seq = ++extractionSeqRef.current
+          setLastExtractionEvent({
+            type: "success",
+            tripId,
+            pendingId,
+            source,
+            seq,
+            at: Date.now(),
+          })
         }
-        return source
-      } finally {
-        setIsLoadingSource(false)
-        setLoadingSourceStage(null)
+      } catch (err) {
+        abortByPendingIdRef.current.delete(pendingId)
+        if (isAbortError(err) || ac.signal.aborted) {
+          setPendingSources((prev) => prev.filter((p) => p.id !== pendingId))
+          return
+        }
+
+        let errorKind: PendingSourceErrorKind = "generic"
+        let message =
+          "No se pudo extraer la fuente. Comprueba la URL y que el backend esté en marcha."
+        if (err instanceof ApiLimitError) {
+          errorKind = err.limit === "guest" ? "guest-limit" : "limit"
+          message = err.message
+        } else if (err instanceof Error && err.message.trim()) {
+          message = err.message
+        }
+
+        setPendingSources((prev) =>
+          prev.map((p) =>
+            p.id === pendingId
+              ? {
+                  ...p,
+                  status: "error",
+                  stage: null,
+                  errorMessage: message,
+                  errorKind,
+                }
+              : p,
+          ),
+        )
+        const seq = ++extractionSeqRef.current
+        setLastExtractionEvent({
+          type: "error",
+          tripId,
+          pendingId,
+          errorKind,
+          message,
+          seq,
+          at: Date.now(),
+        })
       }
     },
-    [applyCoverFromSource],
+    [commitSourceToTrip],
   )
+
+  const startSourceExtraction = useCallback(
+    (tripId: string, url: string): StartSourceExtractionResult => {
+      const trip = tripsRef.current.find((t) => t.id === tripId)
+      if (!trip) return { ok: false, reason: "trip-not-found" }
+
+      const tripPendings = pendingSourcesRef.current.filter((p) => p.tripId === tripId)
+      const loadingPendingCount = tripPendings.filter((p) => p.status === "loading").length
+      if (loadingPendingCount > 0) {
+        return { ok: false, reason: "already-loading" }
+      }
+      if (
+        !canAddSource({
+          sourceCount: trip.sourceIds.length,
+          loadingPendingCount: 0,
+        })
+      ) {
+        return { ok: false, reason: "max-sources" }
+      }
+
+      const pendingId = crypto.randomUUID()
+      const pending: PendingSource = {
+        id: pendingId,
+        tripId,
+        url: url.trim(),
+        author: authorFromUrl(url.trim()),
+        status: "loading",
+        stage: "fetching",
+      }
+      setPendingSources((prev) => [...prev, pending])
+      void runPendingExtraction(pendingId, tripId, url.trim())
+      return { ok: true, pendingId }
+    },
+    [runPendingExtraction],
+  )
+
+  const cancelPendingSource = useCallback((pendingId: string) => {
+    const ac = abortByPendingIdRef.current.get(pendingId)
+    if (ac) {
+      ac.abort()
+      abortByPendingIdRef.current.delete(pendingId)
+    }
+    setPendingSources((prev) => prev.filter((p) => p.id !== pendingId))
+  }, [])
+
+  const dismissPendingSource = useCallback((pendingId: string) => {
+    const existing = pendingSourcesRef.current.find((p) => p.id === pendingId)
+    if (!existing) return
+    if (existing.status === "loading") {
+      cancelPendingSource(pendingId)
+      return
+    }
+    setPendingSources((prev) => prev.filter((p) => p.id !== pendingId))
+  }, [cancelPendingSource])
+
+  const retryPendingSource = useCallback(
+    (pendingId: string): StartSourceExtractionResult => {
+      const existing = pendingSourcesRef.current.find((p) => p.id === pendingId)
+      if (!existing) return { ok: false, reason: "trip-not-found" }
+      if (existing.status !== "error") return { ok: false, reason: "invalid-state" }
+      const trip = tripsRef.current.find((t) => t.id === existing.tripId)
+      if (!trip) return { ok: false, reason: "trip-not-found" }
+
+      const otherLoading = pendingSourcesRef.current.some(
+        (p) => p.tripId === existing.tripId && p.status === "loading" && p.id !== pendingId,
+      )
+      if (otherLoading) return { ok: false, reason: "already-loading" }
+
+      if (
+        !canAddSource({
+          sourceCount: trip.sourceIds.length,
+          loadingPendingCount: 0,
+        })
+      ) {
+        return { ok: false, reason: "max-sources" }
+      }
+
+      void runPendingExtraction(pendingId, existing.tripId, existing.url)
+      return { ok: true, pendingId }
+    },
+    [runPendingExtraction],
+  )
+
+  const ackExtractionEvent = useCallback((seq: number) => {
+    setLastExtractionEvent((prev) => (prev && prev.seq === seq ? null : prev))
+  }, [])
 
   const refetchSource = useCallback(
     async (sourceId: string, url: string) => {
-      setIsLoadingSource(true)
-      setLoadingSourceStage("fetching")
+      setIsRefetchingSource(true)
       try {
-        const itinerary = await fetchItinerary(
-          url,
-          (stage) => setLoadingSourceStage(stage),
-          { refresh: true },
-        )
+        const itinerary = await fetchItinerary(url, undefined, { refresh: true })
         const rebuilt = buildSource(url, itinerary)
         const newSource: Source = { ...rebuilt, id: sourceId }
-        // `rebuild` genera nuevos ids de ítems; solo conservamos entradas del viaje cuyo `sourceItemId` / `sourceBasicItemId` siga existiendo en la fuente refrescada.
-        const newItemIds = new Set(newSource.items.map((i) => i.id))
-        const newBasicIds = new Set(newSource.basics.map((b) => b.id))
+
+        // Remapear sourceItemId / sourceBasicItemId por type+nombre; no podar ítems del viaje.
+        const itemIdByKey = new Map(
+          newSource.items.map((i) => [`${i.type}:${normalizeName(i.name)}`, i.id] as const),
+        )
+        const basicIdByKey = new Map(
+          newSource.basics.map(
+            (b) => [`${b.category}:${normalizeName(b.name)}`, b.id] as const,
+          ),
+        )
 
         const isFirstOfSomeTrip = tripsRef.current.some(
           (t) => t.sourceIds[0] === sourceId,
         )
 
         setTrips((prev) =>
-          prev.map((t) =>
-            withPrunedTasks({
-              ...t,
-              days: t.days.map((d) => ({
-                ...d,
-                items: d.items.filter(
-                  (i) => i.sourceId !== sourceId || newItemIds.has(i.sourceItemId),
-                ),
-              })),
-              basics: t.basics.filter(
-                (b) => b.sourceId !== sourceId || newBasicIds.has(b.sourceBasicItemId),
-              ),
+          prev.map((t) => ({
+            ...t,
+            days: t.days.map((d) => ({
+              ...d,
+              items: d.items.map((i) => {
+                if (i.sourceId !== sourceId) return i
+                const nextId = itemIdByKey.get(`${i.type}:${normalizeName(i.name)}`)
+                return nextId ? { ...i, sourceItemId: nextId } : i
+              }),
+            })),
+            basics: t.basics.map((b) => {
+              if (b.sourceId !== sourceId) return b
+              const nextId = basicIdByKey.get(`${b.category}:${normalizeName(b.name)}`)
+              return nextId ? { ...b, sourceBasicItemId: nextId } : b
             }),
-          ),
+          })),
         )
         setSources((prev) => prev.map((s) => (s.id === sourceId ? newSource : s)))
 
@@ -727,13 +954,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } finally {
-        setIsLoadingSource(false)
-        setLoadingSourceStage(null)
+        setIsRefetchingSource(false)
       }
     },
     [applyCoverFromSource],
   )
-
   const addDay = useCallback((tripId: string) => {
     setTrips((prev) =>
       prev.map((t) => {
@@ -1246,11 +1471,16 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       unarchiveTrip,
       getTrip,
       getTripSources,
-      addSourceToTrip,
+      startSourceExtraction,
+      cancelPendingSource,
+      retryPendingSource,
+      dismissPendingSource,
+      pendingSources,
+      lastExtractionEvent,
+      ackExtractionEvent,
       refetchSource,
+      isRefetchingSource,
       removeSourceFromTrip,
-      isLoadingSource,
-      loadingSourceStage,
       ensureArticleHtml,
       isArticleHtmlLoading,
       loadTripSourcesWithArticles,
@@ -1276,7 +1506,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, addSourceToTrip, refetchSource, removeSourceFromTrip, isLoadingSource, loadingSourceStage, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

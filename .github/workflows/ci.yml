@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:assistant-context
       - run: npm run test:trip-origin
       - run: npm run test:text-highlight
+      - run: npm run test:trip-sources
       - run: npm run build
       # eslint instalado (eslint-config-next); no se usa como gate todavía:
       # hay errores preexistentes en auth-context/trip-context/tailwind.config

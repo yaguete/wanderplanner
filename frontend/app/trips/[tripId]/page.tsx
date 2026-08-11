@@ -85,7 +85,7 @@ function DesktopPanelSlot({
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip, isLoading, addSourceToTrip, updateTrip, getTripSources } = useTrips()
+  const { getTrip, isLoading, startSourceExtraction, updateTrip, getTripSources } = useTrips()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
@@ -94,11 +94,17 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const isMobile = useIsMobile()
   const { setChrome, setAutoCollapsed } = useTripChrome()
 
-  const [panels, setPanels] = useState(readPanels)
+  const [panels, setPanels] = useState<TripPanelState>(DEFAULT_PANELS)
+  const [panelsHydrated, setPanelsHydrated] = useState(false)
   const [mobileSection, setMobileSection] = useState<TripMobileSection>("sources")
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [editTripOpen, setEditTripOpen] = useState(false)
-  const [autoSourceError, setAutoSourceError] = useState<string | null>(null)
+
+  // Evitar mismatch SSR/cliente: leer localStorage tras montar.
+  useEffect(() => {
+    setPanels(readPanels())
+    setPanelsHydrated(true)
+  }, [])
 
   useEffect(() => {
     if (!isLoading && !trip) router.replace("/trips")
@@ -110,16 +116,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     const requestKey = `${tripId}:${pendingSourceUrl}`
     if (autoSourceRequested.current === requestKey) return
     autoSourceRequested.current = requestKey
-    setAutoSourceError(null)
-    void addSourceToTrip(tripId, pendingSourceUrl).catch((error: unknown) => {
-      setAutoSourceError(
-        error instanceof Error
-          ? error.message
-          : "No se pudo extraer la fuente. Inténtalo de nuevo.",
-      )
-      setAddSourceOpen(true)
-    })
-  }, [pendingSourceUrl, trip, tripId, addSourceToTrip])
+    startSourceExtraction(tripId, pendingSourceUrl)
+  }, [pendingSourceUrl, trip, tripId, startSourceExtraction])
 
   useEffect(() => {
     if (!trip?.referrer) return
@@ -147,13 +145,13 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   }, [pendingSourceUrl, trip, tripId, router])
 
   useEffect(() => {
+    if (!panelsHydrated) return
     try {
       localStorage.setItem(PANELS_KEY, JSON.stringify(panels))
     } catch {
       /* ignore */
     }
-  }, [panels])
-
+  }, [panels, panelsHydrated])
   // Al cambiar de viaje, cierra dialogs locales (ajuste en render, no efecto).
   const [layoutTripId, setLayoutTripId] = useState(tripId)
   if (layoutTripId !== tripId) {
@@ -210,6 +208,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     [isMobile],
   )
 
+  const revealSources = useCallback(() => {
+    if (isMobile) setMobileSection("sources")
+    else setPanels((prev) => ({ ...prev, sources: true }))
+  }, [isMobile])
+
   const openEditTrip = useCallback(() => setEditTripOpen(true), [])
 
   const handleAssistantOpenChange = useCallback((open: boolean) => {
@@ -227,12 +230,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         addSourceOpen={addSourceOpen}
         onAddSourceOpenChange={openAddSource}
         initialSourceUrl={pendingSourceUrl}
-        autoSourceError={autoSourceError}
+        onRevealSources={revealSources}
       />
     ),
-    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, autoSourceError],
+    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources],
   )
-
   const planNode = useMemo(
     () => <ItineraryPanel tripId={tripId} onEditTrip={openEditTrip} />,
     [tripId, openEditTrip],
@@ -338,7 +340,12 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
           ) : null}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 p-2.5 pt-0">
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 p-2.5 pt-0",
+            !panelsHydrated && "invisible",
+          )}
+        >
           <DesktopPanelSlot active={panels.sources} label="Fuentes" padStart={false}>
             {sourcesNode}
           </DesktopPanelSlot>
