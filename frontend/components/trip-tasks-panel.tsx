@@ -578,7 +578,7 @@ function TaskRow({
                 href={task.affiliateUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+                className="wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium"
               >
                 {task.category === "basic" || task.origin === "basic" ? "Contratar" : "Reservar"}
                 <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />

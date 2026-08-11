@@ -6,6 +6,15 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /** Hipervínculo a URL externa: azul clásico (texto + iconos hijos). */
+  .wp-ext-link {
+    color: hsl(var(--link));
+  }
+  .wp-ext-link:hover {
+    color: hsl(var(--link-hover));
+    text-decoration-line: underline;
+  }
 }
 
 @layer base {
@@ -22,6 +31,9 @@
     --popover-foreground: 0 0% 9%;
     --primary: 20 8% 14%;
     --primary-foreground: 0 0% 100%;
+    /* Enlaces externos (Reservar, Crónica, asistente…): azul hipervínculo clásico */
+    --link: 214 84% 43%;
+    --link-hover: 214 84% 34%;
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96%;
@@ -59,6 +71,8 @@
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 96%;
     --primary-foreground: 0 0% 9%;
+    --link: 214 90% 68%;
+    --link-hover: 214 90% 78%;
     --secondary: 0 0% 14%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14%;
@@ -116,6 +130,12 @@
   .prose-article > * {
     content-visibility: auto;
     contain-intrinsic-size: auto 240px;
+  }
+
+  /* Con búsqueda activa hace falta layout real: si no, scrollIntoView aterriza mal. */
+  .prose-article--searching > * {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
   }
 
   /** Columna de lectura/listas en paneles (eje izquierdo compartido; se centra si sobra sitio). */
@@ -229,7 +249,11 @@
     @apply my-4 border-l-4 border-border pl-4 italic text-muted-foreground;
   }
   .prose-article a {
-    @apply text-foreground underline underline-offset-2 hover:text-muted-foreground;
+    @apply underline underline-offset-2;
+    color: hsl(var(--link));
+  }
+  .prose-article a:hover {
+    color: hsl(var(--link-hover));
   }
   .prose-article strong {
     @apply font-semibold;
@@ -239,8 +263,12 @@
   }
 
   .prose-article mark.source-highlight {
-    @apply rounded-sm bg-muted px-0.5 text-foreground;
-    scroll-margin-top: 80px;
+    @apply rounded-sm px-0.5 text-foreground;
+    background-color: hsl(52 100% 72%);
+  }
+
+  .prose-article mark.source-highlight-current {
+    background-color: hsl(48 100% 55%);
   }
 
   .cover-fallback {

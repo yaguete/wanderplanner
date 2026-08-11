@@ -136,7 +136,7 @@ export function CountryTasksSection({
                       href={src.url}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="font-medium text-foreground underline-offset-2 hover:underline"
+                      className="wp-ext-link font-medium underline-offset-2"
                     >
                       Fuente: MAE
                       {src.name ? ` (${src.name})` : ""}

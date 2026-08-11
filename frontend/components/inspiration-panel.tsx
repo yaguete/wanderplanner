@@ -4,9 +4,22 @@
  * Panel "Fuentes": biblioteca de investigación, pestañas Crónica / Ruta / Transporte / Descuentos,
  * extracción por URL y consolidación en «Mi viaje» conservando procedencia y afiliado.
  */
-import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from "react"
+import { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef, type ReactNode, type KeyboardEvent } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Loader2, Plus, RefreshCw, Search, Sparkles, X, BookOpen, MapPin, Car, Tag } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  X,
+  BookOpen,
+  MapPin,
+  Car,
+  Tag,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +37,11 @@ import { ApiLimitError } from "@/lib/api"
 import { ITEM_LABELS } from "@/lib/item-styles"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
+import {
+  clearTextHighlights,
+  highlightTextInElement,
+  setActiveHighlight,
+} from "@/lib/text-highlight"
 import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { toast } from "sonner"
 
@@ -91,6 +109,15 @@ export default function InspirationPanel({
   const [refetchError, setRefetchError] = useState<string | null>(null)
   /** Ítem pendiente de «Añadir al día»; un solo Dialog para toda la lista (sobrevive al virtualizer). */
   const [pickingItem, setPickingItem] = useState<SourceItem | null>(null)
+  /** Query compartida Crónica ↔ Ruta (no Desplazamientos/Descuentos). */
+  const [sourceQuery, setSourceQuery] = useState("")
+  const [matchIndex, setMatchIndex] = useState(0)
+  const [matchCount, setMatchCount] = useState(0)
+  const articleRef = useRef<HTMLDivElement>(null)
+  const marksRef = useRef<HTMLElement[]>([])
+  const matchIndexRef = useRef(0)
+  const lastScrolledQueryRef = useRef<string | null>(null)
+  const lastScrolledIndexRef = useRef<number | null>(null)
   const {
     containerRef: panelRef,
     collapsed: headerCollapsed,
@@ -209,10 +236,137 @@ export default function InspirationPanel({
     setRefetchError(null)
   }, [activeSourceId])
 
+  // Solo al cambiar de fuente — no al cambiar de pestaña (persistencia Crónica ↔ Ruta).
+  useEffect(() => {
+    setSourceQuery("")
+    setMatchIndex(0)
+    setMatchCount(0)
+    marksRef.current = []
+    lastScrolledQueryRef.current = null
+    lastScrolledIndexRef.current = null
+  }, [activeSourceId])
+
   useEffect(() => {
     setPickingItem(null)
     setHeaderCollapsed(false)
   }, [activeSourceId, sourceTab, setHeaderCollapsed])
+
+  // Al entrar en Crónica, forzar re-aplicación (el DOM del artículo se remonta).
+  useEffect(() => {
+    if (sourceTab === "source") {
+      lastScrolledQueryRef.current = null
+      lastScrolledIndexRef.current = null
+    }
+  }, [sourceTab])
+
+  // Reset del índice al cambiar la query (nueva búsqueda → primer match).
+  useEffect(() => {
+    setMatchIndex(0)
+    matchIndexRef.current = 0
+  }, [sourceQuery])
+
+  /**
+   * Inyectar el HTML por ref (no dangerouslySetInnerHTML): si no, cada re-render
+   * (p. ej. al cambiar matchIndex con las flechas) resetea el DOM y borra los <mark>.
+   */
+  useLayoutEffect(() => {
+    if (sourceTab !== "source") return
+    const root = articleRef.current
+    if (!root) return
+    root.innerHTML = currentSource?.articleHtml ?? ""
+    marksRef.current = []
+    lastScrolledQueryRef.current = null
+    lastScrolledIndexRef.current = null
+  }, [sourceTab, currentSource?.articleHtml])
+
+  // Find-in-page en Crónica: debounce + TreeWalker. No depende de matchIndex.
+  useEffect(() => {
+    if (sourceTab !== "source") {
+      marksRef.current = []
+      return
+    }
+    const root = articleRef.current
+    if (!root || !currentSource?.articleHtml) {
+      marksRef.current = []
+      setMatchCount(0)
+      return
+    }
+
+    const needle = sourceQuery.trim()
+
+    const apply = () => {
+      if (!needle) {
+        clearTextHighlights(root)
+        marksRef.current = []
+        setMatchCount(0)
+        lastScrolledQueryRef.current = ""
+        lastScrolledIndexRef.current = null
+        return
+      }
+
+      const marks = highlightTextInElement(root, needle)
+      marksRef.current = marks
+      setMatchCount(marks.length)
+      const idx = marks.length === 0 ? 0 : Math.min(matchIndexRef.current, marks.length - 1)
+      matchIndexRef.current = idx
+      setMatchIndex(idx)
+      const activeEl = setActiveHighlight(marks, idx)
+      if (!activeEl) {
+        lastScrolledQueryRef.current = needle
+        lastScrolledIndexRef.current = null
+        return
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (activeEl.isConnected) activeEl.scrollIntoView({ block: "center" })
+        })
+      })
+      lastScrolledQueryRef.current = needle
+      lastScrolledIndexRef.current = idx
+    }
+
+    if (!needle) {
+      apply()
+      return
+    }
+
+    const handle = window.setTimeout(apply, 180)
+    return () => clearTimeout(handle)
+  }, [sourceQuery, sourceTab, currentSource?.articleHtml])
+
+  const goToMatch = useCallback((delta: number) => {
+    const marks = marksRef.current.filter((m) => m.isConnected)
+    marksRef.current = marks
+    if (!marks.length) return
+    const next = (matchIndexRef.current + delta + marks.length) % marks.length
+    matchIndexRef.current = next
+    setMatchIndex(next)
+    const activeEl = setActiveHighlight(marks, next)
+    if (!activeEl) return
+    lastScrolledIndexRef.current = next
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (activeEl.isConnected) activeEl.scrollIntoView({ block: "center" })
+      })
+    })
+  }, [])
+
+  const handleSearchKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setSourceQuery("")
+        return
+      }
+      if (sourceTab !== "source") return
+      if (e.key === "Enter") {
+        e.preventDefault()
+        goToMatch(e.shiftKey ? -1 : 1)
+      }
+    },
+    [sourceTab, goToMatch],
+  )
 
   const handleRefetchArticle = async () => {
     if (!currentSource) return
@@ -272,6 +426,12 @@ export default function InspirationPanel({
     { id: "transport" as const, label: "Desplazamientos", icon: Car },
     { id: "basics" as const, label: "Descuentos", icon: Tag },
   ]
+
+  const rutaItemCount = groupedItems.reduce((n, g) => n + g.items.length, 0)
+  const showRutaSearch = sourceTab === "itinerary" && rutaItemCount > 0
+  const showCronicaSearch = sourceTab === "source" && !!currentSource
+  const searchNeedle = sourceQuery.trim()
+  const showMatchNav = showCronicaSearch && searchNeedle.length > 0 && !!currentSource?.articleHtml
 
   /** Móvil: repliegue por altura; en desktop no aplica. */
   const collapsibleClass = (expandedMaxHeight: string) =>
@@ -416,8 +576,10 @@ export default function InspirationPanel({
           <div
             className={cn(
               "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden",
-              // Ruta gestiona su propio scroll (buscador fijo encima de la lista)
-              sourceTab === "itinerary" ? "overflow-hidden" : "overflow-y-auto",
+              // Crónica y Ruta: barra fija + scroll en el cuerpo
+              sourceTab === "itinerary" || sourceTab === "source"
+                ? "overflow-hidden"
+                : "overflow-y-auto",
             )}
           >
             {!currentSource ? (
@@ -486,42 +648,69 @@ export default function InspirationPanel({
                 </div>
               </div>
             ) : sourceTab === "source" ? (
-              <div className="px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
-                <div className="panel-column">
-                {currentSource.articleHtml ? (
-                  <div
-                    className="prose-article"
-                    dangerouslySetInnerHTML={{ __html: currentSource.articleHtml }}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {showCronicaSearch ? (
+                  <SourceSearchBar
+                    query={sourceQuery}
+                    onQueryChange={setSourceQuery}
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder="Buscar actividad, lugar o restaurante"
+                    ariaLabel="Buscar en la crónica"
+                    matchNav={
+                      showMatchNav
+                        ? {
+                            index:
+                              matchCount === 0
+                                ? 0
+                                : Math.min(matchIndex, matchCount - 1),
+                            count: matchCount,
+                            onPrev: () => goToMatch(-1),
+                            onNext: () => goToMatch(1),
+                          }
+                        : null
+                    }
                   />
-                ) : isArticleHtmlLoading(currentSource.id) ? (
-                  <div className="flex justify-center py-16">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center py-16 text-center">
-                    <p className="text-sm text-muted-foreground">Contenido no disponible</p>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="mt-4 rounded-xl"
-                      onClick={() => void handleRefetchArticle()}
-                      disabled={isLoadingSource}
-                    >
-                      {isLoadingSource ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
+                ) : null}
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+                  <div className="panel-column">
+                  {currentSource.articleHtml ? (
+                    <div
+                      ref={articleRef}
+                      className={cn(
+                        "prose-article",
+                        searchNeedle.length > 0 && "prose-article--searching",
                       )}
-                      <span className="ml-2">Recargar</span>
-                    </Button>
-                    {refetchError ? (
-                      <p className="mt-2 max-w-sm text-xs text-destructive" role="alert">
-                        {refetchError}
-                      </p>
-                    ) : null}
+                    />
+                  ) : isArticleHtmlLoading(currentSource.id) ? (
+                    <div className="flex justify-center py-16">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center py-16 text-center">
+                      <p className="text-sm text-muted-foreground">Contenido no disponible</p>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="mt-4 rounded-xl"
+                        onClick={() => void handleRefetchArticle()}
+                        disabled={isLoadingSource}
+                      >
+                        {isLoadingSource ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        <span className="ml-2">Recargar</span>
+                      </Button>
+                      {refetchError ? (
+                        <p className="mt-2 max-w-sm text-xs text-destructive" role="alert">
+                          {refetchError}
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
                   </div>
-                )}
                 </div>
               </div>
             ) : sourceTab === "transport" ? (
@@ -544,25 +733,37 @@ export default function InspirationPanel({
                 )}
               />
             ) : (
-              <SourceGroupedList
-                key={`${currentSource.id}-ruta`}
-                groups={groupedItems}
-                emptyTitle="Sin ítems de ruta"
-                emptyDescription="Cuando se destile el artículo, verás actividades, alojamientos y comidas aquí."
-                searchable
-                searchPlaceholder="Buscar actividad, restaurante o lugar"
-                renderItem={(item) => (
-                  <ItemRow
-                    key={item.id}
-                    item={item}
-                    sourceArea={currentSource.area}
-                    isAdded={addedItemIds.has(item.id)}
-                    addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
-                    tripStartDate={trip?.startDate ?? null}
-                    onPick={() => setPickingItem(item)}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {showRutaSearch ? (
+                  <SourceSearchBar
+                    query={sourceQuery}
+                    onQueryChange={setSourceQuery}
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder="Buscar actividad, lugar o restaurante"
+                    ariaLabel="Buscar en la ruta"
                   />
-                )}
-              />
+                ) : null}
+                {/* key: reset del virtualizador al cambiar fuente (la query ya vive arriba). */}
+                <SourceGroupedList
+                  key={`${currentSource.id}-ruta`}
+                  groups={groupedItems}
+                  emptyTitle="Sin ítems de ruta"
+                  emptyDescription="Cuando se destile el artículo, verás actividades, alojamientos y comidas aquí."
+                  query={sourceQuery}
+                  virtualized={showRutaSearch}
+                  renderItem={(item) => (
+                    <ItemRow
+                      key={item.id}
+                      item={item}
+                      sourceArea={currentSource.area}
+                      isAdded={addedItemIds.has(item.id)}
+                      addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
+                      tripStartDate={trip?.startDate ?? null}
+                      onPick={() => setPickingItem(item)}
+                    />
+                  )}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -635,23 +836,114 @@ export default function InspirationPanel({
   )
 }
 
+function SourceSearchBar({
+  query,
+  onQueryChange,
+  onKeyDown,
+  placeholder,
+  ariaLabel,
+  matchNav = null,
+}: {
+  query: string
+  onQueryChange: (value: string) => void
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  placeholder: string
+  ariaLabel: string
+  matchNav?: {
+    index: number
+    count: number
+    onPrev: () => void
+    onNext: () => void
+  } | null
+}) {
+  const hasFilter = query.trim().length > 0
+  const showNav = matchNav != null
+  const trailingPad = showNav ? "pr-28" : hasFilter ? "pr-9" : undefined
+
+  return (
+    <div className="shrink-0 bg-background px-4 pb-3 pt-4">
+      <div className="panel-column relative">
+        <Search
+          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          className={cn("h-9 pl-8 text-base md:text-sm", trailingPad)}
+          aria-label={ariaLabel}
+        />
+        {showNav ? (
+          <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+            <span
+              className="px-1 text-[11px] tabular-nums text-muted-foreground"
+              aria-live="polite"
+            >
+              {matchNav.count === 0 ? "0/0" : `${matchNav.index + 1}/${matchNav.count}`}
+            </span>
+            <button
+              type="button"
+              onClick={matchNav.onPrev}
+              disabled={matchNav.count === 0}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+              aria-label="Coincidencia anterior"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={matchNav.onNext}
+              disabled={matchNav.count === 0}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+              aria-label="Coincidencia siguiente"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {hasFilter ? (
+              <button
+                type="button"
+                onClick={() => onQueryChange("")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Quitar filtro"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        ) : hasFilter ? (
+          <button
+            type="button"
+            onClick={() => onQueryChange("")}
+            className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Quitar filtro"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function SourceGroupedList({
   groups,
   emptyTitle,
   emptyDescription,
   renderItem,
-  searchable = false,
-  searchPlaceholder = "Buscar en la ruta",
+  query = "",
+  virtualized = false,
 }: {
   groups: { day: number | null; items: SourceItem[] }[]
   emptyTitle: string
   emptyDescription: string
   renderItem: (item: SourceItem) => ReactNode
-  searchable?: boolean
-  searchPlaceholder?: string
+  /** Filtro controlado desde InspirationPanel (compartido con Crónica). */
+  query?: string
+  /** Lista virtualizada (Ruta). Independiente del buscador: Desplazamientos no virtualiza. */
+  virtualized?: boolean
 }) {
-  const [query, setQuery] = useState("")
-
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle) return groups
@@ -663,8 +955,6 @@ function SourceGroupedList({
       .filter((group) => group.items.length > 0)
   }, [groups, query])
 
-  const totalItems = groups.reduce((n, g) => n + g.items.length, 0)
-  const showSearch = searchable && totalItems > 0
   const needle = query.trim()
   const hasFilter = needle.length > 0
 
@@ -679,8 +969,8 @@ function SourceGroupedList({
     )
   }
 
-  // Transporte (sin buscador): listas cortas; montaje completo vale.
-  if (!showSearch) {
+  // Transporte / Ruta sin virtualizar: listas cortas; montaje completo vale.
+  if (!virtualized) {
     return (
       <div className="space-y-5 px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
         <div className="panel-column space-y-5">
@@ -701,31 +991,6 @@ function SourceGroupedList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 bg-background px-4 pb-3 pt-4">
-        <div className="panel-column relative">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={searchPlaceholder}
-            className={cn("h-9 pl-8 text-base md:text-sm", hasFilter && "pr-9")}
-            aria-label="Buscar en la ruta"
-          />
-          {hasFilter ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Quitar filtro"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
-      </div>
       {hasFilter && filteredGroups.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">
           Ningún ítem coincide con «{needle}».

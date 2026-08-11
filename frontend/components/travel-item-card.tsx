@@ -211,7 +211,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
         <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-snug text-muted-foreground">
           {BASIC_LABELS[props.category]} {provenance}
           {props.vendor ? <span className="text-muted-foreground/80"> · {props.vendor}</span> : null}
-          {props.href ? <ExternalLink className="ml-0.5 h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
+          {props.href ? <ExternalLink className="wp-ext-link ml-0.5 h-3 w-3 shrink-0" aria-hidden /> : null}
         </p>
       </div>
     )
@@ -291,7 +291,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
           {region && !routeSummary ? <span title={region}>{region} </span> : null}
           {provenance}
         </span>
-        {props.href ? <ExternalLink className="h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
+        {props.href ? <ExternalLink className="wp-ext-link h-3 w-3 shrink-0" aria-hidden /> : null}
       </p>
     </div>
   )

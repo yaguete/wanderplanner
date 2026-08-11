@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { SegmentedControl } from "@/components/segmented-control"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -779,6 +780,7 @@ function DayItineraryTimeline({
   onSetTaskState,
   onEditRouteLeg,
   onEditTransport,
+  emphasized = false,
 }: {
   items: UserDayItem[]
   resolveRegion: (item: UserDayItem) => string | null
@@ -791,6 +793,8 @@ function DayItineraryTimeline({
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
   onEditRouteLeg?: (item: UserDayItem) => void
   onEditTransport?: (item: UserDayItem) => void
+  /** Día marcado en el checkbox: resalta las cards del día. */
+  emphasized?: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const firstLiRef = useRef<HTMLLIElement | null>(null)
@@ -888,7 +892,10 @@ function DayItineraryTimeline({
                 />
               </div>
               <TravelItemCard
-                className="min-w-0 flex-1"
+                className={cn(
+                  "min-w-0 flex-1 transition-[border-color,box-shadow,background-color]",
+                  emphasized && "border-foreground/25 bg-muted/40 shadow-md",
+                )}
                 variant="planned"
                 title={item.name}
                 type={item.type}
@@ -1242,32 +1249,51 @@ function DaySection({
             </button>
           )}
           {showAiButton ? (
-            <button
-              type="button"
-              onClick={() => void handleGenerateSummary()}
-              disabled={!canGenerate}
-              title={
-                genError
-                  ? genError
-                  : canGenerate
-                    ? "Generar descripción con IA"
-                    : "Sin cambios en los ítems del día"
-              }
-              aria-label="Generar descripción con IA"
-              className={cn(
-                "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                canGenerate
-                  ? "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  : "cursor-default text-muted-foreground/35",
-              )}
-            >
-              {generating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              ) : (
+            canGenerate || generating ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateSummary()}
+                    disabled={generating}
+                    aria-label="Sugerir descripción del día"
+                    className={cn(
+                      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                      "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      generating && "cursor-wait",
+                    )}
+                  >
+                    {generating ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                {!generating ? (
+                  <TooltipContent
+                    side="left"
+                    align="center"
+                    sideOffset={6}
+                    avoidCollisions={false}
+                    className="overflow-visible border-none bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-sm"
+                  >
+                    Sugerir descripción del día
+                    <TooltipArrow className="fill-foreground" width={10} height={5} />
+                  </TooltipContent>
+                ) : null}
+              </Tooltip>
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-label="Sugerir descripción del día"
+                className="inline-flex h-6 w-6 shrink-0 cursor-default items-center justify-center rounded-md text-muted-foreground/35"
+              >
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              )}
-            </button>
+              </button>
+            )
           ) : null}
         </div>
       </div>
@@ -1277,6 +1303,7 @@ function DaySection({
           <RouteLegPlaceholder
             leg="outbound"
             onClick={() => onOpenRouteLeg("outbound")}
+            emphasized={isDaySelected}
           />
           {items.length === 0 ? (
             <p className="px-1 text-center text-xs text-muted-foreground">
@@ -1294,7 +1321,14 @@ function DaySection({
       ) : null}
 
       {items.length === 0 && !showOutboundPlaceholder && !showReturnPlaceholder ? (
-        <div className="rounded-2xl border-2 border-dashed border-muted-foreground/20 bg-muted/20 px-4 py-5 text-center text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "rounded-2xl border-2 border-dashed px-4 py-5 text-center text-sm text-muted-foreground transition-colors",
+            isDaySelected
+              ? "border-foreground/30 bg-muted/40 shadow-sm"
+              : "border-muted-foreground/20 bg-muted/20",
+          )}
+        >
           <p>
             Añade elementos desde Fuentes o{" "}
             <button
@@ -1318,6 +1352,7 @@ function DaySection({
           onMoveItemDown={onMoveItemDown}
           taskStates={taskStates}
           onSetTaskState={onSetTaskState}
+          emphasized={isDaySelected}
           onEditRouteLeg={(item) => {
             const leg = item.route?.leg
             if (leg === "outbound" || leg === "return") onOpenRouteLeg(leg, item)
@@ -1331,6 +1366,7 @@ function DaySection({
           <RouteLegPlaceholder
             leg="return"
             onClick={() => onOpenRouteLeg("return")}
+            emphasized={isDaySelected}
           />
           {items.length === 0 && !showOutboundPlaceholder ? (
             <p className="px-1 text-center text-xs text-muted-foreground">
@@ -1353,9 +1389,11 @@ function DaySection({
 function RouteLegPlaceholder({
   leg,
   onClick,
+  emphasized = false,
 }: {
   leg: RouteLeg
   onClick: () => void
+  emphasized?: boolean
 }) {
   const label =
     leg === "outbound" ? "Añadir tu viaje de ida" : "Añadir tu viaje de vuelta"
@@ -1365,9 +1403,12 @@ function RouteLegPlaceholder({
       onClick={onClick}
       className={cn(
         "flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed",
-        "border-muted-foreground/25 bg-muted/20 px-4 py-4 text-sm font-medium",
-        "text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
+        "px-4 py-4 text-sm font-medium transition-colors",
+        "text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        emphasized
+          ? "border-foreground/30 bg-muted/40 shadow-sm"
+          : "border-muted-foreground/25 bg-muted/20",
       )}
       aria-label={label}
     >

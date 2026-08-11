@@ -20,7 +20,7 @@ type PanelTabsProps<T extends string> = {
 /**
  * Pestañas de navegación de contenido (Fuentes / Mi viaje):
  * icono + etiqueta, indicador subrayado de 2px con extremos redondeados.
- * Las etiquetas se ocultan según el ancho del **panel** (`@md`, 448px), no de la ventana.
+ * En paneles estrechos (< `@md` ≈448px) solo la etiqueta; a partir de `@md`, icono + label.
  */
 export function PanelTabs<T extends string>({
   items,
@@ -54,8 +54,12 @@ export function PanelTabs<T extends string>({
                 : "font-medium text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={selected ? 2.25 : 2} />
-            <span className="hidden truncate @md:inline">{label}</span>
+            <Icon
+              className="hidden h-3.5 w-3.5 shrink-0 @md:block"
+              aria-hidden
+              strokeWidth={selected ? 2.25 : 2}
+            />
+            <span className="truncate">{label}</span>
             {selected ? (
               <span
                 className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary"

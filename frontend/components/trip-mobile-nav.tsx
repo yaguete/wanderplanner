@@ -129,8 +129,10 @@ export function TripMobileNav({
     >
       <div
         className={cn(
+          // Opaco: si no, el blur deja ver el panel de debajo y el `bg-muted`
+          // del tab activo parece otro gris según Fuentes / Mi viaje / Asistente.
           "pointer-events-auto rounded-2xl",
-          "border border-border/60 bg-background/80 backdrop-blur-xl",
+          "border border-border/60 bg-background",
           "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
         )}
       >

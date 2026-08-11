@@ -253,8 +253,11 @@ export function AddSourceDialog({
           <DialogTitle>{analyzing ? "Analizando fuente" : "Añadir fuente"}</DialogTitle>
           {!analyzing ? (
             <DialogDescription>
-              Pega la URL de un artículo de viajes. Destilaremos la ruta para consolidarla en Mi
+              Pega la URL de un artículo de viajes. Destilaremos la ruta para consolidarla en tu
               viaje.
+              <span className="mt-1.5 block">
+                (Ten paciencia, el proceso puede tardar entre 20 y 40s)
+              </span>
             </DialogDescription>
           ) : null}
         </DialogHeader>

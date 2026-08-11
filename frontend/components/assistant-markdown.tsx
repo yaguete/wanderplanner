@@ -83,7 +83,7 @@ export function AssistantMarkdown({
                 href={href}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="break-all font-medium text-primary underline underline-offset-2"
+                className="wp-ext-link break-all font-medium underline underline-offset-2"
               >
                 {children}
               </a>

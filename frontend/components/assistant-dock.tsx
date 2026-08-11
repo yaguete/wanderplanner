@@ -824,7 +824,7 @@ export function AssistantPanelLayer({
           <div
             className={cn(
               "pointer-events-auto rounded-2xl",
-              "border border-border/60 bg-background/80 backdrop-blur-xl",
+              "border border-border/60 bg-background",
               "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
             )}
           >
@@ -932,7 +932,7 @@ export function AssistantPanelLayer({
                 "pointer-events-auto overflow-hidden rounded-2xl border border-border/60",
                 isPanel
                   ? "bg-background"
-                  : "bg-background/80 backdrop-blur-xl shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+                  : "bg-background shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
               )}
             >
               <ChatComposer
