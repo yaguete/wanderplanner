@@ -115,8 +115,7 @@ function managedCounts(totals: TripTaskTotals) {
 }
 
 /** Fragmento «X de Y gestionadas» para la meta de cabecera; null si no hay tareas. */
-export function TripTasksManagedFragment({ trip }: { trip: Trip }) {
-  const totals = useTaskTotals(trip)
+export function TripTasksManagedFragment({ totals }: { totals: TripTaskTotals }) {
   const { managed, total } = managedCounts(totals)
   if (total === 0) return null
   return (
@@ -191,8 +190,7 @@ export function TripTasksSummaryDetail({
 }
 
 /** Hairline de progreso (1.5 px) para el borde inferior de la cabecera. */
-export function TripTasksProgressHairline({ trip }: { trip: Trip }) {
-  const totals = useTaskTotals(trip)
+export function TripTasksProgressHairline({ totals }: { totals: TripTaskTotals }) {
   const { managed, total } = managedCounts(totals)
   if (total === 0) return null
   const pct = Math.min(100, (managed / total) * 100)

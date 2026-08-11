@@ -5,7 +5,16 @@
  * Ruta · Actividades · Alojamientos · Transporte · Básicos.
  * Ruta = timeline + Lista/Mapa; el resto = filas de tarea por categoría.
  */
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react"
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useMemo,
+  memo,
+  type ComponentType,
+} from "react"
 import {
   Check,
   ChevronDown,
@@ -17,6 +26,7 @@ import {
   Plus,
   Sparkles,
   X,
+  type LucideProps,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -39,6 +49,8 @@ import {
   resolveTaskStatus,
   taskBucket,
   taskKeyForItem,
+  buildTripTasks,
+  computeTripTaskTotals,
 } from "@/lib/trip-tasks"
 import type { ItemType, RouteLeg, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
 import {
@@ -123,6 +135,8 @@ export default function ItineraryPanel({
     reevaluateCountryTasks,
     upsertRouteLeg,
     upsertTransportRouteItem,
+    updateDayLabel,
+    applyDaySummary,
   } = useTrips()
   const trip = getTrip(tripId)
   const isMobile = useIsMobile()
@@ -270,13 +284,23 @@ export default function ItineraryPanel({
       for (const id of prev) {
         if (trip.days.some((d) => d.id === id)) next.add(id)
       }
+      if (next.size === prev.size) {
+        let same = true
+        for (const id of next) {
+          if (!prev.has(id)) {
+            same = false
+            break
+          }
+        }
+        if (same) return prev
+      }
       return next
     })
   }, [trip])
 
   // Lugares del recorrido (stay/food/activity) en orden de introducción.
   const mapPlaces: ItineraryMapPoint[] = useMemo(() => {
-    if (!trip) return []
+    if (!trip || listMode !== "map") return []
     return collectItineraryPlaces(trip.days).map((p) => {
       const item = trip.days[p.dayNumber - 1]?.items.find((it) => it.id === p.id)
       return {
@@ -288,11 +312,11 @@ export default function ItineraryPanel({
         coords: p.coords ?? null,
       }
     })
-  }, [trip, resolveRegion])
+  }, [trip, resolveRegion, listMode])
 
   // Anclas de llegada/salida cuando ida/vuelta no van por carretera.
   const mapHubs: ItineraryMapPoint[] = useMemo(() => {
-    if (!trip) return []
+    if (!trip || listMode !== "map") return []
     return collectMapGatewayAnchors(trip.days).map((g) => ({
       id: `hub:${g.role}:${g.itemId}`,
       name: g.label,
@@ -301,16 +325,16 @@ export default function ItineraryPanel({
       coords: { lng: g.lng, lat: g.lat },
       hubRole: g.role,
     }))
-  }, [trip])
+  }, [trip, listMode])
 
   const mapSegments = useMemo(
-    () => (trip ? collectMapSegments(trip.days) : []),
-    [trip],
+    () => (trip && listMode === "map" ? collectMapSegments(trip.days) : []),
+    [trip, listMode],
   )
 
   const mapTransportDistances = useMemo(
     () =>
-      trip
+      trip && listMode === "map"
         ? collectTransportDistances(trip.days)
         : {
             byMode: {},
@@ -319,7 +343,7 @@ export default function ItineraryPanel({
             undrawnKm: 0,
             totalKm: 0,
           },
-    [trip],
+    [trip, listMode],
   )
 
   // Índice de posición global (por día) para reglas de flechas arriba/abajo; debe coincidir con `moveItemOneStep`.
@@ -333,28 +357,6 @@ export default function ItineraryPanel({
     })
     return map
   }, [trip])
-
-  const canMoveUp = useCallback(
-    (itemId: string) => {
-      const loc = itemLocationById.get(itemId)
-      if (!loc) return false
-      return loc.itemIndex > 0 || loc.dayIndex > 0
-    },
-    [itemLocationById],
-  )
-
-  const canMoveDown = useCallback(
-    (itemId: string) => {
-      if (!trip) return false
-      const loc = itemLocationById.get(itemId)
-      if (!loc) return false
-      const day = trip.days[loc.dayIndex]
-      const hasNextInSameDay = !!day && loc.itemIndex < day.items.length - 1
-      const hasNextDay = loc.dayIndex < trip.days.length - 1
-      return hasNextInSameDay || hasNextDay
-    },
-    [itemLocationById, trip],
-  )
 
   const moveItemOneStep = useCallback(
     (itemId: string, direction: "up" | "down") => {
@@ -398,6 +400,46 @@ export default function ItineraryPanel({
     [itemLocationById, moveItemBetweenDays, trip, tripId],
   )
 
+  // Callbacks estables para memo(DaySection): el cuerpo lee el último moveItemOneStep vía ref.
+  const moveItemOneStepRef = useRef(moveItemOneStep)
+  moveItemOneStepRef.current = moveItemOneStep
+
+  const onMoveItemUp = useCallback((itemId: string) => {
+    moveItemOneStepRef.current(itemId, "up")
+  }, [])
+
+  const onMoveItemDown = useCallback((itemId: string) => {
+    moveItemOneStepRef.current(itemId, "down")
+  }, [])
+
+  const setDaySelected = useCallback((dayId: string, checked: boolean) => {
+    setSelectedDayIds((prev) => {
+      const n = new Set(prev)
+      if (checked) n.add(dayId)
+      else n.delete(dayId)
+      return n
+    })
+  }, [])
+
+  const handleRemoveItem = useCallback(
+    (dayId: string, itemId: string) => {
+      removeItemFromDay(tripId, dayId, itemId)
+    },
+    [removeItemFromDay, tripId],
+  )
+
+  const handleEditTransport = useCallback(
+    (dayId: string, item: UserDayItem) => {
+      openTransportDialog(dayId, item)
+    },
+    [openTransportDialog],
+  )
+
+  const routeTaskTotals = useMemo(
+    () => (trip ? computeTripTaskTotals(buildTripTasks(trip)) : null),
+    [trip],
+  )
+
   if (!trip) return null
 
   const hasDaySelection = selectedDayIds.size > 0
@@ -405,15 +447,6 @@ export default function ItineraryPanel({
   const categoryView = isRoute
     ? null
     : (viewMode as Exclude<ItineraryViewMode, "itinerary">)
-
-  const setDaySelected = (dayId: string, checked: boolean) => {
-    setSelectedDayIds((prev) => {
-      const n = new Set(prev)
-      if (checked) n.add(dayId)
-      else n.delete(dayId)
-      return n
-    })
-  }
 
   const handleDayListAction = () => {
     if (hasDaySelection) {
@@ -514,7 +547,7 @@ export default function ItineraryPanel({
           <p className="mt-3 text-xs text-muted-foreground tabular-nums">
             {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
             {trip.days.length === 1 ? "día" : "días"}
-            <TripTasksManagedFragment trip={trip} />
+            {routeTaskTotals ? <TripTasksManagedFragment totals={routeTaskTotals} /> : null}
           </p>
         </div>
 
@@ -523,7 +556,7 @@ export default function ItineraryPanel({
           <ItineraryViewModeTabs value={viewMode} onValueChange={setViewMode} />
         </div>
 
-        <TripTasksProgressHairline trip={trip} />
+        {routeTaskTotals ? <TripTasksProgressHairline totals={routeTaskTotals} /> : null}
         </div>
       </div>
 
@@ -608,13 +641,11 @@ export default function ItineraryPanel({
                   items={day.items}
                   resolveRegion={resolveRegion}
                   isDaySelected={selectedDayIds.has(day.id)}
-                  onDaySelectChange={(checked) => setDaySelected(day.id, checked)}
-                  onRemoveItem={(itemId) => removeItemFromDay(tripId, day.id, itemId)}
-                  canMoveItemUp={canMoveUp}
-                  canMoveItemDown={canMoveDown}
-                  onMoveItemUp={(itemId) => moveItemOneStep(itemId, "up")}
-                  onMoveItemDown={(itemId) => moveItemOneStep(itemId, "down")}
-                  onAddManualItem={() => openManualDialog(day.id)}
+                  onDaySelectChange={setDaySelected}
+                  onRemoveItem={handleRemoveItem}
+                  onMoveItemUp={onMoveItemUp}
+                  onMoveItemDown={onMoveItemDown}
+                  onAddManualItem={openManualDialog}
                   onSetTaskState={handleSetTaskState}
                   taskStates={trip.tasks}
                   showOutboundPlaceholder={
@@ -624,7 +655,9 @@ export default function ItineraryPanel({
                     dayIndex === trip.days.length - 1 && !hasRouteLeg(trip.days, "return")
                   }
                   onOpenRouteLeg={openRouteLegDialog}
-                  onEditTransport={(item) => openTransportDialog(day.id, item)}
+                  onEditTransport={handleEditTransport}
+                  updateDayLabel={updateDayLabel}
+                  applyDaySummary={applyDaySummary}
                 />
               ))}
               </div>
@@ -770,10 +803,10 @@ export default function ItineraryPanel({
 
 function DayItineraryTimeline({
   items,
+  dayIndex,
+  dayCount,
   resolveRegion,
   onRemoveItem,
-  canMoveItemUp,
-  canMoveItemDown,
   onMoveItemUp,
   onMoveItemDown,
   taskStates,
@@ -783,10 +816,10 @@ function DayItineraryTimeline({
   emphasized = false,
 }: {
   items: UserDayItem[]
+  dayIndex: number
+  dayCount: number
   resolveRegion: (item: UserDayItem) => string | null
   onRemoveItem: (itemId: string) => void
-  canMoveItemUp: (itemId: string) => boolean
-  canMoveItemDown: (itemId: string) => boolean
   onMoveItemUp: (itemId: string) => void
   onMoveItemDown: (itemId: string) => void
   taskStates: Record<string, TripTaskState>
@@ -814,8 +847,9 @@ function DayItineraryTimeline({
     const br = b.getBoundingClientRect()
     const y1 = ar.top - wr.top + ar.height / 2
     const y2 = br.top - wr.top + br.height / 2
-    setLine({ top: y1, height: Math.max(0, y2 - y1) })
-  }, [itemIds, items.length])
+    const h = Math.max(0, y2 - y1)
+    setLine((prev) => (prev.top === y1 && prev.height === h ? prev : { top: y1, height: h }))
+  }, [])
 
   useLayoutEffect(() => {
     measure()
@@ -851,18 +885,18 @@ function DayItineraryTimeline({
           const state = taskStates[taskKey] ?? null
           const status = resolveTaskStatus(state)
           const bucket = taskBucket(categoryFromItemType(item.type), state, "dayItem")
-          const indicator =
-            bucket === "triage" ? null : (
+          const titleAdornment =
+            bucket === "triage" || bucket === "dismissed" ? null : (
+              <RouteTaskIndicator bucket={bucket} status={status} />
+            )
+          const taskIndicator =
+            bucket === "dismissed" ? (
               <RouteTaskIndicator
                 bucket={bucket}
                 status={status}
-                onRestore={
-                  bucket === "dismissed"
-                    ? () => onSetTaskState(taskKey, { status: "pending" })
-                    : undefined
-                }
+                onRestore={() => onSetTaskState(taskKey, { status: "pending" })}
               />
-            )
+            ) : null
           const isLeg = isRouteLegItem(item)
           const routeSummary =
             item.type === "transport" && (item.route || item.vendor)
@@ -922,39 +956,16 @@ function DayItineraryTimeline({
                       : "Editar viaje de vuelta"
                     : "Editar traslado"
                 }
-                taskIndicator={indicator}
+                titleAdornment={titleAdornment}
+                taskIndicator={taskIndicator}
                 moveControls={
                   isLeg ? undefined : (
-                  <div className="flex w-8 flex-col items-center justify-center gap-0.5">
-                    {canMoveItemUp(item.id) ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          onMoveItemUp(item.id)
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                        aria-label="Mover ítem hacia arriba"
-                      >
-                        <ChevronUp className="h-4 w-4" strokeWidth={1.8} />
-                      </button>
-                    ) : null}
-                    {canMoveItemDown(item.id) ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          onMoveItemDown(item.id)
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                        aria-label="Mover ítem hacia abajo"
-                      >
-                        <ChevronDown className="h-4 w-4" strokeWidth={1.8} />
-                      </button>
-                    ) : null}
-                  </div>
+                    <MoveControls
+                      canUp={!(dayIndex === 0 && index === 0)}
+                      canDown={!(dayIndex === dayCount - 1 && index === n - 1)}
+                      onUp={() => onMoveItemUp(item.id)}
+                      onDown={() => onMoveItemDown(item.id)}
+                    />
                   )
                 }
               />
@@ -962,6 +973,54 @@ function DayItineraryTimeline({
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+function MoveButton({
+  icon: Icon,
+  label,
+  disabled,
+  onClick,
+}: {
+  icon: ComponentType<LucideProps>
+  label: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onClick()
+      }}
+      className="inline-flex h-6 w-7 items-center justify-center text-foreground/60 transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:text-foreground/20"
+      aria-label={label}
+    >
+      <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+    </button>
+  )
+}
+
+function MoveControls({
+  canUp,
+  canDown,
+  onUp,
+  onDown,
+}: {
+  canUp: boolean
+  canDown: boolean
+  onUp: () => void
+  onDown: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center overflow-hidden rounded-full border border-border/70 bg-card shadow-sm transition-shadow hover:shadow-md">
+      <MoveButton icon={ChevronUp} label="Mover ítem hacia arriba" disabled={!canUp} onClick={onUp} />
+      <span className="h-px w-4 bg-border/60" aria-hidden />
+      <MoveButton icon={ChevronDown} label="Mover ítem hacia abajo" disabled={!canDown} onClick={onDown} />
     </div>
   )
 }
@@ -994,30 +1053,57 @@ function RouteTaskIndicator({
   }
 
   if (status === "booked" || status === "paid") {
+    const label = status === "paid" ? TASK_STATUS_LABELS.paid : TASK_STATUS_LABELS.booked
     return (
-      <span
-        className="inline-flex h-8 items-center gap-0.5 rounded-md px-1.5 text-[10px] font-semibold text-emerald-700"
-        title={status === "paid" ? TASK_STATUS_LABELS.paid : TASK_STATUS_LABELS.booked}
-        aria-label={status === "paid" ? TASK_STATUS_LABELS.paid : TASK_STATUS_LABELS.booked}
-      >
-        <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className="mt-[3px] inline-flex shrink-0 items-center text-emerald-700"
+            aria-label={label}
+          >
+            <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="right"
+          align="center"
+          sideOffset={6}
+          avoidCollisions={false}
+          className="overflow-visible border-none bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-sm"
+        >
+          {label}
+          <TooltipArrow className="fill-foreground" width={10} height={5} />
+        </TooltipContent>
+      </Tooltip>
     )
   }
 
   // Solo tareas del bucket main pendientes: punto discreto.
   return (
-    <span
-      className="inline-flex h-8 w-2 items-center justify-center"
-      title={TASK_STATUS_LABELS.pending}
-      aria-label={TASK_STATUS_LABELS.pending}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="mt-[3px] inline-flex h-4 w-4 shrink-0 items-center justify-center"
+          aria-label={TASK_STATUS_LABELS.pending}
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="center"
+        sideOffset={6}
+        avoidCollisions={false}
+        className="overflow-visible border-none bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-sm"
+      >
+        {TASK_STATUS_LABELS.pending}
+        <TooltipArrow className="fill-foreground" width={10} height={5} />
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
-function DaySection({
+const DaySection = memo(function DaySection({
   tripId,
   dayId,
   dayIndex,
@@ -1031,8 +1117,6 @@ function DaySection({
   isDaySelected,
   onDaySelectChange,
   onRemoveItem,
-  canMoveItemUp,
-  canMoveItemDown,
   onMoveItemUp,
   onMoveItemDown,
   onAddManualItem,
@@ -1042,6 +1126,8 @@ function DaySection({
   showReturnPlaceholder,
   onOpenRouteLeg,
   onEditTransport,
+  updateDayLabel,
+  applyDaySummary,
 }: {
   tripId: string
   dayId: string
@@ -1054,21 +1140,24 @@ function DaySection({
   items: UserDayItem[]
   resolveRegion: (item: UserDayItem) => string | null
   isDaySelected: boolean
-  onDaySelectChange: (checked: boolean) => void
-  onRemoveItem: (itemId: string) => void
-  canMoveItemUp: (itemId: string) => boolean
-  canMoveItemDown: (itemId: string) => boolean
+  onDaySelectChange: (dayId: string, checked: boolean) => void
+  onRemoveItem: (dayId: string, itemId: string) => void
   onMoveItemUp: (itemId: string) => void
   onMoveItemDown: (itemId: string) => void
-  onAddManualItem: () => void
+  onAddManualItem: (dayId?: string | null) => void
   taskStates: Record<string, TripTaskState>
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
   showOutboundPlaceholder: boolean
   showReturnPlaceholder: boolean
   onOpenRouteLeg: (leg: RouteLeg, existingItem?: UserDayItem | null) => void
-  onEditTransport: (item: UserDayItem) => void
+  onEditTransport: (dayId: string, item: UserDayItem) => void
+  updateDayLabel: (tripId: string, dayId: string, label: string) => void
+  applyDaySummary: (
+    tripId: string,
+    dayId: string,
+    data: { label: string; signature: string },
+  ) => void
 }) {
-  const { updateDayLabel, applyDaySummary } = useTrips()
   const [editingDescription, setEditingDescription] = useState(false)
   const [draft, setDraft] = useState(dayDescription)
   const [generating, setGenerating] = useState(false)
@@ -1164,7 +1253,7 @@ function DaySection({
           <Checkbox
             id={`day-select-${dayId}`}
             checked={isDaySelected}
-            onCheckedChange={(c) => onDaySelectChange(c === true)}
+            onCheckedChange={(c) => onDaySelectChange(dayId, c === true)}
             className="size-4"
             disabled={dayCount === 1}
             aria-label={
@@ -1310,7 +1399,7 @@ function DaySection({
               o{" "}
               <button
                 type="button"
-                onClick={onAddManualItem}
+                onClick={() => onAddManualItem(dayId)}
                 className="font-medium text-foreground underline-offset-2 hover:underline"
               >
                 añade un ítem propio
@@ -1333,7 +1422,7 @@ function DaySection({
             Añade elementos desde Fuentes o{" "}
             <button
               type="button"
-              onClick={onAddManualItem}
+              onClick={() => onAddManualItem(dayId)}
               className="font-medium text-foreground underline-offset-2 hover:underline"
             >
               añade uno propio
@@ -1344,10 +1433,10 @@ function DaySection({
       ) : items.length > 0 ? (
         <DayItineraryTimeline
           items={items}
+          dayIndex={dayIndex}
+          dayCount={dayCount}
           resolveRegion={resolveRegion}
-          onRemoveItem={onRemoveItem}
-          canMoveItemUp={canMoveItemUp}
-          canMoveItemDown={canMoveItemDown}
+          onRemoveItem={(itemId) => onRemoveItem(dayId, itemId)}
           onMoveItemUp={onMoveItemUp}
           onMoveItemDown={onMoveItemDown}
           taskStates={taskStates}
@@ -1357,7 +1446,7 @@ function DaySection({
             const leg = item.route?.leg
             if (leg === "outbound" || leg === "return") onOpenRouteLeg(leg, item)
           }}
-          onEditTransport={onEditTransport}
+          onEditTransport={(item) => onEditTransport(dayId, item)}
         />
       ) : null}
 
@@ -1373,7 +1462,7 @@ function DaySection({
               o{" "}
               <button
                 type="button"
-                onClick={onAddManualItem}
+                onClick={() => onAddManualItem(dayId)}
                 className="font-medium text-foreground underline-offset-2 hover:underline"
               >
                 añade un ítem propio
@@ -1384,7 +1473,7 @@ function DaySection({
       ) : null}
     </div>
   )
-}
+})
 
 function RouteLegPlaceholder({
   leg,

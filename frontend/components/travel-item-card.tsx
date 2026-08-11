@@ -68,7 +68,12 @@ type PlannedCardProps = {
   transportIconLabel?: string
   moveControls?: ReactNode
   /**
-   * Indicador de ejecución (reservado / pendiente / sin reserva).
+   * Adornos no interactivos junto al título (punto pendiente / check).
+   * Van dentro del bloque enlazado; no meter botones aquí.
+   */
+  titleAdornment?: ReactNode
+  /**
+   * Indicador interactivo (p. ej. «Sin reserva»).
    * Hermano del bloque enlazado — nunca dentro del `<a>` afiliado.
    */
   taskIndicator?: ReactNode
@@ -276,9 +281,12 @@ export function TravelItemCard(props: TravelItemCardProps) {
   )
   const titleAndMeta = (
     <div className="min-w-0 flex-1">
-      <p className="line-clamp-2 text-[15px] font-bold leading-snug tracking-tight text-foreground">
-        {props.title}
-      </p>
+      <div className="flex w-fit max-w-full items-start gap-1.5">
+        <p className="min-w-0 line-clamp-2 text-[15px] font-bold leading-snug tracking-tight text-foreground">
+          {props.title}
+        </p>
+        {props.titleAdornment}
+      </div>
       {routeSummary ? (
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{routeSummary}</p>
       ) : null}

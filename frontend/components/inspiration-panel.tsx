@@ -278,10 +278,14 @@ export default function InspirationPanel({
     void ensureArticleHtml(currentSource.id)
   }, [sourceTab, currentSource, ensureArticleHtml])
 
-  const addedItemIds = new Set([
-    ...(trip?.days.flatMap((d) => d.items.map((i) => i.sourceItemId)) ?? []),
-    ...(trip?.basics.map((b) => b.sourceBasicItemId) ?? []),
-  ])
+  const addedItemIds = useMemo(
+    () =>
+      new Set([
+        ...(trip?.days.flatMap((d) => d.items.map((i) => i.sourceItemId)) ?? []),
+        ...(trip?.basics.map((b) => b.sourceBasicItemId) ?? []),
+      ]),
+    [trip],
+  )
 
   const addedItemDaysBySourceItemId = useMemo(() => {
     const map = new Map<string, number[]>()

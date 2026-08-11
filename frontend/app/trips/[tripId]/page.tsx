@@ -12,6 +12,7 @@ import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
 import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
+import { PerfPanel, PerfProbe } from "@/components/perf-probe"
 import { Spinner } from "@/components/ui/spinner"
 import {
   useTripChrome,
@@ -225,30 +226,38 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   const sourcesNode = useMemo(
     () => (
-      <InspirationPanel
-        tripId={tripId}
-        addSourceOpen={addSourceOpen}
-        onAddSourceOpenChange={openAddSource}
-        initialSourceUrl={pendingSourceUrl}
-        onRevealSources={revealSources}
-      />
+      <PerfPanel id="fuentes">
+        <InspirationPanel
+          tripId={tripId}
+          addSourceOpen={addSourceOpen}
+          onAddSourceOpenChange={openAddSource}
+          initialSourceUrl={pendingSourceUrl}
+          onRevealSources={revealSources}
+        />
+      </PerfPanel>
     ),
     [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources],
   )
   const planNode = useMemo(
-    () => <ItineraryPanel tripId={tripId} onEditTrip={openEditTrip} />,
+    () => (
+      <PerfPanel id="viaje">
+        <ItineraryPanel tripId={tripId} onEditTrip={openEditTrip} />
+      </PerfPanel>
+    ),
     [tripId, openEditTrip],
   )
 
   const assistantOpen = panels.assistant
   const assistantNode = useMemo(
     () => (
-      <AssistantPanelLayer
-        open={assistantOpen}
-        onOpenChange={handleAssistantOpenChange}
-        tripId={tripId}
-        variant="panel"
-      />
+      <PerfPanel id="asistente">
+        <AssistantPanelLayer
+          open={assistantOpen}
+          onOpenChange={handleAssistantOpenChange}
+          tripId={tripId}
+          variant="panel"
+        />
+      </PerfPanel>
     ),
     [assistantOpen, handleAssistantOpenChange, tripId],
   )
@@ -265,6 +274,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <PerfProbe />
       <NewTripDialog
         open={editTripOpen}
         mode="edit"
