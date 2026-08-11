@@ -190,6 +190,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **Movimiento de ítems:** solo `moveItemBetweenDays`.
 - **Móvil vs desktop:** sin breadcrumb en móvil; nav inferior de tres secciones solo en el detalle móvil; en desktop, toggles de panel en el header.
 - **Coordenadas:** siempre objeto `{ lng, lat }`, nunca tupla (es la forma del jsonb y de `LngLat`).
+- **Coste de una mutación:** en `/trips/[tripId]` los **tres paneles están montados a la vez** (los cerrados solo se ocultan con `content-visibility`). Cualquier consumidor de `useTrips()` se re-renderiza en **cada** mutación del viaje, aunque no se vea. Un trabajo caro en el asistente lo pagas al mover un ítem en la Ruta.
+- **Arrays derivados del contexto:** `getTripSources(tripId)` construye un array nuevo en cada llamada. Si va a alimentar un `useMemo` o una prop de un `memo()`, pásalo por [`useStableList`](frontend/hooks/use-stable-list.ts) o el memo no servirá de nada.
 
 ## Preguntas abiertas / deuda
 
@@ -201,6 +203,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **`spanDays` pendiente (T4B.2b):** un alojamiento o transporte añadido a mano cuenta 1 noche / 1 día, y el coste por noche de la fila miente. Es lo siguiente de la Fase 4B.
 - **CI parcial:** `route-legs`, `transport-routes` y `assistant-suggestions` tienen tests que [`ci.yml`](.github/workflows/ci.yml) no ejecuta.
 - **Coste de Mapbox sin verificar:** falta comparar las peticiones a Directions de un viaje sin tramos antes/después del mapa nuevo; `place_suggest` / `transport_hub` no están en el presupuesto mensual.
+- **Primera llamada a `resolveTripCountryCodes` (~460 ms):** ahí se compilan de golpe los ~400 patrones de [`countries.ts`](frontend/lib/countries.ts). Ocurre una vez por carga, en el primer render del asistente. Se quitaría indexando los países por su primera palabra para probar solo candidatos plausibles; ojo con los nombres con guion (`guinea-bissau`).
 - Placeholders: compartir/descargar; landing definitiva.
 
 ## Reglas que no se rompen
@@ -222,6 +225,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No persistas candidatos efímeros de Search Box** (hubs) sin pasar por [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts): es una cuestión de licencia de Mapbox, no de estilo.
 - ❌ **No pidas Directions para vuelos, trenes ni tramos largos** → geodésica/línea propia; Mapbox no tiene perfil `rail`.
 - ❌ **No inventes otra ruta de atribución** → [`item-provenance.ts`](frontend/lib/item-provenance.ts): un ítem propio nunca lleva la firma de un bloguero.
+- ❌ **No compiles regex dentro de un bucle sobre la tabla de países** → `hasWordBoundaryMatch` cachea el patrón por nombre. Inlinearlo otra vez devuelve `resolveTripCountryCodes` a ~460 ms **por llamada**, y se llama en cada render del asistente.
+- ❌ **No optimices rendimiento sin medir antes.** Los tres paneles montados hacen que el coste percibido casi nunca esté donde parece: dos rondas de optimización sobre la Ruta (que renderiza en 18 ms) no movieron la aguja porque el segundo entero estaba en el asistente cerrado.
 
 ## Dependencias críticas
 

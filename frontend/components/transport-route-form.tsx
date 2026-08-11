@@ -608,9 +608,8 @@ function EndpointField({
             }))
           }}
           onFocus={() => {
-            if (endpoint.suggestions.length > 0) {
-              setEndpoint((s) => ({ ...s, listOpen: true }))
-            }
+            // Abrir (y disparar suggest si hay texto pendiente) solo con interacción del usuario.
+            setEndpoint((s) => ({ ...s, listOpen: true }))
           }}
           onBlur={() => {
             window.setTimeout(() => setEndpoint((s) => ({ ...s, listOpen: false })), 150)
@@ -693,6 +692,11 @@ function usePlaceSuggest({
     if (debounceRef.current) clearTimeout(debounceRef.current)
     abortRef.current?.abort()
 
+    // No buscar al montar con texto de hint: esperar a que el usuario enfoque o escriba.
+    if (!endpoint.listOpen) {
+      return
+    }
+
     const q = endpoint.query.trim()
     if (endpoint.selected && q === endpoint.selected.label) {
       return
@@ -720,7 +724,6 @@ function usePlaceSuggest({
           setEndpoint((s) => ({
             ...s,
             suggestions: list,
-            listOpen: true,
             loading: false,
           }))
         })
@@ -736,5 +739,5 @@ function usePlaceSuggest({
       abortRef.current?.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint.query, endpoint.selected])
+  }, [endpoint.query, endpoint.selected, endpoint.listOpen])
 }

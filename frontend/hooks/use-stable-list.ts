@@ -1,5 +1,13 @@
 "use client"
 
+/*
+ * `react-hooks/refs` prohíbe leer y escribir refs en render. Aquí es
+ * deliberado y seguro: la derivación es idempotente (misma entrada → misma
+ * salida), que es justo la condición que la regla protege. Es el mismo patrón
+ * que ya usa `use-assistant-chat.ts` para sus refs de último valor.
+ */
+/* eslint-disable react-hooks/refs */
+
 import { useRef } from "react"
 
 /**

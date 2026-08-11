@@ -725,6 +725,7 @@ export function AssistantPanelLayer({
    * viendo el viaje actual sin invalidar el memo de cada mensaje.
    */
   const handlersRef = useRef({ handleAddSourceLink, handleAcceptAction, handleDismissAction })
+  // eslint-disable-next-line react-hooks/refs -- ref de "último valor": la escritura en render es idempotente y solo se lee desde manejadores de eventos.
   handlersRef.current = { handleAddSourceLink, handleAcceptAction, handleDismissAction }
   const onAddSourceLink = useCallback(
     (url: string) => handlersRef.current.handleAddSourceLink(url),

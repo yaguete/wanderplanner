@@ -489,14 +489,17 @@ export function resolveTripCountryCodes(
       if (it.region) hints.push(it.region)
     }
   }
-  for (const hint of hints) {
+  // Las regiones se repiten mucho («Tirol» en 20 ítems) y el resultado es una
+  // unión: escanear duplicados solo multiplica el coste.
+  const uniqueHints = [...new Set(hints)]
+  for (const hint of uniqueHints) {
     for (const code of collectCountryCodesFromHint(hint)) {
       found.add(code.toUpperCase())
     }
   }
 
   // Unión con escaneo global por límites de palabra (p. ej. "Japan and Thailand").
-  const blob = normalizeCountryName(hints.join(" "))
+  const blob = normalizeCountryName(uniqueHints.join(" "))
   for (const code of codesFromWordMatches(blob)) {
     found.add(code)
   }
@@ -504,12 +507,23 @@ export function resolveTripCountryCodes(
   return [...found]
 }
 
+/**
+ * Los patrones son estáticos (nombres de país y alias), pero se consultan miles
+ * de veces por render: `codesFromWordMatches` recorre la tabla entera por cada
+ * pista. Compilar el regex en cada llamada costaba cientos de ms en un viaje
+ * con varias fuentes; cacheado por needle es una sola compilación por nombre.
+ */
+const wordBoundaryPatterns = new Map<string, RegExp>()
+
 /** Coincidencia de palabra completa (Unicode letters/numbers). */
 export function hasWordBoundaryMatch(haystack: string, needle: string): boolean {
   if (!needle) return false
-  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  return new RegExp(
-    `(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`,
-    "iu",
-  ).test(haystack)
+  let pattern = wordBoundaryPatterns.get(needle)
+  if (!pattern) {
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    // Sin flag `g`: no hay `lastIndex` que arrastrar entre usos.
+    pattern = new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu")
+    wordBoundaryPatterns.set(needle, pattern)
+  }
+  return pattern.test(haystack)
 }

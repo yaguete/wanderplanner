@@ -402,6 +402,7 @@ export default function ItineraryPanel({
 
   // Callbacks estables para memo(DaySection): el cuerpo lee el último moveItemOneStep vía ref.
   const moveItemOneStepRef = useRef(moveItemOneStep)
+  // eslint-disable-next-line react-hooks/refs -- ref de "último valor": la escritura en render es idempotente y solo se lee desde manejadores de eventos.
   moveItemOneStepRef.current = moveItemOneStep
 
   const onMoveItemUp = useCallback((itemId: string) => {
@@ -1161,7 +1162,6 @@ const DaySection = memo(function DaySection({
   const [editingDescription, setEditingDescription] = useState(false)
   const [draft, setDraft] = useState(dayDescription)
   const [generating, setGenerating] = useState(false)
-  const [genError, setGenError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const descriptionEditorRef = useRef<HTMLDivElement>(null)
 
@@ -1180,6 +1180,12 @@ const DaySection = memo(function DaySection({
     }
   }, [editingDescription])
 
+  const commitDescription = useCallback(() => {
+    const trimmed = draft.trim()
+    updateDayLabel(tripId, dayId, trimmed)
+    setEditingDescription(false)
+  }, [draft, tripId, dayId, updateDayLabel])
+
   // Guarda la descripción al pinchar fuera del control (equivalente a aceptar), en fase capture.
   useEffect(() => {
     if (!editingDescription) return
@@ -1195,13 +1201,7 @@ const DaySection = memo(function DaySection({
     return () => {
       document.removeEventListener("pointerdown", handlePointerDownOutside, true)
     }
-  }, [editingDescription, draft, tripId, dayId])
-
-  const commitDescription = () => {
-    const trimmed = draft.trim()
-    updateDayLabel(tripId, dayId, trimmed)
-    setEditingDescription(false)
-  }
+  }, [editingDescription, commitDescription])
 
   const cancelDescription = () => {
     setDraft(dayDescription)
@@ -1215,7 +1215,6 @@ const DaySection = memo(function DaySection({
 
   const handleGenerateSummary = async () => {
     if (!canGenerate) return
-    setGenError(null)
     setGenerating(true)
     try {
       const summary = await generateDaySummary({
@@ -1233,10 +1232,9 @@ const DaySection = memo(function DaySection({
       if (err instanceof ApiLimitError) {
         toast.error(err.message)
       } else {
-        const msg =
-          err instanceof Error ? err.message : "No se pudo generar la descripción."
-        setGenError(msg)
-        toast.error(msg)
+        toast.error(
+          err instanceof Error ? err.message : "No se pudo generar la descripción.",
+        )
       }
     } finally {
       setGenerating(false)

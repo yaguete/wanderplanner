@@ -325,7 +325,6 @@ export function TravelItemCard(props: TravelItemCardProps) {
         )}
         <div className="flex shrink-0 items-center gap-1 pr-1">
           {props.taskIndicator}
-          {props.moveControls}
           {props.onEdit ? (
             <button
               type="button"
@@ -340,6 +339,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
               <Pencil className="h-3.5 w-3.5" strokeWidth={1.8} />
             </button>
           ) : null}
+          {props.moveControls}
           <button
             type="button"
             onClick={(e) => {
