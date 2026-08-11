@@ -11,6 +11,7 @@ import {
   CheckSquare,
   ChevronDown,
   ExternalLink,
+  Info,
   Pencil,
   Plus,
   Trash2,
@@ -801,6 +802,14 @@ function TriageSection({
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
         <div className="flex flex-col gap-4 pt-3">
+          <p className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
+            <Info
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/80"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <span>¿No estás seguro/a? Pregunta al asistente.</span>
+          </p>
           {grouped.map(({ category, list }) => (
             <div key={category}>
               {grouped.length > 1 ? (
