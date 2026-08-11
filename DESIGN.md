@@ -9,26 +9,28 @@ Fuente de verdad: este documento + tokens en `frontend/app/globals.css`.
 ### Quiet chrome, clear content
 - UI neutra; la fotografía y los datos del viaje aportan interés.
 - Sin serif editorial, sin terracota, sin papel cálido.
+- Primary = tinta neutra; el color lo ponen las fotos.
 
 ### Precisión sobre ornamentación
 - Jerarquía por tamaño, peso y tracking.
 - Densidad útil: cabeceras estrechas, paneles compactos.
 
-### Fuentes primero, plan a demanda
-- Las fuentes ocupan el canvas principal.
-- «Mi viaje» es un panel lateral derecho plegable y redimensionable (participa en el layout; no flota encima).
-- El asistente es un overlay anclado al área de Fuentes (~560px, ampliable a ~760px en desktop).
+### Tres paneles a demanda (desktop)
+- Fuentes, Viaje y Asistente son paneles hermanos que se encienden/apagan desde el header.
+- Se reparten el ancho a partes iguales; siempre montados (toggle = colapsar visualmente).
+- Canvas gris cálido continuo; paneles blancos redondeados sin borde duro.
 
 ## 2) Color
 
 | Token | Light | Uso |
 |---|---|---|
-| `--background` | `0 0% 100%` | Canvas |
+| `--canvas` | `40 8% 96%` | Fondo del shell `/trips` |
+| `--background` | `0 0% 100%` | Paneles / superficies |
 | `--foreground` | `0 0% 9%` | Texto |
-| `--primary` | `221 83% 53%` | Énfasis / CTAs (azul eléctrico) |
+| `--primary` | `20 8% 14%` | Tinta / CTAs |
 | `--muted` / `--accent` | `0 0% 96%` | Superficies sutiles; bocadillos del usuario en el chat |
 | `--muted-foreground` | `0 0% 45%` | Meta |
-| `--border` | `0 0% 90%` | Bordes |
+| `--border` | `0 0% 90%` | Bordes internos suaves |
 | `--radius` | `0.625rem` | Radios |
 
 Tipos de ítem: chip neutro + punto de color (`ITEM_COLORS.dot`).
@@ -40,19 +42,24 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 ## 4) Layout del workspace
 
 ### Desktop
-- Breadcrumb de viaje ~44px (`TripBreadcrumb`): nombre, meta, «Añadir fuente», «Mi viaje».
-- Fuentes a la izquierda (flex); «Mi viaje» a la derecha como panel acoplado plegable/redimensionable (~35% por defecto, límites ~20–50%), con persistencia de abierto/cerrado (`wp-plan-open`) y del ancho (`autoSaveId`).
-- Asistente: overlay sobre el área de Fuentes (no invade «Mi viaje»); FAB «Asistente» abajo a la derecha; botón de anchura amplia en la cabecera del chat.
+- Shell: canvas gris + sidebar colapsable (expandido / icon-rail, `wp-sidebar-collapsed`).
+- Header: marca al rincón (alineada con la columna del sidebar) · toggles Fuentes / Viaje / Asistente (detalle) · avatar.
+- Tres paneles alícuota (`wp-trip-panels`); mínimo uno activo. Conmutación instantánea (sin animar `flex-grow`). Con 3 paneles y viewport &lt; ~1280px el sidebar se auto-colapsa a rail.
+- Título del viaje en la cabecera del panel Viaje (no en el header).
+- Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes y Mi viaje. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista/Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
+- Sidebar: colapsar con `PanelLeftClose`/`PanelLeftOpen` en el pie; «Inicio» y «Tus viajes» como filas hermanas.
+- Asistente: panel peer montado desde el inicio; chips de sugerencia sin esperar a Supabase si no hay conversación activa.
 
 ### Móvil
-- **Sin** breadcrumb (gana altura útil).
-- FABs abajo a la derecha, solo iconos: **+** (fuente), **asistente**, **Mi viaje** (activo = primary; abierto = gris + icono de cierre). Se ocultan cuando el asistente está abierto; permanecen con «Mi viaje» abierto.
-- «Añadir fuente»: sheet inferior encima de los FABs + backdrop atenuado (no barra superior).
-- «Mi viaje» y asistente: pantalla completa / capa superior.
+- **Sin** título de viaje en header de detalle (marca + avatar).
+- Nav inferior de tres secciones (`TripMobileNav`): Fuentes · Mi viaje · Asistente.
+- Cabeceras que se colapsan al scroll; composer ajustado al teclado virtual.
+- «Añadir fuente» desde chips / sheet en Fuentes.
 
 ### Chat del asistente
-- Mensajes del **usuario**: bocadillo alineado a la derecha, fondo `muted` (no primary chillón).
+- Mensajes del **usuario**: bocadillo alineado a la derecha, fondo `muted`.
 - Mensajes del **asistente**: sin caja ni borde; texto a ancho del panel.
+- Scroll: al enviar, la pregunta queda anclada arriba; auto-follow solo si el usuario está al fondo.
 - Enlaces institucionales: clicables, sin botón «Añadir fuente».
 
 ### Home de viajes
@@ -60,16 +67,17 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Mientras se cargan los viajes desde Supabase, el bloque muestra un spinner en el mismo contenedor punteado que el empty state (nunca «No hay viajes activos» de forma prematura).
 
 ### Superficies de cuenta
-- `/` (landing placeholder), `/login`, `/signup`, `/partners` y `/account` comparten cromo propio, sin sidebar ni breadcrumb: marca arriba, una columna centrada (`max-w-md`, o `max-w-2xl` en `/partners`) y fondo con un degradado radial tenue del primary.
-- Avatar de la cabecera: en desktop abre un menú (nombre, email, ajustes, cerrar sesión); en móvil sigue abriendo `MobileNavMenu`, que incorpora el pie de sesión.
-- Invitados (sesión anónima): el avatar y el pie muestran «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de ajustes.
+- `/` (landing placeholder), `/login`, `/signup`, `/partners` y `/account` comparten cromo propio, sin sidebar: marca arriba, una columna centrada (`max-w-md`, o `max-w-2xl` en `/partners`) y fondo con un degradado radial tenue.
+- Avatar de la cabecera: menú (nombre, email, ajustes, cerrar sesión) en desktop y móvil.
+- Invitados (sesión anónima): el avatar muestra «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de ajustes.
 - `RegistrationGate`: modal breve (nombre, email, contraseña, o enlace de confirmación vía `updateUser` sobre la misma sesión anónima) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio.
 
 ## 5) Qué no hacer
 
-- No reintroducir Fraunces, brand turquesa ni primary terracota.
-- No volver al split permanente Fuentes | Mi viaje en desktop (el panel derecho debe poder plegarse).
-- No reintroducir el breadcrumb en móvil ni FABs de detalle en desktop.
+- No reintroducir Fraunces, brand turquesa, primary blue-600 ni primary terracota.
+- No volver al asistente overlay / FAB en desktop ni a `react-resizable-panels` para el detalle.
+- No reintroducir breadcrumb de viaje ni nav inferior en desktop.
 - No envolver las respuestas del asistente en cards con borde/sombra.
 - No ofrecer «Añadir fuente» sobre webs gubernamentales / de visados como si fueran blogs de inspiración.
 - No bloquear al invitado antes de que vea valor: la primera fuente del CTA entra sin cuenta; la puerta salta en la segunda fuente, al crear otro viaje o al ir a inicio.
+- No desmontar paneles desktop al apagarlos (se pierde scroll / Crónica / borrador del composer).

@@ -1,7 +1,7 @@
 "use client"
 
 import { Bed, Car, Luggage, Route, Ticket } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { SegmentedControl } from "@/components/segmented-control"
 import type { TripTaskCategory } from "@/types/itinerary"
 
 export type ItineraryViewMode =
@@ -11,16 +11,12 @@ export type ItineraryViewMode =
   | "transport"
   | "basics"
 
-const items: {
-  id: ItineraryViewMode
-  label: string
-  icon: typeof Route
-}[] = [
-  { id: "itinerary", label: "Ruta", icon: Route },
-  { id: "activities", label: "Actividades", icon: Ticket },
-  { id: "stay", label: "Alojamientos", icon: Bed },
-  { id: "transport", label: "Transporte", icon: Car },
-  { id: "basics", label: "Básicos", icon: Luggage },
+const items = [
+  { id: "itinerary" as const, label: "Ruta", icon: Route },
+  { id: "activities" as const, label: "Actividades", icon: Ticket },
+  { id: "stay" as const, label: "Alojamientos", icon: Bed },
+  { id: "transport" as const, label: "Transporte", icon: Car },
+  { id: "basics" as const, label: "Básicos", icon: Luggage },
 ]
 
 /** Mapeo pestaña → categorías de tarea que muestra. */
@@ -57,9 +53,9 @@ export const VIEW_MODE_ADD_ACTION_LABEL: Record<
 }
 
 /**
- * Pestañas del panel Mi viaje (segmented control único):
+ * Pestañas del panel Mi viaje (píldora, como Lista/Mapa):
  * Ruta · Actividades · Alojamientos · Transporte · Básicos.
- * En móvil (< sm) solo icono; en desktop icono + label.
+ * Fuentes usa PanelTabs (subrayado); aquí no.
  */
 export function ItineraryViewModeTabs({
   value,
@@ -69,36 +65,12 @@ export function ItineraryViewModeTabs({
   onValueChange: (mode: ItineraryViewMode) => void
 }) {
   return (
-    <div
-      className="inline-flex min-h-8 w-full flex-wrap items-center gap-0 rounded-lg bg-muted p-0.5"
-      role="tablist"
-      aria-label="Vista de Mi viaje"
-    >
-      {items.map(({ id, label, icon: Icon }) => {
-        const selected = value === id
-        return (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            aria-label={label}
-            title={label}
-            onClick={() => onValueChange(id)}
-            className={cn(
-              "inline-flex min-h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-1.5",
-              "text-[11px] transition-colors sm:gap-1.5 sm:px-2 sm:text-xs",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              selected
-                ? "bg-background font-medium text-foreground shadow-sm"
-                : "font-medium text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="hidden truncate sm:inline">{label}</span>
-          </button>
-        )
-      })}
-    </div>
+    <SegmentedControl
+      items={items}
+      value={value}
+      onValueChange={onValueChange}
+      ariaLabel="Vista de Mi viaje"
+      size="default"
+    />
   )
 }

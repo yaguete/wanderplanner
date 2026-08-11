@@ -21,7 +21,7 @@ export default function ArticleReader({ html, referenceUrl }: ArticleReaderProps
           Source: {hostname}
         </p>
         <div
-          className="prose-article"
+          className="prose-article mx-auto max-w-2xl"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       </div>

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type PointerEvent,
   type ReactNode,
   type RefObject,
 } from "react"
@@ -18,9 +19,6 @@ import {
   History,
   Link2,
   Loader2,
-  Maximize2,
-  Minimize2,
-  Minus,
   Plus,
   Sparkles,
   Square,
@@ -49,6 +47,8 @@ import {
   type ChatAction,
   type ChatMessage,
 } from "@/hooks/use-assistant-chat"
+import { useAuth } from "@/lib/auth-context"
+import { loadActiveConversationId } from "@/lib/db/assistant-repo"
 import { useTrips } from "@/lib/trip-context"
 import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
 import { ITEM_LABELS } from "@/lib/item-styles"
@@ -57,10 +57,9 @@ import type { ItemType, UserDayItem } from "@/types/itinerary"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
 
-const ASSISTANT_WIDTH_NARROW = "min(560px, calc(100% - 1rem))"
-const ASSISTANT_WIDTH_WIDE = "min(760px, calc(100% - 1rem))"
-/** Tope de crecimiento del textarea antes de pasar a scroll interno (px). */
 const COMPOSER_MAX_HEIGHT = 168
+/** Distancia al fondo (px) para considerar que el usuario quiere auto-follow. */
+const NEAR_BOTTOM_PX = 80
 
 type PanelView = "chat" | "history"
 
@@ -69,11 +68,11 @@ type AssistantPanelLayerProps = {
   onOpenChange: (open: boolean) => void
   tripId: string
   /**
-   * `overlay` (default): capa modal sobre Fuentes (desktop + legacy).
+   * `panel`: columna hermana en el layout desktop (siempre montada).
    * `section`: sección hermana en la navegación móvil; se mantiene montada
    * aunque no esté visible para no cortar el streaming.
    */
-  variant?: "overlay" | "section"
+  variant?: "panel" | "section"
   /**
    * Solo `section` (móvil): fila de navegación que se incrusta bajo el composer
    * para formar un único elemento flotante (se retira con el teclado abierto).
@@ -235,7 +234,11 @@ const MessageBubble = memo(function MessageBubble({
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
+      <div
+        className="flex justify-end"
+        data-message-role="user"
+        data-message-id={message.id}
+      >
         <div className="max-w-[min(92%,36rem)] rounded-2xl bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
@@ -307,12 +310,23 @@ const ChatComposer = memo(function ChatComposer({
     setDraft("")
   }
 
-  /** El textarea crece con el contenido hasta `COMPOSER_MAX_HEIGHT`; a partir de ahí, scroll. */
+  /** El textarea crece con el contenido hasta `COMPOSER_MAX_HEIGHT`; a partir de ahí, scroll.
+   * También se re-mide con ResizeObserver: si el panel nace oculto (ancho 0), el scrollHeight
+   * basura no debe quedarse pegado al abrir. */
   useLayoutEffect(() => {
     const el = inputRef.current
     if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`
+
+    const measure = () => {
+      if (el.clientWidth === 0) return
+      el.style.height = "auto"
+      el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`
+    }
+
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [draft, inputRef])
 
   const handleSend = () => {
@@ -320,6 +334,10 @@ const ChatComposer = memo(function ChatComposer({
     if (!text || isStreaming) return
     setDraft("")
     onSend(text)
+    // Móvil: bajar el teclado en el mismo gesto que envía (tras preventDefault en pointerdown).
+    if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
+      inputRef.current?.blur()
+    }
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -327,6 +345,11 @@ const ChatComposer = memo(function ChatComposer({
       e.preventDefault()
       handleSend()
     }
+  }
+
+  /** Evita blur del textarea en pointerdown → el composer no salta y el click aterriza. */
+  const keepFocusOnPointerDown = (e: PointerEvent) => {
+    e.preventDefault()
   }
 
   return (
@@ -347,6 +370,7 @@ const ChatComposer = memo(function ChatComposer({
       {isStreaming ? (
         <button
           type="button"
+          onPointerDown={keepFocusOnPointerDown}
           onClick={onStop}
           className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background"
           aria-label="Detener"
@@ -356,6 +380,7 @@ const ChatComposer = memo(function ChatComposer({
       ) : (
         <button
           type="button"
+          onPointerDown={keepFocusOnPointerDown}
           onClick={handleSend}
           disabled={!draft.trim() || disabled}
           className="mb-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-muted disabled:text-muted-foreground"
@@ -435,16 +460,19 @@ function ConversationHistoryList({
 
 export function AssistantPanelLayer({
   open,
-  onOpenChange,
   tripId,
-  variant = "overlay",
+  variant = "panel",
   bottomNav,
 }: AssistantPanelLayerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const nearBottomRef = useRef(true)
+  const lastAnchoredUserIdRef = useRef<string | null>(null)
   const isMobile = useIsMobile()
   const isSection = variant === "section"
+  const isPanel = variant === "panel"
   const { open: keyboardOpen, inset: keyboardInset } = useVirtualKeyboard()
   /** Alto real del composer flotante: reserva espacio al final de la conversación. */
   const [composerHeight, setComposerHeight] = useState(0)
@@ -456,16 +484,27 @@ export function AssistantPanelLayer({
   const [linkError, setLinkError] = useState<string | null>(null)
   const [view, setView] = useState<PanelView>("chat")
   const [pendingDelete, setPendingDelete] = useState<AssistantConversationSummary | null>(null)
-  /** Solo desktop: modo de lectura más ancho; se conserva al minimizar en la misma vista. */
-  const [wide, setWide] = useState(false)
+  // Reset de vista solo al cambiar de viaje — no al abrir/cerrar el panel.
+  const [viewTripId, setViewTripId] = useState(tripId)
+  if (viewTripId !== tripId) {
+    setViewTripId(tripId)
+    setView("chat")
+  }
 
   const { getTrip, getTripSources, addSourceToTrip, addItemToDay, isLoadingSource } = useTrips()
+  const { user } = useAuth()
   const trip = getTrip(tripId)
   const sources = getTripSources(tripId)
   const suggestions = useMemo(
     () => buildAssistantSuggestions(trip, sources),
     [trip, sources],
   )
+  /** Sin conversación activa en localStorage → chips ya; si hay id, esperar a hydrated. */
+  const canShowSuggestionsEarly = useMemo(() => {
+    const uid = user?.id
+    if (!uid) return true
+    return loadActiveConversationId(uid, tripId) === null
+  }, [user?.id, tripId])
   const addedSourceUrls = useMemo(
     () => new Set(sources.map((s) => normalizeSourceUrl(s.url))),
     [sources],
@@ -488,15 +527,17 @@ export function AssistantPanelLayer({
   } = useAssistantChat(tripId, trip, sources)
 
   useEffect(() => {
-    if (!open) return
-    setView("chat")
-  }, [open, tripId])
-
-  useEffect(() => {
     // En móvil no auto-enfocamos: levantaría el teclado al entrar en la pestaña.
+    // Doble rAF: saca el focus del frame crítico donde Fuentes/Viaje re-maquetan al abrir.
     if (!open || view !== "chat" || isMobile) return
-    const t = requestAnimationFrame(() => inputRef.current?.focus())
-    return () => cancelAnimationFrame(t)
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => inputRef.current?.focus())
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
   }, [open, view, isMobile])
 
   useEffect(() => {
@@ -510,26 +551,53 @@ export function AssistantPanelLayer({
     const observer = new ResizeObserver(measure)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [view, isSection])
+  }, [view, isSection, isPanel])
 
+  /** Escucha scroll del viewport de Radix para saber si el usuario está al fondo. */
   useEffect(() => {
-    if (!open || isSection) return
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (view === "history") {
-          setView("chat")
-          return
-        }
-        onOpenChange(false)
-      }
+    const root = chatScrollRef.current
+    if (!root) return
+    const viewport = root.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    ) as HTMLElement | null
+    if (!viewport) return
+    const onScroll = () => {
+      const dist = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight
+      nearBottomRef.current = dist <= NEAR_BOTTOM_PX
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [open, onOpenChange, view, isSection])
+    onScroll()
+    viewport.addEventListener("scroll", onScroll, { passive: true })
+    return () => viewport.removeEventListener("scroll", onScroll)
+  }, [view, open])
 
+  const prevOpenRef = useRef(open)
   useEffect(() => {
-    if (view !== "chat") return
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+    if (view !== "chat" || !open) {
+      prevOpenRef.current = open
+      return
+    }
+
+    // Al abrir el panel: jump instantáneo. Smooth solo con mensajes nuevos / streaming.
+    const justOpened = !prevOpenRef.current
+    prevOpenRef.current = true
+    const scrollBehavior: ScrollBehavior = justOpened ? "auto" : "smooth"
+
+    const lastUser = [...messages].reverse().find((m) => m.role === "user")
+    if (lastUser && lastUser.id !== lastAnchoredUserIdRef.current) {
+      lastAnchoredUserIdRef.current = lastUser.id
+      nearBottomRef.current = false
+      requestAnimationFrame(() => {
+        const el = chatScrollRef.current?.querySelector(
+          `[data-message-id="${lastUser.id}"]`,
+        )
+        el?.scrollIntoView({ block: "start", behavior: scrollBehavior })
+      })
+      return
+    }
+
+    if (nearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: scrollBehavior, block: "end" })
+    }
   }, [messages, statusLabel, isStreaming, open, view, keyboardOpen, keyboardInset])
 
   const handleComposerSend = useCallback(
@@ -622,8 +690,8 @@ export function AssistantPanelLayer({
     setPendingDelete(null)
   }
 
-  // Overlay: desmontar al cerrar. Section: permanece montado (streaming) y se oculta con CSS.
-  if (!open && !isSection) return null
+  // Panel desktop: siempre montado; el slot padre oculta con content-visibility + inert.
+  // (Legacy del overlay: `return null` reintroducía montaje perezoso al hacer clic.)
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
   /** Bocadillo vacío en curso: muestra spinner dentro; si hay statusLabel, manda el pill. */
@@ -638,38 +706,25 @@ export function AssistantPanelLayer({
     <div
       ref={panelRef}
       id="inspiration-assistant-panel"
-      role={isSection ? "region" : "dialog"}
-      aria-modal={isSection ? undefined : isMobile ? true : undefined}
+      role="region"
       aria-label="Asistente de viaje"
       aria-hidden={isSection && !open ? true : undefined}
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden bg-background",
+        "relative flex min-h-0 flex-col overflow-hidden bg-background",
         isSection
           ? cn(
-              "absolute inset-0 z-10",
+              "@container absolute inset-0 z-10",
               open ? "visible" : "invisible pointer-events-none",
             )
-          : cn(
-              "absolute z-40",
-              "inset-0 border-t border-border",
-              "sm:inset-auto sm:top-2 sm:right-2 sm:bottom-2",
-              "sm:rounded-xl sm:border sm:shadow-[0_16px_48px_rgba(0,0,0,0.14)]",
-              "duration-200 animate-in fade-in-0 slide-in-from-bottom-2",
-              "sm:transition-[width] sm:duration-200 sm:ease-out",
-            ),
+          : "h-full w-full",
       )}
-      style={
-        isSection || isMobile
-          ? undefined
-          : { width: wide ? ASSISTANT_WIDTH_WIDE : ASSISTANT_WIDTH_NARROW }
-      }
     >
       <div
         className={cn(
           "flex shrink-0 items-center gap-2",
           isSection
             ? "overflow-hidden px-4 transition-[max-height,opacity,padding] duration-200 ease-out"
-            : "h-12 border-b border-border px-3 sm:px-4",
+            : "h-12 border-b border-border/60 px-3 @md:px-4",
           isSection &&
             (headerCollapsed
               ? "max-h-0 py-0 opacity-0"
@@ -698,7 +753,7 @@ export function AssistantPanelLayer({
           </>
         ) : (
           <>
-            {!isSection ? (
+            {isPanel ? (
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
               </span>
@@ -711,18 +766,6 @@ export function AssistantPanelLayer({
             >
               Asistente
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
-              onClick={handleNewConversation}
-              disabled={isStreaming}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Nueva conversación</span>
-              <span className="sm:hidden">Nueva</span>
-            </Button>
             <button
               type="button"
               onClick={() => setView("history")}
@@ -732,31 +775,20 @@ export function AssistantPanelLayer({
             >
               <History className="h-3.5 w-3.5" />
             </button>
-            {!isMobile && !isSection ? (
-              <button
-                type="button"
-                onClick={() => setWide((v) => !v)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label={wide ? "Reducir ancho del asistente" : "Ampliar asistente para lectura"}
-                aria-pressed={wide}
-                title={wide ? "Ancho normal" : "Modo lectura amplia"}
-              >
-                {wide ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              </button>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+              onClick={handleNewConversation}
+              disabled={isStreaming}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden @md:inline">Nueva conversación</span>
+              <span className="@md:hidden">Nueva</span>
+            </Button>
           </>
         )}
-        {!isSection ? (
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Minimizar asistente"
-            title="Minimizar"
-          >
-            <Minus className="h-4 w-4" strokeWidth={2.25} />
-          </button>
-        ) : null}
       </div>
 
       {showHistory ? (
@@ -803,65 +835,66 @@ export function AssistantPanelLayer({
 
       {!showHistory ? (
         <>
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-3 p-4">
-              {!hydrated ? null : messages.length === 0 ? (
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  Pregúntame sobre tus fuentes, el plan o requisitos oficiales. Puedo buscar en
-                  internet y proponer fuentes o ítems para que tú confirmes.
-                </p>
-              ) : (
-                messages.map((m) => (
-                  <MessageBubble
-                    key={m.id}
-                    message={m}
-                    isStreamingTail={m.id === streamingTailId}
-                    actionBusyId={actionBusyId}
-                    onAcceptAction={handleAcceptAction}
-                    onDismissAction={handleDismissAction}
-                    onAddSourceLink={handleAddSourceLink}
-                    busySourceUrl={busySourceUrl}
-                    addedSourceUrls={addedSourceUrls}
-                  />
-                ))
-              )}
+          <div ref={chatScrollRef} className="min-h-0 flex-1">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 p-4">
+                {!hydrated ? null : messages.length === 0 ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Pregúntame sobre tus fuentes, el plan o requisitos oficiales. Puedo buscar en
+                    internet y proponer fuentes o ítems para que tú confirmes.
+                  </p>
+                ) : (
+                  messages.map((m) => (
+                    <MessageBubble
+                      key={m.id}
+                      message={m}
+                      isStreamingTail={m.id === streamingTailId}
+                      actionBusyId={actionBusyId}
+                      onAcceptAction={handleAcceptAction}
+                      onDismissAction={handleDismissAction}
+                      onAddSourceLink={handleAddSourceLink}
+                      busySourceUrl={busySourceUrl}
+                      addedSourceUrls={addedSourceUrls}
+                    />
+                  ))
+                )}
 
-              {statusLabel ? (
-                <div className="flex justify-start">
-                  <StatusPill label={statusLabel} />
-                </div>
-              ) : null}
+                {statusLabel ? (
+                  <div className="flex justify-start">
+                    <StatusPill label={statusLabel} />
+                  </div>
+                ) : null}
 
-              {busySourceUrl && !statusLabel ? (
-                <div className="flex justify-start">
-                  <StatusPill label="Añadiendo fuente…" />
-                </div>
-              ) : null}
+                {busySourceUrl && !statusLabel ? (
+                  <div className="flex justify-start">
+                    <StatusPill label="Añadiendo fuente…" />
+                  </div>
+                ) : null}
 
-              {error || linkError ? (
-                <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                  {linkError || error}
-                </p>
-              ) : null}
+                {error || linkError ? (
+                  <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                    {linkError || error}
+                  </p>
+                ) : null}
 
-              {/*
-                Spacer con altura explícita (no padding): el Viewport de Radix ScrollArea
-                a veces no reserva bien el padding-bottom y el texto acaba bajo el composer.
-              */}
-              <div
-                ref={bottomRef}
-                aria-hidden
-                className="shrink-0"
-                style={{
-                  // Con teclado overlay (iOS), el inset también tapa conversación.
-                  height:
-                    Math.max(composerHeight, 64) +
-                    20 +
-                    (isSection && keyboardOpen ? keyboardInset : 0),
-                }}
-              />
-            </div>
-          </ScrollArea>
+                {/*
+                  Spacer con altura explícita (no padding): el Viewport de Radix ScrollArea
+                  a veces no reserva bien el padding-bottom y el texto acaba bajo el composer.
+                */}
+                <div
+                  ref={bottomRef}
+                  aria-hidden
+                  className="shrink-0"
+                  style={{
+                    height:
+                      Math.max(composerHeight, 64) +
+                      20 +
+                      (isSection && keyboardOpen ? keyboardInset : 0),
+                  }}
+                />
+              </div>
+            </ScrollArea>
+          </div>
 
           {/* Composer flotante: fondo transparente para que la conversación corra por detrás. */}
           <div
@@ -879,7 +912,7 @@ export function AssistantPanelLayer({
               bottom: isSection && keyboardOpen ? keyboardInset : 0,
             }}
           >
-            {hydrated && messages.length === 0 ? (
+            {(canShowSuggestionsEarly || hydrated) && messages.length === 0 ? (
               <div className="pointer-events-auto mb-2 flex flex-col items-start gap-1.5">
                 {suggestions.map((s) => (
                   <button
@@ -896,9 +929,10 @@ export function AssistantPanelLayer({
             ) : null}
             <div
               className={cn(
-                "pointer-events-auto overflow-hidden rounded-2xl",
-                "border border-border/60 bg-background/80 backdrop-blur-xl",
-                "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+                "pointer-events-auto overflow-hidden rounded-2xl border border-border/60",
+                isPanel
+                  ? "bg-background"
+                  : "bg-background/80 backdrop-blur-xl shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
               )}
             >
               <ChatComposer

@@ -13,7 +13,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { TripPanelToggles } from "@/components/trip-panel-toggles"
 import { useAuth } from "@/lib/auth-context"
+import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { displayNameFor, initialsFor } from "@/lib/user-display"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +44,9 @@ type AppHeaderProps = {
 export function AppHeader({ leading }: AppHeaderProps) {
   const router = useRouter()
   const { user, profile, isGuest, signOut } = useAuth()
+  const isMobile = useIsMobile()
+  const { chrome } = useTripChrome()
+  const rail = useSidebarRail()
 
   const name = displayNameFor(user, profile)
   const initials = initialsFor(name)
@@ -52,17 +58,53 @@ export function AppHeader({ leading }: AppHeaderProps) {
     router.refresh()
   }
 
+  const showPanelToggles = !isMobile && chrome !== null
+
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border bg-background px-3 sm:px-4">
+    <header
+      className={cn(
+        "flex h-12 shrink-0 items-center gap-2.5 bg-canvas",
+        // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
+        isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
+        showPanelToggles ? "relative" : undefined,
+      )}
+    >
       {leading}
-      <Link
-        href="/trips"
-        className="flex min-w-0 items-center gap-2 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+
+      {/* Marca al rincón, misma columna que el sidebar (w-14 rail / w-56 expandido). */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center",
+          !isMobile && (rail ? "w-14 justify-center" : "w-56 px-2"),
+          isMobile && "min-w-0",
+        )}
       >
-        <BrandMark />
-        <span className="truncate text-sm font-semibold tracking-tight">WanderPlanner</span>
-      </Link>
+        <Link
+          href="/trips"
+          className={cn(
+            "flex min-w-0 items-center gap-2 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
+            !isMobile && rail && "justify-center",
+            // Expandido: mismo inset que Inicio / Tus viajes (px-2.5 dentro del p-2 del aside).
+            !isMobile && !rail && "gap-2.5 px-2.5",
+          )}
+        >
+          <BrandMark />
+          {isMobile || !rail ? (
+            <span className="truncate text-sm font-semibold tracking-tight">WanderPlanner</span>
+          ) : null}
+        </Link>
+      </div>
+
+      {showPanelToggles && chrome ? (
+        <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+          <div className="pointer-events-auto">
+            <TripPanelToggles panels={chrome.panels} onToggle={chrome.onTogglePanel} />
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex-1" />
+
       <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
       <DropdownMenu>
         <DropdownMenuTrigger

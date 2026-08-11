@@ -244,7 +244,7 @@ function SuggestionRow({
   onDismiss: () => void
 }) {
   return (
-    <li className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-start sm:justify-between">
+    <li className="flex flex-col gap-2 py-2.5 @md:flex-row @md:items-start @md:justify-between">
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{suggestion.title}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">

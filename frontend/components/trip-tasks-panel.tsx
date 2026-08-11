@@ -130,7 +130,7 @@ export function TripTasksManagedFragment({ trip }: { trip: Trip }) {
   )
 }
 
-/** Fila 2 de cabecera (legacy / embebido): «X de Y gestionadas · total». */
+/** Fila de resumen embebida: «X de Y gestionadas · total». */
 export function TripTasksSummaryLine({ trip }: { trip: Trip }) {
   const totals = useTaskTotals(trip)
   const { managed, total } = managedCounts(totals)
@@ -198,9 +198,16 @@ export function TripTasksProgressHairline({ trip }: { trip: Trip }) {
   const pct = Math.min(100, (managed / total) * 100)
 
   return (
-    <div className="absolute inset-x-0 bottom-0 h-[1.5px] bg-muted" aria-hidden>
+    <div
+      className="absolute inset-x-0 bottom-0 h-[2px] bg-border/70"
+      aria-hidden
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <div
-        className="h-full bg-primary transition-[width] duration-300 ease-out"
+        className="h-full bg-foreground/70 transition-[width] duration-300 ease-out"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -322,7 +329,7 @@ export function TripTasksPanel({
           hideSummary ? "pt-0" : "pt-2",
         )}
       >
-        <div className="flex flex-col gap-6">
+        <div className="panel-column flex flex-col gap-6">
           {countryTasks ? (
             <CountryTasksSection
               trip={trip}
@@ -807,7 +814,7 @@ function TriageSection({
                 {list.map((task) => (
                   <li
                     key={task.id}
-                    className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-2 py-3 @md:flex-row @md:items-center @md:justify-between"
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground">

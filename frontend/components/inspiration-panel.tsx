@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Loader2, Plus, RefreshCw, Search, Sparkles, X } from "lucide-react"
+import { Loader2, Plus, RefreshCw, Search, Sparkles, X, BookOpen, MapPin, Car, Tag } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
 import { AddSourceDialog, AddSourceFlow } from "@/components/add-source-dialog"
 import { AddToDayDialog } from "@/components/add-to-day-dialog"
+import { PanelTabs } from "@/components/panel-tabs"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTrips } from "@/lib/trip-context"
@@ -265,11 +266,11 @@ export default function InspirationPanel({
     })
   }
 
-  const tabs: { id: SourceTab; label: string }[] = [
-    { id: "source", label: "Crónica" },
-    { id: "itinerary", label: "Ruta" },
-    { id: "transport", label: "Desplazamientos" },
-    { id: "basics", label: "Descuentos" },
+  const tabs = [
+    { id: "source" as const, label: "Crónica", icon: BookOpen },
+    { id: "itinerary" as const, label: "Ruta", icon: MapPin },
+    { id: "transport" as const, label: "Desplazamientos", icon: Car },
+    { id: "basics" as const, label: "Descuentos", icon: Tag },
   ]
 
   /** Móvil: repliegue por altura; en desktop no aplica. */
@@ -300,15 +301,8 @@ export default function InspirationPanel({
           </div>
         ) : null}
         {sources.length > 0 ? (
-          <div className={cn("px-3 sm:px-4", isMobile ? "pt-1.5" : "pt-2.5")}>
-            <div
-              className={cn(
-                "flex min-w-0 gap-1.5 overflow-x-auto overflow-y-hidden pb-2.5",
-                "[scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]",
-                "[&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-transparent",
-                "[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
-              )}
-            >
+          <div className={cn(isMobile ? "pt-1.5" : "pt-2.5")}>
+            <div className="source-chips-scroller">
               {sources.map((s) => {
                 const active = activeSourceId === s.id
                 return (
@@ -378,7 +372,8 @@ export default function InspirationPanel({
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentSource ? (
-            <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1 sm:px-6">
+            <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1">
+              <div className="panel-column">
               {/* Desktop: titular del artículo + miniatura. En móvil la etiqueta de guía va en la cabecera. */}
               {!isMobile ? (
                 <div className="flex items-start gap-3">
@@ -406,27 +401,14 @@ export default function InspirationPanel({
                   </div>
                 </div>
               ) : null}
-              <div
-                className={cn(
-                  "flex gap-4 overflow-x-auto transition-[margin] duration-200 ease-out sm:mt-5 sm:gap-5",
-                  isMobile ? "mt-2" : "mt-4",
-                )}
-              >
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setSourceTab(tab.id)}
-                    className={cn(
-                      "shrink-0 border-b-2 pb-2 text-sm transition-colors",
-                      sourceTab === tab.id
-                        ? "border-primary font-semibold text-foreground"
-                        : "border-transparent font-medium text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+              <div className={cn("transition-[margin] duration-200 ease-out", isMobile ? "mt-2" : "mt-4 @md:mt-5")}>
+                <PanelTabs
+                  items={tabs}
+                  value={sourceTab}
+                  onValueChange={setSourceTab}
+                  ariaLabel="Vista de la fuente"
+                />
+              </div>
               </div>
             </div>
           ) : null}
@@ -470,7 +452,8 @@ export default function InspirationPanel({
                 />
               )
             ) : sourceTab === "basics" ? (
-              <div className="space-y-3 px-4 pb-6 pt-4 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+              <div className="space-y-3 px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+                <div className="panel-column space-y-3">
                 {!currentSource.basics.length ? (
                   <EmptyState
                     icon={Sparkles}
@@ -500,9 +483,11 @@ export default function InspirationPanel({
                     />
                   ))
                 )}
+                </div>
               </div>
             ) : sourceTab === "source" ? (
-              <div className="px-4 pb-6 pt-4 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+              <div className="px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+                <div className="panel-column">
                 {currentSource.articleHtml ? (
                   <div
                     className="prose-article"
@@ -537,6 +522,7 @@ export default function InspirationPanel({
                     ) : null}
                   </div>
                 )}
+                </div>
               </div>
             ) : sourceTab === "transport" ? (
               <SourceGroupedList
@@ -696,7 +682,8 @@ function SourceGroupedList({
   // Transporte (sin buscador): listas cortas; montaje completo vale.
   if (!showSearch) {
     return (
-      <div className="space-y-5 px-4 pb-6 pt-4 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+      <div className="space-y-5 px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+        <div className="panel-column space-y-5">
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
             {group.day != null ? (
@@ -707,14 +694,15 @@ function SourceGroupedList({
             {group.items.map((item) => renderItem(item))}
           </div>
         ))}
+        </div>
       </div>
     )
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 bg-background px-4 pb-3 pt-4 sm:px-6">
-        <div className="relative">
+      <div className="shrink-0 bg-background px-4 pb-3 pt-4">
+        <div className="panel-column relative">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
             aria-hidden
@@ -739,7 +727,7 @@ function SourceGroupedList({
         </div>
       </div>
       {hasFilter && filteredGroups.length === 0 ? (
-        <p className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-6">
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
           Ningún ítem coincide con «{needle}».
         </p>
       ) : (
@@ -812,8 +800,9 @@ function VirtualSourceRows({
   return (
     <div
       ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 sm:px-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
     >
+      <div className="panel-column">
       <div
         className="relative w-full"
         style={{ height: virtualizer.getTotalSize() }}
@@ -841,6 +830,7 @@ function VirtualSourceRows({
             </div>
           )
         })}
+      </div>
       </div>
     </div>
   )

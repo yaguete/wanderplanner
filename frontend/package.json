@@ -67,16 +67,15 @@
     "react-dom": "^19",
     "react-hook-form": "^7.60.0",
     "react-markdown": "^10.1.0",
-    "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.4",
     "remark-gfm": "^4.0.1",
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "vaul": "^1.1.2",
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
     "@types/mapbox-gl": "^3.1.0",
     "@types/node": "^22",
     "@types/react": "^19",

@@ -1,9 +1,7 @@
 "use client"
 
-import { Suspense, use, useEffect, useRef, useState } from "react"
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Sparkles } from "lucide-react"
-import type { ImperativePanelHandle } from "react-resizable-panels"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -12,23 +10,77 @@ import { formatGuideLabel } from "@/lib/itinerary-utils"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
-import { TripBreadcrumb } from "@/components/trip-breadcrumb"
 import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
-import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import {
+  useTripChrome,
+  type TripDesktopPanel,
+  type TripPanelState,
+} from "@/lib/trip-chrome-context"
 
-const PLAN_OPEN_KEY = "wp-plan-open"
-const PLAN_LAYOUT_SAVE_ID = "wp-trip-plan-layout"
+const PANELS_KEY = "wp-trip-panels"
+/** Con 3 paneles activos, por debajo de este ancho útil se auto-colapsa el sidebar a rail. */
+const AUTO_COLLAPSE_SIDEBAR_PX = 1280
 
-function readPlanOpen(): boolean {
-  if (typeof window === "undefined") return true
+const DEFAULT_PANELS: TripPanelState = {
+  sources: true,
+  plan: true,
+  assistant: false,
+}
+
+function readPanels(): TripPanelState {
+  if (typeof window === "undefined") return DEFAULT_PANELS
   try {
-    return localStorage.getItem(PLAN_OPEN_KEY) !== "0"
+    const raw = localStorage.getItem(PANELS_KEY)
+    if (!raw) return DEFAULT_PANELS
+    const parsed = JSON.parse(raw) as Partial<TripPanelState>
+    const next: TripPanelState = {
+      sources: parsed.sources !== false,
+      plan: parsed.plan !== false,
+      assistant: Boolean(parsed.assistant),
+    }
+    if (!next.sources && !next.plan && !next.assistant) return DEFAULT_PANELS
+    return next
   } catch {
-    return true
+    return DEFAULT_PANELS
   }
+}
+
+function panelCount(p: TripPanelState): number {
+  return (p.sources ? 1 : 0) + (p.plan ? 1 : 0) + (p.assistant ? 1 : 0)
+}
+
+function DesktopPanelSlot({
+  active,
+  label,
+  padStart,
+  children,
+}: {
+  active: boolean
+  label: string
+  /** Separación respecto al panel activo anterior (evita gaps fantasma con flex:0). */
+  padStart?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      inert={!active}
+      className={cn(
+        "@container min-h-0 overflow-hidden rounded-lg bg-background shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+        "transition-opacity duration-150 ease-out",
+        active
+          ? "min-w-0 opacity-100 [contain:layout_paint]"
+          : "pointer-events-none w-0 min-w-0 opacity-0 [content-visibility:hidden]",
+        active && padStart && "ml-2.5",
+      )}
+      style={{ flex: active ? "1 1 0%" : "0 0 0%" }}
+      aria-hidden={!active}
+      aria-label={label}
+    >
+      <div className="flex h-full min-h-0 flex-col">{children}</div>
+    </div>
+  )
 }
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
@@ -40,22 +92,18 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const pendingSourceUrl = searchParams.get("source")
   const autoSourceRequested = useRef<string | null>(null)
   const isMobile = useIsMobile()
-  /** Lectura síncrona: evita true→false tras hidratar y el flash de cierre. */
-  const [planOpen, setPlanOpen] = useState(readPlanOpen)
-  const [assistantOpen, setAssistantOpen] = useState(false)
-  /** Sección activa en la navegación móvil (hermanas, no overlays). */
+  const { setChrome, setAutoCollapsed } = useTripChrome()
+
+  const [panels, setPanels] = useState(readPanels)
   const [mobileSection, setMobileSection] = useState<TripMobileSection>("sources")
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [editTripOpen, setEditTripOpen] = useState(false)
   const [autoSourceError, setAutoSourceError] = useState<string | null>(null)
-  const planPanelRef = useRef<ImperativePanelHandle>(null)
 
-  // Solo se concluye que el viaje no existe cuando la carga ha terminado.
   useEffect(() => {
     if (!isLoading && !trip) router.replace("/trips")
   }, [isLoading, trip, router])
 
-  // Viaje llegado desde el CTA de un blog (`/start`): se extrae su fuente una sola vez.
   useEffect(() => {
     if (!pendingSourceUrl || !trip) return
     if (trip.sourceIds.length > 0) return
@@ -63,7 +111,6 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     if (autoSourceRequested.current === requestKey) return
     autoSourceRequested.current = requestKey
     setAutoSourceError(null)
-    // No abrir el formulario mientras el sistema trabaja: solo en error para reintentar.
     void addSourceToTrip(tripId, pendingSourceUrl).catch((error: unknown) => {
       setAutoSourceError(
         error instanceof Error
@@ -74,7 +121,6 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     })
   }, [pendingSourceUrl, trip, tripId, addSourceToTrip])
 
-  // Partner legacy: nombre = solo `area` («Japan») → subir a «Japan — 21 días».
   useEffect(() => {
     if (!trip?.referrer) return
     const first = getTripSources(tripId)[0]
@@ -95,7 +141,6 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     }
   }, [trip, tripId, getTripSources, updateTrip])
 
-  // No consumir `?source=` hasta que la fuente exista: así un fallo conserva la URL para reintentar.
   useEffect(() => {
     if (!pendingSourceUrl || !trip || trip.sourceIds.length === 0) return
     router.replace(`/trips/${tripId}`)
@@ -103,44 +148,108 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(PLAN_OPEN_KEY, planOpen ? "1" : "0")
+      localStorage.setItem(PANELS_KEY, JSON.stringify(panels))
     } catch {
       /* ignore */
     }
-  }, [planOpen])
+  }, [panels])
 
-  /** Desktop: sincroniza el panel redimensionable con planOpen (botones / localStorage). */
-  useEffect(() => {
-    if (isMobile) return
-    const id = requestAnimationFrame(() => {
-      const panel = planPanelRef.current
-      if (!panel) return
-      if (planOpen) {
-        if (panel.isCollapsed()) panel.expand()
-      } else if (!panel.isCollapsed()) {
-        panel.collapse()
-      }
-    })
-    return () => cancelAnimationFrame(id)
-  }, [planOpen, isMobile])
-
-  /** Al cambiar de viaje, cierra overlays locales; el panel Mi viaje conserva su estado. */
-  useEffect(() => {
-    setAssistantOpen(false)
+  // Al cambiar de viaje, cierra dialogs locales (ajuste en render, no efecto).
+  const [layoutTripId, setLayoutTripId] = useState(tripId)
+  if (layoutTripId !== tripId) {
+    setLayoutTripId(tripId)
     setEditTripOpen(false)
     setMobileSection("sources")
     if (!pendingSourceUrl) setAddSourceOpen(false)
-  }, [tripId, pendingSourceUrl])
+  }
 
+  /** Auto-colapso del sidebar con 3 paneles en viewports estrechos. */
   useEffect(() => {
-    if (isMobile || !assistantOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
-      setAssistantOpen(false)
+    if (isMobile) {
+      setAutoCollapsed(false)
+      return
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [assistantOpen, isMobile])
+    const update = () => {
+      const three = panelCount(panels) === 3
+      setAutoCollapsed(three && window.innerWidth < AUTO_COLLAPSE_SIDEBAR_PX)
+    }
+    update()
+    window.addEventListener("resize", update)
+    return () => {
+      window.removeEventListener("resize", update)
+      setAutoCollapsed(false)
+    }
+  }, [panels, isMobile, setAutoCollapsed])
+
+  const togglePanel = useCallback((panel: TripDesktopPanel) => {
+    setPanels((prev) => {
+      const turningOff = prev[panel]
+      if (turningOff && panelCount(prev) <= 1) return prev
+      return { ...prev, [panel]: !prev[panel] }
+    })
+  }, [])
+
+  /** Publica toggles en el header del shell (solo desktop). */
+  useEffect(() => {
+    if (isMobile || !trip) {
+      setChrome(null)
+      return
+    }
+    setChrome({
+      panels,
+      onTogglePanel: togglePanel,
+    })
+    return () => setChrome(null)
+  }, [isMobile, trip, panels, togglePanel, setChrome])
+
+  const openAddSource = useCallback(
+    (open: boolean) => {
+      if (open && isMobile) setMobileSection("sources")
+      setAddSourceOpen(open)
+    },
+    [isMobile],
+  )
+
+  const openEditTrip = useCallback(() => setEditTripOpen(true), [])
+
+  const handleAssistantOpenChange = useCallback((open: boolean) => {
+    setPanels((prev) => {
+      if (open) return { ...prev, assistant: true }
+      if (panelCount(prev) <= 1) return prev
+      return { ...prev, assistant: false }
+    })
+  }, [])
+
+  const sourcesNode = useMemo(
+    () => (
+      <InspirationPanel
+        tripId={tripId}
+        addSourceOpen={addSourceOpen}
+        onAddSourceOpenChange={openAddSource}
+        initialSourceUrl={pendingSourceUrl}
+        autoSourceError={autoSourceError}
+      />
+    ),
+    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, autoSourceError],
+  )
+
+  const planNode = useMemo(
+    () => <ItineraryPanel tripId={tripId} onEditTrip={openEditTrip} />,
+    [tripId, openEditTrip],
+  )
+
+  const assistantOpen = panels.assistant
+  const assistantNode = useMemo(
+    () => (
+      <AssistantPanelLayer
+        open={assistantOpen}
+        onOpenChange={handleAssistantOpenChange}
+        tripId={tripId}
+        variant="panel"
+      />
+    ),
+    [assistantOpen, handleAssistantOpenChange, tripId],
+  )
 
   if (isLoading && !trip) {
     return (
@@ -152,75 +261,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   if (!trip) return null
 
-  const closePlan = () => {
-    setPlanOpen(false)
-  }
-
-  const togglePlan = () => {
-    setAddSourceOpen(false)
-    const panel = planPanelRef.current
-    if (!panel) {
-      setPlanOpen((v) => !v)
-      return
-    }
-    if (panel.isCollapsed()) panel.expand()
-    else panel.collapse()
-  }
-
-  const openAddSource = (open: boolean) => {
-    if (open) {
-      if (isMobile) {
-        setMobileSection("sources")
-      } else {
-        setAssistantOpen(false)
-      }
-    }
-    setAddSourceOpen(open)
-  }
-
-  const inspirationColumn = (
-    <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
-      <InspirationPanel
-        tripId={tripId}
-        addSourceOpen={addSourceOpen}
-        onAddSourceOpenChange={openAddSource}
-        initialSourceUrl={pendingSourceUrl}
-        autoSourceError={autoSourceError}
-      />
-
-      {!isMobile && !assistantOpen ? (
-        <Button
-          type="button"
-          className="assistant-cta absolute bottom-4 right-3 z-40 h-11 gap-2 rounded-full px-4 text-sm"
-          onClick={() => setAssistantOpen(true)}
-          aria-controls="inspiration-assistant-panel"
-          aria-expanded={false}
-        >
-          <Sparkles className="h-4 w-4" />
-          Asistente
-        </Button>
-      ) : null}
-
-      {!isMobile ? (
-        <AssistantPanelLayer
-          open={assistantOpen}
-          onOpenChange={setAssistantOpen}
-          tripId={tripId}
-          variant="overlay"
-        />
-      ) : null}
-    </div>
-  )
-
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <TripBreadcrumb
-        trip={trip}
-        planOpen={planOpen}
-        onTogglePlan={togglePlan}
-        onEditTrip={() => setEditTripOpen(true)}
-      />
-
       <NewTripDialog
         open={editTripOpen}
         mode="edit"
@@ -256,31 +298,22 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <div
             className={cn(
-              "absolute inset-0",
+              "@container absolute inset-0",
               mobileSection === "sources" ? "visible z-[1]" : "invisible pointer-events-none",
             )}
             aria-hidden={mobileSection !== "sources"}
           >
-            <InspirationPanel
-              tripId={tripId}
-              addSourceOpen={addSourceOpen}
-              onAddSourceOpenChange={openAddSource}
-              initialSourceUrl={pendingSourceUrl}
-              autoSourceError={autoSourceError}
-            />
+            {sourcesNode}
           </div>
 
           <div
             className={cn(
-              "absolute inset-0",
+              "@container absolute inset-0",
               mobileSection === "plan" ? "visible z-[1]" : "invisible pointer-events-none",
             )}
             aria-hidden={mobileSection !== "plan"}
           >
-            <ItineraryPanel
-              tripId={tripId}
-              onEditTrip={() => setEditTripOpen(true)}
-            />
+            {planNode}
           </div>
 
           <AssistantPanelLayer
@@ -300,55 +333,28 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             }
           />
 
-          {/* En el Asistente el nav va incrustado en la tarjeta del composer. */}
           {mobileSection !== "assistant" ? (
             <TripMobileNav active={mobileSection} onChange={setMobileSection} />
           ) : null}
         </div>
       ) : (
-        <ResizablePanelGroup
-          direction="horizontal"
-          autoSaveId={PLAN_LAYOUT_SAVE_ID}
-          className="min-h-0 flex-1"
-        >
-          <ResizablePanel defaultSize={65} minSize={30} className="min-h-0 min-w-0">
-            {inspirationColumn}
-          </ResizablePanel>
+        <div className="flex min-h-0 flex-1 p-2.5 pt-0">
+          <DesktopPanelSlot active={panels.sources} label="Fuentes" padStart={false}>
+            {sourcesNode}
+          </DesktopPanelSlot>
 
-          <ResizableHandle
-            withHandle
-            className={cn(
-              "w-px bg-border transition-opacity",
-              !planOpen && "pointer-events-none opacity-0",
-            )}
-          />
+          <DesktopPanelSlot active={panels.plan} label="Viaje" padStart={panels.sources}>
+            {planNode}
+          </DesktopPanelSlot>
 
-          <ResizablePanel
-            ref={planPanelRef}
-            id="trip-plan-panel"
-            collapsible
-            collapsedSize={0}
-            defaultSize={planOpen ? 35 : 0}
-            minSize={20}
-            maxSize={50}
-            onCollapse={() => setPlanOpen(false)}
-            onExpand={() => setPlanOpen(true)}
-            className={cn(
-              "min-h-0 overflow-hidden bg-background",
-              planOpen && "border-l border-border",
-            )}
-            aria-label="Mi viaje"
-            aria-hidden={!planOpen}
+          <DesktopPanelSlot
+            active={panels.assistant}
+            label="Asistente"
+            padStart={panels.sources || panels.plan}
           >
-            <div className={cn("flex h-full min-h-0 flex-col", !planOpen && "invisible")}>
-              <ItineraryPanel
-                tripId={tripId}
-                onClose={closePlan}
-                onEditTrip={() => setEditTripOpen(true)}
-              />
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            {assistantNode}
+          </DesktopPanelSlot>
+        </div>
       )}
     </div>
   )

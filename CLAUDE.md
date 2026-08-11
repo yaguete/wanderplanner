@@ -56,6 +56,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
       trip-context.tsx     # Mutaciones síncronas; sync vía trips-repo
+      trip-chrome-context.tsx # Header chrome + sidebar collapse (desktop /trips)
       partner-button.ts    # cleanSourceUrl / buildStartUrl / snippet HTML del kit
       partners-api.ts      # POST /partners/prewarm (SSE, sin Bearer)
       thumbs.ts            # GET /thumb (lazy; memoria + sessionStorage)
@@ -89,9 +90,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **`/partners`** — Kit público para bloggers ([`app/partners/page.tsx`](frontend/app/partners/page.tsx)): formulario URL + slug → enlace `/start` + snippet HTML; dispara `POST /partners/prewarm` para dejar la fuente en caché. Mismo cromo que `/login` (`AuthShell`, ancho `2xl`).
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado.
 - **Layout raíz** — Inter, `AuthProvider`, Analytics. **Sin** `TripProvider`.
-- **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx): `TripProvider` → `RegistrationGateProvider` → shell (header, sidebar, main). Único sitio de `useTrips()`.
+- **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable, main sobre canvas gris). Único sitio de `useTrips()`.
 - **`/trips`** — Listado Activos/Archivados; empty/loading con spinner mientras `isLoading`.
-- **`/trips/[tripId]`** — Fuentes + panel «Mi viaje» (desktop: lateral plegable; móvil: overlay) / Asistente. **Móvil: nav inferior de tres secciones** ([`trip-mobile-nav.tsx`](frontend/components/trip-mobile-nav.tsx): Fuentes · Mi viaje · Asistente) que sustituyó a los FABs, con cabecera que se colapsa al hacer scroll ([`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts)) y ajuste al teclado virtual ([`use-virtual-keyboard.ts`](frontend/hooks/use-virtual-keyboard.ts)); desktop: breadcrumb.
+- **`/trips/[tripId]`** — Desktop: tres paneles alícuota (Fuentes · Viaje · Asistente) con toggles en el header (`wp-trip-panels`); título del viaje en el header. **Móvil: nav inferior de tres secciones** ([`trip-mobile-nav.tsx`](frontend/components/trip-mobile-nav.tsx): Fuentes · Mi viaje · Asistente), con cabecera que se colapsa al hacer scroll ([`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts)) y ajuste al teclado virtual ([`use-virtual-keyboard.ts`](frontend/hooks/use-virtual-keyboard.ts)).
 
 ### Panel «Mi viaje»: cinco pestañas, no dos niveles
 
@@ -116,7 +117,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Viajes de partner (`trip.referrer`): al añadir la primera fuente, si el viaje sigue virgen (sin fechas, ≤1 día vacío), se redimensiona a `totalDays` (tope 60), se fija `startDate` = mañana y se renombra con `source.area`. Con `&days=N` el calendario ya viene fijado en `/start` y solo se renombra. Nunca pisa viajes creados por el usuario.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
-- Preferencias UI menores (`wp-trips-view`, `wp-plan-open`) y cachés de thumbs/Mapbox/country-tasks en session/local storage.
+- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`) y cachés de thumbs/Mapbox/country-tasks en session/local storage.
 - Miniaturas: no van en el payload de `/itinerary` (`thumb_url` null). `InspirationThumbnail` las pide a `GET /thumb` al entrar en viewport. Portadas: `GET /cover` vía [`unsplash.ts`](frontend/lib/unsplash.ts) (claves solo en backend).
 - Trámites de país (T4.4): pestaña **Básicos** → `GET /country-tasks` (Recomendaciones MAE + Haiku). Sugerencias aceptadas → `ExtraTask` con id `country:{iso}:{slug}`; descartes en `dismissedCountryTasks` (columna propia, **no** en `tasks`).
 - Descripción de día por IA: `POST /day-summary`; la firma de ítems (`summarySignature` en `UserDay`) apaga el botón si nada ha cambiado.
@@ -185,7 +186,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **Ids:** `crypto.randomUUID()` en cliente (navegación optimista).
 - **CORS:** `ALLOWED_ORIGINS` en backend.
 - **Movimiento de ítems:** solo `moveItemBetweenDays`.
-- **Móvil vs desktop:** sin breadcrumb en móvil; nav inferior de tres secciones solo en el detalle móvil.
+- **Móvil vs desktop:** sin breadcrumb en móvil; nav inferior de tres secciones solo en el detalle móvil; en desktop, toggles de panel en el header.
 - **Coordenadas:** siempre objeto `{ lng, lat }`, nunca tupla (es la forma del jsonb y de `LngLat`).
 
 ## Preguntas abiertas / deuda
@@ -213,6 +214,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No mezcles conversaciones del asistente entre viajes**.
 - ❌ **No muestres «Añadir fuente» en enlaces institucionales** → [`inspirational-source.ts`](frontend/lib/inspirational-source.ts).
 - ❌ **No reintroduzcas el breadcrumb en móvil** ni el nav inferior en desktop.
+- ❌ **No reintroduzcas el asistente overlay/FAB** en desktop ni paneles redimensionables en el detalle.
 - ❌ **No compongas claves de tarea a mano** ni las renombres → `taskKeyForItem` / `taskKeyForBasic`. Cambiarlas huérfana los costes ya guardados en `trip.tasks`.
 - ❌ **No guardes precios en el ítem ni en `route`** → `trip.tasks[clave].cost`.
 - ❌ **No persistas candidatos efímeros de Search Box** (hubs) sin pasar por [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts): es una cuestión de licencia de Mapbox, no de estilo.

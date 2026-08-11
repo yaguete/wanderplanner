@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { SegmentedControl } from "@/components/segmented-control"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -429,10 +430,11 @@ export default function ItineraryPanel({
     >
       <div
         className={cn(
-          "relative shrink-0 border-b border-border px-4",
+          "relative shrink-0 border-b border-border/60 px-4",
           isMobile && headerCollapsed ? "pb-2 pt-2" : "space-y-3 py-3.5",
         )}
       >
+        <div className="panel-column space-y-3">
         {/* Fila 1+2: título / fecha / meta — se repliegan en móvil al bajar */}
         <div
           className={cn(
@@ -445,9 +447,26 @@ export default function ItineraryPanel({
         >
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-              <h2 className="text-sm font-semibold text-foreground max-md:text-lg max-md:tracking-tight">
-                Mi viaje
-              </h2>
+              {onEditTrip ? (
+                <button
+                  type="button"
+                  onClick={onEditTrip}
+                  className={cn(
+                    "inline-flex min-w-0 max-w-full items-center rounded-md text-left outline-none transition-colors",
+                    "hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring -ml-1 px-1 py-0.5",
+                  )}
+                  aria-label="Editar viaje"
+                  title="Editar viaje"
+                >
+                  <h2 className="truncate text-sm font-semibold text-foreground max-md:text-lg max-md:tracking-tight">
+                    {trip.name}
+                  </h2>
+                </button>
+              ) : (
+                <h2 className="truncate text-sm font-semibold text-foreground max-md:text-lg max-md:tracking-tight">
+                  {trip.name}
+                </h2>
+              )}
               {onEditTrip ? (
                 <button
                   type="button"
@@ -457,8 +476,8 @@ export default function ItineraryPanel({
                     "text-left outline-none transition-colors",
                     "hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring",
                   )}
-                  aria-label="Editar viaje"
-                  title="Editar viaje"
+                  aria-label="Editar fechas del viaje"
+                  title="Editar fechas"
                 >
                   {dateSub ? (
                     <span className="truncate text-xs text-muted-foreground tabular-nums">
@@ -504,49 +523,23 @@ export default function ItineraryPanel({
         </div>
 
         <TripTasksProgressHairline trip={trip} />
+        </div>
       </div>
 
       {isRoute ? (
         <>
           <div className="flex shrink-0 items-center gap-3 px-4 py-2.5">
-            <div
-              className="inline-flex items-center gap-0 rounded-lg bg-muted p-0.5"
-              role="tablist"
-              aria-label="Vista de ruta"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={listMode === "list"}
-                onClick={() => setListMode("list")}
-                className={cn(
-                  "inline-flex min-h-7 min-w-[4rem] items-center justify-center gap-1 rounded-md px-2 py-1",
-                  "text-xs font-medium transition-colors",
-                  listMode === "list"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <List className="h-3 w-3 shrink-0" />
-                Lista
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={listMode === "map"}
-                onClick={() => setListMode("map")}
-                className={cn(
-                  "inline-flex min-h-7 min-w-[4rem] items-center justify-center gap-1 rounded-md px-2 py-1",
-                  "text-xs font-medium transition-colors",
-                  listMode === "map"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <MapIcon className="h-3 w-3 shrink-0" />
-                Mapa
-              </button>
-            </div>
+            <div className="panel-column flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <SegmentedControl
+              items={[
+                { id: "list" as const, label: "Lista", icon: List },
+                { id: "map" as const, label: "Mapa", icon: MapIcon },
+              ]}
+              value={listMode}
+              onValueChange={setListMode}
+              ariaLabel="Vista de ruta"
+              size="compact"
+            />
             {listMode === "map" ? (
               <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
             ) : null}
@@ -592,10 +585,12 @@ export default function ItineraryPanel({
                 </button>
               </div>
             ) : null}
+            </div>
           </div>
 
           {listMode === "list" ? (
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+              <div className="panel-column">
               {trip.days.map((day, dayIndex) => (
                 <DaySection
                   key={day.id}
@@ -631,6 +626,7 @@ export default function ItineraryPanel({
                   onEditTransport={(item) => openTransportDialog(day.id, item)}
                 />
               ))}
+              </div>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
@@ -840,7 +836,7 @@ function DayItineraryTimeline({
     <div ref={wrapRef} className="relative pl-0">
       {showLine && (
         <div
-          className="pointer-events-none absolute left-2.5 z-0 hidden w-px bg-border sm:block"
+          className="pointer-events-none absolute left-2.5 z-0 hidden w-px bg-border @md:block"
           style={{ top: line.top, height: line.height }}
           aria-hidden
         />
@@ -881,9 +877,9 @@ function DayItineraryTimeline({
                 if (index === 0) firstLiRef.current = el
                 if (index === n - 1) lastLiRef.current = el
               }}
-              className="flex min-h-0 items-center gap-0 sm:gap-3"
+              className="flex min-h-0 items-center gap-0 @md:gap-3"
             >
-              <div className="z-10 hidden w-5 shrink-0 items-center justify-center sm:flex" aria-hidden>
+              <div className="z-10 hidden w-5 shrink-0 items-center justify-center @md:flex" aria-hidden>
                 <div
                   className={cn(
                     "h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-card",
@@ -1156,8 +1152,8 @@ function DaySection({
 
   return (
     <div className="mb-7 last:mb-0">
-      <div className="mb-3 flex min-w-0 items-start gap-2.5 sm:items-center">
-        <div className="flex shrink-0 items-center pt-0.5 sm:pt-0" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="mb-3 flex min-w-0 items-start gap-2.5 @md:items-center">
+        <div className="flex shrink-0 items-center pt-0.5 @md:pt-0" onPointerDown={(e) => e.stopPropagation()}>
           <Checkbox
             id={`day-select-${dayId}`}
             checked={isDaySelected}
@@ -1171,21 +1167,21 @@ function DaySection({
             }
           />
         </div>
-        <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 items-start gap-1.5 sm:items-center">
+        <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 items-start gap-1.5 @md:items-center">
           <div className="flex shrink-0 flex-col leading-tight">
             <span className="text-[15px] font-semibold tabular-nums">Día {dayIndex + 1}</span>
             {dayDateLabel ? (
-              <span className="text-[11px] font-medium tabular-nums text-muted-foreground sm:hidden">
+              <span className="text-[11px] font-medium tabular-nums text-muted-foreground @md:hidden">
                 {dayDateLabel}
               </span>
             ) : null}
           </div>
           {dayDateLabel ? (
             <>
-              <span className="hidden shrink-0 text-[15px] text-muted-foreground sm:inline" aria-hidden>
+              <span className="hidden shrink-0 text-[15px] text-muted-foreground @md:inline" aria-hidden>
                 ·
               </span>
-              <span className="hidden shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground sm:inline">
+              <span className="hidden shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground @md:inline">
                 {dayDateLabel}
               </span>
             </>
