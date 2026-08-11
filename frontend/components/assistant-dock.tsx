@@ -40,6 +40,7 @@ import {
 import { AssistantMarkdown } from "@/components/assistant-markdown"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useStableList } from "@/hooks/use-stable-list"
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import {
   useAssistantChat,
@@ -503,7 +504,10 @@ export function AssistantPanelLayer({
   } = useTrips()
   const { user } = useAuth()
   const trip = getTrip(tripId)
-  const sources = getTripSources(tripId)
+  // Identidad estable: `getTripSources` devuelve un array nuevo en cada render y
+  // eso invalidaba `addedSourceUrls` → `memo(MessageBubble)` → re-parseo del
+  // markdown de toda la conversación en cada mutación del viaje.
+  const sources = useStableList(getTripSources(tripId))
   const tripLoadingPending = useMemo(
     () => pendingSources.find((p) => p.tripId === tripId && p.status === "loading") ?? null,
     [pendingSources, tripId],
@@ -715,6 +719,28 @@ export function AssistantPanelLayer({
     [setActionStatus],
   )
 
+  /**
+   * Identidad estable para `memo(MessageBubble)`: los tres handlers dependen de
+   * `trip`, que cambia en cada mutación. El cuerpo se lee por ref, así que sigue
+   * viendo el viaje actual sin invalidar el memo de cada mensaje.
+   */
+  const handlersRef = useRef({ handleAddSourceLink, handleAcceptAction, handleDismissAction })
+  handlersRef.current = { handleAddSourceLink, handleAcceptAction, handleDismissAction }
+  const onAddSourceLink = useCallback(
+    (url: string) => handlersRef.current.handleAddSourceLink(url),
+    [],
+  )
+  const onAcceptAction = useCallback(
+    (messageId: string, action: ChatAction) =>
+      handlersRef.current.handleAcceptAction(messageId, action),
+    [],
+  )
+  const onDismissAction = useCallback(
+    (messageId: string, action: ChatAction) =>
+      handlersRef.current.handleDismissAction(messageId, action),
+    [],
+  )
+
   const handleNewConversation = () => {
     newConversation()
     setView("chat")
@@ -891,9 +917,9 @@ export function AssistantPanelLayer({
                       message={m}
                       isStreamingTail={m.id === streamingTailId}
                       actionBusyId={actionBusyId}
-                      onAcceptAction={handleAcceptAction}
-                      onDismissAction={handleDismissAction}
-                      onAddSourceLink={handleAddSourceLink}
+                      onAcceptAction={onAcceptAction}
+                      onDismissAction={onDismissAction}
+                      onAddSourceLink={onAddSourceLink}
                       busySourceUrl={busySourceUrl}
                       addedSourceUrls={addedSourceUrls}
                     />
