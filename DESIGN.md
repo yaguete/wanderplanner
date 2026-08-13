@@ -35,6 +35,16 @@ Fuente de verdad: este documento + tokens en `frontend/app/globals.css`.
 
 Tipos de ítem: chip neutro + punto de color (`ITEM_COLORS.dot`).
 
+### Marca
+
+Isotipo: ardilla (cola llena + cuerpo a trazo). Color de marca `#9F8173` (`BRAND_COLOR` en [`frontend/components/brand-mark.tsx`](frontend/components/brand-mark.tsx)). **No es `--primary`**: el primary de UI sigue siendo tinta `20 8% 14%`; el marrón no se convierte en token de cromo (ni terracota, ni blue-600).
+
+- `BrandMark` — isotipo. Variantes: `color` (cromo claro), `mono` (`currentColor`), `negative` (blanco sobre fondo oscuro).
+- `BrandLockup` — isotipo + wordmark «WanderPlanner»; el nombre apoya en la base, mismo color.
+- `brandSvgMarkup()` — SVG autocontenido (snippet de partners, OG).
+
+Los paths del componente son el original. `public/brand/logo-{color,mono,negative}.svg` son copias manuales para prensa; no las referencia el código.
+
 ## 3) Tipografía
 
 Una sola familia: **Inter** (`--font-inter`). Sin display serif.

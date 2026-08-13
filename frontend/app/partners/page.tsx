@@ -3,7 +3,7 @@ import { AuthShell } from "@/components/auth/auth-shell"
 import { PartnerButtonBuilder } from "@/components/partners/partner-button-builder"
 
 export const metadata: Metadata = {
-  title: "Partners · WanderPlanner",
+  title: "Kit de partners",
   description:
     "Genera el botón «Planifica esta ruta con WanderPlanner» para tu blog: enlace, snippet HTML y garantías de atribución y afiliación.",
 }

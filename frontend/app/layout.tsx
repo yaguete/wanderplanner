@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/lib/auth-context"
 import { Toaster } from "@/components/ui/sonner"
+import { SITE_URL } from "@/lib/site"
 import "./globals.css"
 
 const inter = Inter({
@@ -11,11 +12,15 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "WanderPlanner",
-  description: "Consolida rutas de blogueros y periodistas en tu propio itinerario",
-  icons: {
-    icon: [{ url: "/icon-light-32x32.png", type: "image/png", sizes: "32x32" }],
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "WanderPlanner",
+    template: "%s · WanderPlanner",
   },
+  description:
+    "Los viajes que lees, convertidos en tu itinerario. Consolida rutas de blogueros en tu propio plan.",
+  openGraph: { type: "website", locale: "es_ES", siteName: "WanderPlanner" },
+  twitter: { card: "summary_large_image" },
 }
 
 /** En móvil, el layout se encoge con el teclado (Chrome/Android) en vez de solaparlo. */

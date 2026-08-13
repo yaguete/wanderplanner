@@ -51,8 +51,15 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     agents/
   frontend/
     app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips…
+      robots.ts            # Allow /; Disallow /trips y /account; NO /start
+      sitemap.ts           # / y /partners (indexables)
+      opengraph-image.tsx  # OG 1200×630 (next/og + brandSvgMarkup)
+      apple-icon.tsx       # 180×180, ardilla #9F8173 sobre blanco opaco
+      icon.svg             # favicon SVG con prefers-color-scheme
     middleware.ts          # Sesión Supabase; protege /trips y /account
     components/            # UI + auth/ + partners/ + tareas + tramos + mapa + nav móvil
+      brand-mark.tsx       # isotipo ardilla, BrandLockup, brandSvgMarkup
+      trips-shell.tsx      # providers + cromo de /trips (el layout es Server Component)
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
       trip-context.tsx     # Mutaciones síncronas; sync vía trips-repo
@@ -77,6 +84,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       trip-origin-resolve.ts     # Origen del viaje al crear/editar
       day-summary.ts       # POST /day-summary + firma de ítems del día
       assistant-suggestions.ts   # Snippets de arranque del asistente (sin LLM)
+      site.ts              # SITE_URL canónica (metadataBase, sitemap, robots)
       db/                  # trips-repo, assistant-repo, profile-repo
       supabase/            # client, server, middleware helpers
     hooks/                 # use-assistant-chat, use-collapsing-header,
@@ -90,9 +98,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **`/`** — Landing placeholder ([`app/page.tsx`](frontend/app/page.tsx)): CTAs Entrar / Crear cuenta.
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas).
 - **`/partners`** — Kit público para bloggers ([`app/partners/page.tsx`](frontend/app/partners/page.tsx)): formulario URL + slug → enlace `/start` + snippet HTML; dispara `POST /partners/prewarm` para dejar la fuente en caché. Mismo cromo que `/login` (`AuthShell`, ancho `2xl`).
-- **`/start?source=&ref=&days=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado.
-- **Layout raíz** — Inter, `AuthProvider`, Analytics. **Sin** `TripProvider`.
-- **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable, main sobre canvas gris). Único sitio de `useTrips()`.
+- **`/start?source=&ref=&days=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado. **Rastreable + `noindex, follow`**: Google tiene que leer el meta; no va en `Disallow`.
+- **Layout raíz** — Inter, `AuthProvider`, Analytics. **Sin** `TripProvider`. Metadata (`metadataBase`, OG, Twitter) en [`app/layout.tsx`](frontend/app/layout.tsx).
+- **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx) es Server Component (`robots: noindex, nofollow`). Los providers viven en [`trips-shell.tsx`](frontend/components/trips-shell.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable, main sobre canvas gris). Único sitio de `useTrips()`.
 - **`/trips`** — Listado Activos/Archivados; empty/loading con spinner mientras `isLoading`.
 - **`/trips/[tripId]`** — Desktop: tres paneles alícuota (Fuentes · Viaje · Asistente) con toggles en el header (`wp-trip-panels`); título del viaje en el header. **Móvil: nav inferior de tres secciones** ([`trip-mobile-nav.tsx`](frontend/components/trip-mobile-nav.tsx): Fuentes · Mi viaje · Asistente), con cabecera que se colapsa al hacer scroll ([`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts)) y ajuste al teclado virtual ([`use-virtual-keyboard.ts`](frontend/hooks/use-virtual-keyboard.ts)).
 
@@ -212,7 +220,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Reglas que no se rompen
 
-- ❌ **No uses `useTrips()`** fuera de [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx).
+- ❌ **No uses `useTrips()`** fuera del segmento `/trips`. El `TripProvider` está en [`trips-shell.tsx`](frontend/components/trips-shell.tsx), montado solo desde [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx).
+- ❌ **No pongas `/start` en `Disallow` de `robots.txt`.** Es el CTA de los blogs: tiene que ser rastreable para que Google lea el `noindex, follow`. `/trips` y `/account` sí van en `Disallow`. `/` y `/partners` se indexan. `Disallow` + `noindex` sobre la misma URL se anulan.
 - ❌ **No amplíes `ItemType` / `BasicCategory`** sin alinear [`item-styles.ts`](frontend/lib/item-styles.ts).
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
 - ❌ **No mutes a mano** `trip.days[…].items` → solo `moveItemBetweenDays`.
@@ -250,3 +259,4 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Tramos de transporte | [`route-legs.ts`](frontend/lib/route-legs.ts), [`transport-routes.ts`](frontend/lib/transport-routes.ts), [`transport-route-form.tsx`](frontend/components/transport-route-form.tsx), `taskKeyForItem`, mapa |
 | Búsqueda de lugares / hubs | [`place_search.py`](backend/place_search.py), [`mapbox.ts`](frontend/lib/mapbox.ts), [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts), [`usage.py`](backend/usage.py), `MAPBOX_ACCESS_TOKEN` |
 | Mapa | [`itinerary-map-view.tsx`](frontend/components/itinerary-map-view.tsx), [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts), [`map-geocode-state.ts`](frontend/lib/map-geocode-state.ts), coste de Directions |
+| Marca / SEO | [`brand-mark.tsx`](frontend/components/brand-mark.tsx), [`site.ts`](frontend/lib/site.ts), [`robots.ts`](frontend/app/robots.ts), [`opengraph-image.tsx`](frontend/app/opengraph-image.tsx) |
