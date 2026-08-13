@@ -88,11 +88,9 @@ export function AddToDayDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        fullscreenOnMobile
         className={cn(
-          "flex max-w-md flex-col gap-0 overflow-hidden p-0",
-          // Móvil: pantalla completa (sin bandas oscuras arriba/abajo)
-          "max-sm:left-0 max-sm:top-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-full max-sm:max-w-none",
-          "max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0",
+          "overflow-hidden p-0 sm:max-w-md",
           // Cierre encima del notch cuando la modal es full-bleed
           "[&>button]:max-sm:top-[max(0.75rem,env(safe-area-inset-top))]",
         )}
