@@ -1,5 +1,5 @@
 import { ITEM_DOT_COLORS } from "@/lib/item-styles"
-import { LandingItemRow } from "@/components/landing/product-frame"
+import { LandingItemRow } from "./product-frame"
 
 /** Tarjeta de paso: mockup sobre canvas (como el workspace real) + texto sobre blanco. */
 function StepCard({

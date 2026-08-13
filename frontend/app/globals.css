@@ -404,6 +404,59 @@
   }
 }
 
+/* Con JS activo el lockup volador cubre estos dos; se ocultan pero siguen midiendo. */
+html.landing-lockup-armed .landing-hero-lockup,
+html.landing-lockup-armed .landing-header-lockup {
+  visibility: hidden;
+}
+
+/* Al hacer scroll, el contenido se pierde detrás del header con un velo difuso. */
+.landing-header::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 6.5rem;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--canvas) / 0.88) 0%,
+    hsl(var(--canvas) / 0.55) 48%,
+    transparent 100%
+  );
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent 100%);
+}
+html.landing-header-scrolled .landing-header::before {
+  opacity: 1;
+}
+
+/*
+ * Mismo lockup que el header, agrandado con scale uniforme (no se deforma).
+ * La altura reserva el hueco del transform, que no afecta al layout.
+ */
+.landing-hero-lockup {
+  --landing-lockup-scale: 1.7;
+  display: flex;
+  justify-content: center;
+  height: calc(2.5rem * var(--landing-lockup-scale));
+  margin-bottom: 1.5rem;
+}
+@media (min-width: 640px) {
+  .landing-hero-lockup {
+    --landing-lockup-scale: 2.5;
+  }
+}
+.landing-hero-lockup [data-landing-lockup-from] {
+  width: fit-content;
+  transform: scale(var(--landing-lockup-scale));
+  transform-origin: top center;
+}
+
 /* Grid fino tipo Vercel para el hero; se desvanece radialmente hacia abajo. */
 .landing-grid-texture {
   background-image:

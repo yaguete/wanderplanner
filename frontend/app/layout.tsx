@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s · WanderPlanner",
   },
   description:
-    "Los viajes que lees, convertidos en tu itinerario. Consolida rutas de blogueros en tu propio plan.",
+    "Los viajes que te inspiran, convertidos en tu itinerario. Consolida rutas de blogueros en tu propio plan.",
   openGraph: { type: "website", locale: "es_ES", siteName: "WanderPlanner" },
   twitter: { card: "summary_large_image" },
 }

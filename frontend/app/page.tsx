@@ -9,7 +9,7 @@ import { LandingFooter } from "@/components/landing/landing-footer"
 
 export const metadata: Metadata = {
   description:
-    "Pega el artículo de tu bloguero favorito y WanderPlanner lo ordena en días, con un asistente que conoce tus fuentes y tu forma de viajar.",
+    "Planifica con quien ya ha estado allí: WanderPlanner lee los artículos de tus blogueros de viaje favoritos y los convierte en un itinerario por días.",
 }
 
 export default function RootPage() {
@@ -21,15 +21,17 @@ export default function RootPage() {
       >
         Saltar al contenido
       </a>
-      <LandingHeader />
-      <main id="contenido">
-        <LandingHero />
-        <HowItWorks />
-        <ForBloggers />
-        <SocialProof />
-        <ClosingCta />
-      </main>
-      <LandingFooter />
+      <div className="relative">
+        <LandingHeader />
+        <main id="contenido">
+          <LandingHero />
+          <HowItWorks />
+          <ForBloggers />
+          <SocialProof />
+          <ClosingCta />
+        </main>
+        <LandingFooter />
+      </div>
     </>
   )
 }

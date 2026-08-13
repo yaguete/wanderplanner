@@ -11,7 +11,7 @@ export function LandingFooter() {
           <div>
             <BrandLockup />
             <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-              Los viajes que lees, convertidos en tu itinerario.
+              Los viajes que te inspiran, convertidos en tu itinerario.
             </p>
           </div>
 
@@ -68,9 +68,6 @@ export function LandingFooter() {
         </div>
 
         <div className="mt-12 border-t border-border pt-6">
-          <p className="text-xs text-muted-foreground">
-            Algunos enlaces de los itinerarios son enlaces de afiliación del blog de origen.
-          </p>
           <p className="mt-1 text-xs text-muted-foreground">© {year} WanderPlanner</p>
         </div>
       </div>

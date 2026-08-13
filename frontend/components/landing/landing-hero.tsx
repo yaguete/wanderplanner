@@ -1,10 +1,11 @@
 import Link from "next/link"
+import { BrandLockup } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
-import { ProductFrame } from "@/components/landing/product-frame"
+import { ProductFrame } from "./product-frame"
 
 export function LandingHero() {
   return (
-    <section className="relative overflow-hidden bg-canvas pb-16 pt-20 sm:pb-24 sm:pt-28">
+    <section className="relative overflow-hidden bg-canvas pb-16 pt-20 sm:pb-24">
       {/* Texturas de fondo: grid + velo de marca (~8%). Solo decoración. */}
       <div aria-hidden className="landing-grid-texture absolute inset-0" />
       <div
@@ -13,16 +14,17 @@ export function LandingHero() {
       />
 
       <div className="relative mx-auto w-full max-w-6xl px-6 text-center">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-foreground/60 sm:text-xs sm:tracking-[0.18em]">
-          Del artículo de viaje a tu plan de viaje
-        </p>
-        <h1 className="mx-auto mt-5 max-w-4xl text-balance text-[2.75rem] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-6xl sm:leading-[1.05] lg:text-7xl">
-          Los viajes que lees,{" "}
+        <div className="landing-hero-lockup">
+          <div data-landing-lockup-from>
+            <BrandLockup />
+          </div>
+        </div>
+        <h1 className="mx-auto max-w-4xl text-balance text-[2.75rem] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-6xl sm:leading-[1.05] lg:text-7xl">
+          Los viajes que te inspiran,{" "}
           <span className="text-foreground/45">convertidos en tu itinerario</span>
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-foreground/70 sm:text-lg">
-          Pega el artículo de tu bloguero favorito. WanderPlanner lo ordena en días,
-          con un asistente que conoce tus fuentes y tu forma de viajar.
+          WanderPlanner lee a los viajeros/as en los que confías y te ayuda a convertir sus rutas en tu itinerario, día a día.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="h-12 w-full px-8 text-base sm:w-auto">
@@ -32,9 +34,6 @@ export function LandingHero() {
             <Link href="/partners">Soy bloguero</Link>
           </Button>
         </div>
-        <p className="mt-4 text-sm text-foreground/60">
-          Gratis. Sin tarjeta. Tu primera ruta en un minuto.
-        </p>
       </div>
 
       <ProductFrame />
