@@ -190,7 +190,7 @@ export function AdjustLocationDialog({
             </div>
             {listOpen && suggestions.length > 0 ? (
               <ul
-                className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
+                className="max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
                 role="listbox"
               >
                 {suggestions.map((s) => (
