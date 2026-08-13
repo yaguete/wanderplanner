@@ -169,7 +169,7 @@ export default function TripsHomePage() {
         <div className="mb-6 sm:mb-8">
           <div className="max-w-xl">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              Viajes
+              Tus viajes
             </h1>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
               Consolida artículos de blogueros y revistas en una sola ruta editable.

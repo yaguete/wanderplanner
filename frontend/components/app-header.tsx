@@ -47,7 +47,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
   return (
     <header
       className={cn(
-        "flex h-12 shrink-0 items-center gap-2.5 bg-canvas",
+        "flex h-12 shrink-0 items-center gap-2.5 bg-canvas max-md:bg-background",
         // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
         isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
         showPanelToggles ? "relative" : undefined,

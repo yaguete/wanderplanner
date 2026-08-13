@@ -46,7 +46,7 @@ export function BrandLockup({ className }: { className?: string }) {
     <span className={cn("flex min-w-0 items-end gap-2", className)}>
       <BrandMark />
       <span
-        className="-mb-[0.12em] truncate text-sm font-normal leading-none tracking-tight"
+        className="-mb-[0.12em] truncate text-lg font-normal leading-none tracking-tight"
         style={{ color: BRAND_COLOR }}
       >
         WanderPlanner
