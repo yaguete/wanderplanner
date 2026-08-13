@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { BrandLockup, BrandMark } from "@/components/brand-mark"
+import { BrandLockup, BrandMark, BrandWordmark } from "@/components/brand-mark"
 import { TripPanelToggles } from "@/components/trip-panel-toggles"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
@@ -66,14 +66,15 @@ export function AppHeader({ leading }: AppHeaderProps) {
       >
         <Link
           href="/trips"
+          aria-label="WanderPlanner"
           className={cn(
-            "flex min-w-0 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
+            "flex min-w-0 items-center outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
             !isMobile && rail && "justify-center",
             // Expandido: mismo inset que Inicio / Tus viajes (px-2.5 dentro del p-2 del aside).
             !isMobile && !rail && "px-2.5",
           )}
         >
-          {isMobile || !rail ? <BrandLockup /> : <BrandMark />}
+          {isMobile ? <BrandLockup /> : rail ? <BrandMark /> : <BrandWordmark />}
         </Link>
       </div>
 

@@ -47,17 +47,28 @@ export function BrandMark({
   )
 }
 
+/** Wordmark en `BRAND_INK`. Sin el isotipo: el header expandido lo usa solo. */
+export function BrandWordmark({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "truncate text-xl font-normal leading-none tracking-tight",
+        className,
+      )}
+      style={{ color: BRAND_INK }}
+    >
+      <span className="font-bold">Wander</span>
+      <span className="font-light">Planner</span>
+    </span>
+  )
+}
+
 /** Ardilla + wordmark: el nombre apoya en la base del logo, en `BRAND_INK`. */
 export function BrandLockup({ className }: { className?: string }) {
   return (
     <span className={cn("flex min-w-0 items-end gap-2", className)}>
       <BrandMark />
-      <span
-        className="-mb-[0.12em] truncate text-lg font-normal leading-none tracking-tight"
-        style={{ color: BRAND_INK }}
-      >
-        WanderPlanner
-      </span>
+      <BrandWordmark className="-mb-[0.12em]" />
     </span>
   )
 }
