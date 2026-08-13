@@ -11,13 +11,13 @@ export type TripMobileSection = "sources" | "plan" | "assistant"
 /**
  * Espacio inferior para que el contenido scrolleable no quede bajo el dock.
  * El nav es overlay absoluto: el contenido pasa por detrás.
+ * Definido en `globals.css` (`--wp-nav-*`): el hueco del dock y el que reserva
+ * el contenido tienen que moverse juntos.
  */
-export const TRIP_MOBILE_NAV_CLEARANCE =
-  "calc(5.5rem + env(safe-area-inset-bottom, 0px))" as const
+export const TRIP_MOBILE_NAV_CLEARANCE = "var(--wp-nav-clearance)" as const
 
 /** Clase Tailwind para padding-bottom de listas / composers en móvil. */
-export const tripMobileNavClearanceClass =
-  "max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+export const tripMobileNavClearanceClass = "max-md:pb-[var(--wp-nav-clearance)]"
 
 const TAB_ITEM_CLASS =
   "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -121,7 +121,7 @@ export function TripMobileNav({
       className={cn(
         // Overlay: sin fondo propio; los toques fuera de la tarjeta atraviesan al contenido.
         "pointer-events-none absolute inset-x-0 bottom-0 z-40",
-        "px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]",
+        "px-3 pt-2 pb-[var(--wp-nav-gap)]",
         "transition-[opacity,transform] duration-200 ease-out",
         isHidden && "translate-y-[120%] opacity-0",
         className,

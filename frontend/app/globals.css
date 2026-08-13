@@ -60,6 +60,21 @@
     --sidebar-accent-foreground: 0 0% 9%;
     --sidebar-border: 40 6% 90%;
     --sidebar-ring: 20 8% 14%;
+
+    /*
+     * Dock móvil (nav inferior del viaje + composer del asistente): única
+     * fuente de verdad del hueco bajo la tarjeta, su altura y el espacio que
+     * el contenido reserva. Si se tocan por separado, el dock y el padding de
+     * las listas se desalinean.
+     *
+     * `--wp-nav-gap`: el home indicator de iOS pide margen, pero reservar el
+     * `env(safe-area-inset-bottom)` entero (34 px) deja el dock flotando muy
+     * alto; medio inset lo esquiva sin regalar la mitad. Sin inset (navegador
+     * con barra inferior) queda casi a ras.
+     */
+    --wp-nav-gap: calc(env(safe-area-inset-bottom, 0px) * 0.5 + 0.25rem);
+    --wp-nav-height: 3.5rem;
+    --wp-nav-clearance: calc(var(--wp-nav-gap) + var(--wp-nav-height) + 1rem);
   }
 
   .dark {

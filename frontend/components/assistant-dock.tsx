@@ -864,7 +864,7 @@ export function AssistantPanelLayer({
           <div
             className={cn(
               "space-y-3 p-4",
-              isSection && "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]",
+              isSection && "pb-[var(--wp-nav-clearance)]",
             )}
           >
             <ConversationHistoryList
@@ -888,7 +888,7 @@ export function AssistantPanelLayer({
 
       {/* Historial (móvil): sin composer, el nav mantiene su propia tarjeta flotante. */}
       {showHistory && isSection && bottomNav ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-2 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-2 pb-[var(--wp-nav-gap)]">
           <div
             className={cn(
               "pointer-events-auto rounded-2xl",
@@ -973,7 +973,7 @@ export function AssistantPanelLayer({
               isSection && keyboardOpen
                 ? "pb-2"
                 : isSection
-                  ? "pb-[max(env(safe-area-inset-bottom),0.75rem)]"
+                  ? "pb-[var(--wp-nav-gap)]"
                   : "pb-3",
             )}
             style={{

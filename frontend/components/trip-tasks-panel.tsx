@@ -325,7 +325,7 @@ export function TripTasksPanel({
 
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-4 pb-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]",
+          "min-h-0 flex-1 overflow-y-auto px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)]",
           hideSummary ? "pt-0" : "pt-2",
         )}
       >

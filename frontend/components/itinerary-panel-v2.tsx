@@ -676,7 +676,7 @@ export default function ItineraryPanel({
           </div>
 
           {listMode === "list" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[var(--wp-nav-clearance)]">
               <div ref={daysFlipRef} className="panel-column">
               {trip.days.map((day, dayIndex) => (
                 <DaySection
@@ -716,7 +716,7 @@ export default function ItineraryPanel({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[var(--wp-nav-clearance)]">
               <ItineraryMapView
                 places={mapPlaces}
                 hubs={mapHubs}

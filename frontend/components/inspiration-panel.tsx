@@ -793,7 +793,7 @@ export default function InspirationPanel({
                 onAction={handlePlusClick}
               />
             ) : sourceTab === "basics" ? (
-              <div className="space-y-3 px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+              <div className="space-y-3 px-4 pb-6 pt-4 max-md:pb-[var(--wp-nav-clearance)]">
                 <div className="panel-column space-y-3">
                 {!currentSource.basics.length ? (
                   <EmptyState
@@ -850,7 +850,7 @@ export default function InspirationPanel({
                     }
                   />
                 ) : null}
-                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)]">
                   <div className="panel-column">
                   {currentSource.articleHtml ? (
                     <div
@@ -986,7 +986,7 @@ export default function InspirationPanel({
           <div
             role="dialog"
             aria-label="Añadir fuente"
-            className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
+            className="fixed bottom-[calc(var(--wp-nav-gap)+var(--wp-nav-height)+0.5rem)] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
           >
             <AddSourceFlow
               initialUrl={initialSourceUrl}
@@ -1139,7 +1139,7 @@ function SourceGroupedList({
   // Transporte / Ruta sin virtualizar: listas cortas; montaje completo vale.
   if (!virtualized) {
     return (
-      <div className="space-y-5 px-4 pb-6 pt-4 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
+      <div className="space-y-5 px-4 pb-6 pt-4 max-md:pb-[var(--wp-nav-clearance)]">
         <div className="panel-column space-y-5">
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
@@ -1232,7 +1232,7 @@ function VirtualSourceRows({
   return (
     <div
       ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]"
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)]"
     >
       <div className="panel-column">
       <div
