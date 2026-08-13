@@ -111,6 +111,7 @@ export default function InspirationPanel({
     isArticleHtmlLoading,
     addItemToDay,
     addBasicToTrip,
+    addDay,
   } = useTrips()
   const { requireAccount } = useRegistrationGate()
   const trip = getTrip(tripId)
@@ -963,6 +964,7 @@ export default function InspirationPanel({
             handleAddItem(pickingItem, dayId)
             setPickingItem(null)
           }}
+          onAddDay={() => addDay(trip.id)}
         />
       ) : null}
 

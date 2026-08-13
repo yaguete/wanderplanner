@@ -594,31 +594,24 @@ function TaskRow({
             <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{meta}</p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <CostInput
-            value={cost}
-            currency={currency}
-            onChange={(next) => onSetTaskState(task.id, { cost: next })}
-          />
-          {canRemove ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (task.origin === "extra" && onRemoveExtraTask) {
-                  onRemoveExtraTask(task.id)
-                } else if (task.origin === "basic" && onRemoveBasic) {
-                  onRemoveBasic(task.itemIds)
-                }
-              }}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground/60 transition-colors hover:bg-muted hover:text-destructive"
-              aria-label={
-                task.origin === "basic" ? "Quitar básico del viaje" : "Eliminar tarea"
+        {canRemove ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (task.origin === "extra" && onRemoveExtraTask) {
+                onRemoveExtraTask(task.id)
+              } else if (task.origin === "basic" && onRemoveBasic) {
+                onRemoveBasic(task.itemIds)
               }
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
+            }}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground/60 transition-colors hover:bg-muted hover:text-destructive"
+            aria-label={
+              task.origin === "basic" ? "Quitar básico del viaje" : "Eliminar tarea"
+            }
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -635,6 +628,11 @@ function TaskRow({
         ) : (
           <BookingStatusToggle value={status} onChange={toggleStatus} />
         )}
+        <CostInput
+          value={cost}
+          currency={currency}
+          onChange={(next) => onSetTaskState(task.id, { cost: next })}
+        />
         {perNight != null ? (
           <span className="text-[11px] tabular-nums text-muted-foreground">
             ≈ {formatTripCurrency(perNight, currency)}/noche

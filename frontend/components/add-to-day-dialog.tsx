@@ -6,7 +6,7 @@
  * alcanzable: scroll propio + filtro cuando hay muchos días.
  */
 import { useEffect, useMemo, useState } from "react"
-import { Check, Search } from "lucide-react"
+import { Check, Plus, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -42,6 +42,8 @@ export type AddToDayDialogProps = {
   /** Números de día (1-based) donde ya está este ítem. */
   addedDayNumbers?: number[]
   onSelect: (dayId: string) => void
+  /** Crea un día vacío al final de la ruta (mismo `addDay` que «Mi viaje»). */
+  onAddDay?: () => void
 }
 
 export function AddToDayDialog({
@@ -53,6 +55,7 @@ export function AddToDayDialog({
   itemType,
   addedDayNumbers = [],
   onSelect,
+  onAddDay,
 }: AddToDayDialogProps) {
   const [query, setQuery] = useState("")
 
@@ -146,9 +149,12 @@ export function AddToDayDialog({
         </DialogHeader>
 
         {days.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground max-sm:flex-1">
-            Este viaje aún no tiene días. Añade un día en «Mi viaje» para empezar.
-          </p>
+          <div className="flex flex-col items-center gap-3 px-5 py-8 max-sm:flex-1">
+            <p className="text-center text-sm text-muted-foreground">
+              Este viaje aún no tiene días.
+            </p>
+            {onAddDay ? <AddDayButton onClick={onAddDay} /> : null}
+          </div>
         ) : visibleRows.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-muted-foreground max-sm:flex-1">
             Ningún día coincide con «{query.trim()}».
@@ -193,9 +199,33 @@ export function AddToDayDialog({
                 </button>
               </li>
             ))}
+            {!needle && onAddDay ? (
+              <li>
+                <AddDayButton onClick={onAddDay} />
+              </li>
+            ) : null}
           </ul>
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AddDayButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors",
+        "text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground",
+        "max-sm:border max-sm:border-dashed max-sm:border-border max-sm:active:bg-accent",
+      )}
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-dashed border-border bg-background">
+        <Plus className="h-3.5 w-3.5" aria-hidden />
+      </span>
+      <span className="text-sm font-medium">Añadir día</span>
+    </button>
   )
 }
