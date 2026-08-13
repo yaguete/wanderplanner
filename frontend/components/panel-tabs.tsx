@@ -1,6 +1,8 @@
 "use client"
 
 import type { LucideIcon } from "lucide-react"
+import { SlidingIndicator } from "@/hooks/sliding-indicator"
+import { useSlidingIndicator } from "@/hooks/use-sliding-indicator"
 import { cn } from "@/lib/utils"
 
 export type PanelTabItem<T extends string> = {
@@ -29,12 +31,19 @@ export function PanelTabs<T extends string>({
   ariaLabel,
   className,
 }: PanelTabsProps<T>) {
+  const { containerRef, box, ready } = useSlidingIndicator(
+    value,
+    items.map((item) => item.id).join("\0"),
+  )
+
   return (
     <div
-      className={cn("inline-flex w-fit max-w-full items-end gap-3 @md:gap-4", className)}
+      ref={containerRef}
+      className={cn("relative inline-flex w-fit max-w-full items-end gap-3 @md:gap-4", className)}
       role="tablist"
       aria-label={ariaLabel}
     >
+      <SlidingIndicator box={box} ready={ready} variant="underline" />
       {items.map(({ id, label, icon: Icon }) => {
         const selected = value === id
         return (
@@ -43,11 +52,13 @@ export function PanelTabs<T extends string>({
             type="button"
             role="tab"
             aria-selected={selected}
+            data-indicator-target=""
+            data-indicator-active={selected ? "true" : undefined}
             aria-label={label}
             title={label}
             onClick={() => onValueChange(id)}
             className={cn(
-              "relative inline-flex min-h-8 shrink-0 items-center gap-1.5 pb-2 text-xs transition-colors",
+              "relative z-[1] inline-flex min-h-8 shrink-0 items-center gap-1.5 pb-2 text-xs transition-colors duration-150 ease-out",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
               selected
                 ? "font-semibold text-foreground"
@@ -60,12 +71,6 @@ export function PanelTabs<T extends string>({
               strokeWidth={selected ? 2.25 : 2}
             />
             <span className="truncate">{label}</span>
-            {selected ? (
-              <span
-                className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary"
-                aria-hidden
-              />
-            ) : null}
           </button>
         )
       })}

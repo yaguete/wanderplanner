@@ -1,6 +1,8 @@
 "use client"
 
 import type { LucideIcon } from "lucide-react"
+import { SlidingIndicator } from "@/hooks/sliding-indicator"
+import { useSlidingIndicator } from "@/hooks/use-sliding-indicator"
 import { cn } from "@/lib/utils"
 
 export type SegmentedControlItem<T extends string> = {
@@ -32,11 +34,16 @@ export function SegmentedControl<T extends string>({
   className,
 }: SegmentedControlProps<T>) {
   const compact = size === "compact"
+  const { containerRef, box, ready } = useSlidingIndicator(
+    value,
+    items.map((item) => item.id).join("\0"),
+  )
 
   return (
     <div
+      ref={containerRef}
       className={cn(
-        "inline-flex items-center gap-0 rounded-lg bg-muted p-0.5",
+        "relative inline-flex items-center gap-0 rounded-lg bg-muted p-0.5",
         "w-full @md:w-fit",
         compact ? "min-h-7" : "min-h-8",
         className,
@@ -44,6 +51,7 @@ export function SegmentedControl<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
     >
+      <SlidingIndicator box={box} ready={ready} variant="pill" />
       {items.map(({ id, label, icon: Icon }) => {
         const selected = value === id
         return (
@@ -52,18 +60,20 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="tab"
             aria-selected={selected}
+            data-indicator-target=""
+            data-indicator-active={selected ? "true" : undefined}
             aria-label={label}
             title={label}
             onClick={() => onValueChange(id)}
             className={cn(
-              "inline-flex min-w-0 items-center justify-center rounded-md transition-colors",
+              "relative z-[1] inline-flex min-w-0 items-center justify-center rounded-md transition-colors duration-150 ease-out",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "flex-1 @md:flex-none",
               compact
                 ? "min-h-7 gap-1 px-2 py-1 text-xs font-medium @md:min-w-[4rem]"
                 : "min-h-7 gap-1 px-1.5 text-[11px] font-medium @md:gap-1.5 @md:px-3 @md:text-xs",
               selected
-                ? "bg-background text-foreground shadow-sm"
+                ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

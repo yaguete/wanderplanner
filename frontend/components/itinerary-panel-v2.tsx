@@ -79,6 +79,7 @@ import {
   TripTasksSummaryDetail,
 } from "@/components/trip-tasks-panel"
 import { hasRouteLeg, isRouteLegItem } from "@/lib/route-legs"
+import { useListFlip } from "@/hooks/use-list-flip"
 
 const CATEGORY_EMPTY: Record<
   Exclude<ItineraryViewMode, "itinerary">,
@@ -168,6 +169,7 @@ export default function ItineraryPanel({
     },
     [sourceAreaById],
   )
+  const { rootRef: daysFlipRef, capture: captureDaysFlip } = useListFlip()
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [listMode, setListMode] = useState<"list" | "map">("list")
@@ -405,12 +407,14 @@ export default function ItineraryPanel({
   moveItemOneStepRef.current = moveItemOneStep
 
   const onMoveItemUp = useCallback((itemId: string) => {
+    captureDaysFlip()
     moveItemOneStepRef.current(itemId, "up")
-  }, [])
+  }, [captureDaysFlip])
 
   const onMoveItemDown = useCallback((itemId: string) => {
+    captureDaysFlip()
     moveItemOneStepRef.current(itemId, "down")
-  }, [])
+  }, [captureDaysFlip])
 
   const setDaySelected = useCallback((dayId: string, checked: boolean) => {
     setSelectedDayIds((prev) => {
@@ -624,7 +628,7 @@ export default function ItineraryPanel({
 
           {listMode === "list" ? (
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
-              <div className="panel-column">
+              <div ref={daysFlipRef} className="panel-column">
               {trip.days.map((day, dayIndex) => (
                 <DaySection
                   key={day.id}
@@ -911,11 +915,12 @@ function DayItineraryTimeline({
           return (
             <li
               key={item.id}
+              data-flip-id={item.id}
               ref={(el) => {
                 if (index === 0) firstLiRef.current = el
                 if (index === n - 1) lastLiRef.current = el
               }}
-              className="flex min-h-0 items-center gap-0 @md:gap-3"
+              className="relative flex min-h-0 items-center gap-0 @md:gap-3 [@media(hover:hover)_and_(pointer:fine)]:hover:z-[2]"
             >
               <div className="z-10 hidden w-5 shrink-0 items-center justify-center @md:flex" aria-hidden>
                 <div
@@ -927,7 +932,7 @@ function DayItineraryTimeline({
               </div>
               <TravelItemCard
                 className={cn(
-                  "min-w-0 flex-1 transition-[border-color,box-shadow,background-color]",
+                  "min-w-0 flex-1 transition-[border-color,box-shadow,background-color,transform]",
                   emphasized && "border-foreground/25 bg-muted/40 shadow-md",
                 )}
                 variant="planned"

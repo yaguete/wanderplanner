@@ -53,7 +53,7 @@ export function TripPanelToggles({ panels, onToggle, className }: TripPanelToggl
               if (!lockedOn) onToggle(id)
             }}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[13px] transition-all duration-150 ease-out",
+              "inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[13px] transition-[color,background-color,box-shadow,transform] duration-150 ease-out",
               "active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
               pressed
                 ? "bg-background font-semibold text-foreground shadow-sm"

@@ -8,6 +8,10 @@ import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } 
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
+/** Hover de 1px solo con puntero fino; no se pega en táctil. */
+const CARD_MOTION =
+  "transition-[transform,box-shadow] duration-150 ease-out [@media(hover:hover)_and_(pointer:fine)]:hover:-translate-y-px [@media(hover:hover)_and_(pointer:fine)]:hover:shadow-md"
+
 function TypeBadge({ type, label }: { type: ItemType; label?: string }) {
   const colors = ITEM_COLORS[type]
   return (
@@ -115,7 +119,8 @@ export function TravelItemCard(props: TravelItemCardProps) {
     return (
       <div
         className={cn(
-          "flex items-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md",
+          "flex items-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm",
+          CARD_MOTION,
           props.isAdded && "opacity-70",
           props.className,
         )}
@@ -164,7 +169,8 @@ export function TravelItemCard(props: TravelItemCardProps) {
     return (
       <div
         className={cn(
-          "flex items-stretch gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md",
+          "flex items-stretch gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm",
+          CARD_MOTION,
           props.isAdded && "opacity-70",
           props.className,
         )}
@@ -221,7 +227,13 @@ export function TravelItemCard(props: TravelItemCardProps) {
       </div>
     )
     return (
-      <div className={cn("min-w-0 rounded-2xl border border-border/80 bg-card shadow-sm", props.className)}>
+      <div
+        className={cn(
+          "min-w-0 rounded-2xl border border-border/80 bg-card shadow-sm",
+          CARD_MOTION,
+          props.className,
+        )}
+      >
         <div className="flex min-h-0 items-stretch">
           {props.href ? (
             <a
@@ -305,7 +317,13 @@ export function TravelItemCard(props: TravelItemCardProps) {
   )
 
   return (
-    <div className={cn("min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm", props.className)}>
+    <div
+      className={cn(
+        "min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm",
+        CARD_MOTION,
+        props.className,
+      )}
+    >
       <div className="flex min-h-0 items-stretch">
         {props.href ? (
           <a
