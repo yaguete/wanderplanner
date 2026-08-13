@@ -13,7 +13,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { BrandMark } from "@/components/app-header"
+import { BrandLockup } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
@@ -119,10 +119,7 @@ function StartFlow() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6 text-center">
-      <div className="flex items-center gap-2.5">
-        <BrandMark />
-        <span className="text-sm font-semibold tracking-tight">WanderPlanner</span>
-      </div>
+      <BrandLockup />
 
       {error ? (
         <>

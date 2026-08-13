@@ -14,14 +14,23 @@
  */
 import type { RoutePlaceKind } from "@/types/itinerary"
 import { isPlaceSearchEnabled } from "@/lib/place-search-guardrails"
+import {
+  featureTypeFromMapboxId,
+  type GeocodeCandidate,
+  type RegionAnchor,
+} from "@/lib/geocode-validate"
 
-const CACHE_VERSION = 3
-const CACHE_PREFIX = "wp-mapbox-geo-v3"
+const CACHE_VERSION = 4
+const CACHE_PREFIX = "wp-mapbox-geo-v4"
+const LEGACY_GEO_CACHE_KEY = "wp-mapbox-geo-v3"
 const TTL_MS = 30 * 24 * 60 * 60 * 1000
+const REGION_ANCHOR_TYPES = "place,locality,district,region,country"
 
 export const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ""
 
 const memoryCache = new Map<string, { lng: number; lat: number; exp: number }>()
+const candidateMemoryCache = new Map<string, { candidates: GeocodeCandidate[]; exp: number }>()
+const anchorMemoryCache = new Map<string, { value: RegionAnchor; exp: number }>()
 
 /**
  * Añade el destino del viaje a la query para desambiguar POI homónimos
@@ -44,55 +53,143 @@ function geocodeQueryKey(
   fullQuery: string,
   proximity: [number, number] | null,
   countryKey: string,
+  extra = "",
 ): string {
   const p = proximity
     ? `${proximity[0].toFixed(3)}_${proximity[1].toFixed(3)}`
     : "none"
-  return `${fullQuery.trim().toLowerCase()}|${p}|${countryKey}`
+  const base = `${fullQuery.trim().toLowerCase()}|${p}|${countryKey}`
+  return extra ? `${base}|${extra}` : base
+}
+
+type GeoCacheEntry = {
+  v: number
+  exp: number
+  lng?: number
+  lat?: number
+  featureType?: string
+  label?: string
+  candidates?: GeocodeCandidate[]
+}
+
+let clearedLegacyGeoCache = false
+function clearLegacyGeoLocalStorage(): void {
+  if (clearedLegacyGeoCache) return
+  clearedLegacyGeoCache = true
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(LEGACY_GEO_CACHE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function readGeoStore(): Record<string, GeoCacheEntry> {
+  clearLegacyGeoLocalStorage()
+  if (typeof window === "undefined") return {}
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX)
+    if (!raw) return {}
+    return JSON.parse(raw) as Record<string, GeoCacheEntry>
+  } catch {
+    return {}
+  }
+}
+
+function writeGeoStore(data: Record<string, GeoCacheEntry>): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(CACHE_PREFIX, JSON.stringify(data))
+  } catch {
+    // ignore quota
+  }
 }
 
 function readLocalCache(key: string): { lng: number; lat: number } | null {
-  if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem(CACHE_PREFIX)
-    if (!raw) return null
-    const data = JSON.parse(raw) as Record<
-      string,
-      { v: number; lng: number; lat: number; exp: number }
-    >
+    const data = readGeoStore()
     const e = data[key]
     if (!e || e.v !== CACHE_VERSION) return null
     if (e.exp < Date.now()) {
       delete data[key]
-      localStorage.setItem(CACHE_PREFIX, JSON.stringify(data))
+      writeGeoStore(data)
       return null
     }
+    if (typeof e.lng !== "number" || typeof e.lat !== "number") return null
     return { lng: e.lng, lat: e.lat }
   } catch {
     return null
   }
 }
 
-function writeLocalCache(
-  key: string,
-  lng: number,
-  lat: number,
-): void {
-  if (typeof window === "undefined") return
+function writeLocalCache(key: string, lng: number, lat: number, extra?: Partial<GeoCacheEntry>): void {
   try {
-    const raw = localStorage.getItem(CACHE_PREFIX)
-    const data: Record<string, { v: number; lng: number; lat: number; exp: number }> = raw
-      ? JSON.parse(raw)
-      : {}
+    const data = readGeoStore()
     data[key] = {
       v: CACHE_VERSION,
       lng,
       lat,
       exp: Date.now() + TTL_MS,
+      ...extra,
     }
-    localStorage.setItem(CACHE_PREFIX, JSON.stringify(data))
+    writeGeoStore(data)
   } catch {
     // ignore quota
+  }
+}
+
+function readCandidateCache(key: string): GeocodeCandidate[] | null {
+  try {
+    const data = readGeoStore()
+    const e = data[key]
+    if (!e || e.v !== CACHE_VERSION) return null
+    if (e.exp < Date.now()) {
+      delete data[key]
+      writeGeoStore(data)
+      return null
+    }
+    if (e.candidates && e.candidates.length > 0) return e.candidates
+    if (typeof e.lng === "number" && typeof e.lat === "number") {
+      return [{ coord: { lng: e.lng, lat: e.lat }, featureType: e.featureType ?? "unknown" }]
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function writeCandidateCache(key: string, candidates: GeocodeCandidate[]): void {
+  try {
+    const data = readGeoStore()
+    data[key] = {
+      v: CACHE_VERSION,
+      exp: Date.now() + TTL_MS,
+      candidates,
+    }
+    writeGeoStore(data)
+  } catch {
+    // ignore quota
+  }
+}
+
+function readAnchorCache(key: string): RegionAnchor | null {
+  try {
+    const data = readGeoStore()
+    const e = data[key]
+    if (!e || e.v !== CACHE_VERSION) return null
+    if (e.exp < Date.now()) {
+      delete data[key]
+      writeGeoStore(data)
+      return null
+    }
+    if (typeof e.lng !== "number" || typeof e.lat !== "number") return null
+    return {
+      coord: { lng: e.lng, lat: e.lat },
+      featureType: e.featureType ?? "place",
+      label: e.label ?? "",
+    }
+  } catch {
+    return null
   }
 }
 
@@ -108,6 +205,34 @@ function getFromMemory(key: string): { lng: number; lat: number } | null {
 
 function setMemory(key: string, lng: number, lat: number): void {
   memoryCache.set(key, { lng, lat, exp: Date.now() + TTL_MS })
+}
+
+function getCandidatesFromMemory(key: string): GeocodeCandidate[] | null {
+  const e = candidateMemoryCache.get(key)
+  if (!e) return null
+  if (e.exp < Date.now()) {
+    candidateMemoryCache.delete(key)
+    return null
+  }
+  return e.candidates
+}
+
+function setCandidateMemory(key: string, candidates: GeocodeCandidate[]): void {
+  candidateMemoryCache.set(key, { candidates, exp: Date.now() + TTL_MS })
+}
+
+function getAnchorFromMemory(key: string): RegionAnchor | null {
+  const e = anchorMemoryCache.get(key)
+  if (!e) return null
+  if (e.exp < Date.now()) {
+    anchorMemoryCache.delete(key)
+    return null
+  }
+  return e.value
+}
+
+function setAnchorMemory(key: string, value: RegionAnchor): void {
+  anchorMemoryCache.set(key, { value, exp: Date.now() + TTL_MS })
 }
 
 export type LngLat = { lng: number; lat: number }
@@ -289,41 +414,96 @@ export function seedGeocodeCache(
  */
 export async function geocodeFreeText(
   text: string,
-  options?: { country?: string; countryCodes?: string[] },
+  options?: { country?: string; countryCodes?: string[]; types?: string },
 ): Promise<[number, number] | null> {
+  const hit = await geocodeFirstHit(text, options)
+  return hit ? [hit.coord.lng, hit.coord.lat] : null
+}
+
+async function geocodeFirstHit(
+  text: string,
+  options?: { country?: string; countryCodes?: string[]; types?: string },
+): Promise<{ coord: { lng: number; lat: number }; featureType: string; label: string } | null> {
   if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return null
   const cKey =
     options?.countryCodes && options.countryCodes.length
       ? countryParamsKey(options.countryCodes)
       : "none"
-  const key = geocodeQueryKey(`__dest__${text.trim()}`, null, cKey)
+  const typesExtra = options?.types ? `types:${options.types}` : ""
+  const key = geocodeQueryKey(`__dest__${text.trim()}`, null, cKey, typesExtra)
   const mem = getFromMemory(key) ?? readLocalCache(key)
-  if (mem) return [mem.lng, mem.lat]
+  if (mem) {
+    const cached = readAnchorCache(key)
+    return {
+      coord: mem,
+      featureType: cached?.featureType ?? "place",
+      label: cached?.label || text.trim(),
+    }
+  }
 
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
     limit: "1",
+    autocomplete: "false",
+    language: "es",
   })
   if (options?.country) params.set("country", options.country)
   appendCountryParams(params, options?.countryCodes)
+  if (options?.types) params.set("types", options.types)
   const url = buildGeocodeUrl(text.trim(), params)
 
   const res = await fetch(url)
   if (!res.ok) return null
-  const data = (await res.json()) as { features?: { center?: [number, number] }[] }
-  const c = data.features?.[0]?.center
+  const data = (await res.json()) as { features?: MapboxFeature[] }
+  const f = data.features?.[0]
+  const c = f?.center
   if (!c) return null
   const lng = c[0]
   const lat = c[1]
+  const featureType = featureTypeFromMapboxId(f?.id)
+  const label = f?.text?.trim() || f?.place_name?.trim() || text.trim()
   setMemory(key, lng, lat)
-  writeLocalCache(key, lng, lat)
-  return [lng, lat]
+  writeLocalCache(key, lng, lat, { featureType, label })
+  return { coord: { lng, lat }, featureType, label }
+}
+
+/** Ancla de región: types restringidos a ciudad/comarca/país (nunca una calle homónima). */
+export async function geocodeRegionAnchor(
+  text: string,
+  options?: { countryCodes?: string[] },
+): Promise<RegionAnchor | null> {
+  if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return null
+  const cKey =
+    options?.countryCodes && options.countryCodes.length
+      ? countryParamsKey(options.countryCodes)
+      : "none"
+  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}`)
+  const mem = getAnchorFromMemory(key) ?? readAnchorCache(key)
+  if (mem) return mem
+
+  const hit = await geocodeFirstHit(text, {
+    countryCodes: options?.countryCodes,
+    types: REGION_ANCHOR_TYPES,
+  })
+  if (!hit) return null
+  const value: RegionAnchor = {
+    coord: hit.coord,
+    featureType: hit.featureType,
+    label: hit.label,
+  }
+  setAnchorMemory(key, value)
+  writeLocalCache(key, value.coord.lng, value.coord.lat, {
+    featureType: value.featureType,
+    label: value.label,
+  })
+  return value
 }
 
 /**
  * Geocodifica el nombre de un sitio.
  * Pasa `tripDestination` (destino del viaje) para construir p. ej. "POI, Granada, …" y reducir homónimos.
  * `countryCodes` añade el filtro `country=` de Mapbox (ISO-3166-1 alpha-2) y evita homónimos en otro continente.
+ * Devuelve hasta 5 candidatos (mismo coste que 1); el caller elige con `pickGeocodeOutcome`.
  */
 export async function geocodeName(
   name: string,
@@ -335,19 +515,21 @@ export async function geocodeName(
     /** P. ej. "Alpujarra de Granada" o "Soportújar" — se concatena a la búsqueda si aporta contexto. */
     tripDestination?: string | null
   },
-): Promise<LngLat | null> {
-  if (!MAPBOX_TOKEN?.trim() || !name?.trim()) return null
+): Promise<GeocodeCandidate[]> {
+  if (!MAPBOX_TOKEN?.trim() || !name?.trim()) return []
   const proximity = options?.proximity ?? null
   const fullQuery = buildContextualQuery(name, options?.tripDestination)
-  if (!fullQuery) return null
+  if (!fullQuery) return []
   const cKey = countryParamsKey(options?.countryCodes)
-  const key = geocodeQueryKey(fullQuery, proximity, cKey)
-  const mem = getFromMemory(key) ?? readLocalCache(key)
-  if (mem) return mem
+  const key = geocodeQueryKey(fullQuery, proximity, cKey, "n5")
+  const cached = getCandidatesFromMemory(key) ?? readCandidateCache(key)
+  if (cached) return cached
 
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
-    limit: "1",
+    limit: "5",
+    autocomplete: "false",
+    language: "es",
   })
   if (proximity) {
     params.set("proximity", `${proximity[0]},${proximity[1]}`)
@@ -361,14 +543,23 @@ export async function geocodeName(
   const url = buildGeocodeUrl(fullQuery, params)
 
   const res = await fetch(url)
-  if (!res.ok) return null
-  const data = (await res.json()) as { features?: { center?: [number, number] }[] }
-  const c = data.features?.[0]?.center
-  if (!c) return null
-  const out = { lng: c[0], lat: c[1] }
-  setMemory(key, out.lng, out.lat)
-  writeLocalCache(key, out.lng, out.lat)
-  return out
+  if (!res.ok) return []
+  const data = (await res.json()) as { features?: MapboxFeature[] }
+  const candidates: GeocodeCandidate[] = []
+  for (const f of data.features ?? []) {
+    const c = f.center
+    if (!c || c.length < 2) continue
+    candidates.push({
+      coord: { lng: c[0], lat: c[1] },
+      featureType: featureTypeFromMapboxId(f.id),
+      placeName: f.place_name?.trim(),
+    })
+  }
+  if (candidates.length > 0) {
+    setCandidateMemory(key, candidates)
+    writeCandidateCache(key, candidates)
+  }
+  return candidates
 }
 
 function chunkCoordsForDirections(coords: LngLat[], maxPerChunk: number): LngLat[][] {

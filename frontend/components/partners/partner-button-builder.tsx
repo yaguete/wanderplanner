@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { isTurnstileEnabled, Turnstile } from "@/components/auth/turnstile"
+import { BrandMark } from "@/components/brand-mark"
 import {
   buildEmbedSnippet,
   buildStartUrl,
@@ -36,24 +37,6 @@ async function copyText(text: string, success: string) {
   }
 }
 
-function BrandSvg() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <path d="M4 18c3-1.5 5-5 5-8.5C9 6 10.5 4 12 4s3 2 3 5.5C15 13 17 16.5 20 18" />
-      <path d="M8.5 14.5c1.2.6 2.5.9 3.5.9s2.3-.3 3.5-.9" />
-    </svg>
-  )
-}
-
 function ButtonPreview({ href }: { href: string }) {
   return (
     <a
@@ -63,7 +46,7 @@ function ButtonPreview({ href }: { href: string }) {
       style={partnerButtonPreviewStyles.anchor}
     >
       <span style={partnerButtonPreviewStyles.iconBox}>
-        <BrandSvg />
+        <BrandMark variant="negative" className="h-[22px]" />
       </span>
       <span>{DEFAULT_LABEL}</span>
     </a>

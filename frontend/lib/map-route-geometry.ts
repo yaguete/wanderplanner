@@ -354,6 +354,17 @@ export const PLACES_ROAD_MAX_KM = 300
 /** Pares con distancia por debajo se colapsan (mismo alojamiento días seguidos). */
 export const PLACES_ZERO_KM_EPSILON = 0.05
 
+/**
+ * Color de la línea del recorrido. Negro a propósito: no puede coincidir con ningún
+ * color de `PIN` (el violeta anterior era el mismo `#7c3aed` de las actividades y los
+ * pines se camuflaban sobre su propia línea). El estilo del mapa es siempre claro
+ * (`streets-v12`), así que no depende del tema de la app.
+ */
+export const PLACES_ROUTE_COLOR = "#171717"
+
+/** Saltos largos: gris, secundarios respecto a la línea del recorrido. */
+export const PLACES_LONG_HOP_COLOR = "#94a3b8"
+
 export type ItineraryPlace = {
   id: string
   name: string
@@ -512,7 +523,7 @@ export function placesRouteToFeatureCollections(
         toId: leg.toId,
         kind: leg.kind,
         km: leg.km,
-        color: leg.kind === "long-hop" ? "#94a3b8" : "#7c3aed",
+        color: leg.kind === "long-hop" ? PLACES_LONG_HOP_COLOR : PLACES_ROUTE_COLOR,
         width: leg.kind === "long-hop" ? 2 : 2.5,
       },
       geometry: { type: "LineString", coordinates: coords },

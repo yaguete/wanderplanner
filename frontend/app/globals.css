@@ -191,6 +191,40 @@
     border-radius: 9999px;
     background: hsl(var(--border));
   }
+
+  /* Bocadillos del mapa: mismo cromo que TooltipContent (sidebar plegado). */
+  .wp-map-popup .mapboxgl-popup-content {
+    padding: 0.375rem 0.75rem;
+    border-radius: calc(var(--radius) - 2px);
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    font: inherit;
+  }
+  .wp-map-popup,
+  .wp-map-popup .mapboxgl-popup-content {
+    pointer-events: none;
+  }
+  .wp-map-popup .mapboxgl-popup-tip,
+  .wp-map-popup .mapboxgl-popup-close-button {
+    display: none;
+  }
+
+  .wp-map-marker {
+    cursor: pointer;
+  }
+  .wp-map-marker .wp-map-pin {
+    transition: transform 120ms ease-out;
+  }
+  .wp-map-marker:hover .wp-map-pin,
+  .wp-map-marker:focus-visible .wp-map-pin {
+    transform: scale(1.12);
+  }
+  .wp-map-marker:hover,
+  .wp-map-marker:focus-within {
+    z-index: 5;
+  }
   .prose-article h1 {
     @apply mt-8 mb-3 text-3xl font-semibold tracking-tight;
   }

@@ -3,6 +3,7 @@
  * Los tracking params deben coincidir con backend/article_fetch.py (_TRACKING_PARAMS).
  */
 
+import { brandSvgMarkup } from "@/components/brand-mark"
 import { parseDaysParam } from "@/lib/partner-trip"
 
 /** Mantener en espejo con backend/article_fetch.py (_TRACKING_PARAMS). */
@@ -87,13 +88,8 @@ const ICON_BOX_STYLE =
   "display:inline-flex;align-items:center;justify-content:center;" +
   "width:28px;height:28px;border-radius:6px;background:#171717;color:#ffffff;flex-shrink:0;"
 
-/** SVG de BrandMark; WordPress puede filtrarlo — el <a> sigue viéndose bien sin él. */
-const BRAND_SVG =
-  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
-  'stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
-  '<path d="M4 18c3-1.5 5-5 5-8.5C9 6 10.5 4 12 4s3 2 3 5.5C15 13 17 16.5 20 18"/>' +
-  '<path d="M8.5 14.5c1.2.6 2.5.9 3.5.9s2.3-.3 3.5-.9"/>' +
-  "</svg>"
+/** Ardilla en negativo; WordPress puede filtrar el SVG — el <a> sigue viéndose bien sin él. */
+const BRAND_SVG = brandSvgMarkup("#ffffff", 16, 22)
 
 /**
  * Snippet HTML autocontenido para pegar en un bloque HTML de WordPress.

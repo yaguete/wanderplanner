@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { BrandMark } from "@/components/app-header"
+import { BrandLockup } from "@/components/brand-mark"
 import { cn } from "@/lib/utils"
 
 /** Marco común de /login, /signup y /partners. */
@@ -23,9 +23,8 @@ export function AuthShell({
         aria-hidden
         className="absolute inset-0 -z-10 bg-[radial-gradient(110%_70%_at_50%_0%,hsl(221_83%_53%/0.12),transparent_60%)]"
       />
-      <Link href="/" className="flex items-center gap-2.5">
-        <BrandMark />
-        <span className="text-sm font-semibold tracking-tight">WanderPlanner</span>
+      <Link href="/" className="outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring">
+        <BrandLockup />
       </Link>
 
       <div

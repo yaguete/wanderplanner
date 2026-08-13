@@ -13,29 +13,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { BrandLockup, BrandMark } from "@/components/brand-mark"
 import { TripPanelToggles } from "@/components/trip-panel-toggles"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { displayNameFor, initialsFor } from "@/lib/user-display"
 import { cn } from "@/lib/utils"
-
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-foreground text-background",
-        className,
-      )}
-      aria-hidden
-    >
-      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-        <path d="M4 18c3-1.5 5-5 5-8.5C9 6 10.5 4 12 4s3 2 3 5.5C15 13 17 16.5 20 18" />
-        <path d="M8.5 14.5c1.2.6 2.5.9 3.5.9s2.3-.3 3.5-.9" />
-      </svg>
-    </div>
-  )
-}
 
 type AppHeaderProps = {
   leading?: ReactNode
@@ -83,16 +67,13 @@ export function AppHeader({ leading }: AppHeaderProps) {
         <Link
           href="/trips"
           className={cn(
-            "flex min-w-0 items-center gap-2 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
+            "flex min-w-0 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
             !isMobile && rail && "justify-center",
             // Expandido: mismo inset que Inicio / Tus viajes (px-2.5 dentro del p-2 del aside).
-            !isMobile && !rail && "gap-2.5 px-2.5",
+            !isMobile && !rail && "px-2.5",
           )}
         >
-          <BrandMark />
-          {isMobile || !rail ? (
-            <span className="truncate text-sm font-semibold tracking-tight">WanderPlanner</span>
-          ) : null}
+          {isMobile || !rail ? <BrandLockup /> : <BrandMark />}
         </Link>
       </div>
 

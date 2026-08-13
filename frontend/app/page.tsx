@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { BrandMark } from "@/components/app-header"
+import { BrandLockup } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 
 /** Landing placeholder: se rediseñará más adelante. */
@@ -12,10 +12,7 @@ export default function RootPage() {
       />
 
       <header className="flex items-center justify-between px-6 py-5 sm:px-10">
-        <div className="flex items-center gap-2.5">
-          <BrandMark />
-          <span className="text-sm font-semibold tracking-tight">WanderPlanner</span>
-        </div>
+        <BrandLockup />
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link href="/login">Entrar</Link>

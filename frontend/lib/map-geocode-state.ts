@@ -14,7 +14,12 @@ export type GeocodePoint = {
   hubRole?: "arrival" | "departure"
 }
 
-export type GeocodeResolved = { point: GeocodePoint; coord: LngLat }
+export type GeocodeResolved = {
+  point: GeocodePoint
+  coord: LngLat
+  precision?: "exact" | "approximate"
+  anchorLabel?: string
+}
 
 export type GeocodeState =
   | { status: "idle" }

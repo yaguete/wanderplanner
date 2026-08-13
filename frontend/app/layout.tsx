@@ -13,6 +13,9 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "WanderPlanner",
   description: "Consolida rutas de blogueros y periodistas en tu propio itinerario",
+  icons: {
+    icon: [{ url: "/icon-light-32x32.png", type: "image/png", sizes: "32x32" }],
+  },
 }
 
 /** En móvil, el layout se encoge con el teclado (Chrome/Android) en vez de solaparlo. */

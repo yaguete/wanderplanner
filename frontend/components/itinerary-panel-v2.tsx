@@ -60,7 +60,7 @@ import {
   VIEW_MODE_TASK_CATEGORIES,
   type ItineraryViewMode,
 } from "@/components/itinerary-view-mode-tabs"
-import { ItineraryMapView, MapModeDropdown, persistMapMode, readStoredMapMode, type ItineraryMapPoint, type MapViewMode } from "@/components/itinerary-map-view"
+import { ItineraryMapView, MapDayDropdown, MapModeDropdown, persistMapMode, readStoredMapMode, type ItineraryMapPoint, type MapViewMode } from "@/components/itinerary-map-view"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
 import { RouteLegDialog } from "@/components/route-leg-dialog"
@@ -71,7 +71,14 @@ import {
   collectMapGatewayAnchors,
   collectMapSegments,
   collectTransportDistances,
+  type TransportDistances,
 } from "@/lib/map-route-geometry"
+import {
+  dayScopeFromId,
+  daysForScope,
+  filterByDayScope,
+  mappableCountsByDay,
+} from "@/lib/map-day-scope"
 import {
   TripTasksManagedFragment,
   TripTasksPanel,
@@ -80,6 +87,7 @@ import {
 } from "@/components/trip-tasks-panel"
 import { hasRouteLeg, isRouteLegItem } from "@/lib/route-legs"
 import { useListFlip } from "@/hooks/use-list-flip"
+import { useStableList } from "@/hooks/use-stable-list"
 
 const CATEGORY_EMPTY: Record<
   Exclude<ItineraryViewMode, "itinerary">,
@@ -102,6 +110,14 @@ const CATEGORY_EMPTY: Record<
     description:
       "Añade ofertas desde la pestaña Descuentos de tus fuentes, o una tarea a mano.",
   },
+}
+
+const EMPTY_TRANSPORT_DISTANCES: TransportDistances = {
+  byMode: {},
+  drawnKm: 0,
+  undrawn: [],
+  undrawnKm: 0,
+  totalKm: 0,
 }
 
 function normalizeDayLabel(raw: string): string {
@@ -153,7 +169,7 @@ export default function ItineraryPanel({
     () => (trip ? trip.days.reduce((sum, d) => sum + d.items.length, 0) : 0),
     [trip],
   )
-  const tripSources = getTripSources(tripId)
+  const tripSources = useStableList(getTripSources(tripId))
   // Fallback de la `region` por ítem: si el ítem no trae una pista propia, se usa el `area` del artículo.
   const sourceAreaById = useMemo(() => {
     const m = new Map<string, string | null>()
@@ -175,6 +191,7 @@ export default function ItineraryPanel({
   const [listMode, setListMode] = useState<"list" | "map">("list")
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
   const [mapMode, setMapMode] = useState<MapViewMode>("places")
+  const [mapFocusDayId, setMapFocusDayId] = useState<string | null>(null)
 
   useEffect(() => {
     const stored = readStoredMapMode()
@@ -187,6 +204,11 @@ export default function ItineraryPanel({
     setMapMode(next)
     persistMapMode(next)
   }, [])
+
+  const focusDayNumber = useMemo(
+    () => dayScopeFromId(trip?.days ?? [], mapFocusDayId),
+    [trip, mapFocusDayId],
+  )
 
   useEffect(() => {
     setHeaderCollapsed(false)
@@ -318,7 +340,7 @@ export default function ItineraryPanel({
   // Anclas de llegada/salida cuando ida/vuelta no van por carretera.
   const mapHubs: ItineraryMapPoint[] = useMemo(() => {
     if (!trip || listMode !== "map") return []
-    return collectMapGatewayAnchors(trip.days).map((g) => ({
+    return filterByDayScope(collectMapGatewayAnchors(trip.days), focusDayNumber).map((g) => ({
       id: `hub:${g.role}:${g.itemId}`,
       name: g.label,
       type: "hub" as const,
@@ -326,26 +348,43 @@ export default function ItineraryPanel({
       coords: { lng: g.lng, lat: g.lat },
       hubRole: g.role,
     }))
-  }, [trip, listMode])
+  }, [trip, listMode, focusDayNumber])
 
   const mapSegments = useMemo(
-    () => (trip && listMode === "map" ? collectMapSegments(trip.days) : []),
-    [trip, listMode],
+    () =>
+      trip && listMode === "map"
+        ? filterByDayScope(collectMapSegments(trip.days), focusDayNumber)
+        : [],
+    [trip, listMode, focusDayNumber],
   )
 
   const mapTransportDistances = useMemo(
     () =>
       trip && listMode === "map"
-        ? collectTransportDistances(trip.days)
-        : {
-            byMode: {},
-            drawnKm: 0,
-            undrawn: [],
-            undrawnKm: 0,
-            totalKm: 0,
-          },
-    [trip, listMode],
+        ? collectTransportDistances(daysForScope(trip.days, focusDayNumber))
+        : EMPTY_TRANSPORT_DISTANCES,
+    [trip, listMode, focusDayNumber],
   )
+
+  const mapDayOptions = useMemo(() => {
+    if (!trip) return []
+    const placeCounts = mappableCountsByDay(collectItineraryPlaces(trip.days))
+    const transportCounts = mappableCountsByDay([
+      ...collectMapSegments(trip.days),
+      ...collectMapGatewayAnchors(trip.days),
+    ])
+    const counts = mapMode === "places" ? placeCounts : transportCounts
+    return trip.days.map((day, index) => ({
+      id: day.id,
+      dayNumber: index + 1,
+      heading: formatDayHeadingLine(
+        index,
+        day.label,
+        formatDayDate(dateISOForDayIndex(trip.startDate, index)),
+      ),
+      mappableCount: counts.get(index + 1) ?? 0,
+    }))
+  }, [trip, mapMode])
 
   // Índice de posición global (por día) para reglas de flechas arriba/abajo; debe coincidir con `moveItemOneStep`.
   const itemLocationById = useMemo(() => {
@@ -579,7 +618,16 @@ export default function ItineraryPanel({
               size="compact"
             />
             {listMode === "map" ? (
-              <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
+              <>
+                {trip.days.length > 1 ? (
+                  <MapDayDropdown
+                    days={mapDayOptions}
+                    value={focusDayNumber == null ? null : mapFocusDayId}
+                    onChange={setMapFocusDayId}
+                  />
+                ) : null}
+                <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
+              </>
             ) : null}
             {listMode === "list" ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
@@ -674,6 +722,11 @@ export default function ItineraryPanel({
                 segments={mapSegments}
                 transportDistances={mapTransportDistances}
                 mapMode={mapMode}
+                focusDayNumber={focusDayNumber}
+                focusDayLabel={
+                  focusDayNumber == null ? null : `Día ${focusDayNumber}`
+                }
+                onMapModeChange={handleMapModeChange}
                 countryCodes={trip.countries}
                 destination={trip.countries.length ? countriesPlainList(trip.countries) : trip.name}
               />

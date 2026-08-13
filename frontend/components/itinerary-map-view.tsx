@@ -17,11 +17,12 @@ import {
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
   geocodeName,
-  geocodeFreeText,
+  geocodeRegionAnchor,
   getDirections,
   MAPBOX_TOKEN,
   type LngLat,
@@ -30,14 +31,22 @@ import {
   geocodeDisplayResult,
   reduceGeocode,
   type GeocodePoint,
+  type GeocodeResolved,
   type GeocodeState,
 } from "@/lib/map-geocode-state"
+import {
+  offsetStackedApproximate,
+  pickGeocodeOutcome,
+  type RegionAnchor,
+} from "@/lib/geocode-validate"
+import { filterByDayScope, type DayScope } from "@/lib/map-day-scope"
 import {
   buildPlacesRoute,
   formatKm,
   groupRoadCandidateSubsequences,
   modeAllowsRoadDirections,
   placesRouteToFeatureCollections,
+  PLACES_ROUTE_COLOR,
   segmentsToFeatureCollection,
   summarizeTransportKm,
   summarizeUndrawnTransports,
@@ -124,6 +133,92 @@ export function MapModeDropdown({
   )
 }
 
+export type MapDayOption = {
+  id: string
+  dayNumber: number
+  heading: string
+  mappableCount: number
+}
+
+const MAP_DAY_ALL = "all"
+
+/** Dropdown de día del mapa (mismo cromo que Recorrido / Desplazamientos). */
+export function MapDayDropdown({
+  days,
+  value,
+  onChange,
+}: {
+  days: MapDayOption[]
+  value: string | null
+  onChange: (next: string | null) => void
+}) {
+  const selected = days.find((d) => d.id === value)
+  const triggerLabel = selected ? `Día ${selected.dayNumber}` : "Ruta completa"
+  const radioValue = value ?? MAP_DAY_ALL
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) return
+        requestAnimationFrame(() => {
+          const checked = contentRef.current?.querySelector<HTMLElement>(
+            '[role="menuitemradio"][data-state="checked"]',
+          )
+          if (!checked) return
+          checked.focus()
+          checked.scrollIntoView({ block: "center" })
+        })
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
+            "text-muted-foreground hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+          aria-label="Día del mapa"
+        >
+          {triggerLabel}
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        ref={contentRef}
+        align="start"
+        className="max-h-[min(60vh,22rem)] max-w-[min(22rem,80vw)] overflow-y-auto"
+      >
+        <DropdownMenuRadioGroup
+          value={radioValue}
+          onValueChange={(v) => onChange(v === MAP_DAY_ALL ? null : v)}
+        >
+          <DropdownMenuRadioItem value={MAP_DAY_ALL} className="text-xs">
+            Ruta completa
+          </DropdownMenuRadioItem>
+          <DropdownMenuSeparator />
+          {days.map((day) => (
+            <DropdownMenuRadioItem
+              key={day.id}
+              value={day.id}
+              title={day.heading}
+              className={cn("text-xs", day.mappableCount === 0 && "opacity-60")}
+            >
+              <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                <span className="min-w-0 truncate">{day.heading}</span>
+                <span className="ml-auto shrink-0 tabular-nums text-[10px] text-muted-foreground">
+                  {day.mappableCount}
+                </span>
+              </span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export type ItineraryMapPoint = {
   id: string
   name: string
@@ -145,6 +240,62 @@ const PIN: Record<ItineraryMapPoint["type"], { fill: string; border: string }> =
   endpoint: { fill: "#64748b", border: "#334155" },
 }
 
+function pinShapeSvg(type: ItineraryMapPoint["type"], fill: string, stroke: string, dashed: boolean): string {
+  const dash = dashed ? ` stroke-dasharray="3 2"` : ""
+  const opacity = dashed ? ` fill-opacity="0.7"` : ""
+  const common = `fill="${fill}" stroke="${stroke}" stroke-width="2"${dash}${opacity}`
+  if (type === "stay") {
+    return `<rect x="2.5" y="2.5" width="23" height="23" rx="5" ${common} />`
+  }
+  if (type === "food") {
+    return `<path d="M14 3.5 L26.5 25 H1.5 Z" stroke-linejoin="round" ${common} />`
+  }
+  return `<circle cx="14" cy="14" r="12" ${common} />`
+}
+
+function renderPinInto(
+  el: HTMLElement,
+  type: ItineraryMapPoint["type"],
+  pinText: string,
+  approximate: boolean,
+): void {
+  const sig = `${type}|${pinText}|${approximate ? "a" : "e"}`
+  if (el.dataset.pinSig === sig) return
+  el.dataset.pinSig = sig
+  const colors = PIN[type] ?? PIN.endpoint
+  const isEndpoint = type === "endpoint"
+  el.className = cn(
+    "wp-map-pin relative flex items-center justify-center font-bold text-white",
+    isEndpoint ? "h-3.5 w-3.5" : "h-7 w-7",
+    pinText.length > 1 ? "text-[10px]" : "text-[12px]",
+  )
+  el.style.filter = "drop-shadow(0 1px 2px rgb(0 0 0 / .28))"
+  el.style.background = "transparent"
+  el.style.border = "none"
+  const shape = pinShapeSvg(type, colors.fill, colors.border, approximate && !isEndpoint)
+  const view = isEndpoint ? "0 0 14 14" : "0 0 28 28"
+  const svgClass = "absolute inset-0 h-full w-full"
+  const textShift = type === "food" && pinText ? " style=\"transform:translateY(3px)\"" : ""
+  const label = pinText
+    ? `<span class="relative leading-none"${textShift}>${escapeHtml(pinText)}</span>`
+    : ""
+  el.innerHTML = `<svg class="${svgClass}" viewBox="${view}" aria-hidden="true">${
+    isEndpoint
+      ? `<circle cx="7" cy="7" r="5.5" fill="${colors.fill}" stroke="${colors.border}" stroke-width="2" />`
+      : shape
+  }</svg>${label}`
+}
+
+function popupHtml(name: string, label: string): string {
+  return `<div class="max-w-[15rem]"><span class="block text-sm text-popover-foreground">${escapeHtml(
+    name,
+  )}</span><span class="block text-xs text-muted-foreground">${escapeHtml(label)}</span></div>`
+}
+
+function pinAriaLabel(name: string, dayNumber: number): string {
+  return `${name} — Día ${dayNumber}`
+}
+
 function emptySourceData(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: [] }
 }
@@ -156,12 +307,6 @@ function setSourceData(
 ) {
   const source = map.getSource(sourceId) as mapboxgl.GeoJSONSource | undefined
   if (source) source.setData(data)
-}
-
-function popupHtml(name: string, label: string): string {
-  return `<div class="p-1 text-sm"><strong class="block">${escapeHtml(
-    name,
-  )}</strong><span class="text-muted-foreground">${escapeHtml(label)}</span></div>`
 }
 
 function ensureMapLayers(map: mapboxgl.Map) {
@@ -269,10 +414,13 @@ export function ItineraryMapView({
   destination,
   countryCodes = [],
   mapMode,
+  focusDayNumber = null,
+  focusDayLabel = null,
+  onMapModeChange,
 }: {
-  /** Lugares del recorrido: stay / food / activity (sin hubs). */
+  /** Lugares del recorrido: stay / food / activity (sin hubs). Viaje entero. */
   places: ItineraryMapPoint[]
-  /** Anclas de llegada/salida para el modo Desplazamientos. */
+  /** Anclas de llegada/salida para el modo Desplazamientos (ya filtradas). */
   hubs?: ItineraryMapPoint[]
   segments?: ItineraryMapSegment[]
   transportDistances: TransportDistances
@@ -280,17 +428,31 @@ export function ItineraryMapView({
   countryCodes?: string[]
   /** Modo controlado desde el panel (dropdown junto a Lista/Mapa). */
   mapMode: MapViewMode
+  /** Día 1-based, o null = ruta completa. */
+  focusDayNumber?: DayScope
+  /** Etiqueta corta para el overlay vacío, p. ej. "Día 5". */
+  focusDayLabel?: string | null
+  onMapModeChange?: (next: MapViewMode) => void
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null)
   const markersByIdRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
-  const popupHtmlByIdRef = useRef<Map<string, string>>(new Map())
-  const coordCacheRef = useRef<Map<string, LngLat>>(new Map())
+  const popupDataByIdRef = useRef<Map<string, { name: string; label: string }>>(new Map())
+  const hoverPopupRef = useRef<mapboxgl.Popup | null>(null)
+  const hoverOpenIdRef = useRef<string | null>(null)
+  const finePointerRef = useRef(false)
+  const coordCacheRef = useRef<
+    Map<string, { coord: LngLat; precision: "exact" | "approximate"; anchorLabel?: string }>
+  >(new Map())
   const mapReadyRef = useRef(false)
   const fittedSignatureRef = useRef<string | null>(null)
   const geocodeRef = useRef<GeocodeState>({ status: "idle" })
 
-  const placesKey = places.map((p) => p.id).join(",")
+  const visiblePlaces = useMemo(
+    () => filterByDayScope(places, focusDayNumber),
+    [places, focusDayNumber],
+  )
+  const placesKey = visiblePlaces.map((p) => p.id).join(",")
   const placesContentKey = places
     .map(
       (p) =>
@@ -328,6 +490,16 @@ export function ItineraryMapView({
   useEffect(() => {
     geocodeRef.current = geocode
   }, [geocode])
+
+  useEffect(() => {
+    const mql = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const sync = () => {
+      finePointerRef.current = mql.matches
+    }
+    sync()
+    mql.addEventListener("change", sync)
+    return () => mql.removeEventListener("change", sync)
+  }, [])
 
   if (placesRoadKey !== placesKey) {
     setPlacesRoadKey(placesKey)
@@ -389,21 +561,43 @@ export function ItineraryMapView({
         for (const c of collectCountryCodesFromHint(p.region)) fromTrip.add(c)
       }
       const unionForBias = Array.from(fromTrip)
+      const countryOpts = unionForBias.length ? unionForBias : undefined
 
-      let proximity: [number, number] | null = null
+      type PlaceFix = {
+        coord: LngLat
+        precision: "exact" | "approximate"
+        anchorLabel?: string
+      }
+
+      const regionKeys = [
+        ...new Set(
+          placesNow
+            .map((p) => p.region?.trim())
+            .filter((r): r is string => Boolean(r && r.length > 0)),
+        ),
+      ]
+      const anchors = new Map<string, RegionAnchor>()
+      await Promise.all(
+        regionKeys.map(async (region) => {
+          try {
+            const a = await geocodeRegionAnchor(region, { countryCodes: countryOpts })
+            if (a) anchors.set(region.toLowerCase(), a)
+          } catch {
+            // ignore
+          }
+        }),
+      )
+      let destAnchor: RegionAnchor | null = null
       if (dest) {
         try {
-          proximity =
-            (await geocodeFreeText(dest, {
-              countryCodes: unionForBias.length ? unionForBias : undefined,
-            })) ?? null
+          destAnchor = await geocodeRegionAnchor(dest, { countryCodes: countryOpts })
         } catch {
-          proximity = null
+          destAnchor = null
         }
       }
       if (ac.signal.aborted) return
 
-      const resolved: { point: GeocodePoint; coord: LngLat }[] = []
+      const resolved: GeocodeResolved[] = []
       const failed: { point: GeocodePoint }[] = []
       const liveIds = new Set(placesNow.map((p) => p.id))
 
@@ -412,7 +606,7 @@ export function ItineraryMapView({
       }
 
       const results = await Promise.allSettled(
-        placesNow.map(async (p): Promise<LngLat | null> => {
+        placesNow.map(async (p): Promise<PlaceFix | null> => {
           const saved = p.coords
           if (
             saved &&
@@ -421,40 +615,77 @@ export function ItineraryMapView({
             Number.isFinite(saved.lng) &&
             Number.isFinite(saved.lat)
           ) {
-            const coord = { lng: saved.lng, lat: saved.lat }
-            coordCacheRef.current.set(p.id, coord)
-            return coord
+            const fix: PlaceFix = { coord: { lng: saved.lng, lat: saved.lat }, precision: "exact" }
+            coordCacheRef.current.set(p.id, fix)
+            return fix
           }
           const cached = coordCacheRef.current.get(p.id)
           if (cached) return cached
 
-          const tripDestination = p.region?.trim() ? p.region.trim() : dest || null
+          const region = p.region?.trim() || null
+          const anchor =
+            (region ? anchors.get(region.toLowerCase()) : undefined) ?? destAnchor
+          const tripDestination = region || dest || null
           const forPoint = new Set<string>([
             ...codesNow.map((c) => c.trim().toLowerCase()).filter((c) => c.length === 2),
           ])
           for (const c of collectCountryCodesFromHint(tripDestination)) forPoint.add(c)
           for (const c of collectCountryCodesFromHint(p.region)) forPoint.add(c)
           const codes = forPoint.size > 0 ? Array.from(forPoint) : unionForBias
-          const coord = await geocodeName(p.name, {
+          const proximity: [number, number] | null = anchor
+            ? [anchor.coord.lng, anchor.coord.lat]
+            : destAnchor
+              ? [destAnchor.coord.lng, destAnchor.coord.lat]
+              : null
+          const candidates = await geocodeName(p.name, {
             proximity,
             tripDestination,
             countryCodes: codes.length > 0 ? codes : undefined,
           })
-          if (coord) coordCacheRef.current.set(p.id, coord)
-          return coord
+          const outcome = pickGeocodeOutcome(candidates, anchor)
+          if (outcome.precision === "unlocated") return null
+          const fix: PlaceFix =
+            outcome.precision === "exact"
+              ? { coord: outcome.coord, precision: "exact" }
+              : {
+                  coord: outcome.coord,
+                  precision: "approximate",
+                  anchorLabel: outcome.anchorLabel,
+                }
+          coordCacheRef.current.set(p.id, fix)
+          return fix
         }),
       )
 
       if (ac.signal.aborted) return
 
+      const unspread: GeocodeResolved[] = []
       for (let i = 0; i < placesNow.length; i++) {
         const p = placesNow[i]!
         const r = results[i]!
         if (r.status === "fulfilled" && r.value) {
-          resolved.push({ point: asGeocodePoint(p), coord: r.value })
+          unspread.push({
+            point: asGeocodePoint(p),
+            coord: r.value.coord,
+            precision: r.value.precision,
+            anchorLabel: r.value.anchorLabel,
+          })
         } else {
           failed.push({ point: asGeocodePoint(p) })
         }
+      }
+      const spread = offsetStackedApproximate(
+        unspread.map((r) => ({
+          id: r.point.id,
+          coord: r.coord,
+          precision: r.precision,
+        })),
+      )
+      for (const r of unspread) {
+        resolved.push({
+          ...r,
+          coord: spread.get(r.point.id) ?? r.coord,
+        })
       }
 
       if (ac.signal.aborted) return
@@ -472,9 +703,24 @@ export function ItineraryMapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geocodeInputKey])
 
+  const visibleResolved = useMemo(
+    () =>
+      geocodeResult
+        ? filterByDayScope(geocodeResult.resolved, focusDayNumber, (r) => r.point.dayNumber)
+        : [],
+    [geocodeResult, focusDayNumber],
+  )
+  const visibleFailed = useMemo(
+    () =>
+      geocodeResult
+        ? filterByDayScope(geocodeResult.failed, focusDayNumber, (f) => f.point.dayNumber)
+        : [],
+    [geocodeResult, focusDayNumber],
+  )
+
   const placesForRoute: ItineraryPlace[] = useMemo(() => {
     if (!geocodeResult) {
-      return places.map((p) => ({
+      return visiblePlaces.map((p) => ({
         id: p.id,
         name: p.name,
         type: p.type === "hub" || p.type === "endpoint" ? "activity" : p.type,
@@ -485,7 +731,7 @@ export function ItineraryMapView({
     }
     const failedIds = new Set(geocodeResult.failed.map((f) => f.point.id))
     const resolvedById = new Map(geocodeResult.resolved.map((r) => [r.point.id, r.coord]))
-    return places.map((p) => {
+    return visiblePlaces.map((p) => {
       const hit = resolvedById.get(p.id)
       return {
         id: p.id,
@@ -496,22 +742,21 @@ export function ItineraryMapView({
         coords: hit ?? (failedIds.has(p.id) ? null : (p.coords ?? null)),
       }
     })
-  }, [geocodeResult, places])
+  }, [geocodeResult, visiblePlaces])
 
   const placesRoute = useMemo(
     () => buildPlacesRoute(placesForRoute),
     [placesForRoute],
   )
 
-  /** Numeración sobre la secuencia dibujada (solo localizados). */
+  /** Numeración sobre la secuencia dibujada (solo localizados del ámbito). */
   const drawnStopNumberById = useMemo(() => {
     const map = new Map<string, number>()
-    if (!geocodeResult) return map
-    geocodeResult.resolved.forEach((r, i) => {
+    visibleResolved.forEach((r, i) => {
       map.set(r.point.id, i + 1)
     })
     return map
-  }, [geocodeResult])
+  }, [visibleResolved])
 
   /** Posición en el itinerario completo (para popup). */
   const itineraryOrderById = useMemo(() => {
@@ -568,7 +813,7 @@ export function ItineraryMapView({
                 toId: leg.toId,
                 kind: "road-candidate",
                 km: leg.km,
-                color: "#7c3aed",
+                color: PLACES_ROUTE_COLOR,
                 width: 2.5,
                 fallback: true,
               },
@@ -590,7 +835,7 @@ export function ItineraryMapView({
           type: "Feature",
           properties: {
             kind: "road",
-            color: "#7c3aed",
+            color: PLACES_ROUTE_COLOR,
             width: 2.5,
           },
           geometry: dir.geometry,
@@ -613,6 +858,38 @@ export function ItineraryMapView({
     }
   }, [placesRoadLoading, placesRoute.legs])
 
+  const closeHoverPopup = useCallback(() => {
+    hoverPopupRef.current?.remove()
+    hoverOpenIdRef.current = null
+  }, [])
+
+  const ensureHoverPopup = useCallback((): mapboxgl.Popup => {
+    if (!hoverPopupRef.current) {
+      hoverPopupRef.current = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        focusAfterOpen: false,
+        offset: 14,
+        maxWidth: "260px",
+        className: "wp-map-popup",
+      })
+    }
+    return hoverPopupRef.current
+  }, [])
+
+  const showHoverPopup = useCallback(
+    (lngLat: mapboxgl.LngLatLike, html: string) => {
+      const map = mapInstanceRef.current
+      if (!map) return
+      ensureHoverPopup().setLngLat(lngLat).setHTML(html).addTo(map)
+    },
+    [ensureHoverPopup],
+  )
+
+  useEffect(() => {
+    closeHoverPopup()
+  }, [mapMode, focusDayNumber, closeHoverPopup])
+
   // ── Ciclo de vida del mapa: una sola instancia ─────────────────────────────
   useEffect(() => {
     if (!MAPBOX_TOKEN?.trim()) return
@@ -621,7 +898,7 @@ export function ItineraryMapView({
     if (mapInstanceRef.current) return
 
     const markersById = markersByIdRef.current
-    const popupHtmlById = popupHtmlByIdRef.current
+    const popupDataById = popupDataByIdRef.current
 
     const map = new mapboxgl.Map({
       container,
@@ -644,7 +921,6 @@ export function ItineraryMapView({
     if (ro) ro.observe(container)
 
     const onError = (e: { error?: { message?: string }; message?: string }) => {
-      // Ignorar errores de tiles una vez cargado el estilo; solo fallos de arranque.
       if (mapReadyRef.current) return
       const msg =
         e?.error?.message ||
@@ -653,6 +929,19 @@ export function ItineraryMapView({
       setMapError(msg)
     }
 
+    const transportPopupHtml = (p: GeoJSON.GeoJsonProperties): string => {
+      if (!p) return ""
+      const mode = routeModeLabel(
+        p.mode === "undecided" ? null : (p.mode as RouteMode),
+      )
+      const leg = p.leg === "outbound" ? "Ida" : p.leg === "return" ? "Vuelta" : null
+      const vendor = p.vendor ? String(p.vendor) : null
+      const meta = [mode, leg, vendor].filter(Boolean).join(" · ")
+      return popupHtml(String(p.title ?? ""), `Día ${p.dayNumber} · ${meta}`)
+    }
+
+    let ignoreNextMapClick = false
+
     const onLoad = () => {
       ensureMapLayers(map)
       onResize()
@@ -660,29 +949,30 @@ export function ItineraryMapView({
       setMapError(null)
       setMapReady(true)
 
-      map.on("click", "transport-segments-line", (e) => {
+      map.on("mousemove", "transport-segments-line", (e) => {
+        map.getCanvas().style.cursor = "pointer"
+        if (!finePointerRef.current) return
         const f = e.features?.[0]
         if (!f?.properties) return
-        const p = f.properties
-        const title = escapeHtml(String(p.title ?? ""))
-        const mode = routeModeLabel(
-          p.mode === "undecided" ? null : (p.mode as RouteMode),
-        )
-        const leg = p.leg === "outbound" ? "Ida" : p.leg === "return" ? "Vuelta" : null
-        const vendor = p.vendor ? escapeHtml(String(p.vendor)) : null
-        const meta = [mode, leg, vendor].filter(Boolean).join(" · ")
-        new mapboxgl.Popup({ offset: 8 })
-          .setLngLat(e.lngLat)
-          .setHTML(
-            `<div class="p-1 text-sm"><strong class="block">${title}</strong><span class="text-muted-foreground">Día ${p.dayNumber} · ${escapeHtml(meta)}</span></div>`,
-          )
-          .addTo(map)
-      })
-      map.on("mouseenter", "transport-segments-line", () => {
-        map.getCanvas().style.cursor = "pointer"
+        showHoverPopup(e.lngLat, transportPopupHtml(f.properties))
       })
       map.on("mouseleave", "transport-segments-line", () => {
         map.getCanvas().style.cursor = ""
+        if (finePointerRef.current) closeHoverPopup()
+      })
+      map.on("click", "transport-segments-line", (e) => {
+        if (finePointerRef.current) return
+        ignoreNextMapClick = true
+        const f = e.features?.[0]
+        if (!f?.properties) return
+        showHoverPopup(e.lngLat, transportPopupHtml(f.properties))
+      })
+      map.on("click", () => {
+        if (ignoreNextMapClick) {
+          ignoreNextMapClick = false
+          return
+        }
+        if (!finePointerRef.current) closeHoverPopup()
       })
     }
 
@@ -693,14 +983,18 @@ export function ItineraryMapView({
     return () => {
       if (ro) ro.disconnect()
       map.off("error", onError)
+      closeHoverPopup()
+      hoverPopupRef.current = null
       for (const marker of markersById.values()) marker.remove()
       markersById.clear()
-      popupHtmlById.clear()
+      popupDataById.clear()
       mapReadyRef.current = false
       setMapReady(false)
       map.remove()
       mapInstanceRef.current = null
     }
+    // showHoverPopup / closeHoverPopup son estables (refs).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Visibilidad por modo.
@@ -753,6 +1047,7 @@ export function ItineraryMapView({
       coord: LngLat
       label: string
       pinText: string
+      approximate: boolean
     }
     const visible: Visible[] = []
 
@@ -772,6 +1067,7 @@ export function ItineraryMapView({
                 ? "Llegada · inicio del itinerario"
                 : "Salida · fin del itinerario",
             pinText: h.hubRole === "arrival" ? "↓" : "↑",
+            approximate: false,
           })
         }
       }
@@ -797,22 +1093,29 @@ export function ItineraryMapView({
             coord: { lng: end.lng, lat: end.lat },
             label: `Día ${s.dayNumber} · ${routeModeLabel(s.mode)}`,
             pinText: "",
+            approximate: false,
           })
         }
       }
-    } else if (geocodeResult) {
-      for (const { point, coord } of geocodeResult.resolved) {
-        const drawn = drawnStopNumberById.get(point.id)
-        const order = itineraryOrderById.get(point.id)
+    } else {
+      for (const r of visibleResolved) {
+        const drawn = drawnStopNumberById.get(r.point.id)
+        const order = itineraryOrderById.get(r.point.id)
+        const approximate = r.precision === "approximate"
+        const label = approximate
+          ? `Día ${r.point.dayNumber} · ubicación aproximada, verifica en la fuente${
+              r.anchorLabel ? ` (centro de ${r.anchorLabel})` : ""
+            }`
+          : order != null
+            ? `Día ${r.point.dayNumber} · #${order} en el itinerario`
+            : `Día ${r.point.dayNumber}`
         visible.push({
-          id: point.id,
-          point: point as ItineraryMapPoint,
-          coord,
-          label:
-            order != null
-              ? `Día ${point.dayNumber} · #${order} en el itinerario`
-              : `Día ${point.dayNumber}`,
+          id: r.point.id,
+          point: r.point as ItineraryMapPoint,
+          coord: r.coord,
+          label,
           pinText: drawn != null ? String(drawn) : "",
+          approximate,
         })
       }
     }
@@ -820,50 +1123,65 @@ export function ItineraryMapView({
     const nextIds = new Set(visible.map((v) => v.id))
     for (const [id, marker] of markersByIdRef.current) {
       if (!nextIds.has(id)) {
+        if (hoverOpenIdRef.current === id) closeHoverPopup()
         marker.remove()
         markersByIdRef.current.delete(id)
-        popupHtmlByIdRef.current.delete(id)
+        popupDataByIdRef.current.delete(id)
       }
     }
 
+    const bindPinChrome = (el: HTMLElement, id: string) => {
+      const open = () => {
+        const data = popupDataByIdRef.current.get(id)
+        const marker = markersByIdRef.current.get(id)
+        if (!data || !marker) return
+        hoverOpenIdRef.current = id
+        showHoverPopup(marker.getLngLat(), popupHtml(data.name, data.label))
+      }
+      const close = () => {
+        if (hoverOpenIdRef.current === id) closeHoverPopup()
+      }
+      el.addEventListener("mouseenter", () => {
+        if (finePointerRef.current) open()
+      })
+      el.addEventListener("mouseleave", () => {
+        if (finePointerRef.current) close()
+      })
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation()
+        if (finePointerRef.current) return
+        open()
+      })
+    }
+
     for (const v of visible) {
-      const colors = PIN[v.point.type] ?? PIN.endpoint
-      const html = popupHtml(v.point.name, v.label)
+      popupDataByIdRef.current.set(v.id, { name: v.point.name, label: v.label })
       const existing = markersByIdRef.current.get(v.id)
 
       if (existing) {
         existing.setLngLat([v.coord.lng, v.coord.lat])
-        const el = existing.getElement()
-        el.textContent = v.pinText
-        el.style.background = colors.fill
-        el.style.border = `2px solid ${colors.border}`
-        if (popupHtmlByIdRef.current.get(v.id) !== html) {
-          const popup = existing.getPopup()
-          if (popup) {
-            popup.setHTML(html)
-          } else {
-            existing.setPopup(new mapboxgl.Popup({ offset: 16 }).setHTML(html))
-          }
-          popupHtmlByIdRef.current.set(v.id, html)
-        }
+        const root = existing.getElement()
+        const pin = root.firstElementChild as HTMLElement | null
+        if (pin) renderPinInto(pin, v.point.type, v.pinText, v.approximate)
+        root.setAttribute("aria-label", pinAriaLabel(v.point.name, v.point.dayNumber))
         continue
       }
 
+      const root = document.createElement("div")
+      root.setAttribute("role", "img")
+      root.setAttribute("aria-label", pinAriaLabel(v.point.name, v.point.dayNumber))
       const pin = document.createElement("div")
-      pin.setAttribute("role", "listitem")
-      pin.className = cn(
-        "flex items-center justify-center rounded-full font-bold text-white shadow-md",
-        v.point.type === "endpoint" ? "h-3.5 w-3.5 text-[0px]" : "h-7 w-7 text-[12px]",
-      )
-      pin.style.background = colors.fill
-      pin.style.border = `2px solid ${colors.border}`
-      pin.textContent = v.pinText
-      const marker = new mapboxgl.Marker({ element: pin })
+      root.appendChild(pin)
+      renderPinInto(pin, v.point.type, v.pinText, v.approximate)
+      bindPinChrome(root, v.id)
+      const marker = new mapboxgl.Marker({
+        element: root,
+        anchor: "center",
+        className: "wp-map-marker",
+      })
         .setLngLat([v.coord.lng, v.coord.lat])
-        .setPopup(new mapboxgl.Popup({ offset: 16 }).setHTML(html))
         .addTo(map)
       markersByIdRef.current.set(v.id, marker)
-      popupHtmlByIdRef.current.set(v.id, html)
     }
   }, [
     mapReady,
@@ -872,14 +1190,15 @@ export function ItineraryMapView({
     hubsKey,
     segments,
     segmentsKey,
-    geocodeResult,
+    visibleResolved,
     drawnStopNumberById,
     itineraryOrderById,
+    showHoverPopup,
+    closeHoverPopup,
   ])
 
   // fitBounds: una vez por modo + conjunto de contenido (no en cada refresh de geocode).
-  const placesResolvedIds =
-    geocodeResult?.resolved.map((r) => r.point.id).join(",") ?? ""
+  const placesResolvedIds = visibleResolved.map((r) => r.point.id).join(",")
   const fitContentKey =
     mapMode === "transport"
       ? `t:${segmentsKey}|${hubsKey}`
@@ -909,17 +1228,25 @@ export function ItineraryMapView({
         bounds.extend([s.to.lng, s.to.lat])
         hasBounds = true
       }
-    } else if (geocodeResult) {
-      for (const { coord } of geocodeResult.resolved) {
+    } else {
+      for (const { coord } of visibleResolved) {
         bounds.extend([coord.lng, coord.lat])
         hasBounds = true
       }
     }
 
     if (!hasBounds) return
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const duration = fittedSignatureRef.current === null || reduceMotion ? 0 : 420
     fittedSignatureRef.current = signature
-    map.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 })
-  }, [mapReady, mapError, mapMode, fitContentKey, hubs, segments, geocodeResult])
+    map.fitBounds(bounds, {
+      padding: 48,
+      maxZoom: focusDayNumber == null ? 12 : 15,
+      duration,
+    })
+  }, [mapReady, mapError, mapMode, fitContentKey, hubs, segments, visibleResolved, focusDayNumber])
 
   if (!MAPBOX_TOKEN?.trim()) {
     return (
@@ -938,11 +1265,13 @@ export function ItineraryMapView({
 
   const roadable = segments.filter((s) => modeAllowsRoadDirections(s.mode))
   const hasTransportContent = segments.length > 0 || hubs.length > 0
-  const hasPlacesContent = places.length > 0
+  const hasPlacesContent = visiblePlaces.length > 0
   const modeEmpty =
     mapMode === "transport" ? !hasTransportContent : !hasPlacesContent
+  const otherModeHasContent =
+    mapMode === "transport" ? hasPlacesContent : hasTransportContent
 
-  const failed = geocodeResult?.failed ?? []
+  const failed = visibleFailed
   const placesRouteIncomplete =
     mapMode === "places" &&
     (placesRoute.skipped.length > 0 || failed.length > 0)
@@ -976,6 +1305,27 @@ export function ItineraryMapView({
   const isGeocoding =
     geocode.status === "loading" || geocode.status === "idle" || geocode.status === "refreshing"
 
+  const dayScoped = focusDayNumber != null && focusDayLabel
+  const emptyCopy = (() => {
+    if (dayScoped) {
+      const day = focusDayLabel.toLowerCase()
+      return mapMode === "transport"
+        ? `El ${day} no tiene desplazamientos estructurados.`
+        : `El ${day} no tiene lugares en el mapa.`
+    }
+    return mapMode === "transport"
+      ? "Aún no has añadido desplazamientos estructurados al itinerario."
+      : "Aún no has añadido lugares al itinerario."
+  })()
+  const emptyHint =
+    dayScoped && otherModeHasContent
+      ? mapMode === "transport"
+        ? "Este día sí tiene lugares."
+        : "Este día sí tiene desplazamientos."
+      : null
+  const switchMode: MapViewMode = mapMode === "transport" ? "places" : "transport"
+  const switchLabel = mapMode === "transport" ? "Ver recorrido" : "Ver desplazamientos"
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3" role="region" aria-label="Itinerario en el mapa">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" aria-live="polite">
@@ -1008,8 +1358,8 @@ export function ItineraryMapView({
           <>
             {(() => {
               const parts: string[] = []
-              if (geocodeResult && geocodeResult.resolved.length > 0) {
-                const n = geocodeResult.resolved.length
+              if (visibleResolved.length > 0) {
+                const n = visibleResolved.length
                 parts.push(`${n} parada${n === 1 ? "" : "s"}`)
               }
               if (placesTotalLabel) parts.push(placesTotalLabel)
@@ -1091,10 +1441,18 @@ export function ItineraryMapView({
             No se pudo cargar el mapa. {mapError}
           </div>
         ) : modeEmpty ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 px-6 text-center text-sm text-muted-foreground backdrop-blur-[1px]">
-            {mapMode === "transport"
-              ? "Aún no has añadido desplazamientos estructurados al itinerario."
-              : "Aún no has añadido lugares al itinerario."}
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/80 px-6 text-center text-sm text-muted-foreground backdrop-blur-[1px]">
+            <p className="m-0">{emptyCopy}</p>
+            {emptyHint ? <p className="m-0">{emptyHint}</p> : null}
+            {emptyHint && onMapModeChange ? (
+              <button
+                type="button"
+                className="rounded-md border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                onClick={() => onMapModeChange(switchMode)}
+              >
+                {switchLabel}
+              </button>
+            ) : null}
           </div>
         ) : null}
         {geocode.status === "error" ? (
