@@ -11,6 +11,7 @@ Kinds:
   - refresh: rate-limit de «Recargar» (user_id obligatorio)
   - system_revalidation: mantenimiento de caché en fondo (user_id null)
   - partner_prewarm: pre-síntesis desde /partners (user_id null; cap global durable)
+  - landing_source_search: Tavily de GET /sources/suggest (user_id null; cap global durable)
 """
 from __future__ import annotations
 
@@ -40,8 +41,9 @@ Kind = Literal[
     "country_tasks",
     "place_suggest",
     "transport_hub",
+    "landing_source_search",
 ]
-_USERLESS_KINDS = frozenset({"system_revalidation", "partner_prewarm"})
+_USERLESS_KINDS = frozenset({"system_revalidation", "partner_prewarm", "landing_source_search"})
 LimitKind = Literal["guest", "daily", "monthly"]
 
 _GUEST_DEFAULTS: dict[str, int] = {

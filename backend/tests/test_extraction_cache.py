@@ -89,6 +89,45 @@ async def test_get_cached_extraction_falls_back_to_canonical(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_cached_extraction_canonical_when_incoming_already_clean(monkeypatch):
+    """Landing envía sin barra; la PK se guardó con barra. Antes se saltaba canonical_url."""
+    monkeypatch.setenv("SUPABASE_URL", "https://sb.example")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
+
+    incoming = "https://losviajesdeclaudia.com/japon/guia-ruta-por-japon-3-semanas-21-dias"
+    stored_pk = incoming + "/"
+    canonical = normalize_article_url(incoming)
+    assert canonical == incoming
+    row = {
+        "url": stored_pk,
+        "canonical_url": canonical,
+        "payload": {"title": "Japón 21 días", "days": [], "basics": []},
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "validated_at": datetime.now(timezone.utc).isoformat(),
+        "etag": None,
+        "last_modified": None,
+        "article_modified_at": None,
+        "content_hash": "abc",
+        "content_version": CONTENT_VERSION,
+    }
+    seen: list[dict] = []
+
+    async def fake_fetch_rows(params):
+        seen.append(params)
+        if params.get("url") == f"eq.{incoming}":
+            return []
+        if params.get("canonical_url") == f"eq.{canonical}":
+            return [row]
+        return []
+
+    with patch("extraction_cache._fetch_rows", side_effect=fake_fetch_rows):
+        entry = await get_cached_extraction(incoming)
+    assert entry is not None
+    assert entry.payload["title"] == "Japón 21 días"
+    assert any("canonical_url" in p for p in seen)
+
+
+@pytest.mark.asyncio
 async def test_get_cached_extraction_miss(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://sb.example")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")

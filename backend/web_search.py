@@ -49,6 +49,7 @@ async def tavily_search(
     max_results: int = 5,
     include_raw_content: bool = True,
     preferred_domains: list[str] | None = None,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """
     Busca en Tavily y devuelve un dict serializable para el LLM.
@@ -56,6 +57,9 @@ async def tavily_search(
     Con `preferred_domains` (los blogs y revistas de referencia del usuario) se hace una primera
     pasada restringida a esos dominios; si devuelve poco, se repite la búsqueda abierta y se
     concatenan los resultados, marcando cuáles vienen de una referencia del usuario.
+
+    `strict=True` no cae a la búsqueda abierta: el caller controla el escalón
+    (GET /sources/suggest no debe disparar Tavily web sin Turnstile).
     """
     api_key = (os.getenv("TAVILY_API_KEY") or "").strip()
     if not api_key:
@@ -83,9 +87,10 @@ async def tavily_search(
                 preferred_results = _normalize_results(first)
                 for item in preferred_results:
                     item["from_user_reference"] = True
-
-        if len(preferred_results) >= n:
-            return {"query": q, "answer": None, "results": preferred_results[:n]}
+            if len(preferred_results) >= n or strict:
+                if isinstance(first, str) and not preferred_results:
+                    return {"error": first}
+                return {"query": q, "answer": None, "results": preferred_results[:n]}
 
         remaining = n - len(preferred_results)
         general = await _tavily_call(client, {**base_payload, "max_results": remaining})

@@ -13,6 +13,8 @@ import { useEffect, useRef } from "react"
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
 
+type TurnstileAppearance = "always" | "execute" | "interaction-only"
+
 type TurnstileApi = {
   render: (
     el: HTMLElement,
@@ -21,6 +23,7 @@ type TurnstileApi = {
       callback: (token: string) => void
       "error-callback"?: () => void
       "expired-callback"?: () => void
+      appearance?: TurnstileAppearance
     },
   ) => string
   remove: (id: string) => void
@@ -57,10 +60,13 @@ function loadScript(): Promise<void> {
 export function Turnstile({
   onToken,
   resetKey = 0,
+  appearance = "always",
 }: {
   onToken: (token: string | null) => void
   /** Cambia este valor para re-montar el widget (token de un solo uso). */
   resetKey?: number | string
+  /** `interaction-only` no pinta el widget salvo que Cloudflare lo pida. */
+  appearance?: TurnstileAppearance
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const onTokenRef = useRef(onToken)
@@ -77,6 +83,7 @@ export function Turnstile({
         if (cancelled || !containerRef.current || !window.turnstile) return
         widgetId = window.turnstile.render(containerRef.current, {
           sitekey: SITE_KEY,
+          appearance,
           callback: (token) => onTokenRef.current(token),
           "error-callback": () => onTokenRef.current(null),
           "expired-callback": () => onTokenRef.current(null),
@@ -88,7 +95,7 @@ export function Turnstile({
       cancelled = true
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId)
     }
-  }, [resetKey])
+  }, [resetKey, appearance])
 
   if (!SITE_KEY) return null
   return <div ref={containerRef} />

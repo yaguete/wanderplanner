@@ -67,7 +67,10 @@ export function BrandWordmark({ className }: { className?: string }) {
 export function BrandLockup({ className }: { className?: string }) {
   return (
     <span className={cn("flex min-w-0 items-end gap-2", className)}>
-      <BrandMark />
+      {/* `data-brand-mark`: el lockup volador de la landing colapsa este hueco al atracar. */}
+      <span className="inline-flex shrink-0 overflow-hidden" data-brand-mark>
+        <BrandMark />
+      </span>
       <BrandWordmark className="-mb-[0.12em]" />
     </span>
   )

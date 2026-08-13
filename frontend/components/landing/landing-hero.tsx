@@ -1,6 +1,5 @@
-import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
-import { Button } from "@/components/ui/button"
+import { LandingStart } from "./landing-start"
 import { ProductFrame } from "./product-frame"
 
 export function LandingHero() {
@@ -23,17 +22,10 @@ export function LandingHero() {
           Los viajes que te inspiran,{" "}
           <span className="text-foreground/45">convertidos en tu itinerario</span>
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-foreground/70 sm:text-lg">
-          WanderPlanner lee a los viajeros/as en los que confías y te ayuda a convertir sus rutas en tu itinerario, día a día.
+        <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-foreground/70 sm:text-xl">
+          WanderPlanner lee a los viajeros/as en los que confías y te ayuda a transformar sus rutas en tu plan de viaje, día a día.
         </p>
-        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button asChild size="lg" className="h-12 w-full px-8 text-base sm:w-auto">
-            <Link href="/signup">Empezar a planificar</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="h-12 w-full px-8 text-base sm:w-auto">
-            <Link href="/partners">Soy bloguero</Link>
-          </Button>
-        </div>
+        <LandingStart />
       </div>
 
       <ProductFrame />

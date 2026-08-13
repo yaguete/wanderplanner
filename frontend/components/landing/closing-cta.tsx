@@ -25,7 +25,7 @@ export function ClosingCta() {
             <Link href="/signup">Empezar a planificar</Link>
           </Button>
           <Button asChild variant="link">
-            <Link href="/partners">o mira el kit para blogueros</Link>
+            <Link href="#empezar">o empieza con un artículo</Link>
           </Button>
         </div>
       </div>

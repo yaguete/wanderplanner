@@ -22,7 +22,8 @@
     "test:map-day-scope": "tsx lib/map-day-scope.test.ts",
     "test:geocode-validate": "tsx lib/geocode-validate.test.ts",
     "test:airports": "tsx lib/airports.test.ts",
-    "test:flight-search": "tsx lib/flight-search.test.ts"
+    "test:flight-search": "tsx lib/flight-search.test.ts",
+    "test:partner-trip": "tsx lib/partner-trip.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

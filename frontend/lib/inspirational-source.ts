@@ -43,6 +43,8 @@ function hostMatchesSuffix(host: string, suffix: string): boolean {
 /**
  * `true` si la URL parece institucional / trámite oficial
  * (no debe ofrecerse «Añadir fuente»).
+ *
+ * Espejo de backend/inspirational_source.py: si cambias una, cambia la otra.
  */
 export function isInstitutionalSourceUrl(url: string): boolean {
   try {

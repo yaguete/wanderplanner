@@ -3,9 +3,9 @@
 /**
  * Entrada del CTA de blogs amigos: `/start?source=<url>&ref=<partner>&days=<N>`.
  *
- * Abre sesión (anónima si no hay ninguna), crea un viaje borrador con el `referrer` y salta al
- * detalle con `?source=`, donde se lanza la extracción. La caché `article_extractions` hace que
- * el artículo del partner esté normalmente listo al instante.
+ * Abre sesión (anónima si no hay ninguna), reusa o crea un viaje borrador con el `referrer` y
+ * salta al detalle con `?source=`, donde se lanza la extracción. La caché `article_extractions`
+ * hace que el artículo del partner esté normalmente listo al instante.
  *
  * `&days=N` (opcional, 1..60) fuerza la duración del borrador desde el post del blogger;
  * tiene prioridad sobre `total_days` de la extracción.
@@ -19,8 +19,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
-import { insertDraftTrip } from "@/lib/db/trips-repo"
-import { draftTripNameFor, parseDaysParam } from "@/lib/partner-trip"
+import { reuseOrInsertDraftTrip } from "@/lib/db/trips-repo"
+import { draftTripNameFor, parseDaysParam, stashPendingSource } from "@/lib/partner-trip"
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) return error.message
@@ -93,11 +93,12 @@ function StartFlow() {
       }
 
       const name = draftTripNameFor(sourceUrl)
-      const tripId = await insertDraftTrip(supabase, userId, {
+      const tripId = await reuseOrInsertDraftTrip(supabase, userId, {
         name,
         referrer,
         numDays: forcedDays,
       })
+      if (isValidSource) stashPendingSource(tripId, sourceUrl)
       const query = isValidSource ? `?source=${encodeURIComponent(sourceUrl)}` : ""
       router.replace(`/trips/${tripId}${query}`)
     } catch (error) {

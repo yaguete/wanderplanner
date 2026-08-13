@@ -16,7 +16,7 @@ import {
   normalizeRefSlug,
   partnerButtonPreviewStyles,
 } from "@/lib/partner-button"
-import { MAX_AUTO_DAYS, parseDaysParam } from "@/lib/partner-trip"
+import { MAX_AUTO_DAYS, isReservedRefSlug, parseDaysParam } from "@/lib/partner-trip"
 import { prewarmSource, type PrewarmResult } from "@/lib/partners-api"
 
 const DEFAULT_LABEL = "Planifica esta ruta con WanderPlanner"
@@ -108,7 +108,11 @@ export function PartnerButtonBuilder() {
       return
     }
     if (!normalizedRef) {
-      setError("Introduce un slug de partner (p. ej. lacosmopolilla).")
+      setError("Introduce un slug de partner (p. ej. tu-blog).")
+      return
+    }
+    if (isReservedRefSlug(normalizedRef)) {
+      setError("Ese slug está reservado. Elige el nombre de tu blog.")
       return
     }
     if (daysRaw.trim() && forcedDays == null) {

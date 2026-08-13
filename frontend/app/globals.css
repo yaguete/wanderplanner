@@ -410,6 +410,22 @@ html.landing-lockup-armed .landing-header-lockup {
   visibility: hidden;
 }
 
+/* Lockup volador: la ardilla se desvanece y cede sitio al atracar (--landing-lockup-p 0→1). */
+.landing-flying-lockup {
+  --landing-lockup-p: 0;
+}
+.landing-flying-lockup > span {
+  gap: calc(0.5rem * (1 - var(--landing-lockup-p)));
+}
+.landing-flying-lockup [data-brand-mark] {
+  max-width: calc(1.75rem * (1 - var(--landing-lockup-p)));
+  max-height: calc(2.25rem * (1 - var(--landing-lockup-p)));
+  opacity: calc(1 - var(--landing-lockup-p));
+}
+.landing-flying-lockup > span > :last-child {
+  margin-bottom: calc(-0.12em * (1 - var(--landing-lockup-p)));
+}
+
 /* Al hacer scroll, el contenido se pierde detrás del header con un velo difuso. */
 .landing-header::before {
   content: "";
@@ -471,4 +487,47 @@ html.landing-header-scrolled .landing-header::before {
 .landing-grid-texture--flip {
   mask-image: radial-gradient(ellipse 70% 55% at 50% 100%, #000 55%, transparent 100%);
   -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 100%, #000 55%, transparent 100%);
+}
+
+.landing-start-field {
+  display: flex;
+  height: 3.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  padding-left: 1.1rem;
+  padding-right: 0.35rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.landing-start-input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  font-size: 0.9375rem;
+  color: hsl(var(--foreground));
+  outline: none;
+}
+
+.landing-start-input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.landing-start-go {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.landing-start-go:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
 }

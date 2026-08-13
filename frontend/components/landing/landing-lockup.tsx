@@ -69,10 +69,15 @@ export function LandingLockup() {
       syncHeaderBlur()
       const to = toEl.getBoundingClientRect()
       const p = smoothstep(clamp01(window.scrollY / RANGE_PX))
+      // Ardilla fuera en la segunda mitad del trayecto (al hacerse pequeña / atracar).
+      const markOut = smoothstep(clamp01((p - 0.4) / 0.6))
       const x = from0.left + (to.left - from0.left) * p
       const y = from0.top + (to.top - from0.top) * p
-      const s = (from0.width / Math.max(to.width, 1)) * (1 - p) + p
+      // Escala contra el lockup completo (offsetWidth ignora el scale del hero).
+      // El destino es solo el wordmark; no usar to.width.
+      const s = (from0.width / Math.max(fromEl.offsetWidth, 1)) * (1 - p) + p
       flying.style.transform = `translate(${x}px, ${y}px) scale(${s})`
+      flying.style.setProperty("--landing-lockup-p", String(markOut))
     }
 
     captureFrom()
@@ -107,7 +112,7 @@ export function LandingLockup() {
       ref={elRef}
       href="/"
       hidden
-      className="fixed left-0 top-0 z-50 origin-top-left will-change-transform"
+      className="landing-flying-lockup fixed left-0 top-0 z-50 origin-top-left will-change-transform"
       aria-label="WanderPlanner — inicio"
     >
       <BrandLockup />

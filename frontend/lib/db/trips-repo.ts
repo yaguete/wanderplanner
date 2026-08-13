@@ -21,6 +21,7 @@ import type {
 } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
 import { sanitizeUserDays } from "@/lib/route-legs"
+import { isReusableDraftTrip, mergeDraftReferrer } from "@/lib/partner-trip"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
 
@@ -253,6 +254,71 @@ export async function loadTripsState(
     trips: ((tripsResult.data ?? []) as unknown as TripRow[]).map(rowToTrip),
     sources: ((sourcesResult.data ?? []) as unknown as SourceRow[]).map(rowToSource),
   }
+}
+
+/**
+ * Viaje vacío del usuario reutilizable por `/start` (sin fuentes, sin fechas, un día en blanco).
+ * `select` acotado: no carga el histórico entero.
+ */
+export async function findReusableDraftTrip(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ id: string; referrer: string | null } | null> {
+  const { data, error } = await supabase
+    .from("trips")
+    .select(TRIP_COLUMNS)
+    .eq("user_id", userId)
+    .eq("archived", false)
+    .is("start_date", null)
+    .order("created_at", { ascending: false })
+    .limit(20)
+
+  if (error) throw error
+  for (const row of (data ?? []) as TripRow[]) {
+    const trip = rowToTrip(row)
+    if (isReusableDraftTrip(trip)) {
+      return { id: trip.id, referrer: trip.referrer ?? null }
+    }
+  }
+  return null
+}
+
+/**
+ * Reusa el borrador vacío si existe; si no, inserta. Evita viajes huérfanos al repetir `/start`.
+ */
+export async function reuseOrInsertDraftTrip(
+  supabase: SupabaseClient,
+  userId: string,
+  data: { name: string; referrer: string | null; numDays?: number | null },
+): Promise<string> {
+  const existing = await findReusableDraftTrip(supabase, userId)
+  if (!existing) {
+    return insertDraftTrip(supabase, userId, data)
+  }
+
+  const forcedDays =
+    data.numDays != null && Number.isFinite(data.numDays) && data.numDays >= 1
+      ? Math.floor(data.numDays)
+      : null
+  const patch: Record<string, unknown> = {
+    name: data.name,
+    referrer: mergeDraftReferrer(existing.referrer, data.referrer),
+  }
+  if (forcedDays != null) {
+    const startDate = tomorrowISO()
+    patch.num_days = forcedDays
+    patch.start_date = startDate
+    patch.end_date = endDateFromStartAndNumDays(startDate, forcedDays)
+    patch.days = Array.from({ length: forcedDays }, () => ({
+      id: crypto.randomUUID(),
+      label: "",
+      items: [],
+    }))
+  }
+
+  const { error } = await supabase.from("trips").update(patch).eq("id", existing.id)
+  if (error) throw error
+  return existing.id
 }
 
 /**

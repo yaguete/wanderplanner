@@ -12,6 +12,9 @@ Auth vía Depends sigue devolviendo HTTP 401/403 antes del body.
 POST /partners/prewarm (público, Turnstile + límites): misma forma SSE, pero `result`
 solo incluye metadatos (destination, total_days, items, og_image) — nunca el payload.
 
+GET /sources/suggest (público): artículos para la landing. Caché curada → Tavily
+de dominios conocidos → Tavily abierto (kill switch SOURCE_SUGGEST_WEB_ENABLED).
+
 Caché global stale-while-revalidate (`article_extractions`):
   - fresh → payload al instante
   - stale → payload al instante + revalidación en fondo
@@ -73,6 +76,7 @@ from partners import (  # noqa: E402
 from photo_lookup import single_flight  # noqa: E402
 from place_thumbs import router as thumbs_router  # noqa: E402
 from place_search import router as place_search_router  # noqa: E402
+from source_suggest import router as source_suggest_router  # noqa: E402
 from usage import enforce_usage, record_event  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -105,6 +109,7 @@ app.include_router(covers_router)
 app.include_router(day_summary_router)
 app.include_router(country_tasks_router)
 app.include_router(place_search_router)
+app.include_router(source_suggest_router)
 
 
 # Salida: itinerarios largos (p. ej. muchas franjas/ítems) superan 8K tokens de JSON; Haiku 4.5 admite ~64K.

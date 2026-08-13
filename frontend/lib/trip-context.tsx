@@ -319,17 +319,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const syncerRef = useRef<TripsSyncer | null>(null)
   const hydratedFor = useRef<string | null>(null)
 
-  useEffect(() => {
-    tripsRef.current = trips
-  }, [trips])
-
-  useEffect(() => {
-    sourcesRef.current = sources
-  }, [sources])
-
-  useEffect(() => {
-    pendingSourcesRef.current = pendingSources
-  }, [pendingSources])
+  // En el render, no en un effect: `/start` dispara la extracción en el hijo
+  // en el mismo commit en el que llegan los viajes. Un effect deja el ref a []
+  // y startSourceExtraction responde trip-not-found.
+  tripsRef.current = trips
+  sourcesRef.current = sources
+  pendingSourcesRef.current = pendingSources
 
   // Al desmontar el provider (salir de /trips): abortar extracciones en vuelo.
   useEffect(() => {

@@ -6,7 +6,7 @@ Política stale-while-revalidate:
   - stale  (entre REVALIDATE y HARD_TTL): servir al instante + revalidar en fondo
   - expired / miss: flujo síncrono (fetch + Claude)
 
-La clave de lookup es doble: `url` cruda y, si falla, `canonical_url` normalizada.
+La clave de lookup es `url` cruda, luego `canonical_url` (siempre) y la PK canónica.
 Acceso solo con `service_role`. Si faltan env vars, degrada a "sin caché".
 """
 from __future__ import annotations
@@ -29,6 +29,14 @@ Freshness = Literal["fresh", "stale", "expired", "miss"]
 _ROW_SELECT = (
     "url,canonical_url,payload,fetched_at,validated_at,"
     "etag,last_modified,article_modified_at,content_hash,content_version"
+)
+# Metadatos para GET /sources/suggest: nunca article_html ni el itinerario.
+_SUGGEST_SELECT = (
+    "url,canonical_url,validated_at,fetched_at,"
+    "destination:payload->>destination,"
+    "og_title:payload->>og_title,"
+    "og_image:payload->>og_image,"
+    "total_days:payload->total_days"
 )
 
 
@@ -163,18 +171,27 @@ async def _fetch_rows(params: dict[str, str]) -> list[dict[str, Any]]:
 
 
 async def get_cached_extraction(url: str) -> CacheEntry | None:
-    """Lookup por URL cruda y, si falla, por canonical_url. Incluye filas expired."""
+    """
+    Lookup por URL cruda, luego por canonical_url (siempre) y por PK canónica.
+
+    Incluye filas expired. El fallback a canonical_url no exige que la canónica
+    difiera de la entrada: si la landing ya manda la URL limpia y la fila se
+    guardó con barra final (u otra variante) como PK, hay que buscar igual.
+    """
     if not url:
         return None
     rows = await _fetch_rows(
         {"url": f"eq.{url}", "select": _ROW_SELECT, "limit": "1"},
     )
-    if not rows:
-        canonical = normalize_article_url(url)
-        if canonical and canonical != url:
-            rows = await _fetch_rows(
-                {"canonical_url": f"eq.{canonical}", "select": _ROW_SELECT, "limit": "1"},
-            )
+    canonical = normalize_article_url(url)
+    if not rows and canonical:
+        rows = await _fetch_rows(
+            {"canonical_url": f"eq.{canonical}", "select": _ROW_SELECT, "limit": "1"},
+        )
+    if not rows and canonical and canonical != url:
+        rows = await _fetch_rows(
+            {"url": f"eq.{canonical}", "select": _ROW_SELECT, "limit": "1"},
+        )
     if not rows or not isinstance(rows[0], dict):
         return None
     return _row_to_entry(rows[0])
@@ -265,3 +282,18 @@ async def touch_validation(
             )
     except Exception:
         return
+
+
+async def list_extraction_metas(*, limit: int = 400) -> list[dict[str, Any]]:
+    """
+    Metadatos recientes de article_extractions (sin article_html).
+    El filtro por destino/host lo hace GET /sources/suggest en Python.
+    """
+    n = max(1, min(int(limit), 500))
+    return await _fetch_rows(
+        {
+            "select": _SUGGEST_SELECT,
+            "limit": str(n),
+            "order": "validated_at.desc.nullslast",
+        }
+    )

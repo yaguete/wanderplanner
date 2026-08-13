@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useTrips } from "@/lib/trip-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { draftTripNameFor } from "@/lib/partner-trip"
+import { draftTripNameFor, takePendingSource } from "@/lib/partner-trip"
 import { formatGuideLabel } from "@/lib/itinerary-utils"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
@@ -89,8 +89,10 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
-  const pendingSourceUrl = searchParams.get("source")
+  const querySource = searchParams.get("source")?.trim() || null
+  const [stashedSource, setStashedSource] = useState<string | null>(null)
   const autoSourceRequested = useRef<string | null>(null)
+  const pendingSourceUrl = querySource || stashedSource
   const isMobile = useIsMobile()
   const { setChrome, setAutoCollapsed } = useTripChrome()
 
@@ -111,12 +113,17 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   }, [isLoading, trip, router])
 
   useEffect(() => {
+    if (querySource) return
+    setStashedSource(takePendingSource(tripId))
+  }, [tripId, querySource])
+
+  useEffect(() => {
     if (!pendingSourceUrl || !trip) return
     if (trip.sourceIds.length > 0) return
     const requestKey = `${tripId}:${pendingSourceUrl}`
     if (autoSourceRequested.current === requestKey) return
-    autoSourceRequested.current = requestKey
-    startSourceExtraction(tripId, pendingSourceUrl)
+    const result = startSourceExtraction(tripId, pendingSourceUrl)
+    if (result.ok) autoSourceRequested.current = requestKey
   }, [pendingSourceUrl, trip, tripId, startSourceExtraction])
 
   useEffect(() => {
