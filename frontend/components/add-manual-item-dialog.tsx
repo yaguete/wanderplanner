@@ -211,7 +211,7 @@ export function AddManualItemDialog({
             Añadir ítem
           </DialogTitle>
           <DialogDescription>
-            Algo que no viene de ninguna fuente: lo añades tú al plan.
+            Añade a tu viaje elementos que no encuentras en tus fuentes.
           </DialogDescription>
         </DialogHeader>
 
@@ -273,26 +273,6 @@ export function AddManualItemDialog({
               placeholder={NAME_PLACEHOLDERS[type]}
               autoFocus
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor={dayFieldId}>Día</Label>
-            <Select value={dayId} onValueChange={setDayId}>
-              <SelectTrigger id={dayFieldId} className="w-full">
-                <SelectValue placeholder="Elige un día" />
-              </SelectTrigger>
-              <SelectContent>
-                {days.map((day, index) => {
-                  const desc = getDayUserDescription(day.label)
-                  const label = desc ? `Día ${index + 1} · ${desc}` : `Día ${index + 1}`
-                  return (
-                    <SelectItem key={day.id} value={day.id}>
-                      {label}
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="relative space-y-2">
@@ -357,6 +337,26 @@ export function AddManualItemDialog({
                   : "Ubicación guardada."}
               </p>
             ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={dayFieldId}>Día</Label>
+            <Select value={dayId} onValueChange={setDayId}>
+              <SelectTrigger id={dayFieldId} className="w-full">
+                <SelectValue placeholder="Elige un día" />
+              </SelectTrigger>
+              <SelectContent>
+                {days.map((day, index) => {
+                  const desc = getDayUserDescription(day.label)
+                  const label = desc ? `Día ${index + 1} · ${desc}` : `Día ${index + 1}`
+                  return (
+                    <SelectItem key={day.id} value={day.id}>
+                      {label}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

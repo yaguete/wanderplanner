@@ -24,6 +24,14 @@ import type { ItemType, UserDay } from "@/types/itinerary"
 /** A partir de aquí la lista se vuelve incómoda sin buscador. */
 const SEARCH_FROM_DAYS = 8
 
+/** Sustantivo con artículo para el copy de «Añadir al día». */
+const ADD_TO_DAY_OBJECT: Record<ItemType, string> = {
+  stay: "este alojamiento",
+  activity: "esta actividad",
+  food: "este restaurante",
+  transport: "este desplazamiento",
+}
+
 export type AddToDayDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -101,7 +109,7 @@ export function AddToDayDialog({
               Añadir al día
             </DialogTitle>
             <DialogDescription className="mt-1">
-              Elige en qué día de tu viaje quieres colocar este ítem.
+              Elige en qué día de tu viaje quieres colocar {ADD_TO_DAY_OBJECT[itemType]}.
             </DialogDescription>
           </div>
           <div className="flex items-center gap-2.5 rounded-xl border border-border bg-muted/40 px-3 py-2">
@@ -146,13 +154,16 @@ export function AddToDayDialog({
             Ningún día coincide con «{query.trim()}».
           </p>
         ) : (
-          <ul className="max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:pb-[env(safe-area-inset-bottom)]">
+          <ul className="max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:space-y-1.5 max-sm:px-3 max-sm:pt-3 max-sm:pb-[env(safe-area-inset-bottom)]">
             {visibleRows.map((row) => (
               <li key={row.id}>
                 <button
                   type="button"
                   onClick={() => handleSelect(row.id)}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent",
+                    "max-sm:border max-sm:border-border max-sm:bg-card max-sm:shadow-sm max-sm:active:bg-accent",
+                  )}
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-sm font-semibold tabular-nums text-foreground">
                     {row.number}
