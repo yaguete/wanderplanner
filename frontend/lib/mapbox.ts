@@ -521,7 +521,7 @@ export async function geocodeName(
   const fullQuery = buildContextualQuery(name, options?.tripDestination)
   if (!fullQuery) return []
   const cKey = countryParamsKey(options?.countryCodes)
-  const key = geocodeQueryKey(fullQuery, proximity, cKey, "n5")
+  const key = geocodeQueryKey(fullQuery, proximity, cKey, "n5t")
   const cached = getCandidatesFromMemory(key) ?? readCandidateCache(key)
   if (cached) return cached
 
@@ -553,6 +553,7 @@ export async function geocodeName(
       coord: { lng: c[0], lat: c[1] },
       featureType: featureTypeFromMapboxId(f.id),
       placeName: f.place_name?.trim(),
+      text: f.text?.trim() || undefined,
     })
   }
   if (candidates.length > 0) {

@@ -16,7 +16,10 @@ export type GeocodePoint = {
 
 export type GeocodeResolved = {
   point: GeocodePoint
+  /** Coordenada real (geometría de la ruta y km del pie). */
   coord: LngLat
+  /** Coordenada del marcador si se ha repartido un grupo apilado. */
+  displayCoord?: LngLat
   precision?: "exact" | "approximate"
   anchorLabel?: string
 }

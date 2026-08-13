@@ -57,6 +57,7 @@ import {
 } from "@/lib/map-route-geometry"
 import { routeModeLabel } from "@/lib/route-legs"
 import type { RouteMode } from "@/types/itinerary"
+import { AdjustLocationDialog } from "@/components/adjust-location-dialog"
 
 mapboxgl.accessToken = MAPBOX_TOKEN
 
@@ -286,10 +287,13 @@ function renderPinInto(
   }</svg>${label}`
 }
 
-function popupHtml(name: string, label: string): string {
+function popupHtml(name: string, label: string, opts?: { adjustId?: string }): string {
+  const adjust = opts?.adjustId
+    ? `<button type="button" class="wp-map-popup-adjust" data-wp-adjust="${escapeHtml(opts.adjustId)}">haz click para ajustar ubicación</button>`
+    : ""
   return `<div class="max-w-[15rem]"><span class="block text-sm text-popover-foreground">${escapeHtml(
     name,
-  )}</span><span class="block text-xs text-muted-foreground">${escapeHtml(label)}</span></div>`
+  )}</span><span class="block text-xs text-muted-foreground">${escapeHtml(label)}</span>${adjust}</div>`
 }
 
 function pinAriaLabel(name: string, dayNumber: number): string {
@@ -406,6 +410,10 @@ function asGeocodePoint(p: ItineraryMapPoint): GeocodePoint {
   }
 }
 
+function pinCoord(r: GeocodeResolved): LngLat {
+  return r.displayCoord ?? r.coord
+}
+
 export function ItineraryMapView({
   places,
   hubs = [],
@@ -417,6 +425,7 @@ export function ItineraryMapView({
   focusDayNumber = null,
   focusDayLabel = null,
   onMapModeChange,
+  onPersistItemCoords,
 }: {
   /** Lugares del recorrido: stay / food / activity (sin hubs). Viaje entero. */
   places: ItineraryMapPoint[]
@@ -433,13 +442,32 @@ export function ItineraryMapView({
   /** Etiqueta corta para el overlay vacío, p. ej. "Día 5". */
   focusDayLabel?: string | null
   onMapModeChange?: (next: MapViewMode) => void
+  /** Guarda coords en el ítem (salida de «Ajustar ubicación»). */
+  onPersistItemCoords?: (
+    itemId: string,
+    coords: LngLat,
+    region: string,
+  ) => void
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null)
   const markersByIdRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
-  const popupDataByIdRef = useRef<Map<string, { name: string; label: string }>>(new Map())
+  const popupDataByIdRef = useRef<
+    Map<string, { name: string; label: string; adjustable?: boolean }>
+  >(new Map())
   const hoverPopupRef = useRef<mapboxgl.Popup | null>(null)
   const hoverOpenIdRef = useRef<string | null>(null)
+  const hoverCloseTimerRef = useRef<number | null>(null)
+  const popupChromeBoundRef = useRef(false)
+  const adjustingSetterRef = useRef<
+    (next: { id: string; name: string; proximity: [number, number] } | null) => void
+  >(() => {})
+  const [adjusting, setAdjusting] = useState<{
+    id: string
+    name: string
+    proximity: [number, number]
+  } | null>(null)
+  adjustingSetterRef.current = setAdjusting
   const finePointerRef = useRef(false)
   const coordCacheRef = useRef<
     Map<string, { coord: LngLat; precision: "exact" | "approximate"; anchorLabel?: string }>
@@ -684,7 +712,7 @@ export function ItineraryMapView({
       for (const r of unspread) {
         resolved.push({
           ...r,
-          coord: spread.get(r.point.id) ?? r.coord,
+          displayCoord: spread.get(r.point.id) ?? r.coord,
         })
       }
 
@@ -859,9 +887,26 @@ export function ItineraryMapView({
   }, [placesRoadLoading, placesRoute.legs])
 
   const closeHoverPopup = useCallback(() => {
+    if (hoverCloseTimerRef.current != null) {
+      window.clearTimeout(hoverCloseTimerRef.current)
+      hoverCloseTimerRef.current = null
+    }
     hoverPopupRef.current?.remove()
     hoverOpenIdRef.current = null
   }, [])
+
+  const scheduleHoverClose = useCallback(
+    (id: string) => {
+      if (hoverCloseTimerRef.current != null) {
+        window.clearTimeout(hoverCloseTimerRef.current)
+      }
+      hoverCloseTimerRef.current = window.setTimeout(() => {
+        hoverCloseTimerRef.current = null
+        if (hoverOpenIdRef.current === id) closeHoverPopup()
+      }, 220)
+    },
+    [closeHoverPopup],
+  )
 
   const ensureHoverPopup = useCallback((): mapboxgl.Popup => {
     if (!hoverPopupRef.current) {
@@ -873,17 +918,57 @@ export function ItineraryMapView({
         maxWidth: "260px",
         className: "wp-map-popup",
       })
+      popupChromeBoundRef.current = false
     }
     return hoverPopupRef.current
   }, [])
 
   const showHoverPopup = useCallback(
-    (lngLat: mapboxgl.LngLatLike, html: string) => {
+    (lngLat: mapboxgl.LngLatLike, html: string, opts?: { interactive?: boolean }) => {
       const map = mapInstanceRef.current
       if (!map) return
-      ensureHoverPopup().setLngLat(lngLat).setHTML(html).addTo(map)
+      if (hoverCloseTimerRef.current != null) {
+        window.clearTimeout(hoverCloseTimerRef.current)
+        hoverCloseTimerRef.current = null
+      }
+      const popup = ensureHoverPopup()
+      popup.setLngLat(lngLat).setHTML(html).addTo(map)
+      const el = popup.getElement()
+      if (!el) return
+      el.classList.toggle("wp-map-popup--interactive", Boolean(opts?.interactive))
+      if (popupChromeBoundRef.current) return
+      popupChromeBoundRef.current = true
+      el.addEventListener("mouseenter", () => {
+        if (hoverCloseTimerRef.current != null) {
+          window.clearTimeout(hoverCloseTimerRef.current)
+          hoverCloseTimerRef.current = null
+        }
+      })
+      el.addEventListener("mouseleave", () => {
+        if (!finePointerRef.current) return
+        const openId = hoverOpenIdRef.current
+        if (openId) scheduleHoverClose(openId)
+      })
+      el.addEventListener("click", (e) => {
+        const btn = (e.target as HTMLElement | null)?.closest?.("[data-wp-adjust]")
+        if (!btn) return
+        e.preventDefault()
+        e.stopPropagation()
+        const itemId = (btn as HTMLElement).dataset.wpAdjust
+        if (!itemId) return
+        const data = popupDataByIdRef.current.get(itemId)
+        const marker = markersByIdRef.current.get(itemId)
+        if (!data || !marker) return
+        closeHoverPopup()
+        const ll = marker.getLngLat()
+        adjustingSetterRef.current({
+          id: itemId,
+          name: data.name,
+          proximity: [ll.lng, ll.lat],
+        })
+      })
     },
-    [ensureHoverPopup],
+    [ensureHoverPopup, closeHoverPopup, scheduleHoverClose],
   )
 
   useEffect(() => {
@@ -985,6 +1070,7 @@ export function ItineraryMapView({
       map.off("error", onError)
       closeHoverPopup()
       hoverPopupRef.current = null
+      popupChromeBoundRef.current = false
       for (const marker of markersById.values()) marker.remove()
       markersById.clear()
       popupDataById.clear()
@@ -1112,7 +1198,7 @@ export function ItineraryMapView({
         visible.push({
           id: r.point.id,
           point: r.point as ItineraryMapPoint,
-          coord: r.coord,
+          coord: pinCoord(r),
           label,
           pinText: drawn != null ? String(drawn) : "",
           approximate,
@@ -1136,26 +1222,53 @@ export function ItineraryMapView({
         const marker = markersByIdRef.current.get(id)
         if (!data || !marker) return
         hoverOpenIdRef.current = id
-        showHoverPopup(marker.getLngLat(), popupHtml(data.name, data.label))
+        showHoverPopup(
+          marker.getLngLat(),
+          popupHtml(data.name, data.label, data.adjustable ? { adjustId: id } : undefined),
+          { interactive: Boolean(data.adjustable) },
+        )
       }
       const close = () => {
         if (hoverOpenIdRef.current === id) closeHoverPopup()
+      }
+      const openAdjust = () => {
+        const data = popupDataByIdRef.current.get(id)
+        const marker = markersByIdRef.current.get(id)
+        if (!data?.adjustable || !marker) return
+        closeHoverPopup()
+        const ll = marker.getLngLat()
+        adjustingSetterRef.current({
+          id,
+          name: data.name,
+          proximity: [ll.lng, ll.lat],
+        })
       }
       el.addEventListener("mouseenter", () => {
         if (finePointerRef.current) open()
       })
       el.addEventListener("mouseleave", () => {
-        if (finePointerRef.current) close()
+        if (!finePointerRef.current) return
+        const data = popupDataByIdRef.current.get(id)
+        if (data?.adjustable) scheduleHoverClose(id)
+        else close()
       })
       el.addEventListener("click", (ev) => {
         ev.stopPropagation()
-        if (finePointerRef.current) return
+        const data = popupDataByIdRef.current.get(id)
+        if (finePointerRef.current) {
+          if (data?.adjustable) openAdjust()
+          return
+        }
         open()
       })
     }
 
     for (const v of visible) {
-      popupDataByIdRef.current.set(v.id, { name: v.point.name, label: v.label })
+      popupDataByIdRef.current.set(v.id, {
+        name: v.point.name,
+        label: v.label,
+        adjustable: v.approximate && Boolean(onPersistItemCoords),
+      })
       const existing = markersByIdRef.current.get(v.id)
 
       if (existing) {
@@ -1195,6 +1308,8 @@ export function ItineraryMapView({
     itineraryOrderById,
     showHoverPopup,
     closeHoverPopup,
+    scheduleHoverClose,
+    onPersistItemCoords,
   ])
 
   // fitBounds: una vez por modo + conjunto de contenido (no en cada refresh de geocode).
@@ -1229,8 +1344,9 @@ export function ItineraryMapView({
         hasBounds = true
       }
     } else {
-      for (const { coord } of visibleResolved) {
-        bounds.extend([coord.lng, coord.lat])
+      for (const r of visibleResolved) {
+        const c = pinCoord(r)
+        bounds.extend([c.lng, c.lat])
         hasBounds = true
       }
     }
@@ -1461,6 +1577,24 @@ export function ItineraryMapView({
           </div>
         ) : null}
       </div>
+
+      {onPersistItemCoords ? (
+        <AdjustLocationDialog
+          open={adjusting != null}
+          onOpenChange={(open) => {
+            if (!open) setAdjusting(null)
+          }}
+          itemName={adjusting?.name ?? ""}
+          proximity={adjusting?.proximity ?? null}
+          countryCodes={countryCodes}
+          destinationHint={destination}
+          onConfirm={(place) => {
+            if (!adjusting) return
+            onPersistItemCoords(adjusting.id, place.coords, place.label)
+            setAdjusting(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

@@ -206,6 +206,27 @@
   .wp-map-popup .mapboxgl-popup-content {
     pointer-events: none;
   }
+  .wp-map-popup--interactive,
+  .wp-map-popup--interactive .mapboxgl-popup-content {
+    pointer-events: auto;
+  }
+  .wp-map-popup-adjust {
+    display: block;
+    margin-top: 0.375rem;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25;
+    color: hsl(var(--primary));
+    cursor: pointer;
+    text-align: left;
+  }
+  .wp-map-popup-adjust:hover {
+    text-decoration: underline;
+  }
   .wp-map-popup .mapboxgl-popup-tip,
   .wp-map-popup .mapboxgl-popup-close-button {
     display: none;

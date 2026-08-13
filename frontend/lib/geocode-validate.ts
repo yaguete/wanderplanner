@@ -1,6 +1,7 @@
 /**
  * Validación de candidatos de Geocoding v5 contra un ancla de región.
- * Puro: sin I/O. La distancia es la única señal fiable (relevance miente).
+ * Puro: sin I/O. La distancia filtra homónimos lejanos; el tipo del candidato
+ * decide exact vs approximate (un `place` es el centro de la ciudad, no el sitio).
  */
 import { haversineMeters } from "./map-route-geometry"
 
@@ -17,6 +18,8 @@ export type GeocodeCandidate = {
   coord: LngLat
   featureType: string
   placeName?: string
+  /** `text` corto de Mapbox (p. ej. «Igls»), no el place_name completo. */
+  text?: string
 }
 
 export type PlaceGeocodeOutcome =
@@ -34,6 +37,45 @@ const RADIUS_M: Record<string, number> = {
 }
 
 const COUNTRY_OK_TYPES = new Set(["place", "locality", "region", "district", "country"])
+
+/** Tipos administrativos: son el centro de una zona, no el sitio con nombre propio. */
+const COARSE_TYPES = new Set([
+  "place",
+  "locality",
+  "neighborhood",
+  "district",
+  "region",
+  "postcode",
+  "country",
+])
+
+/** Menor = más específico. Empates conservan el orden de Mapbox. */
+const TYPE_SPECIFICITY: Record<string, number> = {
+  poi: 0,
+  address: 1,
+  neighborhood: 2,
+  locality: 3,
+  place: 4,
+  district: 5,
+  postcode: 6,
+  region: 7,
+  country: 8,
+}
+
+function typeSpecificity(featureType: string): number {
+  return TYPE_SPECIFICITY[featureType] ?? 9
+}
+
+function candidateAnchorLabel(candidate: GeocodeCandidate, fallback?: string): string {
+  const text = candidate.text?.trim()
+  if (text) return text
+  const placeName = candidate.placeName?.trim()
+  if (placeName) {
+    const first = placeName.split(",")[0]?.trim()
+    if (first) return first
+  }
+  return fallback?.trim() ?? ""
+}
 
 export function maxDistanceMetersForAnchorType(featureType: string): number | null {
   if (featureType === "country") return null
@@ -59,8 +101,8 @@ export function candidatePassesAnchor(
 }
 
 /**
- * Entre los que pasan el filtro, preferir no-address (Calle X vs el POI/ciudad).
- * Orden de Mapbox se conserva dentro de cada grupo.
+ * Entre los que pasan el filtro, el más específico (poi > address > … > country).
+ * Empates conservan el orden de Mapbox.
  */
 export function pickFirstValidCandidate(
   candidates: GeocodeCandidate[],
@@ -70,7 +112,17 @@ export function pickFirstValidCandidate(
     ? candidates.filter((c) => candidatePassesAnchor(c, anchor))
     : candidates
   if (passing.length === 0) return null
-  return passing.find((c) => c.featureType !== "address") ?? passing[0]!
+  let best = passing[0]!
+  let bestRank = typeSpecificity(best.featureType)
+  for (let i = 1; i < passing.length; i++) {
+    const c = passing[i]!
+    const rank = typeSpecificity(c.featureType)
+    if (rank < bestRank) {
+      best = c
+      bestRank = rank
+    }
+  }
+  return best
 }
 
 export function pickGeocodeOutcome(
@@ -78,14 +130,24 @@ export function pickGeocodeOutcome(
   anchor: RegionAnchor | null,
 ): PlaceGeocodeOutcome {
   const hit = pickFirstValidCandidate(candidates, anchor)
-  if (hit) return { precision: "exact", coord: hit.coord }
+  if (hit) {
+    if (COARSE_TYPES.has(hit.featureType)) {
+      return {
+        precision: "approximate",
+        coord: hit.coord,
+        anchorLabel: candidateAnchorLabel(hit, anchor?.label),
+      }
+    }
+    return { precision: "exact", coord: hit.coord }
+  }
   if (anchor) {
     return { precision: "approximate", coord: anchor.coord, anchorLabel: anchor.label }
   }
   return { precision: "unlocated" }
 }
 
-const SPREAD_RADIUS_M = 40
+/** Radio de reparto visual: ~30 m · n (n = tamaño del grupo). */
+const SPREAD_METERS_PER_PIN = 30
 const EARTH_M = 6_371_000
 
 function coordKey(c: LngLat): string {
@@ -93,18 +155,20 @@ function coordKey(c: LngLat): string {
 }
 
 function offsetAround(center: LngLat, index: number, count: number): LngLat {
+  const radiusM = SPREAD_METERS_PER_PIN * count
   const angle = (2 * Math.PI * index) / count
-  const dLat = ((SPREAD_RADIUS_M * Math.cos(angle)) / EARTH_M) * (180 / Math.PI)
+  const dLat = ((radiusM * Math.cos(angle)) / EARTH_M) * (180 / Math.PI)
   const cosLat = Math.cos((center.lat * Math.PI) / 180)
   const dLng =
-    ((SPREAD_RADIUS_M * Math.sin(angle)) / (EARTH_M * Math.max(0.2, Math.abs(cosLat)))) *
+    ((radiusM * Math.sin(angle)) / (EARTH_M * Math.max(0.2, Math.abs(cosLat)))) *
     (180 / Math.PI)
   return { lng: center.lng + dLng, lat: center.lat + dLat }
 }
 
 /**
- * Reparte pines aproximados que caen en la misma coordenada (~40 m, bajo
- * PLACES_ZERO_KM_EPSILON) para que el hover no tape a los demás.
+ * Reparte pines aproximados que caen en la misma coordenada para el display.
+ * El radio crece con el grupo (~30 m · n). No usar el resultado en la geometría
+ * de la ruta: solo marcadores y fitBounds (`displayCoord`).
  */
 export function offsetStackedApproximate<
   T extends { id: string; coord: LngLat; precision?: string },

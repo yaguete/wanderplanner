@@ -153,6 +153,7 @@ export default function ItineraryPanel({
     upsertTransportRouteItem,
     updateDayLabel,
     applyDaySummary,
+    setDayItemCoords,
   } = useTrips()
   const trip = getTrip(tripId)
   const isMobile = useIsMobile()
@@ -729,6 +730,9 @@ export default function ItineraryPanel({
                 onMapModeChange={handleMapModeChange}
                 countryCodes={trip.countries}
                 destination={trip.countries.length ? countriesPlainList(trip.countries) : trip.name}
+                onPersistItemCoords={(itemId, coords, region) => {
+                  setDayItemCoords(tripId, itemId, coords, region)
+                }}
               />
             </div>
           )}
