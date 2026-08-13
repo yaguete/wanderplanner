@@ -41,6 +41,7 @@ import {
   type HubKind,
 } from "@/lib/transport-hubs"
 import type { RouteMode, RoutePlace } from "@/types/itinerary"
+import { isBookableTransportMode } from "@/lib/trip-tasks"
 
 const SUGGEST_DEBOUNCE_MS = 450
 const SUGGEST_MIN_CHARS = 3
@@ -327,6 +328,8 @@ export function TransportRouteForm({
     }
   }
 
+  const showVendor = isBookableTransportMode(mode === "undecided" ? null : mode)
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!from.selected || !to.selected) {
@@ -350,7 +353,7 @@ export function TransportRouteForm({
       from: persistFrom,
       to: persistTo,
       mode: mode === "undecided" ? null : mode,
-      vendor: vendor.trim() || null,
+      vendor: showVendor ? vendor.trim() || null : null,
       detail: detail.trim() || null,
       cityFrom: cityFromRef.current,
       cityTo: cityToRef.current,
@@ -366,6 +369,37 @@ export function TransportRouteForm({
           {searchNotice}
         </p>
       ) : null}
+
+      <div className="space-y-2">
+        <Label>Medio de transporte</Label>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
+          {MODE_OPTIONS.map((opt) => {
+            const selected = mode === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => handleModeChange(opt.value)}
+                className={cn(
+                  "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  selected
+                    ? "border-primary bg-primary/5 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+        {showHubActions ? (
+          <p className="text-[11px] text-muted-foreground">
+            Puedes refinar cada extremo con {hubLabelForKind(hubKind!)} concreto cuando quieras.
+          </p>
+        ) : null}
+      </div>
 
       <div className="space-y-2">
         <EndpointField
@@ -423,46 +457,17 @@ export function TransportRouteForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Medio de transporte</Label>
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
-          {MODE_OPTIONS.map((opt) => {
-            const selected = mode === opt.value
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => handleModeChange(opt.value)}
-                className={cn(
-                  "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
-                  selected
-                    ? "border-primary bg-primary/5 text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
+      {showVendor ? (
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-vendor`}>Compañía (opcional)</Label>
+          <Input
+            id={`${id}-vendor`}
+            value={vendor}
+            onChange={(e) => setVendor(e.target.value)}
+            placeholder="p. ej. Renfe, Vueling…"
+          />
         </div>
-        {showHubActions ? (
-          <p className="text-[11px] text-muted-foreground">
-            Puedes refinar cada extremo con {hubLabelForKind(hubKind!)} concreto cuando quieras.
-          </p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={`${id}-vendor`}>Compañía (opcional)</Label>
-        <Input
-          id={`${id}-vendor`}
-          value={vendor}
-          onChange={(e) => setVendor(e.target.value)}
-          placeholder="p. ej. Renfe, Vueling…"
-        />
-      </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label htmlFor={`${id}-detail`}>Referencia o nota (opcional)</Label>

@@ -32,6 +32,8 @@ jobs:
       - run: npm run test:trip-sources
       - run: npm run test:map-day-scope
       - run: npm run test:geocode-validate
+      - run: npm run test:airports
+      - run: npm run test:flight-search
       - run: npm run build
       # eslint instalado (eslint-config-next); no se usa como gate todavía:
       # hay errores preexistentes en auth-context/trip-context/tailwind.config

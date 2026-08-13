@@ -11,7 +11,7 @@ import type { DerivedTripTask } from "./trip-tasks"
 function task(
   partial: Partial<DerivedTripTask> &
     Pick<DerivedTripTask, "origin" | "sourceKind" | "title">,
-): Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route"> {
+): Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route" | "roundtripFlight"> {
   return partial
 }
 
@@ -91,6 +91,43 @@ assert.equal(
   "Preparar el trayecto en coche a Granada",
 )
 assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Barcelona → Vienna International Airport",
+      route: {
+        from: { label: "Barcelona", coords: { lng: 2.08, lat: 41.3 }, kind: "airport" },
+        to: {
+          label: "Vienna International Airport",
+          coords: { lng: 16.57, lat: 48.11 },
+          kind: "airport",
+        },
+        mode: "flight",
+        leg: "outbound",
+      },
+    }),
+  ),
+  "Comprar los vuelos a VIE",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Barcelona → Viena",
+      roundtripFlight: true,
+      route: {
+        from: { label: "Barcelona", coords: { lng: 2.17, lat: 41.38 }, kind: "city" },
+        to: { label: "Viena", coords: { lng: 16.37, lat: 48.21 }, kind: "city" },
+        mode: "flight",
+        leg: "outbound",
+      },
+    }),
+  ),
+  "Comprar los vuelos Barcelona ⇄ Viena",
+)
+assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "activity", title: "trekking" })),
   "Reservar trekking",
 )
@@ -149,6 +186,18 @@ assert.equal(
 assert.equal(
   formatTaskDays([0, 1, 2], undefined, "2026-08-09"),
   "días 1–3 · dom 9 ago – mar 11 ago",
+)
+assert.equal(
+  formatTaskDays([0, 8], undefined, "2026-08-24", { roundtrip: true }),
+  "ida lun 24 ago · vuelta mar 1 sept",
+)
+assert.equal(
+  formatTaskDays([0, 0], undefined, "2026-08-24", { roundtrip: true }),
+  "lun 24 ago",
+)
+assert.equal(
+  formatTaskDays([0, 8], undefined, null, { roundtrip: true }),
+  "ida día 1 · vuelta día 9",
 )
 
 // Agrupación visual.

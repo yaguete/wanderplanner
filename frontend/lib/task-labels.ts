@@ -4,11 +4,13 @@
  * Tramos de ida/vuelta (T4B.3): el verbo depende de `route.mode`.
  */
 import type { DerivedTripTask } from "@/lib/trip-tasks"
+import { resolveAirportCode } from "@/lib/airports"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import type {
   BasicCategory,
   ItemType,
   RouteMode,
+  RoutePlace,
   TripTaskCategory,
   TripTaskStatus,
 } from "@/types/itinerary"
@@ -89,12 +91,15 @@ function destinationFromTitle(title: string): string {
   return title
 }
 
-function legActionTitle(
-  mode: RouteMode | null | undefined,
-  title: string,
-  routeToLabel?: string | null,
-): string {
-  const dest = routeToLabel?.trim() || destinationFromTitle(title)
+function routePlaceShortLabel(place: RoutePlace): string {
+  if (place.kind === "airport") {
+    const code = resolveAirportCode(place)
+    if (code) return code
+  }
+  return place.label
+}
+
+function legActionTitle(mode: RouteMode | null | undefined, dest: string): string {
   switch (mode) {
     case "flight":
       return `Comprar los vuelos a ${dest}`
@@ -115,13 +120,19 @@ function legActionTitle(
 
 /** Título de fila como acción («Reservar Full Moon Budapest»). Extras: texto del usuario. */
 export function taskActionTitle(
-  task: Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route">,
+  task: Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route" | "roundtripFlight">,
 ): string {
   if (task.origin === "extra") return task.title
 
   // Transporte con ruta estructurada (leg o interno): verbo según medio.
   if (task.origin === "dayItem" && task.route?.from && task.route.to) {
-    return legActionTitle(task.route.mode, task.title, task.route.to.label)
+    if (task.roundtripFlight) {
+      const from = routePlaceShortLabel(task.route.from)
+      const to = routePlaceShortLabel(task.route.to)
+      return `Comprar los vuelos ${from} ⇄ ${to}`
+    }
+    const dest = routePlaceShortLabel(task.route.to) || destinationFromTitle(task.title)
+    return legActionTitle(task.route.mode, dest)
   }
 
   const kind = task.sourceKind
@@ -145,8 +156,13 @@ export function formatTaskDays(
   dayIndexes: number[],
   nights?: number,
   startDate?: string | null,
+  options?: { roundtrip?: boolean },
 ): string | null {
   if (dayIndexes.length === 0) return null
+
+  if (options?.roundtrip) {
+    return formatRoundtripTaskDays(dayIndexes, startDate ?? null)
+  }
 
   const days = dayIndexes.map((i) => i + 1)
   const datePart = formatTaskCalendarRange(dayIndexes, startDate ?? null)
@@ -160,6 +176,28 @@ export function formatTaskDays(
 
   const dayPart = formatDayList(days)
   return datePart ? `${dayPart} · ${datePart}` : dayPart
+}
+
+/** «ida 24 ago · vuelta 1 sept». Mismo día → solo la fecha (o «día 1»). */
+function formatRoundtripTaskDays(
+  dayIndexes: number[],
+  startDate: string | null,
+): string | null {
+  if (dayIndexes.length === 0) return null
+  const sorted = [...dayIndexes].sort((a, b) => a - b)
+  const first = sorted[0]!
+  const last = sorted[sorted.length - 1]!
+  const sameDay = first === last
+
+  if (startDate) {
+    const outDate = formatDayDate(dateISOForDayIndex(startDate, first))
+    const retDate = formatDayDate(dateISOForDayIndex(startDate, last))
+    if (sameDay) return outDate ?? `día ${first + 1}`
+    if (outDate && retDate) return `ida ${outDate} · vuelta ${retDate}`
+  }
+
+  if (sameDay) return `día ${first + 1}`
+  return `ida día ${first + 1} · vuelta día ${last + 1}`
 }
 
 /** Une meta de días + compañía + nota («día 9 · Vueling · ABCDE»). */

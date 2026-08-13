@@ -68,6 +68,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       route-legs.ts        # Ciclo de vida de ida/vuelta (reanclado, rescate)
       transport-routes.ts  # Semilla y resumen de un tramo
       transport-hubs.ts    # Decisiones puras de hub por modo (sin I/O)
+      airports.ts          # IATA OurAirports + áreas metro (T4B.3b); no editar airports-data.ts
+      flight-search.ts     # Enlace Kiwi prerelleno (Nivel 1); afiliación solo aquí
       mapbox.ts            # suggestPlaces / hubs / Directions / HUB_MAX_DISTANCE_KM
       place-search-guardrails.ts # Efímero vs persistible; presupuesto de sesión
       map-route-geometry.ts      # Geodésicas, segmentos por modo, km por medio
@@ -129,6 +131,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
   - `leg:outbound` / `leg:return` — tramos de ida y vuelta (aunque se llamen igual, no colisionan);
   - `route:{itemId}` — traslado interno con `route`;
   - `${type}:${normalizeName(name)}` — todo lo demás (un hotel de 3 noches es UNA reserva aunque aparezca 3 veces en la Ruta).
+- Ida y vuelta **en avión espejadas** (mismos IATA invertidos) se agregan como **una** tarea con clave `leg:outbound`; el coste de `leg:return` se pliega ahí. `taskKeyForItem` no cambia. La Ruta sigue mostrando dos tarjetas.
 - **El dinero vive en un solo sitio**: `trip.tasks[clave].cost`. Ni los ítems ni `route` llevan precio.
 - Divisa **del viaje** (`trip.currency`, default EUR), nunca por tarea. Coste por persona con `trip.numTravelers`.
 - `nights` se deriva hoy de `dayIndexes.length`: un alojamiento añadido a mano se ancla a un día y cuenta **1 noche**. `spanDays` (T4B.2b) está pendiente — ver deuda.
@@ -141,6 +144,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **Hubs** (aeropuerto/estación) solo tras elegir medio y **por proximidad**, vía `GET /transport-hubs`; radios en `HUB_MAX_DISTANCE_KM` (aeropuerto 200 km, estación 80, bus 50). El ancla de búsqueda es la **ciudad**, no el hub ya elegido.
 - **Licencia Mapbox** ([`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts)): los candidatos de Search Box son **efímeros** y no se persisten salvo `NEXT_PUBLIC_ALLOW_TRANSPORT_HUB_PERSISTENCE=true`; lo persistible sale de Geocoding permanente (`NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING`). Kill switch: `TRANSPORT_PLACE_SEARCH_ENABLED` (servidor) / `NEXT_PUBLIC_TRANSPORT_PLACE_SEARCH_ENABLED` (cliente). Límites por `usage_events` con kinds `place_suggest` y `transport_hub`.
 - **Mapa** ([`itinerary-map-view.tsx`](frontend/components/itinerary-map-view.tsx) + [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts)): dos modos (`MapViewMode` = `transport` | `places`). Los tramos **no locales** (> `MAP_LOCAL_SEGMENT_MAX_KM`, 3.000 km) y las idas/vueltas que no son coche/bus **no se dibujan**: en su lugar se pintan anclas de llegada/salida (`collectMapGatewayAnchors`), así el encuadre se queda en el destino. Directions (`driving`) solo en subsecuencias por carretera < `PLACES_ROAD_MAX_KM` (300 km); el resto son geodésicas locales sin peticiones. Mapbox **no tiene perfil de tren**. Los km del pie se desglosan por medio (`summarizeTransportKm`).
+- **Buscador de vuelos (T4B.3b, Nivel 1):** botón «Buscar vuelos» en tramos con `mode: "flight"` → enlace Kiwi prerelleno ([`flight-search.ts`](frontend/lib/flight-search.ts)). IATA desde tabla OurAirports + áreas metro ([`airports.ts`](frontend/lib/airports.ts)); regenerar con `node scripts/generate-airports.mjs`. **Prohibido** API de precios. Afiliación propia **solo** en `FLIGHT_SEARCH_AFFILIATE_ID`; nunca tocar `affiliateUrl` de fuentes. No editar [`airports-data.ts`](frontend/lib/airports-data.ts) a mano. El diálogo de ida no siembra Destino con el nombre del viaje.
 
 ## Archivos críticos
 
@@ -227,6 +231,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No inventes otra ruta de atribución** → [`item-provenance.ts`](frontend/lib/item-provenance.ts): un ítem propio nunca lleva la firma de un bloguero.
 - ❌ **No compiles regex dentro de un bucle sobre la tabla de países** → `hasWordBoundaryMatch` cachea el patrón por nombre. Inlinearlo otra vez devuelve `resolveTripCountryCodes` a ~460 ms **por llamada**, y se llama en cada render del asistente.
 - ❌ **No optimices rendimiento sin medir antes.** Los tres paneles montados hacen que el coste percibido casi nunca esté donde parece: dos rondas de optimización sobre la Ruta (que renderiza en 18 ms) no movieron la aguja porque el segundo entero estaba en el asistente cerrado.
+- ❌ **No implementes búsqueda de vuelos con API / precios** → el buscador es Nivel 1 (enlace Kiwi). Afiliación propia solo en `FLIGHT_SEARCH_AFFILIATE_ID`; no toques `affiliateUrl` de fuentes. La tabla IATA se genera con `scripts/generate-airports.mjs`, no se edita `airports-data.ts` a mano.
 
 ## Dependencias críticas
 

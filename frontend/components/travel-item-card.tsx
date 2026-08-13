@@ -4,8 +4,10 @@ import type { ReactNode } from "react"
 import { Check, ExternalLink, Pencil, Plus, X, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { FlightSearchLink } from "@/components/flight-search-link"
 import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
+import type { FlightSearchHit } from "@/lib/flight-search"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
 /** Hover de 1px solo con puntero fino; no se pega en táctil. */
@@ -81,6 +83,8 @@ type PlannedCardProps = {
    * Hermano del bloque enlazado — nunca dentro del `<a>` afiliado.
    */
   taskIndicator?: ReactNode
+  /** T4B.3b: enlace Kiwi prerelleno. Fuera del `<a>` de affiliateUrl. */
+  flightSearch?: FlightSearchHit | null
   className?: string
 }
 
@@ -300,19 +304,29 @@ export function TravelItemCard(props: TravelItemCardProps) {
         {props.titleAdornment}
       </div>
       {routeSummary ? (
-        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{routeSummary}</p>
-      ) : null}
+        <p className="mt-0.5 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
+          <span className="truncate">
+            {routeSummary} · {provenance}
+          </span>
+          {props.href ? (
+            <ExternalLink className="wp-ext-link h-3 w-3 shrink-0" aria-hidden />
+          ) : null}
+        </p>
+      ) : (
+        <p className="mt-1 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
+          <span className="truncate">
+            <span className="mr-1 font-medium">{typeLabel}</span>
+            {region ? <span title={region}>{region} </span> : null}
+            {provenance}
+          </span>
+          {props.href ? (
+            <ExternalLink className="wp-ext-link h-3 w-3 shrink-0" aria-hidden />
+          ) : null}
+        </p>
+      )}
       {props.sourceId === MANUAL_SOURCE_ID && props.detail?.trim() ? (
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail.trim()}</p>
       ) : null}
-      <p className="mt-1 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
-        <span className="truncate">
-          <span className="mr-1 font-medium">{typeLabel}</span>
-          {region && !routeSummary ? <span title={region}>{region} </span> : null}
-          {provenance}
-        </span>
-        {props.href ? <ExternalLink className="wp-ext-link h-3 w-3 shrink-0" aria-hidden /> : null}
-      </p>
     </div>
   )
 
@@ -372,6 +386,11 @@ export function TravelItemCard(props: TravelItemCardProps) {
           </button>
         </div>
       </div>
+      {props.flightSearch ? (
+        <div className="border-t border-border/60 px-3 py-1.5">
+          <FlightSearchLink search={props.flightSearch} showCodes />
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -7,6 +7,7 @@
  * También expone `pruneTaskStates` (claves vivas) para limpiar huérfanos
  * al serializar y al mutar en memoria ("borrar es olvidar").
  */
+import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import type {
   BasicCategory,
   ExtraTask,
@@ -18,8 +19,49 @@ import type {
   TripTaskState,
   TripTaskStatus,
   UserBasicItem,
+  UserDay,
   UserDayItem,
 } from "@/types/itinerary"
+
+const OUTBOUND_TASK_KEY = "leg:outbound"
+const RETURN_TASK_KEY = "leg:return"
+
+function addTaskCosts(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): number | null {
+  if (a == null && b == null) return null
+  return (a ?? 0) + (b ?? 0)
+}
+
+function combinedTaskState(
+  a: TripTaskState | null,
+  b: TripTaskState | null,
+): TripTaskState | null {
+  if (!b) return a
+  if (!a) return b
+  return { ...a, cost: addTaskCosts(a.cost, b.cost) }
+}
+
+/**
+ * Si ida y vuelta son el mismo vuelo espejado, el coste de `leg:return`
+ * pasa a `leg:outbound` y se borra la clave de vuelta. Idempotente.
+ */
+export function foldMirroredFlightReturnCost(
+  tasks: Record<string, TripTaskState>,
+  days: UserDay[],
+): Record<string, TripTaskState> {
+  if (!isMirroredFlightRoundtrip(days)) return tasks
+  const ret = tasks[RETURN_TASK_KEY]
+  if (!ret) return tasks
+  const next = { ...tasks }
+  const out = next[OUTBOUND_TASK_KEY]
+  next[OUTBOUND_TASK_KEY] = out
+    ? { ...out, cost: addTaskCosts(out.cost, ret.cost) }
+    : { ...ret }
+  delete next[RETURN_TASK_KEY]
+  return next
+}
 
 export type DerivedTaskOrigin = "dayItem" | "basic" | "extra"
 
@@ -53,6 +95,11 @@ export type DerivedTripTask = {
   detail?: string | null
   /** Tramo de ida/vuelta (T4B.3); ausente en el resto. */
   route?: TransportRoute
+  /**
+   * Ida y vuelta en avión espejadas: una sola fila (clave `leg:outbound`).
+   * La Ruta sigue mostrando dos tarjetas.
+   */
+  roundtripFlight?: boolean
 }
 
 export type TripTaskTotals = {
@@ -226,6 +273,7 @@ export function taskBucket(
 export function pruneTaskStates(
   trip: Pick<Trip, "days" | "basics" | "tasks">,
 ): Record<string, TripTaskState> {
+  const folded = foldMirroredFlightReturnCost(trip.tasks ?? {}, trip.days ?? [])
   const live = new Set<string>()
   for (const day of trip.days ?? []) {
     for (const item of day.items ?? []) live.add(taskKeyForItem(item))
@@ -233,7 +281,7 @@ export function pruneTaskStates(
   for (const basic of trip.basics ?? []) live.add(taskKeyForBasic(basic))
 
   const next: Record<string, TripTaskState> = {}
-  for (const [key, state] of Object.entries(trip.tasks ?? {})) {
+  for (const [key, state] of Object.entries(folded)) {
     if (live.has(key)) next[key] = state
   }
   return next
@@ -411,13 +459,35 @@ function extraTask(extra: ExtraTask): DerivedTripTask {
   }
 }
 
+function mergeMirroredFlightTasks(tasks: DerivedTripTask[]): DerivedTripTask[] {
+  const outbound = tasks.find((t) => t.id === OUTBOUND_TASK_KEY)
+  const ret = tasks.find((t) => t.id === RETURN_TASK_KEY)
+  if (!outbound || !ret) return tasks
+  const merged: DerivedTripTask = {
+    ...outbound,
+    itemIds: [...outbound.itemIds, ...ret.itemIds],
+    dayIndexes: [...outbound.dayIndexes, ...ret.dayIndexes],
+    occurrences: outbound.occurrences + ret.occurrences,
+    roundtripFlight: true,
+    state: combinedTaskState(outbound.state, ret.state),
+    route: outbound.route,
+  }
+  return tasks
+    .filter((t) => t.id !== RETURN_TASK_KEY)
+    .map((t) => (t.id === OUTBOUND_TASK_KEY ? merged : t))
+}
+
 /**
  * Lista agregada de tareas: una entrada por reserva (clave), no por ocurrencia.
  * Orden: primera aparición en días, luego básicos, luego extras.
  * Ausencia en el mapa → `state: null` (sin centinela).
+ * Ida y vuelta en avión espejadas → una sola tarea (`leg:outbound`).
  */
 export function buildTripTasks(trip: Trip): DerivedTripTask[] {
-  const out = aggregateDayItems(trip)
+  let out = aggregateDayItems(trip)
+  if (isMirroredFlightRoundtrip(trip.days)) {
+    out = mergeMirroredFlightTasks(out)
+  }
   out.push(...aggregateBasics(trip))
   for (const extra of trip.extraTasks) {
     out.push(extraTask(extra))

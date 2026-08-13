@@ -233,43 +233,30 @@ function lastRoutablePoint(items: UserDayItem[]): RoutePlace | null {
 export type LegEndpointSuggestion = {
   from: RoutePlace | null
   to: RoutePlace | null
-  /** Texto pendiente (trip.name / país) cuando no hay coords; el usuario debe elegir candidato. */
-  pendingFromText: string | null
-  pendingToText: string | null
 }
 
 /**
  * Propone extremos para el formulario de ida/vuelta.
  * Lugares normales (ciudades), nunca aeropuertos.
+ * No siembra el input con `trip.name`: parece resuelto y bloquea el envío.
  */
 export function suggestLegEndpoints(
-  trip: Pick<Trip, "origin" | "name" | "countries" | "days">,
+  trip: Pick<Trip, "origin" | "days">,
   leg: RouteLeg,
 ): LegEndpointSuggestion {
   const days = trip.days
   const firstDay = days[0]
   const lastDay = days[days.length - 1]
-  const hint = trip.name.trim() || null
 
   if (leg === "outbound") {
     const from = trip.origin ? originToRoutePlace(trip.origin) : null
     const to = firstDay ? firstRoutablePoint(firstDay.items) : null
-    return {
-      from,
-      to,
-      pendingFromText: from ? null : null,
-      pendingToText: to ? null : hint,
-    }
+    return { from, to }
   }
 
   const from = lastDay ? lastRoutablePoint(lastDay.items) : null
   const to = trip.origin ? originToRoutePlace(trip.origin) : null
-  return {
-    from,
-    to,
-    pendingFromText: from ? null : hint,
-    pendingToText: to ? null : null,
-  }
+  return { from, to }
 }
 
 /**

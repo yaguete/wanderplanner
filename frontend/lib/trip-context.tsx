@@ -38,11 +38,12 @@ import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { draftTripNameFor, MAX_AUTO_DAYS } from "@/lib/partner-trip"
-import { createExtraTaskState, mergeTaskState, normalizeName, taskKeyForItem, withPrunedTasks } from "@/lib/trip-tasks"
+import { createExtraTaskState, foldMirroredFlightReturnCost, mergeTaskState, normalizeName, taskKeyForItem, withPrunedTasks } from "@/lib/trip-tasks"
 import { countryCodeFromTaskId, isCountryTaskId } from "@/lib/country-tasks"
 import {
   buildRouteLegItem,
   dayHasNonLegContent,
+  findLegItem,
   reanchorRouteLegs,
   rescueLegsFromRemovedDays,
   upsertLegInDays,
@@ -51,6 +52,7 @@ import {
   buildTransportRouteItem,
   migrateTaskKeyOnStructure,
 } from "@/lib/transport-routes"
+import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { canAddSource } from "@/lib/trip-sources"
 
 export type PendingSourceErrorKind = "guest-limit" | "limit" | "generic"
@@ -274,6 +276,8 @@ interface TripContextValue {
       vendor?: string | null
       /** Solo se aplica si el viaje aún no tiene origen. */
       origin?: TripOrigin | null
+      /** Al crear ida: también crea el retorno espejado en el último día. */
+      createMirrorReturn?: boolean
     },
   ) => { ok: true } | { ok: false; error: string }
   /**
@@ -1206,6 +1210,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         detail?: string | null
         vendor?: string | null
         origin?: TripOrigin | null
+        createMirrorReturn?: boolean
       },
     ): { ok: true } | { ok: false; error: string } => {
       const trip = tripsRef.current.find((t) => t.id === tripId)
@@ -1231,13 +1236,51 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         existingSourceItemId: existing?.sourceItemId,
       })
 
+      const existingReturn = findLegItem(trip.days, "return")
+      const shouldCreateMirror =
+        data.leg === "outbound" &&
+        Boolean(data.createMirrorReturn) &&
+        !existingReturn
+      const shouldSyncMirror =
+        data.leg === "outbound" &&
+        Boolean(existing) &&
+        Boolean(existingReturn) &&
+        isMirroredFlightRoundtrip(trip.days)
+
       setTrips((prev) =>
         prev.map((t) => {
           if (t.id !== tripId) return t
           const nextOrigin =
             t.origin == null && data.origin != null ? data.origin : t.origin
-          const days = upsertLegInDays(t.days, item)
-          return syncTripSchedule({ ...t, origin: nextOrigin }, days)
+          let days = upsertLegInDays(t.days, item)
+          if (shouldCreateMirror) {
+            const retItem = buildRouteLegItem({
+              route: {
+                from: data.route.to,
+                to: data.route.from,
+                mode: data.route.mode ?? null,
+                leg: "return",
+              },
+              detail: data.detail,
+              vendor: data.vendor,
+            })
+            days = upsertLegInDays(days, retItem)
+          } else if (shouldSyncMirror && existingReturn) {
+            const retItem = buildRouteLegItem({
+              route: {
+                from: data.route.to,
+                to: data.route.from,
+                mode: data.route.mode ?? null,
+                leg: "return",
+              },
+              detail: existingReturn.item.detail,
+              vendor: existingReturn.item.vendor,
+              existingId: existingReturn.item.id,
+              existingSourceItemId: existingReturn.item.sourceItemId,
+            })
+            days = upsertLegInDays(days, retItem)
+          }
+          return withPrunedTasks(syncTripSchedule({ ...t, origin: nextOrigin }, days))
         }),
       )
       return { ok: true }
@@ -1348,11 +1391,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             )
             return { ...t, extraTasks }
           }
+          const folded = foldMirroredFlightReturnCost(t.tasks, t.days)
           return {
             ...t,
             tasks: {
-              ...t.tasks,
-              [taskKey]: mergeTaskState(t.tasks[taskKey], patch, now),
+              ...folded,
+              [taskKey]: mergeTaskState(folded[taskKey], patch, now),
             },
           }
         }),

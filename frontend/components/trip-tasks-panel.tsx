@@ -31,6 +31,7 @@ import {
 import { EmptyState } from "@/components/empty-state"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CountryTasksSection } from "@/components/country-tasks-section"
+import { FlightSearchLink } from "@/components/flight-search-link"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
@@ -51,6 +52,7 @@ import {
   type DerivedTripTask,
   type TripTaskTotals,
 } from "@/lib/trip-tasks"
+import { flightSearchHrefForItem } from "@/lib/flight-search"
 import type { Source, Trip, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
 
 export type TripTasksPanelProps = {
@@ -232,15 +234,17 @@ function matchesCategories(
 }
 
 function findTransportItem(
-  trip: Trip,
+  trip: Pick<Trip, "days">,
   task: DerivedTripTask,
 ): { dayId: string; item: UserDayItem } | null {
   for (const dayIndex of task.dayIndexes) {
     const day = trip.days[dayIndex]
     if (!day) continue
-    const item = day.items.find(
-      (i) => i.type === "transport" && task.itemIds.includes(i.id),
-    )
+    const item = day.items.find((i) => {
+      if (i.type !== "transport" || !task.itemIds.includes(i.id)) return false
+      if (task.roundtripFlight && i.route?.leg === "return") return false
+      return true
+    })
     if (item) return { dayId: day.id, item }
   }
   return null
@@ -361,6 +365,7 @@ export function TripTasksPanel({
                       <li key={task.id} className="m-0 p-0">
                         <TaskRow
                           task={task}
+                          trip={trip}
                           currency={trip.currency || "EUR"}
                           startDate={trip.startDate}
                           compactTop={index === 0 && groupedMain.length === 1}
@@ -524,6 +529,7 @@ function DoneChip({
 
 function TaskRow({
   task,
+  trip,
   currency,
   startDate,
   compactTop = false,
@@ -533,6 +539,7 @@ function TaskRow({
   onEditTransport,
 }: {
   task: DerivedTripTask
+  trip: Pick<Trip, "startDate" | "numDays" | "numTravelers" | "days">
   currency: string
   startDate: string | null
   /** Primera fila tras el resumen: menos padding superior y sin borde de lista arriba. */
@@ -545,7 +552,9 @@ function TaskRow({
   const status = task.state?.status ?? "pending"
   const managed = isTaskManaged(task.state)
   const doneChip = usesDoneChip(task)
-  const dayMeta = formatTaskDays(task.dayIndexes, task.nights, startDate)
+  const dayMeta = formatTaskDays(task.dayIndexes, task.nights, startDate, {
+    roundtrip: task.roundtripFlight,
+  })
   const meta = formatTaskMeta({
     dayMeta,
     vendor: task.category === "accommodation" ? null : task.vendor,
@@ -564,6 +573,16 @@ function TaskRow({
   const toggleStatus = (next: "booked" | "paid") => {
     onSetTaskState(task.id, { status: status === next ? "pending" : next })
   }
+
+  const flightSearch =
+    task.route && task.dayIndexes.length > 0
+      ? flightSearchHrefForItem({
+          route: task.route,
+          dayIndex: task.dayIndexes[0]!,
+          trip,
+          days: trip.days,
+        })
+      : null
 
   return (
     <div className={cn("flex flex-col gap-2 pb-3", compactTop ? "pt-1" : "pt-3")}>
@@ -589,6 +608,7 @@ function TaskRow({
                 <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
               </a>
             ) : null}
+            {flightSearch ? <FlightSearchLink search={flightSearch} showCodes /> : null}
           </div>
           {meta ? (
             <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{meta}</p>

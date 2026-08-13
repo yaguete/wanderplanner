@@ -52,7 +52,8 @@ import {
   buildTripTasks,
   computeTripTaskTotals,
 } from "@/lib/trip-tasks"
-import type { ItemType, RouteLeg, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
+import type { ItemType, RouteLeg, Trip, TripTaskCategory, TripTaskState, UserDay, UserDayItem } from "@/types/itinerary"
+import { flightSearchHrefForItem } from "@/lib/flight-search"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
@@ -165,6 +166,14 @@ export default function ItineraryPanel({
   const dateSub = useMemo(
     () => (trip ? formatTripDates(trip.startDate, trip.endDate) : null),
     [trip],
+  )
+  const flightSearchTrip = useMemo(
+    () => ({
+      startDate: trip?.startDate ?? null,
+      numDays: trip?.numDays ?? null,
+      numTravelers: trip?.numTravelers ?? null,
+    }),
+    [trip?.startDate, trip?.numDays, trip?.numTravelers],
   )
   const itemCount = useMemo(
     () => (trip ? trip.days.reduce((sum, d) => sum + d.items.length, 0) : 0),
@@ -685,6 +694,8 @@ export default function ItineraryPanel({
                   dayId={day.id}
                   dayIndex={dayIndex}
                   dayCount={trip.days.length}
+                  days={trip.days}
+                  flightSearchTrip={flightSearchTrip}
                   dayDescription={getDayUserDescription(day.label)}
                   dayDateLabel={
                     formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex))
@@ -837,6 +848,7 @@ export default function ItineraryPanel({
               detail: data.detail,
               vendor: data.vendor,
               origin: data.origin,
+              createMirrorReturn: data.createMirrorReturn,
             })
             if (!result.ok) toast.error(result.error)
           }}
@@ -866,6 +878,8 @@ function DayItineraryTimeline({
   items,
   dayIndex,
   dayCount,
+  days,
+  flightSearchTrip,
   resolveRegion,
   onRemoveItem,
   onMoveItemUp,
@@ -879,6 +893,8 @@ function DayItineraryTimeline({
   items: UserDayItem[]
   dayIndex: number
   dayCount: number
+  days: UserDay[]
+  flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers">
   resolveRegion: (item: UserDayItem) => string | null
   onRemoveItem: (itemId: string) => void
   onMoveItemUp: (itemId: string) => void
@@ -1000,6 +1016,16 @@ function DayItineraryTimeline({
                 detail={item.detail}
                 regionLabel={resolveRegion(item)}
                 href={item.affiliateUrl}
+                flightSearch={
+                  item.route
+                    ? flightSearchHrefForItem({
+                        route: item.route,
+                        dayIndex,
+                        trip: flightSearchTrip,
+                        days,
+                      })
+                    : null
+                }
                 routeSummary={routeSummary}
                 transportIcon={transportVisual?.Icon}
                 transportIconLabel={transportVisual?.label}
@@ -1170,6 +1196,8 @@ const DaySection = memo(function DaySection({
   dayId,
   dayIndex,
   dayCount,
+  days,
+  flightSearchTrip,
   dayDescription,
   dayDateLabel,
   summarySignature,
@@ -1195,6 +1223,8 @@ const DaySection = memo(function DaySection({
   dayId: string
   dayIndex: number
   dayCount: number
+  days: UserDay[]
+  flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers">
   dayDescription: string
   dayDateLabel: string | null
   summarySignature: string | null
@@ -1494,6 +1524,8 @@ const DaySection = memo(function DaySection({
           items={items}
           dayIndex={dayIndex}
           dayCount={dayCount}
+          days={days}
+          flightSearchTrip={flightSearchTrip}
           resolveRegion={resolveRegion}
           onRemoveItem={(itemId) => onRemoveItem(dayId, itemId)}
           onMoveItemUp={onMoveItemUp}

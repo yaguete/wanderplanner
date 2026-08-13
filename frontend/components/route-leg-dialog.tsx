@@ -3,6 +3,7 @@
 /**
  * Wrapper de ida/vuelta sobre TransportRouteForm (T4B.3 §9.2).
  * Aporta suggestLegEndpoints, originPatch y copy de casa.
+ * Al crear una ida sin retorno: atajo «Solo ida / Ida y vuelta» (no se persiste).
  */
 import { useId, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -19,7 +20,8 @@ import {
   TransportRouteForm,
   type TransportRouteFormValue,
 } from "@/components/transport-route-form"
-import { suggestLegEndpoints, tripOriginFromCityAnchor } from "@/lib/route-legs"
+import { cn } from "@/lib/utils"
+import { hasRouteLeg, suggestLegEndpoints, tripOriginFromCityAnchor } from "@/lib/route-legs"
 import type {
   RouteLeg,
   TransportRoute,
@@ -40,6 +42,8 @@ export type RouteLegDialogProps = {
     detail: string | null
     vendor: string | null
     origin: TripOrigin | null
+    /** Al crear ida: también crea el retorno espejado. No se persiste. */
+    createMirrorReturn?: boolean
   }) => void
 }
 
@@ -53,6 +57,7 @@ export function RouteLegDialog({
 }: RouteLegDialogProps) {
   const formId = useId()
   const [canSubmit, setCanSubmit] = useState(false)
+  const [tripKind, setTripKind] = useState<"oneway" | "roundtrip">("roundtrip")
 
   const initial = useMemo(() => {
     if (existingItem?.route) {
@@ -67,14 +72,8 @@ export function RouteLegDialog({
     }
     const suggestion = suggestLegEndpoints(trip, leg)
     return {
-      from: emptyEndpoint({
-        place: suggestion.from,
-        pendingText: suggestion.pendingFromText,
-      }),
-      to: emptyEndpoint({
-        place: suggestion.to,
-        pendingText: suggestion.pendingToText,
-      }),
+      from: emptyEndpoint({ place: suggestion.from, pendingText: null }),
+      to: emptyEndpoint({ place: suggestion.to, pendingText: null }),
       mode: "undecided" as const,
       vendor: "",
       detail: "",
@@ -86,6 +85,8 @@ export function RouteLegDialog({
   const isOutbound = leg === "outbound"
   const title = isOutbound ? "Viaje de ida" : "Viaje de vuelta"
   const editing = Boolean(existingItem?.route?.leg)
+  const canOfferRoundtrip =
+    isOutbound && !editing && !hasRouteLeg(trip.days, "return")
 
   const handleFormSubmit = (value: TransportRouteFormValue) => {
     // trip.origin = ancla de casa: ciudad elegida ANTES del hub, nunca el aeropuerto.
@@ -104,6 +105,7 @@ export function RouteLegDialog({
       detail: value.detail,
       vendor: value.vendor,
       origin: originPatch,
+      createMirrorReturn: canOfferRoundtrip && tripKind === "roundtrip",
     })
     onOpenChange(false)
   }
@@ -116,16 +118,53 @@ export function RouteLegDialog({
             {editing ? `Editar ${title.toLowerCase()}` : title}
           </DialogTitle>
           <DialogDescription>
-            Primero de dónde a dónde. El medio lo decides cuando quieras.
+            Elige el medio si ya lo sabes — o déjalo en «Aún no lo sé». Luego de
+            dónde a dónde.
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          {canOfferRoundtrip ? (
+            <div
+              className="mb-4 flex flex-wrap gap-1.5"
+              role="radiogroup"
+              aria-label="Solo ida o ida y vuelta"
+            >
+              {(
+                [
+                  { value: "oneway", label: "Solo ida" },
+                  { value: "roundtrip", label: "Ida y vuelta" },
+                ] as const
+              ).map((opt) => {
+                const selected = tripKind === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setTripKind(opt.value)}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      selected
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
           <TransportRouteForm
             formId={formId}
             initial={initial}
             fromLabel={isOutbound ? "Origen" : "Salida"}
             toLabel={isOutbound ? "Destino" : "Llegada"}
+            toPlaceholder={
+              isOutbound ? "Indica tu ciudad de destino" : "¿A qué ciudad llegas?"
+            }
             onValidityChange={setCanSubmit}
             onSubmit={handleFormSubmit}
           />

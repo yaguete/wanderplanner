@@ -15,6 +15,7 @@ import {
   computeTripTaskTotals,
   createExtraTaskState,
   effectiveStatus,
+  foldMirroredFlightReturnCost,
   isBookableTransportMode,
   mergeTaskState,
   normalizeName,
@@ -812,6 +813,128 @@ assert.equal(isBookableTransportMode(null), false)
   const pruned = pruneTaskStates(withoutOut)
   assert.equal(pruned[outKey], undefined)
   assert.deepEqual(pruned[retKey]?.cost, 95)
+}
+
+// ── T4B.3b: ida y vuelta en avión espejadas = una sola tarea ─────────────────
+
+{
+  const bcn = { label: "Barcelona", coords: { lng: 2.173, lat: 41.385 }, kind: "city" as const }
+  const vie = { label: "Viena", coords: { lng: 16.37, lat: 48.21 }, kind: "city" as const }
+  const bud = { label: "Budapest", coords: { lng: 19.04, lat: 47.5 }, kind: "city" as const }
+
+  const outbound = dayItem({
+    id: "leg-out",
+    type: "transport",
+    name: "Barcelona → Viena",
+    route: { from: bcn, to: vie, mode: "flight", leg: "outbound" },
+  })
+  const ret = dayItem({
+    id: "leg-ret",
+    type: "transport",
+    name: "Viena → Barcelona",
+    route: { from: vie, to: bcn, mode: "flight", leg: "return" },
+  })
+
+  const booked = (cost: number): TripTaskState => ({
+    status: "booked",
+    cost,
+    cancellable: true,
+    notes: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  })
+
+  const mirroredTrip = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [outbound] },
+      { id: "day-2", label: "", items: [] },
+      { id: "day-3", label: "", items: [ret] },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: {
+      "leg:outbound": booked(120),
+      "leg:return": booked(95),
+    },
+  })
+
+  const fused = buildTripTasks(mirroredTrip).filter((t) => t.category === "transport")
+  assert.equal(fused.length, 1)
+  assert.equal(fused[0]!.id, "leg:outbound")
+  assert.equal(fused[0]!.roundtripFlight, true)
+  assert.equal(fused[0]!.occurrences, 2)
+  assert.deepEqual(fused[0]!.dayIndexes, [0, 2])
+  assert.equal(fused[0]!.itemIds.length, 2)
+  assert.equal(fused[0]!.state?.cost, 215)
+  assert.equal(computeTripTaskTotals(buildTripTasks(mirroredTrip)).totalCost, 215)
+  assert.equal(
+    computeTripTaskTotals(buildTripTasks(mirroredTrip)).costByCategory.transport,
+    215,
+  )
+
+  const folded = foldMirroredFlightReturnCost(mirroredTrip.tasks, mirroredTrip.days)
+  assert.equal(folded["leg:outbound"]?.cost, 215)
+  assert.equal(folded["leg:return"], undefined)
+  const prunedFold = pruneTaskStates(mirroredTrip)
+  assert.equal(prunedFold["leg:outbound"]?.cost, 215)
+  assert.equal(prunedFold["leg:return"], undefined)
+
+  // Ida en avión sin retorno → una tarea, occurrences 1.
+  const outboundOnly = makeTrip({
+    days: [{ id: "day-1", label: "", items: [outbound] }],
+    basics: [],
+    extraTasks: [],
+    tasks: {},
+  })
+  const onlyOut = buildTripTasks(outboundOnly).filter((t) => t.category === "transport")
+  assert.equal(onlyOut.length, 1)
+  assert.equal(onlyOut[0]!.occurrences, 1)
+  assert.equal(onlyOut[0]!.roundtripFlight, undefined)
+
+  // Vuelta en tren → dos tareas.
+  const trainReturn = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [outbound] },
+      {
+        id: "day-3",
+        label: "",
+        items: [
+          {
+            ...ret,
+            route: { from: vie, to: bcn, mode: "train", leg: "return" },
+          },
+        ],
+      },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: { "leg:outbound": booked(120), "leg:return": booked(95) },
+  })
+  const splitTrain = buildTripTasks(trainReturn).filter((t) => t.category === "transport")
+  assert.equal(splitTrain.length, 2)
+  assert.equal(computeTripTaskTotals(buildTripTasks(trainReturn)).totalCost, 215)
+
+  // Open-jaw (BCN→VIE, VIE→BUD) → dos tareas.
+  const openJaw = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [outbound] },
+      {
+        id: "day-3",
+        label: "",
+        items: [
+          {
+            ...ret,
+            name: "Viena → Budapest",
+            route: { from: vie, to: bud, mode: "flight", leg: "return" },
+          },
+        ],
+      },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: { "leg:outbound": booked(120), "leg:return": booked(95) },
+  })
+  const splitJaw = buildTripTasks(openJaw).filter((t) => t.category === "transport")
+  assert.equal(splitJaw.length, 2)
 }
 
 console.log("trip-tasks: ok")
