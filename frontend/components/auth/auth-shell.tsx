@@ -18,10 +18,12 @@ export function AuthShell({
   width?: "md" | "2xl"
 }) {
   return (
-    <main className="relative flex min-h-screen flex-col items-center px-5 py-10">
+    <main className="relative flex min-h-screen flex-col items-center overflow-hidden bg-canvas px-5 py-10">
+      {/* Mismo fondo que `/`: el embudo landing → signup no cambia de temperatura. */}
+      <div aria-hidden className="landing-grid-texture absolute inset-0 -z-10" />
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-[radial-gradient(110%_70%_at_50%_0%,hsl(221_83%_53%/0.12),transparent_60%)]"
+        className="absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(50%_60%_at_50%_0%,#9F817314,transparent_70%)]"
       />
       <Link href="/" className="outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring">
         <BrandLockup />

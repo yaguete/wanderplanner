@@ -1,7 +1,14 @@
 import { cn } from "@/lib/utils"
 
-/** Color de la marca (ardilla). */
+/** Color de la marca (ardilla). Elemento gráfico: le basta 3:1. */
 export const BRAND_COLOR = "#9F8173"
+
+/**
+ * Marrón del wordmark. Mismo tono que `BRAND_COLOR` (H 17°, S 19%) pero 10
+ * puntos más oscuro: como texto necesita 4.5:1 y `BRAND_COLOR` se queda en
+ * 3.6:1 sobre blanco / 3.3:1 sobre canvas. Con este: 5.1:1 y 4.7:1.
+ */
+export const BRAND_INK = "#86675B"
 
 const TAIL_PATH =
   "M55.2622 169.129C61.9837 156.55 84.9807 127.513 67.8016 100.615C45.2258 65.2671 2.59668 92.3981 2.59668 92.3981C2.59668 92.3981 3.84897 32.0586 45.2258 11.9326C86.6026 -8.19348 125.483 5.60461 146.8 37.0902C168.117 68.5757 161.847 101.873 131.753 134.578C101.658 167.283 86.6083 181.707 77.8332 199.318C69.058 216.928 68.4535 236.107 77.8332 249.633C82.1693 255.886 86.2482 260.39 91.3631 263.425C104.596 268.501 115.451 268.501 115.451 268.501C104.663 268.501 97.3124 266.956 91.3631 263.425C80.4767 259.25 67.9811 251.639 58.5967 237.767C37.805 207.033 48.5408 181.707 55.2622 169.129Z"
@@ -40,14 +47,14 @@ export function BrandMark({
   )
 }
 
-/** Ardilla + wordmark: el nombre apoya en la base del logo, mismo color. */
+/** Ardilla + wordmark: el nombre apoya en la base del logo, en `BRAND_INK`. */
 export function BrandLockup({ className }: { className?: string }) {
   return (
     <span className={cn("flex min-w-0 items-end gap-2", className)}>
       <BrandMark />
       <span
         className="-mb-[0.12em] truncate text-lg font-normal leading-none tracking-tight"
-        style={{ color: BRAND_COLOR }}
+        style={{ color: BRAND_INK }}
       >
         WanderPlanner
       </span>

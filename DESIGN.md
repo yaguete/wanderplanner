@@ -40,7 +40,8 @@ Tipos de ítem: chip neutro + punto de color (`ITEM_COLORS.dot`).
 Isotipo: ardilla (cola llena + cuerpo a trazo). Color de marca `#9F8173` (`BRAND_COLOR` en [`frontend/components/brand-mark.tsx`](frontend/components/brand-mark.tsx)). **No es `--primary`**: el primary de UI sigue siendo tinta `20 8% 14%`; el marrón no se convierte en token de cromo (ni terracota, ni blue-600).
 
 - `BrandMark` — isotipo. Variantes: `color` (cromo claro), `mono` (`currentColor`), `negative` (blanco sobre fondo oscuro).
-- `BrandLockup` — isotipo + wordmark «WanderPlanner»; el nombre apoya en la base, mismo color.
+- `BrandLockup` — isotipo + wordmark «WanderPlanner»; el nombre apoya en la base del logo.
+- **Dos marrones, por contraste, no por capricho.** El isotipo usa `BRAND_COLOR` `#9F8173`: es un elemento gráfico y le basta 3:1. El **wordmark es texto** y necesita 4.5:1, que `#9F8173` no da (3.6:1 sobre blanco, 3.3:1 sobre canvas), así que va en `BRAND_INK` `#86675B` — mismo tono (H 17°, S 19%), 10 puntos menos de luz, 5.1:1 y 4.7:1. No unifiques los dos valores «por limpieza»: hacerlo devuelve un fallo AA a todas las cabeceras de la app.
 - `brandSvgMarkup()` — SVG autocontenido (snippet de partners, OG).
 
 Los paths del componente son el original. `public/brand/logo-{color,mono,negative}.svg` son copias manuales para prensa; no las referencia el código.
@@ -76,8 +77,20 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Tarjetas/lista con portada fotográfica (`coverUrl`) o emoji; acciones Archivar / Editar / Eliminar a primer nivel.
 - Mientras se cargan los viajes desde Supabase, el bloque muestra un spinner en el mismo contenedor punteado que el empty state (nunca «No hay viajes activos» de forma prematura).
 
+### Superficie de marketing (landing)
+
+`/` es una página de marketing, no una superficie de cuenta. Vive en [`frontend/components/landing/`](frontend/components/landing/) y **no comparte** el cromo de login. Ese lenguaje es solo de marketing: el workspace sigue siendo quiet chrome y no adopta glows, textura de grid ni display type.
+
+- Escala display (solo aquí): h1 `text-[2.75rem] sm:text-6xl lg:text-7xl` con `leading-[1.05]` y tracking `[-0.035em]`; h2 de sección `text-3xl sm:text-4xl lg:text-5xl` / `[-0.03em]`; eyebrow `text-[11px] sm:text-xs` uppercase con tracking `[0.14em] sm:[0.18em]` (a 375px, con `text-xs` + `0.18em` el antetítulo parte y deja una palabra huérfana).
+- Textura `.landing-grid-texture` (grid 56px que se desvanece) y velo de marca `#9F8173` ≤ 8% de opacidad en el hero.
+- Pieza central: workspace de 3 paneles en un marco de navegador, con glow de las 4 tintas de ítem (`sky-600`, `orange-600`, `emerald-600`, `violet-600`) y un hilo de 3px con esas mismas cuatro en el borde superior del marco. El panel «Mi viaje» corta su último ítem con un degradado (`mask-image`): el corte tiene que leerse como «sigue», no como recorte.
+- Mockups del producto: reconstrucciones HTML, nunca capturas. Viaje ficticio «Vietnam en 12 días» y atribución genérica `vía @unblogdeviajes` — nunca un partner real.
+- Banda de blogueros sobre tinta `hsl(20 8% 11%)` (un paso más profunda que `--primary`), texto blanco.
+- Reveal por scroll (`.landing-reveal`) solo con `animation-timeline: view()`; apagado si `prefers-reduced-motion`.
+- Cero JS de landing: todo Server Component.
+
 ### Superficies de cuenta
-- `/` (landing placeholder), `/login`, `/signup`, `/partners` y `/account` comparten cromo propio, sin sidebar: marca arriba, una columna centrada (`max-w-md`, o `max-w-2xl` en `/partners`) y fondo con un degradado radial tenue.
+- `/login`, `/signup`, `/partners` y `/account` comparten cromo propio, sin sidebar: marca arriba, una columna centrada (`max-w-md`, o `max-w-2xl` en `/partners`) y **el mismo fondo que la landing**: canvas cálido + `.landing-grid-texture` + velo de marca al 8%. Antes había aquí un radial `hsl(221 83% 53%)` — blue-600, prohibido más abajo — que además enfriaba el embudo justo al salir de `/`.
 - Avatar de la cabecera: menú (nombre, email, ajustes, cerrar sesión) en desktop y móvil.
 - Invitados (sesión anónima): el avatar muestra «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de ajustes.
 - `RegistrationGate`: modal breve (nombre, email, contraseña, o enlace de confirmación vía `updateUser` sobre la misma sesión anónima) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio.

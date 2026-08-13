@@ -371,3 +371,51 @@
     opacity: 1;
   }
 }
+
+/* ===== Landing (/) — reveal por scroll sin JS y textura de grid ===== */
+
+/* Progressive enhancement: solo navegadores con scroll-driven animations. */
+@supports (animation-timeline: view()) {
+  .landing-reveal {
+    animation: landing-reveal-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 40%;
+  }
+}
+
+@keyframes landing-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * El bloque global de prefers-reduced-motion fuerza duration 0.01ms, pero las
+ * animaciones con timeline de scroll ignoran duration: hay que apagarlas aquí.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .landing-reveal {
+    animation: none;
+  }
+}
+
+/* Grid fino tipo Vercel para el hero; se desvanece radialmente hacia abajo. */
+.landing-grid-texture {
+  background-image:
+    linear-gradient(to right, hsl(0 0% 9% / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(0 0% 9% / 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, #000 55%, transparent 100%);
+}
+
+/* Variante espejada para el CTA final: la textura emana del borde inferior. */
+.landing-grid-texture--flip {
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 100%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 100%, #000 55%, transparent 100%);
+}

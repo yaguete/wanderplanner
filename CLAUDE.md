@@ -50,15 +50,16 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     Dockerfile
     agents/
   frontend/
-    app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips…
+    app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips, /legal…
       robots.ts            # Allow /; Disallow /trips y /account; NO /start
-      sitemap.ts           # / y /partners (indexables)
+      sitemap.ts           # / y /partners (indexables; /legal/* noindex hasta T6.4)
       opengraph-image.tsx  # OG 1200×630 (next/og + brandSvgMarkup)
       apple-icon.tsx       # 180×180, ardilla #9F8173 sobre blanco opaco
       icon.svg             # favicon SVG con prefers-color-scheme
     middleware.ts          # Sesión Supabase; protege /trips y /account
-    components/            # UI + auth/ + partners/ + tareas + tramos + mapa + nav móvil
+    components/            # UI + auth/ + partners/ + landing/ + tareas + tramos + mapa + nav móvil
       brand-mark.tsx       # isotipo ardilla, BrandLockup, brandSvgMarkup
+      landing/             # home pública: hero, marco 3 paneles, blogueros, footer
       trips-shell.tsx      # providers + cromo de /trips (el layout es Server Component)
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
@@ -95,7 +96,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Rutas App Router y shell
 
-- **`/`** — Landing placeholder ([`app/page.tsx`](frontend/app/page.tsx)): CTAs Entrar / Crear cuenta.
+- **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + CTAs signup/partners), cómo funciona, banda de blogueros, prueba social, footer. Server Components, indexable.
+- **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Stubs `noindex, follow` hasta T6.4 (copy real). No van en `sitemap.ts`.
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas).
 - **`/partners`** — Kit público para bloggers ([`app/partners/page.tsx`](frontend/app/partners/page.tsx)): formulario URL + slug → enlace `/start` + snippet HTML; dispara `POST /partners/prewarm` para dejar la fuente en caché. Mismo cromo que `/login` (`AuthShell`, ancho `2xl`).
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos: sesión anónima + viaje borrador + fuente precargada. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado. **Rastreable + `noindex, follow`**: Google tiene que leer el meta; no va en `Disallow`.
