@@ -135,13 +135,17 @@ assert.equal(
 assert.equal(formatTaskDays([1]), "día 2")
 assert.equal(formatTaskDays([0, 1, 2]), "días 1–3")
 assert.equal(formatTaskDays([0, 2]), "días 1, 3")
-assert.equal(formatTaskDays([0, 1, 2], 3), "3 noches · días 1–3")
-assert.equal(formatTaskDays([0], 1), "1 noche · día 1")
+assert.equal(formatTaskDays([0, 1, 2], 3), "Días 1–3 (3 noches)")
+assert.equal(formatTaskDays([0], 1), "Día 1 (1 noche)")
 assert.equal(formatTaskDays([]), null)
 
 // Con startDate: anexa weekday + día + mes corto.
 assert.equal(formatTaskDays([0], undefined, "2026-08-09"), "día 1 · dom 9 ago")
-assert.equal(formatTaskDays([0], 1, "2026-08-09"), "1 noche · día 1 · dom 9 ago")
+assert.equal(formatTaskDays([0], 1, "2026-08-09"), "dom 9 ago (1 noche)")
+assert.equal(
+  formatTaskDays([0, 1], 2, "2026-08-09"),
+  "dom 9 ago – lun 10 ago (2 noches)",
+)
 assert.equal(
   formatTaskDays([0, 1, 2], undefined, "2026-08-09"),
   "días 1–3 · dom 9 ago – mar 11 ago",

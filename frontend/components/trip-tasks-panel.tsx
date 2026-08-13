@@ -548,7 +548,7 @@ function TaskRow({
   const dayMeta = formatTaskDays(task.dayIndexes, task.nights, startDate)
   const meta = formatTaskMeta({
     dayMeta,
-    vendor: task.vendor,
+    vendor: task.category === "accommodation" ? null : task.vendor,
     detail: task.detail,
   })
   const showCancellable =

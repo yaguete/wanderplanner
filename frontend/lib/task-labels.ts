@@ -137,8 +137,9 @@ export function taskActionTitle(
 /**
  * Meta de días / noches. `dayIndexes` es 0-based.
  * Contiguos → «días 1–3»; discontinuos → «días 1, 3».
- * Alojamientos con `nights`: «3 noches · días 1–3».
- * Con `startDate`: anexa calendario («día 1 · dom 9 ago»).
+ * Alojamientos con `nights` + fechas: «dom 9 ago – lun 10 ago (2 noches)».
+ * Alojamientos sin fechas del viaje: «Días 1–2 (2 noches)» (sin calendario).
+ * Con `startDate` en no-alojamiento: anexa calendario («día 1 · dom 9 ago»).
  */
 export function formatTaskDays(
   dayIndexes: number[],
@@ -148,18 +149,17 @@ export function formatTaskDays(
   if (dayIndexes.length === 0) return null
 
   const days = dayIndexes.map((i) => i + 1)
-  const dayPart = formatDayList(days)
   const datePart = formatTaskCalendarRange(dayIndexes, startDate ?? null)
 
-  let base: string
   if (nights != null && nights > 0) {
     const nightLabel = nights === 1 ? "1 noche" : `${nights} noches`
-    base = `${nightLabel} · ${dayPart}`
-  } else {
-    base = dayPart
+    if (datePart) return `${datePart} (${nightLabel})`
+    const dayPart = formatDayList(days)
+    return `${dayPart.charAt(0).toUpperCase()}${dayPart.slice(1)} (${nightLabel})`
   }
 
-  return datePart ? `${base} · ${datePart}` : base
+  const dayPart = formatDayList(days)
+  return datePart ? `${dayPart} · ${datePart}` : dayPart
 }
 
 /** Une meta de días + compañía + nota («día 9 · Vueling · ABCDE»). */
