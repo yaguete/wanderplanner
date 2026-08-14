@@ -458,7 +458,8 @@ export function ItineraryMapView({
   const hoverPopupRef = useRef<mapboxgl.Popup | null>(null)
   const hoverOpenIdRef = useRef<string | null>(null)
   const hoverCloseTimerRef = useRef<number | null>(null)
-  const popupChromeBoundRef = useRef(false)
+  /** Elemento al que están los listeners del bocadillo. `remove()` lo destruye. */
+  const popupChromeElRef = useRef<HTMLElement | null>(null)
   const adjustingSetterRef = useRef<
     (next: { id: string; name: string; proximity: [number, number] } | null) => void
   >(() => {})
@@ -918,7 +919,7 @@ export function ItineraryMapView({
         maxWidth: "260px",
         className: "wp-map-popup",
       })
-      popupChromeBoundRef.current = false
+      popupChromeElRef.current = null
     }
     return hoverPopupRef.current
   }, [])
@@ -936,8 +937,11 @@ export function ItineraryMapView({
       const el = popup.getElement()
       if (!el) return
       el.classList.toggle("wp-map-popup--interactive", Boolean(opts?.interactive))
-      if (popupChromeBoundRef.current) return
-      popupChromeBoundRef.current = true
+      // `Popup.remove()` borra `_container`. El siguiente `addTo` crea un nodo
+      // nuevo; religar si el elemento cambió (si no, el botón de ajustar en
+      // móvil queda muerto tras el primer cierre).
+      if (popupChromeElRef.current === el) return
+      popupChromeElRef.current = el
       el.addEventListener("mouseenter", () => {
         if (hoverCloseTimerRef.current != null) {
           window.clearTimeout(hoverCloseTimerRef.current)
@@ -1070,7 +1074,7 @@ export function ItineraryMapView({
       map.off("error", onError)
       closeHoverPopup()
       hoverPopupRef.current = null
-      popupChromeBoundRef.current = false
+      popupChromeElRef.current = null
       for (const marker of markersById.values()) marker.remove()
       markersById.clear()
       popupDataById.clear()
