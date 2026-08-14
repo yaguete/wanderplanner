@@ -8,8 +8,16 @@ import { ClosingCta } from "@/components/landing/closing-cta"
 import { LandingFooter } from "@/components/landing/landing-footer"
 
 export const metadata: Metadata = {
+  title: {
+    absolute: "WanderPlanner: itinerarios de viaje con IA, gratis",
+  },
   description:
-    "Planifica con quien ya ha estado allí: WanderPlanner lee los artículos de tus blogueros de viaje favoritos y los convierte en un itinerario por días.",
+    "Gratis y con IA. Pega el artículo de tu bloguero favorito y WanderPlanner lo convierte en tu itinerario, día a día.",
+  openGraph: {
+    title: "WanderPlanner: itinerarios de viaje con IA, gratis",
+    description:
+      "Gratis y con IA. Pega el artículo de tu bloguero favorito y WanderPlanner lo convierte en tu itinerario, día a día.",
+  },
 }
 
 export default function RootPage() {

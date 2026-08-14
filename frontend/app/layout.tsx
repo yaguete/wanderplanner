@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s · WanderPlanner",
   },
   description:
-    "Los viajes que te inspiran, convertidos en tu itinerario. Consolida rutas de blogueros en tu propio plan.",
+    "El primer planificador editorial de viajes impulsado por IA. Pega las fuentes y blogueros de tu confianza y WanderPlanner lo convierte en un plan de viaje para ti, día a día.",
   openGraph: { type: "website", locale: "es_ES", siteName: "WanderPlanner" },
   twitter: { card: "summary_large_image" },
 }
