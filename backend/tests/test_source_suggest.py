@@ -61,15 +61,55 @@ def test_tavily_drops_feed_and_amp():
         hit_from_tavily(
             {"url": "https://www.viajeroscallejeros.com/cuenca-en-un-dia/feed", "title": "Cuenca"},
             origin="curated",
+            query="cuenca",
         )
         is None
     )
     hit = hit_from_tavily(
         {"url": "https://www.viajeroscallejeros.com/cuenca-en-un-dia", "title": "Cuenca en un día"},
         origin="curated",
+        query="cuenca",
     )
     assert hit is not None
     assert hit.origin == "curated"
+
+
+def test_tavily_drops_off_topic_itineraries():
+    assert (
+        hit_from_tavily(
+            {
+                "url": "https://www.mochileandoporelmundo.com/itinerario-viaje-myanmar",
+                "title": "Itinerario de viaje a Myanmar de 2 y 3 semanas",
+                "content": "Blog de viajes con guías…",
+            },
+            origin="curated",
+            query="zambia",
+        )
+        is None
+    )
+    assert (
+        hit_from_tavily(
+            {
+                "url": "https://www.viajeroscallejeros.com/tag/cuenca",
+                "title": "Cuenca",
+            },
+            origin="curated",
+            query="cuenca",
+        )
+        is None
+    )
+    assert (
+        hit_from_tavily(
+            {
+                "url": "https://www.viajeroscallejeros.com/page/3?s=madrid",
+                "title": "madrid",
+                "content": "También Cuenca y Teruel",
+            },
+            origin="curated",
+            query="cuenca",
+        )
+        is None
+    )
 
 
 def test_cache_row_skips_private_hosts_and_expired():
@@ -103,11 +143,33 @@ def test_cache_row_skips_private_hosts_and_expired():
     assert hit.host == "lacosmopolilla.com"
 
 
+def test_tavily_web_skips_social_hosts():
+    assert (
+        hit_from_tavily(
+            {"url": "https://www.instagram.com/reel/zambia", "title": "Zambia"},
+            origin="web",
+            query="zambia",
+        )
+        is None
+    )
+    hit = hit_from_tavily(
+        {
+            "url": "https://www.undiaporelmundo.com/que-hacer-en-zambia",
+            "title": "Qué hacer en Zambia",
+        },
+        origin="web",
+        query="zambia",
+    )
+    assert hit is not None
+    assert hit.origin == "web"
+
+
 def test_tavily_drops_institutional():
     assert (
         hit_from_tavily(
             {"url": "https://www.exteriores.gob.es/japon", "title": "MAE"},
             origin="web",
+            query="japon",
         )
         is None
     )
@@ -118,6 +180,7 @@ def test_tavily_drops_institutional():
             "content": "12 días",
         },
         origin="curated",
+        query="vietnam",
     )
     assert hit is not None
     assert hit.instant is False
@@ -200,7 +263,7 @@ async def test_endpoint_cache_hit_skips_tavily(monkeypatch):
 @pytest.mark.asyncio
 async def test_endpoint_fills_with_curated_tavily(monkeypatch):
     monkeypatch.setenv("SOURCE_SUGGEST_ENABLED", "true")
-    monkeypatch.setenv("SOURCE_SUGGEST_WEB_ENABLED", "false")
+    monkeypatch.setenv("SOURCE_SUGGEST_WEB_ENABLED", "true")
     monkeypatch.setenv("LANDING_SOURCE_SEARCH_MAX_IP_DAY", "20")
     mod._ip_counts = {}
     mod._day = None
@@ -214,7 +277,7 @@ async def test_endpoint_fills_with_curated_tavily(monkeypatch):
     ]
     tavily_payload = {
         "results": [
-            {"url": "https://japonismo.com/itinerario-15", "title": "15 días"},
+            {"url": "https://japonismo.com/itinerario-japon-15", "title": "Japón 15 días"},
             {"url": "https://viajablog.com/japon", "title": "Japón viajablog"},
             {"url": "https://www.exteriores.gob.es/jp", "title": "MAE"},
         ]
@@ -224,6 +287,7 @@ async def test_endpoint_fills_with_curated_tavily(monkeypatch):
             with patch.object(mod, "allow_suggest_tavily_global", new=AsyncMock(return_value=True)):
                 with patch.object(mod, "record_event", new=AsyncMock()) as record:
                     resp = await sources_suggest(_Req(), q="japon")  # type: ignore[arg-type]
+    assert tavily.await_count == 1
     assert tavily.await_args.kwargs["strict"] is True
     assert tavily.await_args.args[0] == "japon itinerario"
     assert record.await_count == 1
@@ -235,18 +299,46 @@ async def test_endpoint_fills_with_curated_tavily(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_endpoint_web_step_asks_captcha(monkeypatch):
+async def test_endpoint_web_fallback_when_curated_empty(monkeypatch):
     monkeypatch.setenv("SOURCE_SUGGEST_ENABLED", "true")
     monkeypatch.setenv("SOURCE_SUGGEST_WEB_ENABLED", "true")
+    monkeypatch.setenv("LANDING_SOURCE_SEARCH_MAX_IP_DAY", "20")
     mod._ip_counts = {}
     mod._day = None
+
+    async def fake_tavily(_q: str, **kwargs):
+        if kwargs.get("strict"):
+            return {
+                "results": [
+                    {
+                        "url": "https://www.mochileandoporelmundo.com/itinerario-viaje-myanmar",
+                        "title": "Myanmar",
+                    }
+                ]
+            }
+        return {
+            "results": [
+                {
+                    "url": "https://www.undiaporelmundo.com/que-hacer-en-zambia",
+                    "title": "Qué hacer en Zambia",
+                },
+                {
+                    "url": "https://www.instagram.com/reel/zambia",
+                    "title": "Zambia reel",
+                },
+            ]
+        }
+
     with patch.object(mod, "list_extraction_metas", new=AsyncMock(return_value=[])):
-        with patch.object(mod, "tavily_search", new=AsyncMock(return_value={"results": []})):
+        with patch.object(mod, "tavily_search", new=AsyncMock(side_effect=fake_tavily)) as tavily:
             with patch.object(mod, "allow_suggest_tavily_global", new=AsyncMock(return_value=True)):
-                with patch.object(mod, "verify_turnstile", new=AsyncMock(return_value=False)):
-                    with patch.object(mod, "record_event", new=AsyncMock()):
-                        resp = await sources_suggest(_Req(), q="alaska")  # type: ignore[arg-type]
-    assert resp.need_captcha is True
+                with patch.object(mod, "record_event", new=AsyncMock()):
+                    resp = await sources_suggest(_Req(), q="zambia")  # type: ignore[arg-type]
+    assert tavily.await_count == 2
+    assert tavily.await_args.kwargs["strict"] is False
+    assert [h.origin for h in resp.results] == ["web"]
+    assert resp.results[0].url.endswith("/que-hacer-en-zambia")
+    assert resp.need_captcha is False
 
 
 @pytest.mark.asyncio

@@ -4,10 +4,10 @@ GET /sources/suggest — artículos para la pestaña «Busca un destino».
 Público (como /partners/prewarm). Cascada:
   1. article_extractions de host curado, fresh/stale (gratis, instantáneo)
   2. Tavily restringido a LANDING_SOURCE_DOMAINS
-  3. Tavily abierto, detrás de SOURCE_SUGGEST_WEB_ENABLED + Turnstile
+  3. Si 1+2 no dan ningún hit: Tavily abierto (mismo filtro de relevancia)
 
-Kill switch: SOURCE_SUGGEST_ENABLED=false
-El escalón 3: SOURCE_SUGGEST_WEB_ENABLED=true (default apagado).
+Kill switch global: SOURCE_SUGGEST_ENABLED=false
+Kill switch del escalón 3: SOURCE_SUGGEST_WEB_ENABLED=false
 """
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ from extraction_cache import classify_freshness, list_extraction_metas
 from inspirational_source import is_inspirational_source_url
 from landing_source_domains import LANDING_SOURCE_DOMAINS
 from obs import log_kv
-from partners import TurnstileUnavailable, verify_turnstile
 from usage import count_kind_events, record_event
 from web_search import tavily_search
 
@@ -40,7 +39,21 @@ MAX_RESULTS = 4
 TAVILY_FETCH = 8
 MIN_QUERY_LEN = 3
 MAX_QUERY_LEN = 60
-_JUNK_PATH = re.compile(r"/(?:feed|amp)(?:/|$)", re.I)
+_JUNK_PATH = re.compile(
+    r"/(?:feed|amp|tag|tags|category|categories|author|page|search)(?:/|$)",
+    re.I,
+)
+_SKIP_WEB_HOSTS = (
+    "instagram.com",
+    "tiktok.com",
+    "facebook.com",
+    "pinterest.com",
+    "youtube.com",
+    "youtu.be",
+    "twitter.com",
+    "x.com",
+    "reddit.com",
+)
 
 _day: date | None = None
 _ip_counts: dict[str, int] = {}
@@ -77,7 +90,7 @@ def suggest_enabled() -> bool:
 
 
 def suggest_web_enabled() -> bool:
-    return _env_flag("SOURCE_SUGGEST_WEB_ENABLED", False)
+    return _env_flag("SOURCE_SUGGEST_WEB_ENABLED", True)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -215,19 +228,36 @@ def curated_search_query(query: str) -> str:
     return f"{query} itinerario"
 
 
-def hit_from_tavily(item: dict[str, Any], *, origin: Origin) -> SuggestHit | None:
+def hit_from_tavily(
+    item: dict[str, Any],
+    *,
+    origin: Origin,
+    query: str,
+) -> SuggestHit | None:
     url = str(item.get("url") or "").strip()
     if not url or not is_inspirational_source_url(url):
         return None
-    if _JUNK_PATH.search(urlparse(url).path or ""):
+    parsed = urlparse(url)
+    if _JUNK_PATH.search(parsed.path or ""):
+        return None
+    query_s = (parsed.query or "").lower()
+    if "s=" in query_s or "search=" in query_s:
         return None
     host = host_from_url(url)
     if origin == "curated" and not host_is_curated(host):
         return None
+    if origin == "web" and any(host == d or host.endswith("." + d) for d in _SKIP_WEB_HOSTS):
+        return None
     title = item.get("title")
     content = item.get("content")
     heading = title if isinstance(title, str) and title.strip() else host
-    dest = content.strip() if isinstance(content, str) and content.strip() else None
+    raw_body = content.strip() if isinstance(content, str) and content.strip() else None
+    # Título o slug: el snippet de Tavily cita posts relacionados y cuela destinos ajenos.
+    if not text_matches(query, heading, parsed.path):
+        return None
+    dest = raw_body
+    if dest and dest.lower().startswith("ir al contenido"):
+        dest = None
     if dest and len(dest) > 140:
         dest = dest[:137] + "…"
     return SuggestHit(
@@ -277,7 +307,7 @@ def cache_hits_for_query(rows: list[dict[str, Any]], query: str) -> list[Suggest
 async def sources_suggest(
     request: Request,
     q: str = Query(..., min_length=1, max_length=120),
-    captcha_token: str | None = Query(None),
+    captcha_token: str | None = Query(None),  # compat; el escalón web ya no pide Turnstile
 ) -> SuggestResponse:
     if not suggest_enabled():
         raise HTTPException(status_code=404, detail="Búsqueda de fuentes desactivada")
@@ -298,7 +328,6 @@ async def sources_suggest(
     remaining = MAX_RESULTS - len(cached)
     curated: list[SuggestHit] = []
     web: list[SuggestHit] = []
-    need_captcha = False
     tavily_used = False
     client_ip = _client_ip(request)
     can_tavily = remaining > 0 and allow_suggest_tavily_ip(client_ip)
@@ -319,38 +348,30 @@ async def sources_suggest(
         for item in data.get("results") or []:
             if not isinstance(item, dict):
                 continue
-            hit = hit_from_tavily(item, origin="curated")
+            hit = hit_from_tavily(item, origin="curated", query=query)
             if hit:
                 curated.append(hit)
 
     merged = merge_hits(cached, curated)
-    remaining = MAX_RESULTS - len(merged)
 
-    if remaining > 0 and suggest_web_enabled():
-        token_ok = False
-        try:
-            token_ok = await verify_turnstile(captcha_token, client_ip)
-        except TurnstileUnavailable:
-            token_ok = False
-        if not token_ok:
-            need_captcha = True
-        elif can_tavily:
-            tavily_used = True
-            data = await tavily_search(
-                f"{query} itinerario blog",
-                max_results=TAVILY_FETCH,
-                include_raw_content=False,
-                preferred_domains=None,
-                strict=False,
-            )
-            if data.get("error"):
-                log_kv(logger, event="source_suggest_tavily", step="web", err=str(data["error"])[:180])
-            for item in data.get("results") or []:
-                if not isinstance(item, dict):
-                    continue
-                hit = hit_from_tavily(item, origin="web")
-                if hit:
-                    web.append(hit)
+    # Solo si los blogueros no trajeron nada: no rellenar huecos con la web abierta.
+    if len(merged) == 0 and suggest_web_enabled() and can_tavily:
+        tavily_used = True
+        data = await tavily_search(
+            f"{query} itinerario blog",
+            max_results=TAVILY_FETCH,
+            include_raw_content=False,
+            preferred_domains=None,
+            strict=False,
+        )
+        if data.get("error"):
+            log_kv(logger, event="source_suggest_tavily", step="web", err=str(data["error"])[:180])
+        for item in data.get("results") or []:
+            if not isinstance(item, dict):
+                continue
+            hit = hit_from_tavily(item, origin="web", query=query)
+            if hit:
+                web.append(hit)
 
     if tavily_used:
         await record_event(None, "landing_source_search")
@@ -365,4 +386,4 @@ async def sources_suggest(
         n=len(results),
         q_len=len(query),
     )
-    return SuggestResponse(results=results, need_captcha=need_captcha)
+    return SuggestResponse(results=results, need_captcha=False)

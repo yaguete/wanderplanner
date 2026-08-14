@@ -2,8 +2,9 @@
  * Kill switch y cliente de GET /sources/suggest (pestaña «Busca un destino»).
  *
  * - `NEXT_PUBLIC_SOURCE_SUGGEST_ENABLED=false` oculta el chip.
- * - `NEXT_PUBLIC_SOURCE_SUGGEST_WEB_ENABLED=true` habilita el escalón web abierta
- *   (Turnstile). Default apagado: caché + dominios curados bastan para el lanzamiento.
+ * - El escalón web abierta lo decide el API (`SOURCE_SUGGEST_WEB_ENABLED`, default on).
+ *   `NEXT_PUBLIC_SOURCE_SUGGEST_WEB_ENABLED` solo enseña Turnstile si el API
+ *   devolviera `need_captcha` (hoy no lo pide).
  */
 import { parseApiDetail } from "@/lib/api"
 
