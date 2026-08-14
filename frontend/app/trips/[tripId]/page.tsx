@@ -3,6 +3,7 @@
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useTrips } from "@/lib/trip-context"
+import { useAuth } from "@/lib/auth-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { draftTripNameFor, takePendingSource } from "@/lib/partner-trip"
@@ -86,6 +87,7 @@ function DesktopPanelSlot({
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
   const { getTrip, isLoading, startSourceExtraction, updateTrip, getTripSources } = useTrips()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
@@ -109,8 +111,9 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   }, [])
 
   useEffect(() => {
-    if (!isLoading && !trip) router.replace("/trips")
-  }, [isLoading, trip, router])
+    if (authLoading || isLoading || !user) return
+    if (!trip) router.replace("/trips")
+  }, [authLoading, isLoading, user, trip, router])
 
   useEffect(() => {
     if (querySource) return

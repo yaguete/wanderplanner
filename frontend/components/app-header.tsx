@@ -38,8 +38,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
 
   const handleSignOut = async () => {
     await signOut()
-    router.push("/")
-    router.refresh()
+    window.location.assign("/")
   }
 
   const showPanelToggles = !isMobile && chrome !== null
