@@ -20,7 +20,7 @@ export const TRIP_MOBILE_NAV_CLEARANCE = "var(--wp-nav-clearance)" as const
 export const tripMobileNavClearanceClass = "max-md:pb-[var(--wp-nav-clearance)]"
 
 const TAB_ITEM_CLASS =
-  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-[color,background-color,min-height,width,padding,border-radius,gap] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
 const TABS: {
   id: TripMobileSection
@@ -36,12 +36,10 @@ type TripMobileNavProps = {
   active: TripMobileSection
   onChange: (section: TripMobileSection) => void
   /**
-   * Oculta el dock con una salida suave. Con el teclado virtual abierto se
-   * oculta solo (variante `floating`): la suscripción vive aquí para no
-   * re-renderizar la página entera en cada cambio del teclado.
-   * En Fuentes / Mi viaje también se oculta al replegar la cabecera (scroll).
+   * Repliegue al hacer scroll (Fuentes / Mi viaje): iconos solos, más juntos.
+   * El teclado virtual sigue ocultando el dock por completo (variante `floating`).
    */
-  hidden?: boolean
+  compact?: boolean
   /**
    * `floating`: tarjeta flotante independiente (Fuentes / Mi viaje).
    * `embedded`: solo la fila de pestañas, para incrustarla en otra tarjeta
@@ -51,24 +49,41 @@ type TripMobileNavProps = {
   className?: string
 }
 
-/** Fila de pestañas: Inicio + secciones del viaje, a ancho completo. */
+/** Fila de pestañas: Inicio + secciones del viaje. */
 function NavTabs({
   active,
   onChange,
-}: Pick<TripMobileNavProps, "active" | "onChange">) {
+  compact = false,
+}: Pick<TripMobileNavProps, "active" | "onChange" | "compact">) {
   const { requireAccount } = useRegistrationGate()
 
+  const itemClass = compact
+    ? "flex size-9 items-center justify-center rounded-full p-0 text-[10.5px] font-medium leading-none transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    : TAB_ITEM_CLASS
+
   return (
-    <div className="grid grid-cols-4 gap-0.5 p-1">
+    <div
+      className={cn(
+        "grid grid-cols-4",
+        compact ? "w-max gap-0 p-0.5" : "gap-0.5 p-1",
+      )}
+    >
       <Link
         href="/trips"
+        aria-label="Inicio"
         onClick={(e) => {
           if (!requireAccount("home")) e.preventDefault()
         }}
-        className={cn(TAB_ITEM_CLASS, "text-muted-foreground")}
+        className={cn(itemClass, "text-muted-foreground")}
       >
-        <Compass className="h-[1.125rem] w-[1.125rem]" aria-hidden />
-        <span>Inicio</span>
+        <Compass
+          className={cn(
+            "shrink-0 transition-[width,height] duration-200",
+            compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
+          )}
+          aria-hidden
+        />
+        {compact ? null : <span>Inicio</span>}
       </Link>
 
       {TABS.map(({ id, label, icon: Icon }) => {
@@ -77,18 +92,23 @@ function NavTabs({
           <button
             key={id}
             type="button"
+            aria-label={label}
             aria-current={selected ? "page" : undefined}
             onClick={() => onChange(id)}
             className={cn(
-              TAB_ITEM_CLASS,
+              itemClass,
               selected ? "bg-muted text-primary" : "text-muted-foreground",
             )}
           >
             <Icon
-              className={cn("h-[1.125rem] w-[1.125rem]", selected && "stroke-[2.25]")}
+              className={cn(
+                "shrink-0 transition-[width,height] duration-200",
+                compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
+                selected && "stroke-[2.25]",
+              )}
               aria-hidden
             />
-            <span>{label}</span>
+            {compact ? null : <span>{label}</span>}
           </button>
         )
       })}
@@ -99,7 +119,7 @@ function NavTabs({
 export function TripMobileNav({
   active,
   onChange,
-  hidden = false,
+  compact = false,
   variant = "floating",
   className,
 }: TripMobileNavProps) {
@@ -113,7 +133,7 @@ export function TripMobileNav({
     )
   }
 
-  const isHidden = hidden || keyboardOpen
+  const isHidden = keyboardOpen
 
   return (
     <nav
@@ -132,13 +152,14 @@ export function TripMobileNav({
         className={cn(
           // Opaco: si no, el blur deja ver el panel de debajo y el `bg-muted`
           // del tab activo parece otro gris según Fuentes / Mi viaje / Asistente.
-          "pointer-events-auto rounded-2xl",
-          "border border-border/60 bg-background",
+          "pointer-events-auto overflow-hidden border border-border/60 bg-background",
           "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+          "transition-[border-radius,width,margin] duration-200 ease-out",
+          compact ? "mx-auto w-max rounded-full" : "w-full rounded-2xl",
           isHidden && "pointer-events-none",
         )}
       >
-        <NavTabs active={active} onChange={onChange} />
+        <NavTabs active={active} onChange={onChange} compact={compact} />
       </div>
     </nav>
   )

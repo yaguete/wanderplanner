@@ -7,18 +7,23 @@ import { useCallback, useEffect, useRef, useState } from "react"
  * El listener va en captura porque cada pestaña puede montar su propio scroller
  * (los eventos `scroll` no burbujean).
  *
- * `onCollapsedChange` avisa al padre (p. ej. para ocultar la navbar) también
+ * `onCollapsedChange` avisa al padre (p. ej. para compactar la navbar) también
  * cuando el repliegue se resetea a mano al cambiar de pestaña.
+ *
+ * `active`: al volver a la sección (Fuentes ↔ Mi viaje) se expande de nuevo
+ * para que el siguiente scroll hacia abajo pueda volver a compactar.
  */
 export function useCollapsingHeader(
   enabled: boolean,
   onCollapsedChange?: (collapsed: boolean) => void,
+  active = true,
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [collapsed, setCollapsedState] = useState(false)
   const collapsedRef = useRef(false)
   const onCollapsedChangeRef = useRef(onCollapsedChange)
   onCollapsedChangeRef.current = onCollapsedChange
+  const prevActiveRef = useRef(active)
 
   const setCollapsed = useCallback((next: boolean) => {
     if (collapsedRef.current === next) return
@@ -26,6 +31,11 @@ export function useCollapsingHeader(
     setCollapsedState(next)
     onCollapsedChangeRef.current?.(next)
   }, [])
+
+  useEffect(() => {
+    if (enabled && active && !prevActiveRef.current) setCollapsed(false)
+    prevActiveRef.current = active
+  }, [active, enabled, setCollapsed])
 
   useEffect(() => {
     if (!enabled) {

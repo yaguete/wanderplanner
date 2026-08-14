@@ -258,9 +258,10 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         initialSourceUrl={pendingSourceUrl}
         onRevealSources={revealSources}
         onHeaderCollapsedChange={onSourcesHeaderCollapsed}
+        activeOnMobile={mobileSection === "sources"}
       />
     ),
-    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources, onSourcesHeaderCollapsed],
+    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources, onSourcesHeaderCollapsed, mobileSection],
   )
   const planNode = useMemo(
     () => (
@@ -268,9 +269,10 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         tripId={tripId}
         onEditTrip={openEditTrip}
         onHeaderCollapsedChange={onPlanHeaderCollapsed}
+        activeOnMobile={mobileSection === "plan"}
       />
     ),
-    [tripId, openEditTrip, onPlanHeaderCollapsed],
+    [tripId, openEditTrip, onPlanHeaderCollapsed, mobileSection],
   )
 
   const assistantOpen = panels.assistant
@@ -334,7 +336,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
           className="relative min-h-0 flex-1 overflow-hidden"
           style={
             mobileNavHidden
-              ? ({ "--wp-nav-height": "0px" } as CSSProperties)
+              ? ({ "--wp-nav-height": "var(--wp-nav-height-compact)" } as CSSProperties)
               : undefined
           }
         >
@@ -379,7 +381,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             <TripMobileNav
               active={mobileSection}
               onChange={selectMobileSection}
-              hidden={mobileNavHidden}
+              compact={mobileNavHidden}
             />
           ) : null}
         </div>
