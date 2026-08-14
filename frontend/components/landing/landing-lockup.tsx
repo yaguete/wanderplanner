@@ -4,7 +4,6 @@ import { useLayoutEffect, useRef } from "react"
 import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 
-const RANGE_PX = 240
 const ARMED_CLASS = "landing-lockup-armed"
 const SCROLLED_CLASS = "landing-header-scrolled"
 const BLUR_AFTER_PX = 12
@@ -68,11 +67,13 @@ export function LandingLockup() {
       raf = 0
       syncHeaderBlur()
       const to = toEl.getBoundingClientRect()
-      const p = smoothstep(clamp01(window.scrollY / RANGE_PX))
+      // Y a ritmo del h1 (flujo del documento) hasta atracar en el header.
+      const y = Math.max(to.top, from0.top - window.scrollY)
+      const travel = Math.max(from0.top - to.top, 1)
+      const p = smoothstep(clamp01(window.scrollY / travel))
       // Ardilla fuera en la segunda mitad del trayecto (al hacerse pequeña / atracar).
       const markOut = smoothstep(clamp01((p - 0.4) / 0.6))
       const x = from0.left + (to.left - from0.left) * p
-      const y = from0.top + (to.top - from0.top) * p
       // Escala contra el lockup completo (offsetWidth ignora el scale del hero).
       // El destino es solo el wordmark; no usar to.width.
       const s = (from0.width / Math.max(fromEl.offsetWidth, 1)) * (1 - p) + p
