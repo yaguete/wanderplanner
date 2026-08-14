@@ -36,8 +36,11 @@ router = APIRouter(tags=["sources"])
 
 Origin = Literal["cache", "curated", "web"]
 MAX_RESULTS = 4
+# Tavily con include_domains a veces rellena con ruido; pedimos de más y filtramos.
+TAVILY_FETCH = 8
 MIN_QUERY_LEN = 3
 MAX_QUERY_LEN = 60
+_JUNK_PATH = re.compile(r"/(?:feed|amp)(?:/|$)", re.I)
 
 _day: date | None = None
 _ip_counts: dict[str, int] = {}
@@ -207,9 +210,16 @@ def hit_from_cache_row(row: dict[str, Any]) -> SuggestHit | None:
     )
 
 
+def curated_search_query(query: str) -> str:
+    """El destino va primero: si no, Tavily rankea diccionarios de 'itinerario'."""
+    return f"{query} itinerario"
+
+
 def hit_from_tavily(item: dict[str, Any], *, origin: Origin) -> SuggestHit | None:
     url = str(item.get("url") or "").strip()
     if not url or not is_inspirational_source_url(url):
+        return None
+    if _JUNK_PATH.search(urlparse(url).path or ""):
         return None
     host = host_from_url(url)
     if origin == "curated" and not host_is_curated(host):
@@ -298,12 +308,14 @@ async def sources_suggest(
     if remaining > 0 and can_tavily:
         tavily_used = True
         data = await tavily_search(
-            f"itinerario {query} viaje",
-            max_results=remaining,
+            curated_search_query(query),
+            max_results=TAVILY_FETCH,
             include_raw_content=False,
             preferred_domains=list(LANDING_SOURCE_DOMAINS),
             strict=True,
         )
+        if data.get("error"):
+            log_kv(logger, event="source_suggest_tavily", step="curated", err=str(data["error"])[:180])
         for item in data.get("results") or []:
             if not isinstance(item, dict):
                 continue
@@ -325,12 +337,14 @@ async def sources_suggest(
         elif can_tavily:
             tavily_used = True
             data = await tavily_search(
-                f"itinerario {query} viaje blog",
-                max_results=remaining,
+                f"{query} itinerario blog",
+                max_results=TAVILY_FETCH,
                 include_raw_content=False,
                 preferred_domains=None,
                 strict=False,
             )
+            if data.get("error"):
+                log_kv(logger, event="source_suggest_tavily", step="web", err=str(data["error"])[:180])
             for item in data.get("results") or []:
                 if not isinstance(item, dict):
                     continue

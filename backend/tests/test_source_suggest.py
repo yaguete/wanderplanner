@@ -11,6 +11,7 @@ import source_suggest as mod
 from source_suggest import (
     SuggestHit,
     cache_hits_for_query,
+    curated_search_query,
     hit_from_cache_row,
     hit_from_tavily,
     host_is_curated,
@@ -49,6 +50,26 @@ def test_text_matches_folds_accents():
     assert text_matches("Japón", "Itinerario por japon")
     assert text_matches("costa rica", "Costa Rica, Centroamérica")
     assert text_matches("islandia", "Ruta por Vietnam") is False
+
+
+def test_curated_query_puts_destination_first():
+    assert curated_search_query("cuenca") == "cuenca itinerario"
+
+
+def test_tavily_drops_feed_and_amp():
+    assert (
+        hit_from_tavily(
+            {"url": "https://www.viajeroscallejeros.com/cuenca-en-un-dia/feed", "title": "Cuenca"},
+            origin="curated",
+        )
+        is None
+    )
+    hit = hit_from_tavily(
+        {"url": "https://www.viajeroscallejeros.com/cuenca-en-un-dia", "title": "Cuenca en un día"},
+        origin="curated",
+    )
+    assert hit is not None
+    assert hit.origin == "curated"
 
 
 def test_cache_row_skips_private_hosts_and_expired():
@@ -204,6 +225,7 @@ async def test_endpoint_fills_with_curated_tavily(monkeypatch):
                 with patch.object(mod, "record_event", new=AsyncMock()) as record:
                     resp = await sources_suggest(_Req(), q="japon")  # type: ignore[arg-type]
     assert tavily.await_args.kwargs["strict"] is True
+    assert tavily.await_args.args[0] == "japon itinerario"
     assert record.await_count == 1
     origins = {h.origin for h in resp.results}
     assert "cache" in origins
