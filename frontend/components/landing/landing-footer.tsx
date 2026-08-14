@@ -13,6 +13,7 @@ export function LandingFooter() {
             <p className="mt-3 max-w-xs text-sm text-muted-foreground">
               Los viajes que te inspiran, convertidos en tu itinerario.
             </p>
+            <p className="mt-3 text-xs text-muted-foreground">© {year} WanderPlanner</p>
           </div>
 
           <div>
@@ -65,10 +66,6 @@ export function LandingFooter() {
               </a>
             </nav>
           </div>
-        </div>
-
-        <div className="mt-12 border-t border-border pt-6">
-          <p className="mt-1 text-xs text-muted-foreground">© {year} WanderPlanner</p>
         </div>
       </div>
     </footer>
