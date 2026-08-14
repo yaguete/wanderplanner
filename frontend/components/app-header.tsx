@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { BrandLockup, BrandMark, BrandWordmark } from "@/components/brand-mark"
+import { BrandMark, BrandWordmark } from "@/components/brand-mark"
 import { TripPanelToggles } from "@/components/trip-panel-toggles"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
@@ -73,7 +73,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
             !isMobile && !rail && "px-2.5",
           )}
         >
-          {isMobile ? <BrandLockup /> : rail ? <BrandMark /> : <BrandWordmark />}
+          {isMobile || !rail ? <BrandWordmark /> : <BrandMark />}
         </Link>
       </div>
 
