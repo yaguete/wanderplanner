@@ -86,6 +86,7 @@ export default function InspirationPanel({
   onAddSourceOpenChange,
   initialSourceUrl,
   onRevealSources,
+  onHeaderCollapsedChange,
 }: {
   tripId: string
   addSourceOpen?: boolean
@@ -93,6 +94,8 @@ export default function InspirationPanel({
   initialSourceUrl?: string | null
   /** Activa el panel/sección Fuentes (toast «Ver»). */
   onRevealSources?: () => void
+  /** Móvil: repliegue de cabecera (para ocultar la navbar con el mismo gesto). */
+  onHeaderCollapsedChange?: (collapsed: boolean) => void
 }) {
   const {
     getTrip,
@@ -144,7 +147,7 @@ export default function InspirationPanel({
     containerRef: panelRef,
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
-  } = useCollapsingHeader(isMobile)
+  } = useCollapsingHeader(isMobile, onHeaderCollapsedChange)
 
   useEffect(() => {
     activeSourceIdRef.current = activeSourceId

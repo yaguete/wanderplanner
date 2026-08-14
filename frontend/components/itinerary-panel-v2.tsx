@@ -129,11 +129,14 @@ export default function ItineraryPanel({
   tripId,
   onClose,
   onEditTrip,
+  onHeaderCollapsedChange,
 }: {
   tripId: string
   onClose?: () => void
   /** Abre el diálogo de edición del viaje (fechas, nombre, etc.). */
   onEditTrip?: () => void
+  /** Móvil: repliegue de cabecera (para ocultar la navbar con el mismo gesto). */
+  onHeaderCollapsedChange?: (collapsed: boolean) => void
 }) {
   const {
     getTrip,
@@ -162,7 +165,7 @@ export default function ItineraryPanel({
     containerRef: panelRef,
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
-  } = useCollapsingHeader(isMobile)
+  } = useCollapsingHeader(isMobile, onHeaderCollapsedChange)
   const dateSub = useMemo(
     () => (trip ? formatTripDates(trip.startDate, trip.endDate) : null),
     [trip],

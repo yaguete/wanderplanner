@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useTrips } from "@/lib/trip-context"
 import { useAuth } from "@/lib/auth-context"
@@ -101,8 +101,23 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const [panels, setPanels] = useState<TripPanelState>(DEFAULT_PANELS)
   const [panelsHydrated, setPanelsHydrated] = useState(false)
   const [mobileSection, setMobileSection] = useState<TripMobileSection>("sources")
+  const [mobileNavHidden, setMobileNavHidden] = useState(false)
+  const mobileSectionRef = useRef(mobileSection)
+  mobileSectionRef.current = mobileSection
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [editTripOpen, setEditTripOpen] = useState(false)
+
+  const selectMobileSection = useCallback((section: TripMobileSection) => {
+    setMobileSection(section)
+    setMobileNavHidden(false)
+  }, [])
+
+  const onSourcesHeaderCollapsed = useCallback((collapsed: boolean) => {
+    if (mobileSectionRef.current === "sources") setMobileNavHidden(collapsed)
+  }, [])
+  const onPlanHeaderCollapsed = useCallback((collapsed: boolean) => {
+    if (mobileSectionRef.current === "plan") setMobileNavHidden(collapsed)
+  }, [])
 
   // Evitar mismatch SSR/cliente: leer localStorage tras montar.
   useEffect(() => {
@@ -168,6 +183,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     setLayoutTripId(tripId)
     setEditTripOpen(false)
     setMobileSection("sources")
+    setMobileNavHidden(false)
     if (!pendingSourceUrl) setAddSourceOpen(false)
   }
 
@@ -212,16 +228,16 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   const openAddSource = useCallback(
     (open: boolean) => {
-      if (open && isMobile) setMobileSection("sources")
+      if (open && isMobile) selectMobileSection("sources")
       setAddSourceOpen(open)
     },
-    [isMobile],
+    [isMobile, selectMobileSection],
   )
 
   const revealSources = useCallback(() => {
-    if (isMobile) setMobileSection("sources")
+    if (isMobile) selectMobileSection("sources")
     else setPanels((prev) => ({ ...prev, sources: true }))
-  }, [isMobile])
+  }, [isMobile, selectMobileSection])
 
   const openEditTrip = useCallback(() => setEditTripOpen(true), [])
 
@@ -241,13 +257,20 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         onAddSourceOpenChange={openAddSource}
         initialSourceUrl={pendingSourceUrl}
         onRevealSources={revealSources}
+        onHeaderCollapsedChange={onSourcesHeaderCollapsed}
       />
     ),
-    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources],
+    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources, onSourcesHeaderCollapsed],
   )
   const planNode = useMemo(
-    () => <ItineraryPanel tripId={tripId} onEditTrip={openEditTrip} />,
-    [tripId, openEditTrip],
+    () => (
+      <ItineraryPanel
+        tripId={tripId}
+        onEditTrip={openEditTrip}
+        onHeaderCollapsedChange={onPlanHeaderCollapsed}
+      />
+    ),
+    [tripId, openEditTrip, onPlanHeaderCollapsed],
   )
 
   const assistantOpen = panels.assistant
@@ -307,7 +330,14 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       />
 
       {isMobile ? (
-        <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          className="relative min-h-0 flex-1 overflow-hidden"
+          style={
+            mobileNavHidden
+              ? ({ "--wp-nav-height": "0px" } as CSSProperties)
+              : undefined
+          }
+        >
           <div
             className={cn(
               "@container absolute inset-0",
@@ -331,8 +361,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
           <AssistantPanelLayer
             open={mobileSection === "assistant"}
             onOpenChange={(open) => {
-              if (open) setMobileSection("assistant")
-              else setMobileSection("sources")
+              if (open) selectMobileSection("assistant")
+              else selectMobileSection("sources")
             }}
             tripId={tripId}
             variant="section"
@@ -340,13 +370,17 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
               <TripMobileNav
                 variant="embedded"
                 active={mobileSection}
-                onChange={setMobileSection}
+                onChange={selectMobileSection}
               />
             }
           />
 
           {mobileSection !== "assistant" ? (
-            <TripMobileNav active={mobileSection} onChange={setMobileSection} />
+            <TripMobileNav
+              active={mobileSection}
+              onChange={selectMobileSection}
+              hidden={mobileNavHidden}
+            />
           ) : null}
         </div>
       ) : (

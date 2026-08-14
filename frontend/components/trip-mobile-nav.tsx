@@ -39,6 +39,7 @@ type TripMobileNavProps = {
    * Oculta el dock con una salida suave. Con el teclado virtual abierto se
    * oculta solo (variante `floating`): la suscripción vive aquí para no
    * re-renderizar la página entera en cada cambio del teclado.
+   * En Fuentes / Mi viaje también se oculta al replegar la cabecera (scroll).
    */
   hidden?: boolean
   /**
@@ -134,6 +135,7 @@ export function TripMobileNav({
           "pointer-events-auto rounded-2xl",
           "border border-border/60 bg-background",
           "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+          isHidden && "pointer-events-none",
         )}
       >
         <NavTabs active={active} onChange={onChange} />

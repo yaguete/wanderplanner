@@ -1,15 +1,31 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 /**
  * Móvil: la cabecera se repliega al bajar y vuelve al subir.
  * El listener va en captura porque cada pestaña puede montar su propio scroller
  * (los eventos `scroll` no burbujean).
+ *
+ * `onCollapsedChange` avisa al padre (p. ej. para ocultar la navbar) también
+ * cuando el repliegue se resetea a mano al cambiar de pestaña.
  */
-export function useCollapsingHeader(enabled: boolean) {
+export function useCollapsingHeader(
+  enabled: boolean,
+  onCollapsedChange?: (collapsed: boolean) => void,
+) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsedState] = useState(false)
+  const collapsedRef = useRef(false)
+  const onCollapsedChangeRef = useRef(onCollapsedChange)
+  onCollapsedChangeRef.current = onCollapsedChange
+
+  const setCollapsed = useCallback((next: boolean) => {
+    if (collapsedRef.current === next) return
+    collapsedRef.current = next
+    setCollapsedState(next)
+    onCollapsedChangeRef.current?.(next)
+  }, [])
 
   useEffect(() => {
     if (!enabled) {
@@ -42,7 +58,7 @@ export function useCollapsingHeader(enabled: boolean) {
 
     node.addEventListener("scroll", onScroll, true)
     return () => node.removeEventListener("scroll", onScroll, true)
-  }, [enabled])
+  }, [enabled, setCollapsed])
 
   return { containerRef, collapsed, setCollapsed }
 }
