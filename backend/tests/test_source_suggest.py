@@ -36,8 +36,8 @@ def test_sanitize_rejects_short_and_strips_syntax():
 
 
 def test_host_is_curated_matches_subdomains():
-    assert host_is_curated("unblogdeviajes.com")
-    assert host_is_curated("www.unblogdeviajes.com")
+    assert host_is_curated("lacosmopolilla.com")
+    assert host_is_curated("www.lacosmopolilla.com")
     assert host_is_curated("www.japonismo.com")
     assert host_is_curated("blog.japonismo.com")
     assert host_is_curated("evil.example") is False
@@ -61,7 +61,7 @@ def test_cache_row_skips_private_hosts_and_expired():
     assert hit_from_cache_row(row) is None
 
     expired = {
-        "url": "https://unblogdeviajes.com/japon/",
+        "url": "https://lacosmopolilla.com/japon/",
         "og_title": "Japón",
         "destination": "Japón",
         "validated_at": _fresh_iso(400),
@@ -69,7 +69,7 @@ def test_cache_row_skips_private_hosts_and_expired():
     assert hit_from_cache_row(expired) is None
 
     ok = {
-        "url": "https://unblogdeviajes.com/japon/",
+        "url": "https://lacosmopolilla.com/japon/",
         "og_title": "Japón en 15 días",
         "destination": "Japón",
         "total_days": 15,
@@ -79,7 +79,7 @@ def test_cache_row_skips_private_hosts_and_expired():
     assert hit is not None
     assert hit.origin == "cache"
     assert hit.instant is True
-    assert hit.host == "unblogdeviajes.com"
+    assert hit.host == "lacosmopolilla.com"
 
 
 def test_tavily_drops_institutional():
@@ -92,7 +92,7 @@ def test_tavily_drops_institutional():
     )
     hit = hit_from_tavily(
         {
-            "url": "https://unblogdeviajes.com/vietnam/",
+            "url": "https://lacosmopolilla.com/vietnam/",
             "title": "Vietnam",
             "content": "12 días",
         },
@@ -108,18 +108,18 @@ def test_merge_hits_dedupes_and_caps_at_four():
         return SuggestHit(
             url=url,
             title=url,
-            host="unblogdeviajes.com",
+            host="lacosmopolilla.com",
             origin=origin,  # type: ignore[arg-type]
             instant=origin == "cache",
         )
 
     merged = merge_hits(
-        [hit("https://unblogdeviajes.com/a"), hit("https://unblogdeviajes.com/a/")],
+        [hit("https://lacosmopolilla.com/a"), hit("https://lacosmopolilla.com/a/")],
         [
-            hit("https://unblogdeviajes.com/b", "curated"),
-            hit("https://unblogdeviajes.com/c", "curated"),
-            hit("https://unblogdeviajes.com/d", "web"),
-            hit("https://unblogdeviajes.com/e", "web"),
+            hit("https://lacosmopolilla.com/b", "curated"),
+            hit("https://lacosmopolilla.com/c", "curated"),
+            hit("https://lacosmopolilla.com/d", "web"),
+            hit("https://lacosmopolilla.com/e", "web"),
         ],
     )
     assert len(merged) == 4
@@ -130,13 +130,13 @@ def test_merge_hits_dedupes_and_caps_at_four():
 def test_cache_hits_for_query_filters_by_destination():
     rows = [
         {
-            "url": "https://unblogdeviajes.com/japon/",
+            "url": "https://lacosmopolilla.com/japon/",
             "og_title": "Japón en 15 días",
             "destination": "Japón",
             "validated_at": _fresh_iso(1),
         },
         {
-            "url": "https://unblogdeviajes.com/vietnam/",
+            "url": "https://lacosmopolilla.com/vietnam/",
             "og_title": "Vietnam",
             "destination": "Vietnam",
             "validated_at": _fresh_iso(1),
@@ -159,7 +159,7 @@ async def test_endpoint_cache_hit_skips_tavily(monkeypatch):
     monkeypatch.setenv("SOURCE_SUGGEST_WEB_ENABLED", "false")
     rows = [
         {
-            "url": f"https://unblogdeviajes.com/japon-{i}/",
+            "url": f"https://lacosmopolilla.com/japon-{i}/",
             "og_title": f"Japón {i}",
             "destination": "Japón",
             "validated_at": _fresh_iso(1),
@@ -185,7 +185,7 @@ async def test_endpoint_fills_with_curated_tavily(monkeypatch):
     mod._day = None
     rows = [
         {
-            "url": "https://unblogdeviajes.com/japon/",
+            "url": "https://lacosmopolilla.com/japon/",
             "og_title": "Japón",
             "destination": "Japón",
             "validated_at": _fresh_iso(1),

@@ -108,7 +108,11 @@ export async function suggestSources(
       detail = null
     }
     const { message } = parseApiDetail(detail, response.status)
-    throw new SourceSuggestError(message, response.status)
+    const friendly =
+      response.status === 404 && (message === "Not Found" || !detail)
+        ? "La búsqueda de destinos no está disponible en este servidor."
+        : message
+    throw new SourceSuggestError(friendly, response.status)
   }
 
   const body = (await response.json()) as Record<string, unknown>

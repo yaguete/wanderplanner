@@ -257,8 +257,16 @@ export function LandingStart() {
                 placeholder="Japón, Vietnam, Islandia…"
                 value={destValue}
                 onChange={(e) => {
-                  setDestValue(e.target.value)
+                  const next = e.target.value
+                  setDestValue(next)
                   if (destError) setDestError(null)
+                  if (next.trim() !== "") return
+                  // Sin query: cierra el panel (no hay búsqueda que mostrar).
+                  abortRef.current?.abort()
+                  setDestResults(null)
+                  setDestLoading(false)
+                  setNeedCaptcha(false)
+                  setCaptchaToken(null)
                 }}
                 className="landing-start-input"
               />
@@ -307,12 +315,6 @@ export function LandingStart() {
                       </li>
                     ))}
                   </ul>
-                ) : null}
-                {destResults && destResults.some((hit) => !hit.instant) ? (
-                  <p className="mt-2 px-1 text-xs text-muted-foreground">
-                    Si el artículo no está cacheado, empezaremos tu viaje con él (tarda un minuto) y
-                    usará tu extracción de invitado.
-                  </p>
                 ) : null}
                 {showWebCaptcha ? (
                   <div className="mt-3 flex justify-center">
