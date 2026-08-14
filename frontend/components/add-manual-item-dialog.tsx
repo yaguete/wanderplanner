@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { isMobileViewport } from "@/hooks/use-mobile"
 import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import {
@@ -219,7 +220,7 @@ export function AddManualItemDialog({
           <div className="space-y-2">
             <Label>Tipo</Label>
             <div
-              className="grid grid-cols-2 gap-1.5 sm:grid-cols-4"
+              className="grid grid-cols-4 gap-1.5"
               role="radiogroup"
               aria-label="Tipo de elemento"
             >
@@ -248,7 +249,7 @@ export function AddManualItemDialog({
                       setType(t)
                     }}
                     className={cn(
-                      "inline-flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center transition-colors",
+                      "inline-flex min-w-0 flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-center transition-colors sm:px-2 sm:py-2",
                       selected
                         ? "border-primary bg-primary/5 text-foreground"
                         : "border-border bg-card text-muted-foreground hover:text-foreground",
@@ -257,7 +258,7 @@ export function AddManualItemDialog({
                     <span className="relative flex h-7 w-7 items-center justify-center">
                       <Icon className="h-4 w-4" aria-hidden />
                     </span>
-                    <span className="text-[11px] font-medium leading-tight">{ITEM_LABELS[t]}</span>
+                    <span className="text-[10px] font-medium leading-tight sm:text-[11px]">{ITEM_LABELS[t]}</span>
                   </button>
                 )
               })}
@@ -271,7 +272,7 @@ export function AddManualItemDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={NAME_PLACEHOLDERS[type]}
-              autoFocus
+              autoFocus={!isMobileViewport()}
             />
           </div>
 

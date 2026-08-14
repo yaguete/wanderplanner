@@ -5,6 +5,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { isMobileViewport } from '@/hooks/use-mobile'
 
 const Dialog = DialogPrimitive.Root
 
@@ -39,7 +40,7 @@ const DialogContent = React.forwardRef<
      */
     fullscreenOnMobile?: boolean
   }
->(({ className, children, hideClose = false, fullscreenOnMobile = false, ...props }, ref) => (
+>(({ className, children, hideClose = false, fullscreenOnMobile = false, onOpenAutoFocus, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -70,6 +71,11 @@ const DialogContent = React.forwardRef<
         className,
       )}
       {...props}
+      onOpenAutoFocus={(event) => {
+        // Móvil: no enfocar inputs al abrir (el teclado encoge la pantalla).
+        if (isMobileViewport()) event.preventDefault()
+        onOpenAutoFocus?.(event)
+      }}
     >
       {children}
       {!hideClose ? (

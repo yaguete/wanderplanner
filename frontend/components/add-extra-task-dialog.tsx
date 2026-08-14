@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { isMobileViewport } from "@/hooks/use-mobile"
 import type { TripTaskCategory } from "@/types/itinerary"
 
 export type AddExtraTaskDialogProps = {
@@ -71,7 +72,7 @@ export function AddExtraTaskDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Contratar seguro de viaje"
-                autoFocus
+                autoFocus={!isMobileViewport()}
               />
             </div>
           </div>

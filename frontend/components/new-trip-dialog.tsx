@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { isMobileViewport } from "@/hooks/use-mobile"
 import {
   Select,
   SelectContent,
@@ -423,7 +424,7 @@ export function NewTripDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="p. ej. Semana santa 2026 · Alpujarra"
-              autoFocus
+              autoFocus={!isMobileViewport()}
             />
             <p className="text-xs text-muted-foreground">
               Pon el nombre que quieras que aparezca en la portada.

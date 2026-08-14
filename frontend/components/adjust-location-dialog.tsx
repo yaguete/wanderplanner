@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { isMobileViewport } from "@/hooks/use-mobile"
 import {
   geocodeFreeText,
   seedGeocodeCache,
@@ -177,7 +178,7 @@ export function AdjustLocationDialog({
                 placeholder="p. ej. Hofkirche, Innsbruck"
                 className="pl-8"
                 autoComplete="off"
-                autoFocus
+                autoFocus={!isMobileViewport()}
                 aria-autocomplete="list"
                 aria-expanded={listOpen && suggestions.length > 0}
               />

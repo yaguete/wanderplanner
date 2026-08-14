@@ -1,6 +1,12 @@
 import * as React from 'react'
 
-const MOBILE_BREAKPOINT = 768
+export const MOBILE_BREAKPOINT = 768
+
+/** Lectura síncrona del viewport. Útil al montar un diálogo (el hook aún no ha hidratado). */
+export function isMobileViewport(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.innerWidth < MOBILE_BREAKPOINT
+}
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)

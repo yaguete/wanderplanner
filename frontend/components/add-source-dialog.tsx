@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { isMobileViewport } from "@/hooks/use-mobile"
 import type { ItineraryProgressStage } from "@/lib/api"
 import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
 
@@ -150,7 +151,7 @@ export function AddSourceFlow({
             if (error) setError(null)
           }}
           placeholder="https://blog.com/mi-viaje-a..."
-          autoFocus
+          autoFocus={!isMobileViewport()}
           aria-invalid={!!error}
         />
         {error ? (
