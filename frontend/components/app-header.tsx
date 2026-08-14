@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { LogOut, Settings, UserPlus } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -27,6 +27,7 @@ type AppHeaderProps = {
 
 export function AppHeader({ leading }: AppHeaderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, profile, isGuest, signOut } = useAuth()
   const isMobile = useIsMobile()
   const { chrome, chromeHydrated } = useTripChrome()
@@ -42,11 +43,14 @@ export function AppHeader({ leading }: AppHeaderProps) {
   }
 
   const showPanelToggles = !isMobile && chrome !== null
+  const onTripsHome = pathname === "/trips"
 
   return (
     <header
       className={cn(
-        "flex h-12 shrink-0 items-center gap-2.5 bg-canvas max-md:bg-background",
+        "flex h-12 shrink-0 items-center gap-2.5 bg-canvas",
+        // Detalle del viaje: el panel es blanco; el listado de inicio comparte el canvas.
+        isMobile && !onTripsHome && "bg-background",
         // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
         isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
         showPanelToggles ? "relative" : undefined,

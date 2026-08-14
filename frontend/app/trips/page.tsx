@@ -172,7 +172,7 @@ export default function TripsHomePage() {
               Tus viajes
             </h1>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Consolida artículos de blogueros y revistas en una sola ruta editable.
+              Consolida fuentes en las que confías en una ruta editable.
             </p>
           </div>
         </div>
