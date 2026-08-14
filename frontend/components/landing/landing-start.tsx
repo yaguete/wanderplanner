@@ -22,13 +22,13 @@ import { cn } from "@/lib/utils"
 
 type StartTab = "article" | "destination" | "signup"
 
-const TABS: { id: StartTab; label: string }[] = [
-  { id: "article", label: "Añade una fuente" },
-  { id: "destination", label: "Busca un destino" },
-  { id: "signup", label: "Crea tu cuenta" },
+const TABS: { id: StartTab; label: string; mobileLines: [string, string] }[] = [
+  { id: "article", label: "Añade una fuente", mobileLines: ["Añade una", "fuente"] },
+  { id: "destination", label: "Busca un destino", mobileLines: ["Busca un", "destino"] },
+  { id: "signup", label: "Crea tu cuenta", mobileLines: ["Crea tu", "cuenta"] },
 ]
 
-function visibleTabs(): { id: StartTab; label: string }[] {
+function visibleTabs(): { id: StartTab; label: string; mobileLines: [string, string] }[] {
   if (isSourceSuggestEnabled()) return TABS
   return TABS.filter((tab) => tab.id !== "destination")
 }
@@ -187,15 +187,21 @@ export function LandingStart() {
                 selectTab(item.id, true)
               }}
               onKeyDown={(event) => onChipKeyDown(event, index)}
+              aria-label={item.label}
               className={cn(
-                "min-w-0 flex-1 rounded-full px-2 py-2 text-[11px] font-medium transition-colors sm:px-4 sm:text-sm",
+                "min-w-0 flex-1 rounded-full px-1.5 py-1.5 text-[11px] font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 selected
                   ? "bg-foreground text-background"
                   : "text-foreground/55 hover:text-foreground",
               )}
             >
-              <span className="block truncate">{item.label}</span>
+              <span className="block leading-[1.2] sm:hidden">
+                {item.mobileLines[0]}
+                <br />
+                {item.mobileLines[1]}
+              </span>
+              <span className="hidden sm:block">{item.label}</span>
             </button>
           )
         })}
