@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
 type StartTab = "article" | "destination" | "signup"
 
 const TABS: { id: StartTab; label: string }[] = [
-  { id: "article", label: "Pega un artículo" },
+  { id: "article", label: "Añade una fuente" },
   { id: "destination", label: "Busca un destino" },
   { id: "signup", label: "Crea tu cuenta" },
 ]
@@ -201,7 +201,7 @@ export function LandingStart() {
         })}
       </div>
 
-      <div className="relative mt-4 min-h-[3.25rem]">
+      <div className="mt-4">
         <div
           role="tabpanel"
           id={`${baseId}-panel-article`}
@@ -236,6 +236,10 @@ export function LandingStart() {
           {urlError ? (
             <p className="mt-2 text-left text-sm text-destructive">{urlError}</p>
           ) : null}
+          <p className="mt-2.5 text-pretty text-xs leading-5 text-foreground/50">
+            Por ahora, un artículo de blog o revista de viaje. Pronto también Instagram, TikTok y
+            YouTube.
+          </p>
         </div>
 
         {isSourceSuggestEnabled() ? (
@@ -279,7 +283,7 @@ export function LandingStart() {
               </button>
             </form>
             {showDestOverlay ? (
-              <div className="absolute inset-x-0 top-full z-30 mt-3 overflow-hidden rounded-2xl border border-border bg-background p-3 text-left shadow-lg">
+              <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-background p-3 text-left shadow-lg">
                 {destError ? <p className="px-1 py-2 text-sm text-destructive">{destError}</p> : null}
                 {destLoading && !destResults ? (
                   <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
@@ -337,7 +341,7 @@ export function LandingStart() {
           hidden={tab !== "signup"}
         >
           {showSignupOverlay ? (
-            <div className="absolute inset-x-0 top-0 z-30 rounded-2xl border border-border bg-background p-5 text-left shadow-lg sm:p-6">
+            <div className="rounded-2xl border border-border bg-background p-5 text-left shadow-lg sm:p-6">
               <SignupForm variant="compact" />
             </div>
           ) : null}
