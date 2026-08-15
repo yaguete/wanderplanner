@@ -1391,147 +1391,147 @@ const DaySection = memo(function DaySection({
             aria-label={`Marcar ${headingForAria}`}
           />
         </div>
-        <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 items-start gap-1.5 @md:items-center">
-          <div className="flex shrink-0 flex-col leading-tight">
-            <span className="text-[15px] font-semibold tabular-nums">Día {dayIndex + 1}</span>
+        <div className="flex min-w-0 flex-1 flex-col leading-tight">
+          <div ref={descriptionEditorRef} className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 text-[15px] font-semibold tabular-nums">Día {dayIndex + 1}</span>
             {dayDateLabel ? (
-              <span className="text-[11px] font-medium tabular-nums text-muted-foreground @md:hidden">
-                {dayDateLabel}
-              </span>
+              <>
+                <span className="hidden shrink-0 text-[15px] text-muted-foreground @md:inline" aria-hidden>
+                  ·
+                </span>
+                <span className="hidden shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground @md:inline">
+                  {dayDateLabel}
+                </span>
+              </>
             ) : null}
-          </div>
-          {dayDateLabel ? (
-            <>
-              <span className="hidden shrink-0 text-[15px] text-muted-foreground @md:inline" aria-hidden>
-                ·
-              </span>
-              <span className="hidden shrink-0 text-[15px] font-medium tabular-nums leading-tight text-muted-foreground @md:inline">
-                {dayDateLabel}
-              </span>
-            </>
-          ) : null}
-          <span
-            className="shrink-0 pt-0.5 text-[15px] leading-tight text-muted-foreground"
-            aria-hidden
-          >
-            ·
-          </span>
-          {isDaySelected ? (
-            <button
-              type="button"
-              onClick={() => onResetDay(dayId)}
-              disabled={!canReset}
-              className={cn(
-                "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
-                canReset
-                  ? "text-destructive hover:text-destructive/90"
-                  : "cursor-not-allowed text-destructive/40",
-              )}
-              aria-label="Reiniciar día"
+            <span
+              className="shrink-0 text-[15px] leading-tight text-muted-foreground"
+              aria-hidden
             >
-              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-              Reiniciar día
-            </button>
-          ) : (
-            <>
-          {editingDescription ? (
-            <>
-              <input
-                ref={inputRef}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    commitDescription()
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault()
-                    cancelDescription()
-                  }
-                }}
-                className="min-w-0 flex-1 truncate border-b border-primary bg-transparent py-0.5 text-[15px] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/60"
-                placeholder="Descripción del día"
-                aria-label="Descripción del día"
-              />
-              <Button
+              ·
+            </span>
+            {isDaySelected ? (
+              <button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 shrink-0 text-foreground/80 hover:text-foreground"
-                onClick={commitDescription}
-                aria-label="Guardar descripción"
+                onClick={() => onResetDay(dayId)}
+                disabled={!canReset}
+                className={cn(
+                  "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
+                  canReset
+                    ? "text-destructive hover:text-destructive/90"
+                    : "cursor-not-allowed text-destructive/40",
+                )}
+                aria-label="Reiniciar día"
               >
-                <Check className="h-4 w-4" strokeWidth={2.2} />
-              </Button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={startEdit}
-              className={cn(
-                "min-w-0 flex-1 cursor-pointer select-none truncate text-left text-[15px] leading-tight",
-                "rounded-sm ring-offset-2 transition-colors",
-                "hover:bg-muted/60",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                normalizedDesc
-                  ? "font-semibold text-foreground"
-                  : "font-medium text-muted-foreground",
-              )}
-              aria-label={normalizedDesc ? "Editar descripción del día" : "Añadir descripción del día"}
-            >
-              {normalizedDesc ?? "Sin descripción"}
-            </button>
-          )}
-          {showAiButton ? (
-            canGenerate || generating ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => void handleGenerateSummary()}
-                    disabled={generating}
-                    aria-label="Sugerir descripción del día"
-                    className={cn(
-                      "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
-                      "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      generating && "cursor-wait",
-                    )}
-                  >
-                    {generating ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                    )}
-                  </button>
-                </TooltipTrigger>
-                {!generating ? (
-                  <TooltipContent
-                    side="left"
-                    align="center"
-                    sideOffset={6}
-                    avoidCollisions={false}
-                    className="overflow-visible border-none bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-sm"
-                  >
-                    Sugerir descripción del día
-                    <TooltipArrow className="fill-foreground" width={10} height={5} />
-                  </TooltipContent>
-                ) : null}
-              </Tooltip>
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                Reiniciar día
+              </button>
+            ) : (
+              <>
+            {editingDescription ? (
+              <>
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      commitDescription()
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault()
+                      cancelDescription()
+                    }
+                  }}
+                  className="min-w-0 flex-1 truncate border-b border-primary bg-transparent py-0.5 text-[15px] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/60"
+                  placeholder="Descripción del día"
+                  aria-label="Descripción del día"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-foreground/80 hover:text-foreground"
+                  onClick={commitDescription}
+                  aria-label="Guardar descripción"
+                >
+                  <Check className="h-4 w-4" strokeWidth={2.2} />
+                </Button>
+              </>
             ) : (
               <button
                 type="button"
-                disabled
-                aria-label="Sugerir descripción del día"
-                className="inline-flex h-6 w-6 shrink-0 cursor-default items-center justify-center rounded-md text-muted-foreground/35"
+                onClick={startEdit}
+                className={cn(
+                  "min-w-0 flex-1 cursor-pointer select-none truncate text-left text-[15px] leading-tight",
+                  "rounded-sm ring-offset-2 transition-colors",
+                  "hover:bg-muted/60",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  normalizedDesc
+                    ? "font-semibold text-foreground"
+                    : "font-medium text-muted-foreground",
+                )}
+                aria-label={normalizedDesc ? "Editar descripción del día" : "Añadir descripción del día"}
               >
-                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                {normalizedDesc ?? "Sin descripción"}
               </button>
-            )
+            )}
+            {showAiButton ? (
+              canGenerate || generating ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateSummary()}
+                      disabled={generating}
+                      aria-label="Sugerir descripción del día"
+                      className={cn(
+                        "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                        "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        generating && "cursor-wait",
+                      )}
+                    >
+                      {generating ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  {!generating ? (
+                    <TooltipContent
+                      side="left"
+                      align="center"
+                      sideOffset={6}
+                      avoidCollisions={false}
+                      className="overflow-visible border-none bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-sm"
+                    >
+                      Sugerir descripción del día
+                      <TooltipArrow className="fill-foreground" width={10} height={5} />
+                    </TooltipContent>
+                  ) : null}
+                </Tooltip>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Sugerir descripción del día"
+                  className="inline-flex h-6 w-6 shrink-0 cursor-default items-center justify-center rounded-md text-muted-foreground/35"
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )
+            ) : null}
+              </>
+            )}
+          </div>
+          {dayDateLabel ? (
+            <span className="text-[11px] font-medium tabular-nums text-muted-foreground @md:hidden">
+              {dayDateLabel}
+            </span>
           ) : null}
-            </>
-          )}
         </div>
       </div>
 

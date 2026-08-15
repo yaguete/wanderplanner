@@ -196,9 +196,6 @@ export function AddSourceDialog({
           <DialogDescription>
             Pega la URL de un artículo de viajes. Destilaremos la ruta para consolidarla en tu
             viaje.
-            <span className="mt-1.5 block">
-              Tarda entre 20 y 40 s. Puedes seguir trabajando mientras tanto.
-            </span>
           </DialogDescription>
         </DialogHeader>
         <AddSourceFlow
