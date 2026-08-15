@@ -457,7 +457,7 @@ html.landing-header-scrolled .landing-header::before {
  * La altura reserva el hueco del transform, que no afecta al layout.
  */
 .landing-hero-lockup {
-  --landing-lockup-scale: 1.7;
+  --landing-lockup-scale: 1.25;
   display: flex;
   justify-content: center;
   height: calc(2.5rem * var(--landing-lockup-scale));

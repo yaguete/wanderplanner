@@ -190,7 +190,7 @@ export function LandingStart() {
               onKeyDown={(event) => onChipKeyDown(event, index)}
               aria-label={item.label}
               className={cn(
-                "min-w-0 flex-1 rounded-full px-1.5 py-1.5 text-[11px] font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm",
+                "min-w-0 flex-1 rounded-full px-1.5 py-2 text-[13px] font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 selected
                   ? "bg-foreground text-background"
