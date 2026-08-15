@@ -37,9 +37,11 @@ export type AddToDayDialogProps = {
   onOpenChange: (open: boolean) => void
   days: UserDay[]
   tripStartDate?: string | null
-  itemName: string
-  itemType: ItemType
-  /** Números de día (1-based) donde ya está este ítem. */
+  itemName?: string
+  itemType?: ItemType
+  /** Sustituye el copy por defecto («colocar este alojamiento», etc.). */
+  description?: string
+  /** Números de día (1-based) donde ya está este ítem (o todos, en lote). */
   addedDayNumbers?: number[]
   onSelect: (dayId: string) => void
   /** Crea un día vacío al final de la ruta (mismo `addDay` que «Mi viaje»). */
@@ -53,6 +55,7 @@ export function AddToDayDialog({
   tripStartDate = null,
   itemName,
   itemType,
+  description,
   addedDayNumbers = [],
   onSelect,
   onAddDay,
@@ -88,8 +91,14 @@ export function AddToDayDialog({
       )
     : rows
 
-  const TypeIcon = ITEM_TYPE_ICONS[itemType]
+  const TypeIcon = itemType ? ITEM_TYPE_ICONS[itemType] : null
   const showSearch = days.length >= SEARCH_FROM_DAYS
+  const showItemPreview = !!itemName && !!itemType && TypeIcon
+  const descriptionText =
+    description ??
+    (itemType
+      ? `Elige en qué día de tu viaje quieres colocar ${ADD_TO_DAY_OBJECT[itemType]}.`
+      : "Elige en qué día de tu viaje quieres colocar estos ítems.")
 
   const handleSelect = (dayId: string) => {
     onSelect(dayId)
@@ -112,9 +121,10 @@ export function AddToDayDialog({
               Añadir al día
             </DialogTitle>
             <DialogDescription className="mt-1">
-              Elige en qué día de tu viaje quieres colocar {ADD_TO_DAY_OBJECT[itemType]}.
+              {descriptionText}
             </DialogDescription>
           </div>
+          {showItemPreview ? (
           <div className="flex items-center gap-2.5 rounded-xl border border-border bg-muted/40 px-3 py-2">
             <span
               className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground"
@@ -127,10 +137,11 @@ export function AddToDayDialog({
                 {itemName}
               </p>
               <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-                {ITEM_LABELS[itemType]}
+                {itemType ? ITEM_LABELS[itemType] : null}
               </p>
             </div>
           </div>
+          ) : null}
           {showSearch ? (
             <div className="relative">
               <Search

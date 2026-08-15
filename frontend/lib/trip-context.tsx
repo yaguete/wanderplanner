@@ -211,6 +211,8 @@ interface TripContextValue {
   /** Quita días cuyo id esté en la lista; nunca deja el viaje sin días. */
   removeSelectedDays: (tripId: string, dayIds: string[]) => void
   addItemToDay: (tripId: string, dayId: string, item: UserDayItem) => void
+  /** Varios ítems a la vez; no duplica `sourceItemId` ya presente en ese día. */
+  addItemsToDay: (tripId: string, dayId: string, items: UserDayItem[]) => void
   removeItemFromDay: (tripId: string, dayId: string, itemId: string) => void
   /** Vacía los ítems de un día (conserva ida/vuelta); una sola mutación. */
   clearDayItems: (tripId: string, dayId: string) => void
@@ -1056,6 +1058,31 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  /** Añade varios ítems a un día; omite los que ya están (mismo `sourceItemId`). */
+  const addItemsToDay = useCallback((tripId: string, dayId: string, items: UserDayItem[]) => {
+    if (items.length === 0) return
+    setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        return {
+          ...t,
+          days: t.days.map((d) => {
+            if (d.id !== dayId) return d
+            const seen = new Set(d.items.map((i) => i.sourceItemId))
+            const unique: UserDayItem[] = []
+            for (const item of items) {
+              if (seen.has(item.sourceItemId)) continue
+              seen.add(item.sourceItemId)
+              unique.push(item)
+            }
+            if (unique.length === 0) return d
+            return { ...d, items: [...d.items, ...unique] }
+          }),
+        }
+      }),
+    )
+  }, [])
+
   const removeItemFromDay = useCallback((tripId: string, dayId: string, itemId: string) => {
     setTrips((prev) =>
       prev.map((t) => {
@@ -1590,6 +1617,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       removeDay,
       removeSelectedDays,
       addItemToDay,
+      addItemsToDay,
       removeItemFromDay,
       clearDayItems,
       setDayItemCoords,
@@ -1608,7 +1636,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

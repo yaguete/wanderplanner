@@ -50,7 +50,7 @@ import {
   highlightTextInElement,
   setActiveHighlight,
 } from "@/lib/text-highlight"
-import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
+import type { Source, SourceBasicItem, SourceItem, UserDayItem } from "@/types/itinerary"
 import { toast } from "sonner"
 
 function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
@@ -65,6 +65,33 @@ function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
     if (`día ${day}`.includes(needle) || `dia ${day}`.includes(needle)) return true
   }
   return false
+}
+
+function userDayItemFromSource(item: SourceItem, source: Source): UserDayItem {
+  return {
+    id: crypto.randomUUID(),
+    sourceItemId: item.id,
+    sourceId: source.id,
+    type: item.type,
+    name: item.name,
+    detail: item.detail,
+    sourceAuthor: source.author,
+    region: item.region ?? source.area ?? null,
+    affiliateUrl: item.affiliateUrl ?? null,
+    vendor: item.vendor ?? null,
+    sourceRouteHint: item.sourceRouteHint,
+  }
+}
+
+function daysWhereAllSourceItemsPresent(
+  days: { items: { sourceItemId: string }[] }[],
+  sourceItemIds: string[],
+): number[] {
+  if (sourceItemIds.length === 0) return []
+  return days.flatMap((day, index) => {
+    const present = new Set(day.items.map((i) => i.sourceItemId))
+    return sourceItemIds.every((id) => present.has(id)) ? [index + 1] : []
+  })
 }
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
@@ -116,6 +143,7 @@ export default function InspirationPanel({
     ensureArticleHtml,
     isArticleHtmlLoading,
     addItemToDay,
+    addItemsToDay,
     addBasicToTrip,
     addDay,
   } = useTrips()
@@ -132,8 +160,12 @@ export default function InspirationPanel({
   const [sourceTab, setSourceTab] = useState<SourceTab>("source")
   const [maxSourcesOpen, setMaxSourcesOpen] = useState(false)
   const [refetchError, setRefetchError] = useState<string | null>(null)
-  /** Ítem pendiente de «Añadir al día»; un solo Dialog para toda la lista (sobrevive al virtualizer). */
-  const [pickingItem, setPickingItem] = useState<SourceItem | null>(null)
+  /** Pendiente de «Añadir al día»: un ítem suelto o todos los de un día de la guía. */
+  const [picking, setPicking] = useState<
+    | { kind: "item"; item: SourceItem }
+    | { kind: "day"; day: number; items: SourceItem[] }
+    | null
+  >(null)
   /** Query compartida Crónica ↔ Ruta (no Desplazamientos/Descuentos). */
   const [sourceQuery, setSourceQuery] = useState("")
   const [matchIndex, setMatchIndex] = useState(0)
@@ -361,7 +393,7 @@ export default function InspirationPanel({
   }, [activeSourceId])
 
   useEffect(() => {
-    setPickingItem(null)
+    setPicking(null)
     setHeaderCollapsed(false)
   }, [activeSourceId, sourceTab, setHeaderCollapsed])
 
@@ -504,19 +536,22 @@ export default function InspirationPanel({
 
   const handleAddItem = (item: SourceItem, dayId: string) => {
     if (!currentSource) return
-    addItemToDay(tripId, dayId, {
-      id: crypto.randomUUID(),
-      sourceItemId: item.id,
-      sourceId: currentSource.id,
-      type: item.type,
-      name: item.name,
-      detail: item.detail,
-      sourceAuthor: currentSource.author,
-      region: item.region ?? currentSource.area ?? null,
-      affiliateUrl: item.affiliateUrl ?? null,
-      vendor: item.vendor ?? null,
-      sourceRouteHint: item.sourceRouteHint,
-    })
+    addItemToDay(tripId, dayId, userDayItemFromSource(item, currentSource))
+  }
+
+  const handleAddDayItems = (items: SourceItem[], dayId: string) => {
+    if (!currentSource) return
+    addItemsToDay(
+      tripId,
+      dayId,
+      items.map((item) => userDayItemFromSource(item, currentSource)),
+    )
+  }
+
+  const handleAddAllForSourceDay = (day: number) => {
+    const group = groupedItems.find((g) => g.day === day)
+    if (!group || group.items.length === 0) return
+    setPicking({ kind: "day", day, items: group.items })
   }
 
   const handleAddBasic = (basic: SourceBasicItem) => {
@@ -914,7 +949,7 @@ export default function InspirationPanel({
                     tripStartDate={trip?.startDate ?? null}
                     thumbnailMode="transportIcon"
                     sourceTypeLabel="Desplazamiento"
-                    onPick={() => setPickingItem(item)}
+                    onPick={() => setPicking({ kind: "item", item })}
                   />
                 )}
               />
@@ -937,6 +972,7 @@ export default function InspirationPanel({
                   emptyDescription="Cuando se destile el artículo, verás actividades, alojamientos y comidas aquí."
                   query={sourceQuery}
                   virtualized={showRutaSearch}
+                  onAddAllDay={handleAddAllForSourceDay}
                   renderItem={(item) => (
                     <ItemRow
                       key={item.id}
@@ -945,7 +981,7 @@ export default function InspirationPanel({
                       isAdded={addedItemIds.has(item.id)}
                       addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
                       tripStartDate={trip?.startDate ?? null}
-                      onPick={() => setPickingItem(item)}
+                      onPick={() => setPicking({ kind: "item", item })}
                     />
                   )}
                 />
@@ -955,20 +991,37 @@ export default function InspirationPanel({
         </div>
       </div>
 
-      {pickingItem && trip ? (
+      {picking && trip ? (
         <AddToDayDialog
           open
           onOpenChange={(open) => {
-            if (!open) setPickingItem(null)
+            if (!open) setPicking(null)
           }}
           days={trip.days}
           tripStartDate={trip.startDate ?? null}
-          itemName={pickingItem.name}
-          itemType={pickingItem.type}
-          addedDayNumbers={addedItemDaysBySourceItemId.get(pickingItem.id) ?? []}
+          itemName={picking.kind === "item" ? picking.item.name : undefined}
+          itemType={picking.kind === "item" ? picking.item.type : undefined}
+          description={
+            picking.kind === "day"
+              ? `Elige en qué día de tu viaje quieres colocar todos los ítems del día ${picking.day} de la ruta de ${
+                  currentSource?.author
+                    ? `@${currentSource.author.replace(/^@/, "")}`
+                    : "esta fuente"
+                }.`
+              : undefined
+          }
+          addedDayNumbers={
+            picking.kind === "item"
+              ? (addedItemDaysBySourceItemId.get(picking.item.id) ?? [])
+              : daysWhereAllSourceItemsPresent(
+                  trip.days,
+                  picking.items.map((i) => i.id),
+                )
+          }
           onSelect={(dayId) => {
-            handleAddItem(pickingItem, dayId)
-            setPickingItem(null)
+            if (picking.kind === "item") handleAddItem(picking.item, dayId)
+            else handleAddDayItems(picking.items, dayId)
+            setPicking(null)
           }}
           onAddDay={() => addDay(trip.id)}
         />
@@ -1109,6 +1162,7 @@ function SourceGroupedList({
   renderItem,
   query = "",
   virtualized = false,
+  onAddAllDay,
 }: {
   groups: { day: number | null; items: SourceItem[] }[]
   emptyTitle: string
@@ -1118,6 +1172,8 @@ function SourceGroupedList({
   query?: string
   /** Lista virtualizada (Ruta). Independiente del buscador: Desplazamientos no virtualiza. */
   virtualized?: boolean
+  /** Ruta: añade todos los ítems de ese día de la guía. */
+  onAddAllDay?: (day: number) => void
 }) {
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -1152,9 +1208,7 @@ function SourceGroupedList({
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
             {group.day != null ? (
-              <p className="px-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Día {group.day}
-              </p>
+              <DayGroupHeading day={group.day} onAddAll={onAddAllDay} />
             ) : null}
             {group.items.map((item) => renderItem(item))}
           </div>
@@ -1171,8 +1225,54 @@ function SourceGroupedList({
           Ningún ítem coincide con «{needle}».
         </p>
       ) : (
-        <VirtualSourceRows groups={filteredGroups} renderItem={renderItem} resetKey={query} />
+        <VirtualSourceRows
+          groups={filteredGroups}
+          renderItem={renderItem}
+          resetKey={query}
+          onAddAllDay={onAddAllDay}
+        />
       )}
+    </div>
+  )
+}
+
+function DayGroupHeading({
+  day,
+  onAddAll,
+  compact = false,
+}: {
+  day: number
+  onAddAll?: (day: number) => void
+  compact?: boolean
+}) {
+  const labelClass =
+    "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+
+  if (!onAddAll) {
+    return (
+      <p className={cn("px-0.5", labelClass, compact && "pb-2 pt-0.5")}>
+        Día {day}
+      </p>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 px-0.5",
+        compact && "pb-2 pt-0.5",
+      )}
+    >
+      <p className={labelClass}>Día {day}</p>
+      <button
+        type="button"
+        onClick={() => onAddAll(day)}
+        className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
+        aria-label={`Añadir todos los ítems del día ${day}`}
+      >
+        <Plus className="h-3.5 w-3.5 shrink-0" />
+        Añadir todo
+      </button>
     </div>
   )
 }
@@ -1208,10 +1308,12 @@ function VirtualSourceRows({
   groups,
   renderItem,
   resetKey,
+  onAddAllDay,
 }: {
   groups: { day: number | null; items: SourceItem[] }[]
   renderItem: (item: SourceItem) => ReactNode
   resetKey: string
+  onAddAllDay?: (day: number) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const rows = useMemo(() => flattenSourceGroups(groups), [groups])
@@ -1221,7 +1323,7 @@ function VirtualSourceRows({
     getScrollElement: () => scrollRef.current,
     estimateSize: (index) => {
       const row = rows[index]
-      if (!row || row.kind === "header") return 28
+      if (!row || row.kind === "header") return onAddAllDay ? 40 : 28
       // card ~80px + pb-2; más aire entre grupos (antes space-y-5)
       return row.groupGap ? 108 : 92
     },
@@ -1259,9 +1361,7 @@ function VirtualSourceRows({
               style={{ transform: `translateY(${vRow.start}px)` }}
             >
               {row.kind === "header" ? (
-                <p className="px-0.5 pb-2 pt-0.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Día {row.day}
-                </p>
+                <DayGroupHeading day={row.day} onAddAll={onAddAllDay} compact />
               ) : (
                 <div className={cn("pb-2", row.groupGap && "pb-5")}>
                   {renderItem(row.item)}
