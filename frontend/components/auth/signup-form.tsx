@@ -181,6 +181,14 @@ export function SignupForm({
       >
         {submitting ? "Creando cuenta…" : "Crear cuenta"}
       </Button>
+      {compact ? (
+        <p className="text-center text-xs text-muted-foreground">
+          ¿Ya estás registrado/a?{" "}
+          <Link href="/login" className="font-medium text-foreground underline underline-offset-4">
+            Accede
+          </Link>
+        </p>
+      ) : null}
     </form>
   )
 }
