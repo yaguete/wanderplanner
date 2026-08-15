@@ -180,11 +180,17 @@ export default function InspirationPanel({
   const lastScrolledIndexRef = useRef<number | null>(null)
   const activeSourceIdRef = useRef(activeSourceId)
   const seenExtractionSeqRef = useRef(0)
+  // Móvil: repliega chips + cabecera (y compacta la navbar). Desktop: el
+  // titular del artículo en cualquier pestaña, para ganar espacio de lectura.
   const {
     containerRef: panelRef,
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
-  } = useCollapsingHeader(isMobile, onHeaderCollapsedChange, activeOnMobile)
+  } = useCollapsingHeader(
+    true,
+    isMobile ? onHeaderCollapsedChange : undefined,
+    isMobile ? activeOnMobile : true,
+  )
 
   useEffect(() => {
     activeSourceIdRef.current = activeSourceId
@@ -743,44 +749,62 @@ export default function InspirationPanel({
               <div className="panel-column">
               {/* Desktop: titular del artículo + miniatura. En móvil la etiqueta de guía va en la cabecera. */}
               {!isMobile ? (
-                activePending ? (
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                      @{activePending.author}
-                    </h3>
-                    <p className="block truncate text-xs text-muted-foreground">
-                      {activePending.url}
-                    </p>
-                  </div>
-                ) : currentSource ? (
-                  <div className="flex items-start gap-3">
-                    {currentSource.ogImage ? (
-                      <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-                        <img
-                          src={currentSource.ogImage}
-                          alt=""
-                          className="absolute inset-0 h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : null}
+                <div
+                  className={cn(
+                    "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+                    headerCollapsed ? "max-h-0 opacity-0" : "max-h-24 opacity-100",
+                  )}
+                  aria-hidden={headerCollapsed}
+                  inert={headerCollapsed || undefined}
+                >
+                  {activePending ? (
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
-                        {sourceArticleHeading(currentSource)}
+                        @{activePending.author}
                       </h3>
-                      <a
-                        href={currentSource.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
-                      >
-                        {currentSource.url}
-                      </a>
+                      <p className="block truncate text-xs text-muted-foreground">
+                        {activePending.url}
+                      </p>
                     </div>
-                  </div>
-                ) : null
+                  ) : currentSource ? (
+                    <div className="flex items-start gap-3">
+                      {currentSource.ogImage ? (
+                        <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                          <img
+                            src={currentSource.ogImage}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : null}
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug tracking-tight text-foreground">
+                          {sourceArticleHeading(currentSource)}
+                        </h3>
+                        <a
+                          href={currentSource.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate text-xs text-muted-foreground underline-offset-2 hover:underline"
+                        >
+                          {currentSource.url}
+                        </a>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
               {currentSource ? (
-                <div className={cn("transition-[margin] duration-200 ease-out", isMobile ? "mt-2" : "mt-4 @md:mt-5")}>
+                <div
+                  className={cn(
+                    "transition-[margin] duration-200 ease-out",
+                    isMobile
+                      ? "mt-2"
+                      : headerCollapsed
+                        ? "mt-2"
+                        : "mt-4 @md:mt-5",
+                  )}
+                >
                   <PanelTabs
                     items={tabs}
                     value={sourceTab}

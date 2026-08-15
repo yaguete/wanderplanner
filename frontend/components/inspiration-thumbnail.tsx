@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import {
@@ -16,7 +16,22 @@ import {
   TRANSPORT_MODE_A11Y,
   TRANSPORT_MODE_ICONS,
 } from "@/lib/item-styles"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
+
+/** Ratón fino vs táctil: el hover preview no vale en touch; el tap lightbox sí. */
+function useFinePointer() {
+  const [fine, setFine] = useState<boolean | null>(null)
+  useEffect(() => {
+    const mql = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const onChange = () => setFine(mql.matches)
+    onChange()
+    mql.addEventListener("change", onChange)
+    return () => mql.removeEventListener("change", onChange)
+  }, [])
+  return fine
+}
 
 type ItineraryItemProps = {
   kind: "item"
@@ -153,7 +168,7 @@ function ItineraryItemInner({
     return <div className="h-full w-full animate-pulse bg-muted" aria-hidden />
   }
   return (
-    <>
+    <PhotoPreview src={src} ready={imageLoaded}>
       {!imageLoaded ? (
         <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden />
       ) : null}
@@ -166,7 +181,7 @@ function ItineraryItemInner({
         unoptimized
         onLoad={() => setImageLoaded(true)}
       />
-    </>
+    </PhotoPreview>
   )
 }
 
@@ -228,7 +243,7 @@ function BasicInner({
     imageLoaded ? "opacity-100" : "opacity-0",
   )
 
-  return (
+  const photo = (
     <>
       {!imageLoaded ? (
         <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden />
@@ -255,5 +270,115 @@ function BasicInner({
         />
       )}
     </>
+  )
+
+  // Logos de proveedor: ampliarlos no aporta; las fotos de Places sí.
+  if (mode === "vendorLogo") return photo
+  return (
+    <PhotoPreview src={src} ready={imageLoaded}>
+      {photo}
+    </PhotoPreview>
+  )
+}
+
+function PhotoPreview({
+  src,
+  ready,
+  children,
+}: {
+  src: string
+  ready: boolean
+  children: ReactNode
+}) {
+  const finePointer = useFinePointer()
+  const [lightbox, setLightbox] = useState(false)
+
+  const openLightbox = (event: { preventDefault: () => void; stopPropagation: () => void }) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setLightbox(true)
+  }
+
+  if (!ready) return children
+
+  const lightboxUi = (
+    <ThumbLightbox src={src} open={lightbox} onOpenChange={setLightbox} />
+  )
+
+  if (finePointer === true) {
+    return (
+      <HoverCard openDelay={280} closeDelay={80}>
+        <HoverCardTrigger asChild>
+          <div className="relative h-full w-full cursor-zoom-in">{children}</div>
+        </HoverCardTrigger>
+        <HoverCardContent
+          side="right"
+          align="center"
+          sideOffset={10}
+          collisionPadding={16}
+          className="z-[80] w-auto overflow-hidden rounded-xl border-border p-0 shadow-lg"
+        >
+          <img src={src} alt="" className="h-72 w-72 object-cover" />
+        </HoverCardContent>
+      </HoverCard>
+    )
+  }
+
+  return (
+    <>
+      <div
+        className="relative h-full w-full"
+        role={finePointer === false ? "button" : undefined}
+        tabIndex={finePointer === false ? 0 : undefined}
+        aria-label={finePointer === false ? "Ver foto" : undefined}
+        onPointerDown={
+          finePointer === false
+            ? (event) => {
+                event.stopPropagation()
+              }
+            : undefined
+        }
+        onClick={finePointer === false ? openLightbox : undefined}
+        onKeyDown={
+          finePointer === false
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                openLightbox(event)
+              }
+            : undefined
+        }
+      >
+        {children}
+      </div>
+      {lightboxUi}
+    </>
+  )
+}
+
+function ThumbLightbox({
+  src,
+  open,
+  onOpenChange,
+}: {
+  src: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        hideClose
+        aria-describedby={undefined}
+        className="max-w-[min(92vw,32rem)] gap-0 border-0 bg-transparent p-0 shadow-none"
+        onClick={() => onOpenChange(false)}
+      >
+        <DialogTitle className="sr-only">Foto</DialogTitle>
+        <img
+          src={src}
+          alt=""
+          className="max-h-[80vh] w-full rounded-xl object-contain"
+        />
+      </DialogContent>
+    </Dialog>
   )
 }
