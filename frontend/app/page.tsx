@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
 import { LandingHeader } from "@/components/landing/landing-header"
 import { LandingHero } from "@/components/landing/landing-hero"
-import { HowItWorks } from "@/components/landing/how-it-works"
+import { ValueProps } from "@/components/landing/value-props"
 import { ForBloggers } from "@/components/landing/for-bloggers"
-import { SocialProof } from "@/components/landing/social-proof"
 import { ClosingCta } from "@/components/landing/closing-cta"
 import { LandingFooter } from "@/components/landing/landing-footer"
 
@@ -33,9 +32,8 @@ export default function RootPage() {
         <LandingHeader />
         <main id="contenido">
           <LandingHero />
-          <HowItWorks />
+          <ValueProps />
           <ForBloggers />
-          <SocialProof />
           <ClosingCta />
         </main>
         <LandingFooter />

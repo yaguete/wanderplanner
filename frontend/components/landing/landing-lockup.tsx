@@ -1,7 +1,6 @@
 "use client"
 
 import { useLayoutEffect, useRef } from "react"
-import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 
 const ARMED_CLASS = "landing-lockup-armed"
@@ -21,7 +20,8 @@ export function LandingLockup() {
   const elRef = useRef<HTMLAnchorElement>(null)
 
   useLayoutEffect(() => {
-    const flying = elRef.current
+    const flying =
+      elRef.current ?? document.querySelector<HTMLAnchorElement>(".landing-flying-lockup")
     const root = document.documentElement
 
     const syncHeaderBlur = () => {
@@ -29,7 +29,6 @@ export function LandingLockup() {
     }
 
     if (!flying || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      if (flying) flying.hidden = true
       syncHeaderBlur()
       window.addEventListener("scroll", syncHeaderBlur, { passive: true })
       return () => {
@@ -41,7 +40,6 @@ export function LandingLockup() {
     const fromEl = document.querySelector<HTMLElement>("[data-landing-lockup-from]")
     const toEl = document.querySelector<HTMLElement>("[data-landing-lockup-to]")
     if (!fromEl || !toEl) {
-      flying.hidden = true
       syncHeaderBlur()
       window.addEventListener("scroll", syncHeaderBlur, { passive: true })
       return () => {
@@ -51,7 +49,6 @@ export function LandingLockup() {
     }
 
     root.classList.add(ARMED_CLASS)
-    flying.hidden = false
 
     const from0 = { left: 0, top: 0, width: 1 }
 
@@ -109,14 +106,13 @@ export function LandingLockup() {
   }, [])
 
   return (
-    <Link
+    <a
       ref={elRef}
       href="/"
-      hidden
       className="landing-flying-lockup fixed left-0 top-0 z-50 origin-top-left will-change-transform"
       aria-label="WanderPlanner — inicio"
     >
       <BrandLockup />
-    </Link>
+    </a>
   )
 }

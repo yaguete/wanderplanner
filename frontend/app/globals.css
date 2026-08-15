@@ -411,9 +411,14 @@ html.landing-lockup-armed .landing-header-lockup {
   visibility: hidden;
 }
 
-/* Lockup volador: la ardilla se desvanece y cede sitio al atracar (--landing-lockup-p 0→1). */
+/* Lockup volador: invisible hasta que JS arma el morph. No usar el atributo
+ * `hidden` de React: lo pisa en cada commit y deja el logo del header a la vista. */
 .landing-flying-lockup {
   --landing-lockup-p: 0;
+  visibility: hidden;
+}
+html.landing-lockup-armed .landing-flying-lockup {
+  visibility: visible;
 }
 .landing-flying-lockup > span {
   gap: calc(0.5rem * (1 - var(--landing-lockup-p)));

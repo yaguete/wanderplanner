@@ -101,7 +101,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Rutas App Router y shell
 
-- **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), cómo funciona, banda de blogueros, prueba social, footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en la banda oscura y el footer, no en el hero.
+- **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), tres zooms de valor (`ValueProps`: fuentes / plan / oficiales), banda de blogueros, footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en la banda oscura y el footer, no en el hero.
 - **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Stubs `noindex, follow` hasta T6.4 (copy real). No van en `sitemap.ts`.
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas). El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero).
 - **`/partners`** — Kit público para bloggers ([`app/partners/page.tsx`](frontend/app/partners/page.tsx)): formulario URL + slug → enlace `/start` + snippet HTML; dispara `POST /partners/prewarm` para dejar la fuente en caché. Mismo cromo que `/login` (`AuthShell`, ancho `2xl`). Slugs reservados: `landing`, `wp-landing`, `start`, `admin`.
