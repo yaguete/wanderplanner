@@ -87,6 +87,10 @@ import {
   TripTasksProgressHairline,
   TripTasksSummaryDetail,
 } from "@/components/trip-tasks-panel"
+import {
+  DayDestructiveConfirmDialog,
+  type DayDestructiveAction,
+} from "@/components/day-destructive-confirm-dialog"
 import { hasRouteLeg, isRouteLegItem } from "@/lib/route-legs"
 import { useListFlip } from "@/hooks/use-list-flip"
 import { useStableList } from "@/hooks/use-stable-list"
@@ -205,6 +209,7 @@ export default function ItineraryPanel({
   )
   const { rootRef: daysFlipRef, capture: captureDaysFlip } = useListFlip()
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
+  const [pendingDayAction, setPendingDayAction] = useState<DayDestructiveAction | null>(null)
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [listMode, setListMode] = useState<"list" | "map">("list")
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
@@ -489,12 +494,9 @@ export default function ItineraryPanel({
     [removeItemFromDay, tripId],
   )
 
-  const handleResetDay = useCallback(
-    (dayId: string) => {
-      clearDayItems(tripId, dayId)
-    },
-    [clearDayItems, tripId],
-  )
+  const handleResetDay = useCallback((dayId: string) => {
+    setPendingDayAction({ kind: "reset", dayId })
+  }, [])
 
   const handleEditTransport = useCallback(
     (dayId: string, item: UserDayItem) => {
@@ -518,11 +520,21 @@ export default function ItineraryPanel({
 
   const handleDayListAction = () => {
     if (canRemoveSelectedDays) {
-      removeSelectedDays(tripId, Array.from(selectedDayIds))
-      setSelectedDayIds(new Set())
+      setPendingDayAction({ kind: "remove", dayIds: Array.from(selectedDayIds) })
     } else {
       addDay(tripId)
     }
+  }
+
+  const confirmPendingDayAction = () => {
+    if (!pendingDayAction) return
+    if (pendingDayAction.kind === "reset") {
+      clearDayItems(tripId, pendingDayAction.dayId)
+    } else {
+      removeSelectedDays(tripId, pendingDayAction.dayIds)
+      setSelectedDayIds(new Set())
+    }
+    setPendingDayAction(null)
   }
 
   return (
@@ -886,6 +898,15 @@ export default function ItineraryPanel({
           }}
         />
       ) : null}
+
+      <DayDestructiveConfirmDialog
+        action={pendingDayAction}
+        days={trip.days}
+        onOpenChange={(open) => {
+          if (!open) setPendingDayAction(null)
+        }}
+        onConfirm={confirmPendingDayAction}
+      />
     </div>
   )
 }
