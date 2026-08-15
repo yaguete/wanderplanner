@@ -44,6 +44,7 @@ import {
   buildRouteLegItem,
   dayHasNonLegContent,
   findLegItem,
+  isRouteLegItem,
   reanchorRouteLegs,
   rescueLegsFromRemovedDays,
   upsertLegInDays,
@@ -211,6 +212,8 @@ interface TripContextValue {
   removeSelectedDays: (tripId: string, dayIds: string[]) => void
   addItemToDay: (tripId: string, dayId: string, item: UserDayItem) => void
   removeItemFromDay: (tripId: string, dayId: string, itemId: string) => void
+  /** Vacía los ítems de un día (conserva ida/vuelta); una sola mutación. */
+  clearDayItems: (tripId: string, dayId: string) => void
   /** Fija coords persistidas (p. ej. «Ajustar ubicación» del mapa). El pin pasa a exacto. */
   setDayItemCoords: (
     tripId: string,
@@ -1067,6 +1070,26 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  const clearDayItems = useCallback((tripId: string, dayId: string) => {
+    setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        return withPrunedTasks({
+          ...t,
+          days: t.days.map((d) =>
+            d.id === dayId
+              ? {
+                  ...d,
+                  items: d.items.filter((i) => isRouteLegItem(i)),
+                  summarySignature: null,
+                }
+              : d,
+          ),
+        })
+      }),
+    )
+  }, [])
+
   const setDayItemCoords = useCallback(
     (
       tripId: string,
@@ -1568,6 +1591,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       removeSelectedDays,
       addItemToDay,
       removeItemFromDay,
+      clearDayItems,
       setDayItemCoords,
       moveItemBetweenDays,
       addBasicToTrip,
@@ -1584,7 +1608,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

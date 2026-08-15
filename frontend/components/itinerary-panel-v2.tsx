@@ -24,6 +24,7 @@ import {
   Map as MapIcon,
   Pencil,
   Plus,
+  RotateCcw,
   Sparkles,
   X,
   type LucideProps,
@@ -147,6 +148,7 @@ export default function ItineraryPanel({
     addDay,
     addItemToDay,
     removeItemFromDay,
+    clearDayItems,
     removeSelectedDays,
     removeBasicFromTrip,
     moveItemBetweenDays,
@@ -487,6 +489,13 @@ export default function ItineraryPanel({
     [removeItemFromDay, tripId],
   )
 
+  const handleResetDay = useCallback(
+    (dayId: string) => {
+      clearDayItems(tripId, dayId)
+    },
+    [clearDayItems, tripId],
+  )
+
   const handleEditTransport = useCallback(
     (dayId: string, item: UserDayItem) => {
       openTransportDialog(dayId, item)
@@ -501,14 +510,14 @@ export default function ItineraryPanel({
 
   if (!trip) return null
 
-  const hasDaySelection = selectedDayIds.size > 0
+  const canRemoveSelectedDays = selectedDayIds.size > 0 && trip.days.length > 1
   const isRoute = viewMode === "itinerary"
   const categoryView = isRoute
     ? null
     : (viewMode as Exclude<ItineraryViewMode, "itinerary">)
 
   const handleDayListAction = () => {
-    if (hasDaySelection) {
+    if (canRemoveSelectedDays) {
       removeSelectedDays(tripId, Array.from(selectedDayIds))
       setSelectedDayIds(new Set())
     } else {
@@ -661,19 +670,19 @@ export default function ItineraryPanel({
                   onClick={handleDayListAction}
                   className={cn(
                     "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
-                    hasDaySelection
+                    canRemoveSelectedDays
                       ? "text-destructive hover:text-destructive/90"
                       : "text-foreground hover:text-muted-foreground",
                   )}
                   aria-label={
-                    hasDaySelection
+                    canRemoveSelectedDays
                       ? selectedDayIds.size > 1
                         ? "Eliminar días"
                         : "Eliminar día"
                       : "Añadir día"
                   }
                 >
-                  {hasDaySelection ? (
+                  {canRemoveSelectedDays ? (
                     <>
                       <X className="h-3.5 w-3.5 shrink-0" />
                       {selectedDayIds.size > 1 ? "Eliminar días" : "Eliminar día"}
@@ -712,6 +721,7 @@ export default function ItineraryPanel({
                   resolveRegion={resolveRegion}
                   isDaySelected={selectedDayIds.has(day.id)}
                   onDaySelectChange={setDaySelected}
+                  onResetDay={handleResetDay}
                   onRemoveItem={handleRemoveItem}
                   onMoveItemUp={onMoveItemUp}
                   onMoveItemDown={onMoveItemDown}
@@ -1212,6 +1222,7 @@ const DaySection = memo(function DaySection({
   resolveRegion,
   isDaySelected,
   onDaySelectChange,
+  onResetDay,
   onRemoveItem,
   onMoveItemUp,
   onMoveItemDown,
@@ -1239,6 +1250,7 @@ const DaySection = memo(function DaySection({
   resolveRegion: (item: UserDayItem) => string | null
   isDaySelected: boolean
   onDaySelectChange: (dayId: string, checked: boolean) => void
+  onResetDay: (dayId: string) => void
   onRemoveItem: (dayId: string, itemId: string) => void
   onMoveItemUp: (itemId: string) => void
   onMoveItemDown: (itemId: string) => void
@@ -1266,10 +1278,15 @@ const DaySection = memo(function DaySection({
   const canGenerate =
     items.length >= 1 && signature !== (summarySignature ?? null) && !generating
   const showAiButton = items.length >= 1
+  const canReset = items.some((i) => !isRouteLegItem(i))
 
   useEffect(() => {
     if (!editingDescription) setDraft(dayDescription)
   }, [dayDescription, editingDescription])
+
+  useEffect(() => {
+    if (isDaySelected) setEditingDescription(false)
+  }, [isDaySelected])
 
   useEffect(() => {
     if (editingDescription) {
@@ -1350,12 +1367,7 @@ const DaySection = memo(function DaySection({
             checked={isDaySelected}
             onCheckedChange={(c) => onDaySelectChange(dayId, c === true)}
             className="size-4"
-            disabled={dayCount === 1}
-            aria-label={
-              dayCount === 1
-                ? "No puedes marcar el único día"
-                : `Marcar ${headingForAria} para eliminar`
-            }
+            aria-label={`Marcar ${headingForAria}`}
           />
         </div>
         <div ref={descriptionEditorRef} className="flex min-w-0 flex-1 items-start gap-1.5 @md:items-center">
@@ -1383,6 +1395,24 @@ const DaySection = memo(function DaySection({
           >
             ·
           </span>
+          {isDaySelected ? (
+            <button
+              type="button"
+              onClick={() => onResetDay(dayId)}
+              disabled={!canReset}
+              className={cn(
+                "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
+                canReset
+                  ? "text-destructive hover:text-destructive/90"
+                  : "cursor-not-allowed text-destructive/40",
+              )}
+              aria-label="Reiniciar día"
+            >
+              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+              Reiniciar día
+            </button>
+          ) : (
+            <>
           {editingDescription ? (
             <>
               <input
@@ -1479,6 +1509,8 @@ const DaySection = memo(function DaySection({
               </button>
             )
           ) : null}
+            </>
+          )}
         </div>
       </div>
 
