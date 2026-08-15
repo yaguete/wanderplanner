@@ -94,23 +94,10 @@ function ItineraryItemInner({
   area: string | null
   mode: "default" | "vendorLogo" | "transportIcon"
 }) {
-  if (mode === "transportIcon") {
-    const visual = resolveTransportModeVisual({
-      hint: item.sourceRouteHint,
-      name: item.name,
-      detail: item.detail,
-      preferHint: true,
-    })
-    const Icon = TRANSPORT_MODE_ICONS[visual]
-    return (
-      <div
-        className="flex h-full w-full items-center justify-center bg-muted"
-        aria-label={TRANSPORT_MODE_A11Y[visual]}
-      >
-        <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
-      </div>
-    )
-  }
+  // Los hooks van antes de cualquier return condicional: React los empareja por
+  // orden de llamada, y salir antes en modo icono dejaba esta función con 0 hooks
+  // en una rama y 5 en la otra (react-hooks/rules-of-hooks).
+  const isTransportIcon = mode === "transportIcon"
 
   const fallback = useMemo(() => getItemThumbnail(item), [item.id, item.type])
   const [src, setSrc] = useState<string | null>(() => item.thumbUrl ?? null)
@@ -118,6 +105,8 @@ function ItineraryItemInner({
   const [imageLoaded, setImageLoaded] = useState(false)
 
   useEffect(() => {
+    // En modo icono no se pinta foto: ni se resuelve miniatura ni se gasta cuota.
+    if (isTransportIcon) return
     setImageLoaded(false)
     if (item.thumbUrl) {
       setSrc(item.thumbUrl)
@@ -140,7 +129,25 @@ function ItineraryItemInner({
     return () => {
       cancel = true
     }
-  }, [item.id, item.thumbUrl, item.name, item.region, area, fallback])
+  }, [isTransportIcon, item.id, item.thumbUrl, item.name, item.region, area, fallback])
+
+  if (isTransportIcon) {
+    const visual = resolveTransportModeVisual({
+      hint: item.sourceRouteHint,
+      name: item.name,
+      detail: item.detail,
+      preferHint: true,
+    })
+    const Icon = TRANSPORT_MODE_ICONS[visual]
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center bg-muted"
+        aria-label={TRANSPORT_MODE_A11Y[visual]}
+      >
+        <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
+      </div>
+    )
+  }
 
   if (!settled || !src) {
     return <div className="h-full w-full animate-pulse bg-muted" aria-hidden />

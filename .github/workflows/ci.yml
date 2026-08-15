@@ -35,10 +35,11 @@ jobs:
       - run: npm run test:airports
       - run: npm run test:flight-search
       - run: npm run test:partner-trip
+      # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
+      # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
+      # degradados a warning en eslint.config.mjs y no bloquean.
+      - run: npm run lint
       - run: npm run build
-      # eslint instalado (eslint-config-next); no se usa como gate todavía:
-      # hay errores preexistentes en auth-context/trip-context/tailwind.config
-      # que no pertenecen a T4B.1. `npm run lint` funciona en local.
 
   backend:
     runs-on: ubuntu-latest
