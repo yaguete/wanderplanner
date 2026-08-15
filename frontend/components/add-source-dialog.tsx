@@ -1,11 +1,12 @@
 "use client"
 
 /**
- * Flujo «Añadir fuente»: solo formulario de URL.
+ * Flujo «Añadir fuente»: URL + sugerencias del destino del viaje.
  * La extracción vive en trip-context (`startSourceExtraction`); el progreso/error
  * se muestran como chip pendiente en InspirationPanel.
  */
-import { useEffect, useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useRef, useState, type FormEvent } from "react"
+import { track } from "@vercel/analytics"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,9 +19,14 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SourceSuggestList } from "@/components/source-suggest-list"
+import { useTripSourceSuggestions } from "@/hooks/use-trip-source-suggestions"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import type { ItineraryProgressStage } from "@/lib/api"
+import { isSourceSuggestEnabled, type SourceSuggestHit } from "@/lib/source-suggest"
+import { TRIP_SOURCE_SUGGEST_MOBILE_MAX } from "@/lib/trip-source-suggestions"
 import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
+import type { Source, Trip } from "@/types/itinerary"
 
 export function validateSourceUrl(raw: string): string | null {
   const trimmed = raw.trim()
@@ -97,12 +103,96 @@ export function AddSourceErrorState({
   )
 }
 
+type AddSourceSuggestContext = {
+  trip?: Trip | null
+  sources?: Source[]
+  pendingUrls?: string[]
+  atSourceCap?: boolean
+  loadingPendingCount?: number
+  isMobile?: boolean
+}
+
 type AddSourceFlowProps = {
   initialUrl?: string | null
   onSubmit: (url: string) => void
   onCancel: () => void
   /** Gate de segunda fuente / límite invitado; return false para abortar. */
   guardBeforeSubmit?: () => boolean
+} & AddSourceSuggestContext
+
+function AddSourceSuggestions({
+  trip,
+  sources = [],
+  pendingUrls = [],
+  atSourceCap = false,
+  loadingPendingCount = 0,
+  isMobile = false,
+  onPick,
+}: AddSourceSuggestContext & { onPick: (url: string) => void }) {
+  const enabled =
+    Boolean(trip) &&
+    !atSourceCap &&
+    loadingPendingCount === 0 &&
+    isSourceSuggestEnabled()
+
+  const { query, hits, fetched, loading, refresh } = useTripSourceSuggestions({
+    trip,
+    sources,
+    pendingUrls,
+    enabled,
+  })
+
+  const shownKey = useRef<string | null>(null)
+  useEffect(() => {
+    if (!query || hits.length === 0) return
+    const key = `${query}:${hits.length}:${hits[0]?.origin ?? ""}`
+    if (shownKey.current === key) return
+    shownKey.current = key
+    track("trip_source_suggest_shown", { origin: hits[0]!.origin, n: hits.length })
+  }, [query, hits])
+
+  if (!enabled || !query) return null
+
+  const visible = isMobile ? hits.slice(0, TRIP_SOURCE_SUGGEST_MOBILE_MAX) : hits
+  const showEmpty = fetched && !loading && visible.length === 0
+  if (!loading && !fetched) return null
+
+  const handleSelect = (hit: SourceSuggestHit) => {
+    track("trip_source_suggest_click", { origin: hit.origin, instant: hit.instant })
+    onPick(hit.url)
+  }
+
+  const handleMore = () => {
+    track("trip_source_suggest_more")
+    refresh()
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Sugeridas para {query}</p>
+      {loading && visible.length === 0 ? (
+        <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
+      ) : null}
+      {visible.length > 0 ? (
+        <SourceSuggestList hits={visible} onSelect={handleSelect} compactSubtitle />
+      ) : null}
+      {showEmpty ? (
+        <div className="space-y-2">
+          <p className="px-1 text-sm text-muted-foreground">
+            No quedan sugerencias para este destino.
+          </p>
+          <button
+            type="button"
+            onClick={handleMore}
+            disabled={loading}
+            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+          >
+            Buscar más
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 /** Formulario de URL compartido (Dialog desktop y sheet móvil). */
@@ -111,6 +201,12 @@ export function AddSourceFlow({
   onSubmit,
   onCancel,
   guardBeforeSubmit,
+  trip,
+  sources,
+  pendingUrls,
+  atSourceCap,
+  loadingPendingCount,
+  isMobile,
 }: AddSourceFlowProps) {
   const id = useId()
   const [url, setUrl] = useState(initialUrl?.trim() ?? "")
@@ -121,6 +217,15 @@ export function AddSourceFlow({
     setError(null)
   }, [initialUrl])
 
+  const commit = (raw: string) => {
+    if (guardBeforeSubmit && !guardBeforeSubmit()) {
+      onCancel()
+      return
+    }
+    setError(null)
+    onSubmit(raw.trim())
+  }
+
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault()
     const validation = validateSourceUrl(url)
@@ -128,12 +233,7 @@ export function AddSourceFlow({
       setError(validation)
       return
     }
-    if (guardBeforeSubmit && !guardBeforeSubmit()) {
-      onCancel()
-      return
-    }
-    setError(null)
-    onSubmit(url.trim())
+    commit(url.trim())
   }
 
   const urlId = `${id}-url`
@@ -160,6 +260,15 @@ export function AddSourceFlow({
           </p>
         ) : null}
       </div>
+      <AddSourceSuggestions
+        trip={trip}
+        sources={sources}
+        pendingUrls={pendingUrls}
+        atSourceCap={atSourceCap}
+        loadingPendingCount={loadingPendingCount}
+        isMobile={isMobile}
+        onPick={commit}
+      />
       <DialogFooter className="gap-2 sm:gap-0">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancelar
@@ -178,24 +287,30 @@ export type AddSourceDialogProps = {
   initialUrl?: string | null
   onSubmit: (url: string) => void
   guardBeforeSubmit?: () => boolean
-}
+} & AddSourceSuggestContext
 
-/** Diálogo desktop: solo URL. */
+/** Diálogo desktop: URL + sugerencias del destino. */
 export function AddSourceDialog({
   open,
   onOpenChange,
   initialUrl,
   onSubmit,
   guardBeforeSubmit,
+  trip,
+  sources,
+  pendingUrls,
+  atSourceCap,
+  loadingPendingCount,
+  isMobile,
 }: AddSourceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Añadir fuente</DialogTitle>
           <DialogDescription>
-            Pega la URL de un artículo de viajes. Destilaremos la ruta para consolidarla en tu
-            viaje.
+            Pega la URL de un artículo de viajes o elige una sugerencia. Destilaremos la ruta
+            para consolidarla en tu viaje.
           </DialogDescription>
         </DialogHeader>
         <AddSourceFlow
@@ -206,6 +321,12 @@ export function AddSourceDialog({
           }}
           onCancel={() => onOpenChange(false)}
           guardBeforeSubmit={guardBeforeSubmit}
+          trip={trip}
+          sources={sources}
+          pendingUrls={pendingUrls}
+          atSourceCap={atSourceCap}
+          loadingPendingCount={loadingPendingCount}
+          isMobile={isMobile}
         />
       </DialogContent>
     </Dialog>

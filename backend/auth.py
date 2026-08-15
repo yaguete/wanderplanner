@@ -113,6 +113,27 @@ async def _decode(token: str) -> dict[str, Any]:
     )
 
 
+async def peek_user(authorization: str | None) -> AuthUser | None:
+    """Best-effort: token inválido o ausente → None. Nunca 401 (endpoints públicos)."""
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    if not token:
+        return None
+    try:
+        claims = await _decode(token)
+    except Exception:
+        return None
+    user_id = str(claims.get("sub") or "").strip()
+    if not user_id:
+        return None
+    return AuthUser(
+        id=user_id,
+        email=(claims.get("email") or None),
+        is_anonymous=claims.get("is_anonymous") is True,
+    )
+
+
 async def require_user(
     authorization: str | None = Header(default=None),
 ) -> AuthUser | None:

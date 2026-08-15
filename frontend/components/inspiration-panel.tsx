@@ -38,6 +38,7 @@ import { AddToDayDialog } from "@/components/add-to-day-dialog"
 import { PanelTabs } from "@/components/panel-tabs"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useStableList } from "@/hooks/use-stable-list"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ApiLimitError } from "@/lib/api"
@@ -45,6 +46,7 @@ import { ITEM_LABELS } from "@/lib/item-styles"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
 import { canAddSource } from "@/lib/trip-sources"
+import { prefetchTripSourceSuggestions } from "@/lib/trip-source-suggestions"
 import {
   clearTextHighlights,
   highlightTextInElement,
@@ -149,7 +151,7 @@ export default function InspirationPanel({
   } = useTrips()
   const { requireAccount } = useRegistrationGate()
   const trip = getTrip(tripId)
-  const sources = useMemo(() => getTripSources(tripId), [getTripSources, tripId])
+  const sources = useStableList(getTripSources(tripId))
   const tripPendings = useMemo(
     () => pendingSources.filter((p) => p.tripId === tripId),
     [pendingSources, tripId],
@@ -715,6 +717,10 @@ export default function InspirationPanel({
               <button
                 type="button"
                 onClick={handlePlusClick}
+                onPointerEnter={() => {
+                  if (!trip || atSourceCap || loadingPendingCount > 0) return
+                  prefetchTripSourceSuggestions(trip, sources)
+                }}
                 className={cn(
                   "inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-input",
                   "bg-background text-foreground transition-colors",
@@ -1035,6 +1041,12 @@ export default function InspirationPanel({
           initialUrl={initialSourceUrl}
           onSubmit={handleStartExtract}
           guardBeforeSubmit={guardBeforeSubmit}
+          trip={trip}
+          sources={sources}
+          pendingUrls={tripPendings.map((p) => p.url)}
+          atSourceCap={atSourceCap}
+          loadingPendingCount={loadingPendingCount}
+          isMobile={false}
         />
       ) : addSourceOpen ? (
         <>
@@ -1047,13 +1059,19 @@ export default function InspirationPanel({
           <div
             role="dialog"
             aria-label="Añadir fuente"
-            className="fixed bottom-[calc(var(--wp-nav-gap)+var(--wp-nav-height)+0.5rem)] left-3 right-3 z-[50] space-y-2 rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
+            className="fixed bottom-[calc(var(--wp-nav-gap)+var(--wp-nav-height)+0.5rem)] left-3 right-3 z-[50] max-h-[60vh] space-y-2 overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
           >
             <AddSourceFlow
               initialUrl={initialSourceUrl}
               onSubmit={handleStartExtract}
               onCancel={() => setAddSourceOpen(false)}
               guardBeforeSubmit={guardBeforeSubmit}
+              trip={trip}
+              sources={sources}
+              pendingUrls={tripPendings.map((p) => p.url)}
+              atSourceCap={atSourceCap}
+              loadingPendingCount={loadingPendingCount}
+              isMobile
             />
           </div>
         </>

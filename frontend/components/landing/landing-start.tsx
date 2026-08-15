@@ -10,6 +10,7 @@ import { track } from "@vercel/analytics"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { SignupForm } from "@/components/auth/signup-form"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { SourceSuggestList } from "@/components/source-suggest-list"
 import { cleanSourceUrl } from "@/lib/partner-button"
 import { LANDING_REF } from "@/lib/partner-trip"
 import {
@@ -294,37 +295,13 @@ export function LandingStart() {
                 {destLoading && !destResults ? (
                   <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
                 ) : null}
-                <div aria-live="polite" className="sr-only">
-                  {destResults
-                    ? destResults.length === 0
-                      ? "Ningún artículo"
-                      : `${destResults.length} artículos`
-                    : ""}
-                </div>
                 {destResults && destResults.length === 0 && !destError ? (
                   <p className="px-1 py-2 text-sm text-muted-foreground">
                     No hemos encontrado artículos para ese destino. Prueba con otro nombre o pega una URL.
                   </p>
                 ) : null}
                 {destResults && destResults.length > 0 ? (
-                  <ul className="flex flex-col gap-1">
-                    {destResults.map((hit) => (
-                      <li key={hit.url}>
-                        <button
-                          type="button"
-                          onClick={() => openHit(hit)}
-                          className="flex w-full flex-col rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <span className="text-sm font-medium text-foreground">{hit.title}</span>
-                          <span className="mt-0.5 text-xs text-muted-foreground">
-                            {hit.host}
-                            {hit.destination ? ` · ${hit.destination}` : ""}
-                            {hit.instant ? " · Listo al instante" : " · Tarda ~1 min"}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <SourceSuggestList hits={destResults} onSelect={openHit} />
                 ) : null}
                 {showWebCaptcha ? (
                   <div className="mt-3 flex justify-center">

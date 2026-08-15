@@ -57,7 +57,7 @@ import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
-import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
+import { MAX_SOURCES_PER_TRIP, sourceMatchKey } from "@/lib/trip-sources"
 import { toast } from "sonner"
 
 const COMPOSER_MAX_HEIGHT = 168
@@ -187,19 +187,6 @@ function ActionCard({
       </div>
     </div>
   )
-}
-
-function normalizeSourceUrl(url: string): string {
-  try {
-    const u = new URL(url.trim())
-    u.hash = ""
-    let path = u.pathname
-    if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1)
-    u.pathname = path
-    return u.toString()
-  } catch {
-    return url.trim()
-  }
 }
 
 /**
@@ -535,7 +522,7 @@ export function AssistantPanelLayer({
     return loadActiveConversationId(uid, tripId) === null
   }, [user?.id, tripId])
   const addedSourceUrls = useMemo(
-    () => new Set(sources.map((s) => normalizeSourceUrl(s.url))),
+    () => new Set(sources.map((s) => sourceMatchKey(s.url))),
     [sources],
   )
 
@@ -638,7 +625,7 @@ export function AssistantPanelLayer({
 
   const handleAddSourceLink = useCallback(
     (url: string) => {
-      const normalized = normalizeSourceUrl(url)
+      const normalized = sourceMatchKey(url)
       if (!trip || tripLoadingPending) return
       if (addedSourceUrls.has(normalized)) return
       const result = startSourceExtraction(tripId, url)
@@ -665,7 +652,7 @@ export function AssistantPanelLayer({
       setActionBusyId(action.id)
       try {
         if (action.kind === "add_source") {
-          const normalized = normalizeSourceUrl(action.url)
+          const normalized = sourceMatchKey(action.url)
           if (!addedSourceUrls.has(normalized)) {
             const result = startSourceExtraction(tripId, action.url)
             if (!result.ok) {

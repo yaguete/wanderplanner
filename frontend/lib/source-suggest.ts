@@ -81,15 +81,25 @@ function parseHit(raw: unknown): SourceSuggestHit | null {
 
 export async function suggestSources(
   query: string,
-  options?: { captchaToken?: string | null; signal?: AbortSignal },
+  options?: {
+    captchaToken?: string | null
+    signal?: AbortSignal
+    scope?: "landing" | "trip"
+    limit?: number
+    fresh?: boolean
+    headers?: Record<string, string>
+  },
 ): Promise<SourceSuggestResponse> {
   const params = new URLSearchParams({ q: query.trim() })
   if (options?.captchaToken) params.set("captcha_token", options.captchaToken)
+  if (options?.scope) params.set("scope", options.scope)
+  if (options?.limit != null) params.set("limit", String(options.limit))
+  if (options?.fresh) params.set("fresh", "true")
 
   let response: Response
   try {
     response = await fetch(`${API_BASE}/sources/suggest?${params.toString()}`, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...(options?.headers ?? {}) },
       signal: options?.signal,
     })
   } catch (e) {

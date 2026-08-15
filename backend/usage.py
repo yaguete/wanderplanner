@@ -11,7 +11,8 @@ Kinds:
   - refresh: rate-limit de «Recargar» (user_id obligatorio)
   - system_revalidation: mantenimiento de caché en fondo (user_id null)
   - partner_prewarm: pre-síntesis desde /partners (user_id null; cap global durable)
-  - landing_source_search: Tavily de GET /sources/suggest (user_id null; cap global durable)
+  - landing_source_search: Tavily de GET /sources/suggest (landing; user_id null; cap global durable)
+  - trip_source_search: Tavily de GET /sources/suggest desde Añadir fuente (user_id opcional; cap propio)
 """
 from __future__ import annotations
 
@@ -42,8 +43,11 @@ Kind = Literal[
     "place_suggest",
     "transport_hub",
     "landing_source_search",
+    "trip_source_search",
 ]
-_USERLESS_KINDS = frozenset({"system_revalidation", "partner_prewarm", "landing_source_search"})
+_USERLESS_KINDS = frozenset(
+    {"system_revalidation", "partner_prewarm", "landing_source_search", "trip_source_search"}
+)
 LimitKind = Literal["guest", "daily", "monthly"]
 
 _GUEST_DEFAULTS: dict[str, int] = {
@@ -241,9 +245,7 @@ async def record_event(
     cfg = _config()
     if not cfg:
         return
-    if kind in _USERLESS_KINDS:
-        user_id = None
-    elif not user_id:
+    if kind not in _USERLESS_KINDS and not user_id:
         return
     base, key = cfg
     body: dict[str, object] = {"kind": kind}

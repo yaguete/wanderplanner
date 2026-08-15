@@ -70,7 +70,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       trip-chrome-context.tsx # Header chrome + sidebar collapse (desktop /trips)
       partner-button.ts    # cleanSourceUrl / buildStartUrl / snippet HTML del kit
       partners-api.ts      # POST /partners/prewarm (SSE, sin Bearer)
-      source-suggest.ts    # GET /sources/suggest (landing; kill switch)
+      source-suggest.ts    # GET /sources/suggest (landing + Añadir fuente)
+      trip-source-suggestions.ts # sugerencias in-app; sessionStorage wp-trip-source-suggest
       thumbs.ts            # GET /thumb (lazy; memoria + sessionStorage)
       unsplash.ts          # portadas vía GET /cover (sin clave en el navegador)
       country-tasks.ts     # GET /country-tasks (lazy; sessionStorage + dismissals)
@@ -134,7 +135,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Extracción de fuente: `startSourceExtraction` (fire-and-forget) → chip pendiente en Fuentes (`pendingSources`); sin modal bloqueante. Tope **5 fuentes/viaje** ([`trip-sources.ts`](frontend/lib/trip-sources.ts)). Quitar una fuente **no** borra ítems/basics ya consolidados en Mi viaje.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
-- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`) y cachés de thumbs/Mapbox/country-tasks en session/local storage.
+- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
 - Miniaturas: no van en el payload de `/itinerary` (`thumb_url` null). `InspirationThumbnail` las pide a `GET /thumb` al entrar en viewport. Portadas: `GET /cover` vía [`unsplash.ts`](frontend/lib/unsplash.ts) (claves solo en backend).
 - Trámites de país (T4.4): pestaña **Básicos** → `GET /country-tasks` (Recomendaciones MAE + Haiku). Sugerencias aceptadas → `ExtraTask` con id `country:{iso}:{slug}`; descartes en `dismissedCountryTasks` (columna propia, **no** en `tasks`).
 - Descripción de día por IA: `POST /day-summary`; la firma de ítems (`summarySignature` en `UserDay`) apaga el botón si nada ha cambiado.
@@ -247,6 +248,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No compiles regex dentro de un bucle sobre la tabla de países** → `hasWordBoundaryMatch` cachea el patrón por nombre. Inlinearlo otra vez devuelve `resolveTripCountryCodes` a ~460 ms **por llamada**, y se llama en cada render del asistente.
 - ❌ **No optimices rendimiento sin medir antes.** Los tres paneles montados hacen que el coste percibido casi nunca esté donde parece: dos rondas de optimización sobre la Ruta (que renderiza en 18 ms) no movieron la aguja porque el segundo entero estaba en el asistente cerrado.
 - ❌ **No implementes búsqueda de vuelos con API / precios** → el buscador es Nivel 1 (enlace Kiwi). Afiliación propia solo en `FLIGHT_SEARCH_AFFILIATE_ID`; no toques `affiliateUrl` de fuentes. La tabla IATA se genera con `scripts/generate-airports.mjs`, no se edita `airports-data.ts` a mano.
+- ❌ **El uso in-app de sugerencias de fuentes no consume la cuota Tavily de la landing** → `GET /sources/suggest?scope=trip` con JWT (`trip_source_search`); sin JWT válido cae a `landing`. Tope IP en ambos scopes. Caché de respuesta TTL (`SOURCE_SUGGEST_RESPONSE_TTL_SEC`, default 6 h); `fresh=true` solo en «Buscar más».
 
 ## Dependencias críticas
 
@@ -259,7 +261,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), perfil |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
-| Landing / chips de arranque | [`landing-start.tsx`](frontend/components/landing/landing-start.tsx), [`source_suggest.py`](backend/source_suggest.py), [`source-suggest.ts`](frontend/lib/source-suggest.ts), [`landing_source_domains.py`](backend/landing_source_domains.py), `ref=wp-landing` |
+| Sugerencias de fuentes (landing + Añadir fuente) | [`landing-start.tsx`](frontend/components/landing/landing-start.tsx), [`source-suggest-list.tsx`](frontend/components/source-suggest-list.tsx), [`source_suggest.py`](backend/source_suggest.py), [`source-suggest.ts`](frontend/lib/source-suggest.ts), [`trip-source-suggestions.ts`](frontend/lib/trip-source-suggestions.ts), [`landing_source_domains.py`](backend/landing_source_domains.py), `ref=wp-landing`, kind `trip_source_search` |
 | Trámites de país | [`country_tasks.py`](backend/country_tasks.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country-tasks.ts`](frontend/lib/country-tasks.ts), [`country-tasks-section.tsx`](frontend/components/country-tasks-section.tsx), `dismissed_country_tasks` |
 | Thumbs / covers | [`place_thumbs.py`](backend/place_thumbs.py), [`covers.py`](backend/covers.py), [`thumbs.ts`](frontend/lib/thumbs.ts), [`unsplash.ts`](frontend/lib/unsplash.ts) |
 | Tareas / costes | [`trip-tasks.ts`](frontend/lib/trip-tasks.ts) (+ test), [`task-labels.ts`](frontend/lib/task-labels.ts), [`trip-tasks-panel.tsx`](frontend/components/trip-tasks-panel.tsx), `tasks` / `extra_tasks` / `currency` / `num_travelers` |

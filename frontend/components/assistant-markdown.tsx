@@ -4,23 +4,11 @@ import { Loader2, Plus } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
+import { sourceMatchKey } from "@/lib/trip-sources"
 import { cn } from "@/lib/utils"
 
 function isHttpUrl(href: string | undefined): href is string {
   return !!href && /^https?:\/\//i.test(href)
-}
-
-function normalizeSourceUrl(url: string): string {
-  try {
-    const u = new URL(url.trim())
-    u.hash = ""
-    let path = u.pathname
-    if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1)
-    u.pathname = path
-    return u.toString()
-  } catch {
-    return url.trim()
-  }
 }
 
 /** Renderiza markdown del asistente con tipografía compacta para el chat. */
@@ -70,7 +58,7 @@ export function AssistantMarkdown({
               return <span className="font-medium text-foreground">{children}</span>
             }
 
-            const normalized = normalizeSourceUrl(href)
+            const normalized = sourceMatchKey(href)
             const added = Boolean(
               addedUrls?.has(normalized) || addedUrls?.has(href),
             )
