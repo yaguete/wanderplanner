@@ -7,6 +7,9 @@ import {
   densityFor,
   DENSITY_WIDE_PX,
   DENSITY_MD_PX,
+  monthBadgeCap,
+  MONTH_CELL_CHROME_PX,
+  BADGE_SLOT_PX,
   initialAnchorISO,
   isoByDayIndex,
   shiftAnchor,
@@ -241,17 +244,24 @@ assert.deepEqual(densityFor(DENSITY_WIDE_PX - 1), {
   weekLayout: "rows",
 })
 
-// clipBadges: 0, cap, cap+1.
+// clipBadges: cabe entero; si no, el último hueco es "+n".
 assert.deepEqual(clipBadges([], 3), { shown: [], overflow: 0 })
 assert.deepEqual(clipBadges(["a", "b", "c"], 3), {
   shown: ["a", "b", "c"],
   overflow: 0,
 })
 assert.deepEqual(clipBadges(["a", "b", "c", "d"], 3), {
-  shown: ["a", "b", "c"],
-  overflow: 1,
+  shown: ["a", "b"],
+  overflow: 2,
 })
+assert.deepEqual(clipBadges(["a", "b"], 1), { shown: [], overflow: 2 })
 assert.deepEqual(clipBadges(["a"], 0), { shown: [], overflow: 1 })
+
+// monthBadgeCap: recorta al alto de celda; mínimo 1 hueco.
+assert.equal(monthBadgeCap(3, MONTH_CELL_CHROME_PX + BADGE_SLOT_PX * 2 + 1), 2)
+assert.equal(monthBadgeCap(3, MONTH_CELL_CHROME_PX + BADGE_SLOT_PX * 4), 3)
+assert.equal(monthBadgeCap(3, 40), 1)
+assert.equal(monthBadgeCap(2, 0), 2)
 
 // calendarBadgeLabel: route con/sin coma, y sin route.
 assert.equal(

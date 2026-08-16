@@ -19,6 +19,7 @@ import {
   calendarDayAriaLabel,
   clipBadges,
   densityFor,
+  monthBadgeCap,
   initialAnchorISO,
   shiftAnchor,
   weekdayHeader,
@@ -330,6 +331,21 @@ function MonthGrid({
   interactive: boolean
 }) {
   const n = Math.max(weeks.length, 1)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [cellHeight, setCellHeight] = useState(0)
+  useEffect(() => {
+    const node = gridRef.current
+    if (!node) return
+    const apply = () => {
+      const h = node.getBoundingClientRect().height
+      setCellHeight(n > 0 ? h / n : 0)
+    }
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [n])
+  const cap = monthBadgeCap(density.cap, cellHeight)
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-y-auto"
@@ -337,6 +353,7 @@ function MonthGrid({
     >
       <WeekdayRow ariaHidden />
       <div
+        ref={gridRef}
         className="grid min-h-0 flex-1 grid-cols-1 gap-0.5"
         style={{ gridTemplateRows: `repeat(${n}, minmax(3.5rem, 1fr))` }}
       >
@@ -348,6 +365,7 @@ function MonthGrid({
                 cell={cell}
                 days={days}
                 density={density}
+                cap={cap}
                 finePointer={finePointer}
                 onOpenDay={onOpenDay}
                 interactive={interactive}
@@ -441,6 +459,7 @@ function DayCell({
   cell,
   days,
   density,
+  cap: capOverride,
   finePointer,
   onOpenDay,
   interactive,
@@ -449,6 +468,7 @@ function DayCell({
   cell: CalendarCell
   days: UserDay[]
   density: CalendarDensity
+  cap?: number
   finePointer: boolean
   onOpenDay: (dayId: string) => void
   interactive: boolean
@@ -458,10 +478,12 @@ function DayCell({
   const items = inTrip ? itemsForCell(days, cell) : []
   const dayId = inTrip ? dayIdForCell(days, cell) : null
   const uncapped = layout === "week-columns"
+  const cap = capOverride ?? density.cap
   const { shown, overflow } = clipBadges(
     items,
-    uncapped ? Number.POSITIVE_INFINITY : density.cap,
+    uncapped ? Number.POSITIVE_INFINITY : cap,
   )
+  const hidden = overflow > 0 ? items.slice(shown.length) : []
   const badgeMode = density.badges
   const dateNum = Number(cell.iso.slice(8, 10))
   const openList = () => {
@@ -480,7 +502,7 @@ function DayCell({
   const shell = cn(
     "flex min-h-0 min-w-0 flex-col p-1 text-left",
     layout === "week-rows" ? "flex-row items-start gap-2 px-2 py-1.5" : "h-full",
-    layout === "week-columns" && "overflow-hidden",
+    layout === "week-columns" || layout === "month" ? "overflow-hidden" : null,
     inTripBand && "bg-muted",
     layout === "week-rows"
       ? cn(cell.isTripStart && "rounded-t-md", cell.isTripEnd && "rounded-b-md")
@@ -507,42 +529,48 @@ function DayCell({
     </span>
   )
 
-  const badges = (
-    <div
-      className={cn(
-        "flex min-h-0 min-w-0 gap-0.5",
-        layout === "week-rows"
-          ? "flex-1 flex-row flex-wrap content-start"
-          : "flex-col",
-        layout === "week-columns" && "overflow-y-auto",
-        layout === "month" && "overflow-hidden",
-      )}
-    >
-      {shown.map((item) => (
-        <ItemBadge
-          key={item.id}
-          item={item}
-          mode={badgeMode}
-          showTooltip={finePointer && inTrip}
-          onOpen={finePointer ? openList : undefined}
-        />
-      ))}
-      {overflow > 0 ? (
-        finePointer && inTrip ? (
-          <DayOverflow
-            overflow={overflow}
-            cell={cell}
-            items={items}
-            onOpenDay={openList}
-          />
-        ) : (
-          <span className="px-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
-            +{overflow}
-          </span>
-        )
-      ) : null}
-    </div>
-  )
+  const overflowEl =
+    overflow > 0 ? (
+      finePointer && inTrip ? (
+        <DayOverflow overflow={overflow} hiddenItems={hidden} onOpenDay={openList} />
+      ) : (
+        <span className="flex h-4 shrink-0 items-center px-0.5 text-[10px] font-medium tabular-nums leading-none text-muted-foreground">
+          +{overflow}
+        </span>
+      )
+    ) : null
+
+  const badgeItems = shown.map((item) => (
+    <ItemBadge
+      key={item.id}
+      item={item}
+      mode={badgeMode}
+      showTooltip={finePointer && inTrip}
+      onOpen={finePointer ? openList : undefined}
+    />
+  ))
+
+  const badges =
+    layout === "month" ? (
+      <div className="flex h-full min-h-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+          {badgeItems}
+        </div>
+        {overflowEl}
+      </div>
+    ) : (
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 gap-0.5",
+          layout === "week-rows"
+            ? "flex-1 flex-row flex-wrap content-start"
+            : "flex-col overflow-y-auto",
+        )}
+      >
+        {badgeItems}
+        {overflowEl}
+      </div>
+    )
 
   if (!inTrip) {
     return (
@@ -599,7 +627,7 @@ function DayCell({
             type="button"
             onClick={openList}
             aria-label={aria}
-            className="self-start rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 self-start rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {numberEl}
           </button>
@@ -649,8 +677,8 @@ function ItemBadge({
   const inner = (
     <span
       className={cn(
-        "inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-muted",
-        mode === "text" ? "px-1 py-px" : "p-0.5",
+        "inline-flex h-4 max-w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-muted",
+        mode === "text" ? "px-1" : "px-0.5",
       )}
     >
       <span
@@ -674,7 +702,7 @@ function ItemBadge({
           type="button"
           onClick={onOpen}
           aria-label={item.name}
-          className="max-w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-4 max-w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {inner}
         </button>
@@ -691,25 +719,38 @@ function ItemBadge({
 
 function DayOverflow({
   overflow,
-  cell,
-  items,
+  hiddenItems,
   onOpenDay,
 }: {
   overflow: number
-  cell: CalendarCell
-  items: UserDayItem[]
+  hiddenItems: UserDayItem[]
   onOpenDay: () => void
 }) {
   return (
-    <DayPopover items={items} cell={cell} onOpenDay={onOpenDay}>
-      <button
-        type="button"
-        className="self-start rounded-sm px-0.5 text-[10px] font-medium tabular-nums text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={`Ver ${overflow} más`}
-      >
-        +{overflow}
-      </button>
-    </DayPopover>
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onOpenDay}
+          className="flex h-4 shrink-0 items-center self-start rounded-sm px-0.5 text-[10px] font-medium tabular-nums leading-none text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Ver ${overflow} más`}
+        >
+          +{overflow}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-h-64 max-w-xs overflow-y-auto text-xs">
+        <ul className="flex flex-col gap-1.5">
+          {hiddenItems.map((item) => (
+            <li key={item.id}>
+              <p className="m-0 text-[10px] text-muted-foreground">
+                {ITEM_LABELS[item.type]}
+              </p>
+              <p className="m-0 font-medium">{item.name}</p>
+            </li>
+          ))}
+        </ul>
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

@@ -134,6 +134,29 @@ export function densityFor(panelWidthPx: number): CalendarDensity {
   return { badges: "text", cap: 3, weekLayout: "columns" }
 }
 
+/**
+ * Padding de celda mes (`p-1` = 8px) + número del día (`size-6` = 24px).
+ * El resto del alto son huecos de badge (ítems y, si cabe, "+n").
+ */
+export const MONTH_CELL_CHROME_PX = 32
+/** Alto de un badge de texto + `gap-0.5`. */
+export const BADGE_SLOT_PX = 18
+
+/** Tope de huecos visuales en mes: el de densidad, recortado al alto real de la celda. */
+export function monthBadgeCap(widthCap: number, cellHeightPx: number): number {
+  if (!Number.isFinite(widthCap) || widthCap <= 0) return 0
+  if (!Number.isFinite(cellHeightPx) || cellHeightPx <= 0) return widthCap
+  const slots = Math.max(
+    1,
+    Math.floor((cellHeightPx - MONTH_CELL_CHROME_PX) / BADGE_SLOT_PX),
+  )
+  return Math.min(widthCap, slots)
+}
+
+/**
+ * Recorta a `cap` huecos visuales. Si hay más ítems que `cap`, el último
+ * hueco queda para «+n» (`shown` tiene como máximo `cap - 1` ítems).
+ */
 export function clipBadges<T>(
   items: T[],
   cap: number,
@@ -142,7 +165,8 @@ export function clipBadges<T>(
     return { shown: items, overflow: 0 }
   }
   if (cap <= 0) return { shown: [], overflow: items.length }
-  return { shown: items.slice(0, cap), overflow: items.length - cap }
+  const shownCount = cap - 1
+  return { shown: items.slice(0, shownCount), overflow: items.length - shownCount }
 }
 
 function shortPlace(label: string): string {
