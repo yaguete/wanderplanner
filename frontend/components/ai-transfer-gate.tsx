@@ -14,9 +14,8 @@ export function AiTransferGate({
     <div className="px-3 py-3">
       <p className="text-sm font-medium tracking-tight">Antes de empezar</p>
       <p className="mt-1.5 text-pretty text-xs leading-5 text-foreground/70">
-        Para responderte, el asistente envía los datos de tu viaje a proveedores de IA fuera
-        de la Unión Europea, hoy también en China, donde la protección de datos no es la
-        europea. No enviamos tu nombre ni tu correo.
+        Para responderte, el asistente envía los información de tu viaje a proveedores de IA fuera
+        de la Unión Europea. No enviaremos tu nombre ni tu correo electrónico.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" className="h-8" disabled={!ready} onClick={onAccept}>

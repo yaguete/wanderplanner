@@ -48,8 +48,17 @@ function hashSeed(s: string): number {
   return h
 }
 
+/** Tiempo si hay fechas; si no, packing list (con país cuando se conoce). */
+function utilitySnippet(hasDates: boolean, dest: string | null): string {
+  if (hasDates) return "¿Qué tiempo crees que hará en las fechas de mi viaje?"
+  return dest
+    ? `¿Qué no puede faltar en mi mochila de viaje a ${dest}?`
+    : "¿Qué no puede faltar en mi mochila de viaje?"
+}
+
 /**
  * Hasta 3 sugerencias accionables. Si hay destino, lo nombra; si no, cae a genéricas.
+ * El segundo hueco es fijo: tiempo (con fechas) o mochila (sin ellas).
  */
 export function buildAssistantSuggestions(
   trip: Trip | null | undefined,
@@ -62,6 +71,7 @@ export function buildAssistantSuggestions(
   const onlySpain = codes.length > 0 && codes.every((c) => c === "ES")
   const hasSources = sources.length > 0
   const seed = hashSeed(dest ?? trip.name ?? trip.id)
+  const utility = utilitySnippet(Boolean(trip.startDate), dest)
 
   const first = onlySpain
     ? dest
@@ -93,14 +103,9 @@ export function buildAssistantSuggestions(
         "¿Qué me falta para completar el plan?",
       ]
 
-  // Dos sabores distintos del pool, rotados por destino (estables entre recargas).
   const a = flavours[seed % flavours.length]!
-  const b = flavours[(seed + 3) % flavours.length]!
-  const second = a === first ? flavours[(seed + 1) % flavours.length]! : a
-  let third = b === first || b === second ? flavours[(seed + 5) % flavours.length]! : b
-  if (third === first || third === second) {
-    third = flavours.find((s) => s !== first && s !== second) ?? FALLBACK[2]
-  }
+  const third = [a, flavours[(seed + 3) % flavours.length]!, flavours[(seed + 1) % flavours.length]!]
+    .find((s) => s !== first && s !== utility) ?? FALLBACK[2]
 
-  return [first, second, third]
+  return [first, utility, third]
 }

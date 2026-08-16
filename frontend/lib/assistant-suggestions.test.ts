@@ -81,8 +81,22 @@ function source(overrides: Partial<Source> = {}): Source {
   const withSource = buildAssistantSuggestions(baseTrip({ name: "Japón" }), [
     source({ area: "Kyoto, Japan" }),
   ])
-  assert.ok(withSource.some((s) => /fuente/i.test(s)))
   assert.ok(withSource.some((s) => /Japón|Japan|Kioto|Kyoto/i.test(s)))
+}
+
+{
+  const withDates = buildAssistantSuggestions(
+    baseTrip({ name: "Uganda", startDate: "2026-09-01", endDate: "2026-09-07" }),
+    [],
+  )
+  assert.equal(withDates[1], "¿Qué tiempo crees que hará en las fechas de mi viaje?")
+  assert.ok(!withDates.some((s) => /mochila/i.test(s)))
+}
+
+{
+  const noDates = buildAssistantSuggestions(baseTrip({ name: "Uganda", countries: ["UG"] }), [])
+  assert.equal(noDates[1], "¿Qué no puede faltar en mi mochila de viaje a Uganda?")
+  assert.ok(!noDates.some((s) => /fechas de mi viaje/i.test(s)))
 }
 
 {
