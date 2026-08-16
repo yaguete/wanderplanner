@@ -20,7 +20,7 @@ import {
 } from "@/lib/partner-button"
 import { authorFromUrl } from "@/lib/itinerary-utils"
 import { MAX_AUTO_DAYS, isReservedRefSlug, parseDaysParam } from "@/lib/partner-trip"
-import { prewarmSource, type PrewarmResult } from "@/lib/partners-api"
+import { prewarmSource, type PrewarmCounts, type PrewarmResult } from "@/lib/partners-api"
 import { cn } from "@/lib/utils"
 
 const fieldClass =
@@ -28,6 +28,23 @@ const fieldClass =
 
 const iconBtnClass =
   "shrink-0 border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+
+function esCount(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`
+}
+
+function formatPrewarmBreakdown(counts: PrewarmCounts): string {
+  return [
+    esCount(counts.accommodations, "alojamiento", "alojamientos"),
+    esCount(counts.activities, "actividad", "actividades"),
+    esCount(counts.transport, "desplazamiento", "desplazamientos"),
+    esCount(counts.basics, "descuento", "descuentos"),
+  ].join(" · ")
+}
+
+function prewarmTitle(result: PrewarmResult): string | null {
+  return result.og_title || result.destination
+}
 
 function appOrigin(): string {
   const configured = (process.env.NEXT_PUBLIC_APP_ORIGIN || "").trim().replace(/\/$/, "")
@@ -132,7 +149,7 @@ export function PartnerButtonBuilder() {
     }
 
     setSubmitting(true)
-    setProgress("Leyendo el artículo…")
+    setProgress("Comprobando si ya está sintetizado…")
     try {
       const result = await prewarmSource(cleanedUrl, {
         captchaToken,
@@ -159,25 +176,26 @@ export function PartnerButtonBuilder() {
     }
   }
 
+  const summaryTitle = generated?.prewarm ? prewarmTitle(generated.prewarm) : null
+
   return (
     <div className="flex min-h-[16rem] flex-col justify-center sm:min-h-[14rem]">
       {generated ? (
         <div className="flex flex-col gap-5">
           {generated.prewarm ? (
-            <p className="text-sm text-white/70">
-              Ruta ya sintetizada
-              {generated.prewarm.destination ? (
-                <>
-                  :{" "}
-                  <span className="font-medium text-white">{generated.prewarm.destination}</span>
-                </>
+            <div className="flex flex-col gap-1.5 text-sm text-white/70">
+              {summaryTitle ? (
+                <p>
+                  <span className="font-medium text-white">{summaryTitle}</span>
+                </p>
               ) : null}
-              {generated.prewarm.items > 0 ? <> · {generated.prewarm.items} ítems</> : null}. El
-              primer lector entrará sin esperar.
-              {generated.prewarm.status === "cached" ? (
-                <span className="mt-1 block text-xs text-white/60">Ya estaba en caché.</span>
+              {normalizedRef ? (
+                <p>
+                  <span className="font-medium text-white">vía @{normalizedRef}</span>
+                </p>
               ) : null}
-            </p>
+              <p>{formatPrewarmBreakdown(generated.prewarm.counts)}</p>
+            </div>
           ) : generated.skippedPrewarm ? (
             <p className="text-sm text-white/70">
               Enlace y snippet listos. La síntesis se hará cuando el primer lector pulse el botón.

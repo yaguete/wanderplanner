@@ -169,6 +169,34 @@ def _host(url: str) -> str:
     return urlparse(url).hostname or "-"
 
 
+def _len_list(value: object) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def _item_kind_counts(itinerary: dict) -> dict[str, int]:
+    """Desglose para el kit de partners. No incluye restaurantes."""
+    accommodations = 0
+    activities = 0
+    transport = 0
+    for day in itinerary.get("days") or []:
+        if not isinstance(day, dict):
+            continue
+        accommodations += _len_list(day.get("accommodations"))
+        transport += _len_list(day.get("transport"))
+        acts = day.get("activities")
+        if isinstance(acts, list):
+            for act in acts:
+                activities += 1
+                if isinstance(act, dict):
+                    activities += _len_list(act.get("sub_activities"))
+    return {
+        "accommodations": accommodations,
+        "activities": activities,
+        "transport": transport,
+        "basics": _len_list(itinerary.get("basics")),
+    }
+
+
 def _count_items(itinerary: dict) -> int:
     """Cuenta entidades del payload de extracción (snake_case del prompt)."""
     n = 0
@@ -176,20 +204,14 @@ def _count_items(itinerary: dict) -> int:
         if not isinstance(day, dict):
             continue
         for key in ("accommodations", "restaurants", "transport"):
-            items = day.get(key)
-            if isinstance(items, list):
-                n += len(items)
+            n += _len_list(day.get(key))
         activities = day.get("activities")
         if isinstance(activities, list):
             for act in activities:
                 n += 1
                 if isinstance(act, dict):
-                    subs = act.get("sub_activities")
-                    if isinstance(subs, list):
-                        n += len(subs)
-    basics = itinerary.get("basics")
-    if isinstance(basics, list):
-        n += len(basics)
+                    n += _len_list(act.get("sub_activities"))
+    n += _len_list(itinerary.get("basics"))
     return n
 
 
@@ -829,13 +851,15 @@ def _prewarm_meta(payload: dict, *, status: str) -> dict[str, Any]:
     total_days = payload.get("total_days")
     og_image = payload.get("og_image")
     og_title = payload.get("og_title")
+    title = og_title.strip() if isinstance(og_title, str) else ""
     return {
         "status": status,
         "destination": destination if isinstance(destination, str) else None,
         "total_days": total_days if isinstance(total_days, (int, float)) else None,
         "items": _count_items(payload),
+        "counts": _item_kind_counts(payload),
         "og_image": og_image if isinstance(og_image, str) else None,
-        "og_title": og_title if isinstance(og_title, str) else None,
+        "og_title": title or None,
     }
 
 
@@ -846,6 +870,8 @@ async def _stream_prewarm(
 ) -> AsyncIterator[str]:
     try:
         if entry is not None and entry.freshness in ("fresh", "stale"):
+            # Hit: no fetch, no Claude. El botón se genera con lo ya indexado.
+            # Stale: se sirve igual y se revalida en fondo (Claude solo si el artículo cambió).
             payload = dict(entry.payload)
             _strip_thumb_urls(payload)
             _log_extraction(
@@ -855,7 +881,6 @@ async def _stream_prewarm(
                 items=_count_items(payload),
                 freshness=entry.freshness,
             )
-            yield _sse("progress", {"stage": "fetching"})
             yield _sse("result", _prewarm_meta(payload, status="cached"))
             if entry.freshness == "stale":
                 _spawn_background(revalidate_in_background(url, entry))
@@ -914,6 +939,10 @@ async def partners_prewarm(request: PrewarmRequest, http_request: Request):
     Pre-síntesis pública para el kit de partners. Sin sesión; Turnstile +
     límites por IP/globales. Solo escribe en article_extractions; no devuelve
     el payload de extracción.
+
+    Si la URL ya está en caché y sigue vigente (fresh/stale), no destila:
+    responde `status: cached` y genera el botón con lo indexado. Miss o
+    expired sí precalientan (Claude). Stale revalida en fondo.
     """
     url = (request.url or "").strip()
     if not url.startswith(("http://", "https://")) or len(url) > 2048:

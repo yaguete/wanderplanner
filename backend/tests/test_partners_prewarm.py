@@ -26,11 +26,21 @@ def _itinerary_payload() -> dict:
                 "accommodations": [{"name": "Casa"}],
                 "activities": [{"name": "Mirador"}, {"name": "Paseo"}],
                 "restaurants": [],
+                "transport": [{"type": "bus", "from": "Granada", "to": "Órgiva"}],
             }
         ],
         "general_tips": None,
-        "basics": [],
+        "basics": [
+            {
+                "category": "other",
+                "name": "10% en el hotel",
+                "vendor": "Booking",
+                "notes": None,
+                "affiliate_url": "https://booking.example/x",
+            }
+        ],
         "og_image": "https://cdn.example/og.jpg",
+        "og_title": "La Alpujarra en 7 días",
         "article_html": "<p>hola</p>",
     }
 
@@ -82,14 +92,41 @@ async def test_prewarm_fresh_hit_cached_without_claude():
                         main_mod._stream_prewarm(entry.url, entry=entry)
                     )
     result = _parse_result(body)
+    assert "event: progress" not in body
     assert result["status"] == "cached"
     assert result["destination"] == "La Alpujarra granadina, Granada, Spain"
     assert result["total_days"] == 7
+    assert result["og_title"] == "La Alpujarra en 7 días"
+    assert result["counts"] == {
+        "accommodations": 1,
+        "activities": 2,
+        "transport": 1,
+        "basics": 1,
+    }
     assert "days" not in result  # nunca el payload completo
     fetch.assert_not_called()
     claude.assert_not_called()
     reval.assert_not_called()
     record.assert_not_awaited()
+
+
+def test_item_kind_counts_includes_sub_activities():
+    payload = {
+        "days": [
+            {
+                "accommodations": [{}],
+                "activities": [{"name": "A", "sub_activities": [{}, {}]}],
+                "transport": [],
+            }
+        ],
+        "basics": [{}, {}],
+    }
+    assert main_mod._item_kind_counts(payload) == {
+        "accommodations": 1,
+        "activities": 3,
+        "transport": 0,
+        "basics": 2,
+    }
 
 
 @pytest.mark.asyncio

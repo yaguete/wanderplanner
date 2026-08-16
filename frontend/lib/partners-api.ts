@@ -5,12 +5,21 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export type PrewarmProgressStage = "fetching" | "extracting"
 
+export type PrewarmCounts = {
+  accommodations: number
+  activities: number
+  transport: number
+  basics: number
+}
+
 export type PrewarmResult = {
   status: "cached" | "extracted"
   destination: string | null
   total_days: number | null
   items: number
+  counts: PrewarmCounts
   og_image: string | null
+  og_title: string | null
 }
 
 export class PrewarmError extends Error {
@@ -24,8 +33,26 @@ export class PrewarmError extends Error {
 }
 
 function progressLabel(stage: PrewarmProgressStage): string {
-  if (stage === "fetching") return "Leyendo el artículo…"
+  if (stage === "fetching") return "El artículo no está al día. Leyéndolo…"
   return "Sintetizando la ruta…"
+}
+
+function asCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : 0
+}
+
+function parsePrewarmCounts(raw: unknown): PrewarmCounts {
+  const obj = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {}
+  return {
+    accommodations: asCount(obj.accommodations),
+    activities: asCount(obj.activities),
+    transport: asCount(obj.transport),
+    basics: asCount(obj.basics),
+  }
 }
 
 /**
@@ -126,8 +153,10 @@ export async function prewarmSource(
           typeof raw.total_days === "number" && Number.isFinite(raw.total_days)
             ? raw.total_days
             : null,
-        items: typeof raw.items === "number" ? raw.items : 0,
+        items: asCount(raw.items),
+        counts: parsePrewarmCounts(raw.counts),
         og_image: typeof raw.og_image === "string" ? raw.og_image : null,
+        og_title: typeof raw.og_title === "string" ? raw.og_title.trim() || null : null,
       }
     }
   }
