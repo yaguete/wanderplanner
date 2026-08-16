@@ -93,7 +93,7 @@ export function ValueProps() {
                   Nos basamos en tus referencias favoritas, experiencias reales y fuentes oficiales.
                 </Capability>
                 <Capability icon={BadgeCheck}>
-                  Cada sitio lleva la firma de quien lo recomendó, y su crónica siempre a la vista.
+                  Cada sitio lleva la firma de quien lo recomendó, con su crónica siempre a la vista.
                 </Capability>
                 <Capability icon={Link2}>
                   Los enlaces del blog llegan intactos: sus descuentos siguen funcionando.
@@ -144,7 +144,7 @@ export function ValueProps() {
               <ValueCopy
                 title="Del visado"
                 titleMuted="al abrigo."
-                body="El asistente consulta las fichas país del Ministerio de Asuntos Exteriores para visados, sanidad y seguridad, y te dice de dónde sale cada dato y de cuándo es. Lo práctico —si en Sa Pa en marzo hace frío— lo busca y también lo cita."
+                body="El asistente consulta información oficial para visados, sanidad y seguridad. Lo práctico —qué tienes que echarte a la mochila— lo busca y también lo cita."
               />
               <CapabilityGrid className="mt-8 border-t-0 pt-0 sm:pt-0">
                 <Capability icon={Landmark}>

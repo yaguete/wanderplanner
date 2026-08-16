@@ -2,7 +2,7 @@ import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 import { cn } from "@/lib/utils"
 
-/** Marco común de /login, /signup y /partners. */
+/** Marco común de /login y /signup. */
 export function AuthShell({
   title,
   subtitle,
@@ -14,7 +14,7 @@ export function AuthShell({
   subtitle?: string
   children: React.ReactNode
   footer?: React.ReactNode
-  /** `2xl` para páginas con más contenido (p. ej. /partners). */
+  /** `2xl` por si una cuenta necesita más ancho. */
   width?: "md" | "2xl"
 }) {
   return (

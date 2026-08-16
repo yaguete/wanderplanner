@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { BadgeCheck, Link2, Server, Undo2, type LucideIcon } from "lucide-react"
 import { BrandMark } from "@/components/brand-mark"
+import { PartnerButtonPreview } from "@/components/partners/partner-button-preview"
 import { Button } from "@/components/ui/button"
 
 function Guarantee({
@@ -36,11 +37,8 @@ function BlogPostMockup() {
           <div className="h-2 w-11/12 rounded-full bg-neutral-200" />
           <div className="h-2 w-4/5 rounded-full bg-neutral-200" />
         </div>
-        <div className="mt-5 inline-flex items-center gap-2.5 rounded-lg bg-[#2563eb] px-4 py-3 text-[14px] font-medium leading-none text-white">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-900">
-            <BrandMark variant="negative" className="h-4 w-auto" />
-          </span>
-          Planifica esta ruta con WanderPlanner
+        <div className="mt-5">
+          <PartnerButtonPreview mode="mock" />
         </div>
         <div className="mt-5 flex flex-col gap-2">
           <div className="h-2 w-3/4 rounded-full bg-neutral-200" />

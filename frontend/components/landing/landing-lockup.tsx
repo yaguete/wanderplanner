@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react"
 import { BrandLockup } from "@/components/brand-mark"
+import type { LandingTone } from "./landing-tone"
 
 const ARMED_CLASS = "landing-lockup-armed"
 const SCROLLED_CLASS = "landing-header-scrolled"
@@ -16,7 +17,13 @@ function smoothstep(t: number) {
 }
 
 /** Logo único: grande sobre el h1 → pequeño en el header. Incluye Firefox. */
-export function LandingLockup() {
+export function LandingLockup({
+  tone = "light",
+  href = "/",
+}: {
+  tone?: LandingTone
+  href?: string
+}) {
   const elRef = useRef<HTMLAnchorElement>(null)
 
   useLayoutEffect(() => {
@@ -108,11 +115,11 @@ export function LandingLockup() {
   return (
     <a
       ref={elRef}
-      href="/"
+      href={href}
       className="landing-flying-lockup fixed left-0 top-0 z-50 origin-top-left will-change-transform"
       aria-label="WanderPlanner — inicio"
     >
-      <BrandLockup />
+      <BrandLockup variant={tone === "negative" ? "negative" : "color"} />
     </a>
   )
 }

@@ -9,7 +9,7 @@ const ITEM_GLOW =
   "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
   "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)"
 
-function MockupWell({
+export function MockupWell({
   children,
   className,
 }: {

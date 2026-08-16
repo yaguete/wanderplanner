@@ -24,6 +24,7 @@ type TurnstileApi = {
       "error-callback"?: () => void
       "expired-callback"?: () => void
       appearance?: TurnstileAppearance
+      theme?: "auto" | "light" | "dark"
     },
   ) => string
   remove: (id: string) => void
@@ -61,12 +62,14 @@ export function Turnstile({
   onToken,
   resetKey = 0,
   appearance = "always",
+  theme = "auto",
 }: {
   onToken: (token: string | null) => void
   /** Cambia este valor para re-montar el widget (token de un solo uso). */
   resetKey?: number | string
   /** `interaction-only` no pinta el widget salvo que Cloudflare lo pida. */
   appearance?: TurnstileAppearance
+  theme?: "auto" | "light" | "dark"
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const onTokenRef = useRef(onToken)
@@ -84,6 +87,7 @@ export function Turnstile({
         widgetId = window.turnstile.render(containerRef.current, {
           sitekey: SITE_KEY,
           appearance,
+          theme,
           callback: (token) => onTokenRef.current(token),
           "error-callback": () => onTokenRef.current(null),
           "expired-callback": () => onTokenRef.current(null),
@@ -95,7 +99,7 @@ export function Turnstile({
       cancelled = true
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId)
     }
-  }, [resetKey, appearance])
+  }, [resetKey, appearance, theme])
 
   if (!SITE_KEY) return null
   return <div ref={containerRef} />

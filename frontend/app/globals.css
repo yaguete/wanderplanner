@@ -444,8 +444,8 @@ html.landing-lockup-armed .landing-flying-lockup {
   transition: opacity 0.28s ease;
   background: linear-gradient(
     to bottom,
-    hsl(var(--canvas) / 0.88) 0%,
-    hsl(var(--canvas) / 0.55) 48%,
+    hsl(var(--landing-veil, var(--canvas)) / 0.88) 0%,
+    hsl(var(--landing-veil, var(--canvas)) / 0.55) 48%,
     transparent 100%
   );
   backdrop-filter: blur(18px);
@@ -536,4 +536,20 @@ html.landing-header-scrolled .landing-header::before {
 .landing-start-go:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
+}
+
+/* ===== Landing en negativo (/partners) ===== */
+.landing-negative {
+  --landing-veil: 20 8% 11%;
+  --ring: 0 0% 100%;
+  background: hsl(20 8% 11%);
+  color: #fff;
+}
+body:has(.landing-negative) {
+  background: hsl(20 8% 11%);
+}
+.landing-negative .landing-grid-texture {
+  background-image:
+    linear-gradient(to right, hsl(0 0% 100% / 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(0 0% 100% / 0.055) 1px, transparent 1px);
 }

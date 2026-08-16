@@ -47,15 +47,22 @@ export function BrandMark({
   )
 }
 
-/** Wordmark en `BRAND_INK`. Sin el isotipo: el header expandido lo usa solo. */
-export function BrandWordmark({ className }: { className?: string }) {
+/** Wordmark en `BRAND_INK` (claro) o blanco (`negative`). Sin el isotipo: el header expandido lo usa solo. */
+export function BrandWordmark({
+  className,
+  variant = "color",
+}: {
+  className?: string
+  variant?: BrandMarkVariant
+}) {
   return (
     <span
       className={cn(
         "truncate text-xl font-normal leading-none tracking-tight",
+        variant === "negative" && "text-white",
         className,
       )}
-      style={{ color: BRAND_INK }}
+      style={variant === "negative" ? undefined : { color: BRAND_INK }}
     >
       <span className="font-bold">Wander</span>
       <span className="font-light">Planner</span>
@@ -63,15 +70,21 @@ export function BrandWordmark({ className }: { className?: string }) {
   )
 }
 
-/** Ardilla + wordmark: el nombre apoya en la base del logo, en `BRAND_INK`. */
-export function BrandLockup({ className }: { className?: string }) {
+/** Ardilla + wordmark: el nombre apoya en la base del logo. */
+export function BrandLockup({
+  className,
+  variant = "color",
+}: {
+  className?: string
+  variant?: BrandMarkVariant
+}) {
   return (
     <span className={cn("flex min-w-0 items-end gap-2", className)}>
       {/* `data-brand-mark`: el lockup volador de la landing colapsa este hueco al atracar. */}
       <span className="inline-flex shrink-0 overflow-hidden" data-brand-mark>
-        <BrandMark />
+        <BrandMark variant={variant} />
       </span>
-      <BrandWordmark className="-mb-[0.12em]" />
+      <BrandWordmark className="-mb-[0.12em]" variant={variant} />
     </span>
   )
 }
