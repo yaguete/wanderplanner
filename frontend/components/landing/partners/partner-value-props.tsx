@@ -105,7 +105,7 @@ export function PartnerValueProps() {
                   El href del post llega intacto, sin reescritura.
                 </Capability>
                 <Capability icon={BadgeCheck}>
-                  No sustituimos tu afiliación por la nuestra.
+                  No sustituimos tu afiliación por ninguna otra.
                 </Capability>
               </CapabilityGrid>
             </div>
@@ -128,7 +128,7 @@ export function PartnerValueProps() {
                   target=_blank: tu tráfico no se fuga.
                 </Capability>
                 <Capability icon={Server}>
-                  Mil lectores = una petición a tu servidor.
+                  Refrescamos la ruta cuando la actualizas, no en cada clic.
                 </Capability>
               </CapabilityGrid>
             </div>

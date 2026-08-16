@@ -8,19 +8,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { isTurnstileEnabled, Turnstile } from "@/components/auth/turnstile"
-import {
-  PARTNER_BUTTON_LABEL,
-  PartnerButtonPreview,
-} from "@/components/partners/partner-button-preview"
+import { PartnerButtonPreview } from "@/components/partners/partner-button-preview"
 import {
   buildEmbedSnippet,
   buildStartUrl,
   cleanSourceUrl,
   normalizeRefSlug,
+  type PartnerButtonVariant,
 } from "@/lib/partner-button"
 import { authorFromUrl } from "@/lib/itinerary-utils"
 import { MAX_AUTO_DAYS, isReservedRefSlug, parseDaysParam } from "@/lib/partner-trip"
 import { prewarmSource, type PrewarmCounts, type PrewarmResult } from "@/lib/partners-api"
+import { SITE_URL } from "@/lib/site"
 import { cn } from "@/lib/utils"
 
 const fieldClass =
@@ -49,8 +48,9 @@ function prewarmTitle(result: PrewarmResult): string | null {
 function appOrigin(): string {
   const configured = (process.env.NEXT_PUBLIC_APP_ORIGIN || "").trim().replace(/\/$/, "")
   if (configured) return configured
-  if (typeof window !== "undefined") return window.location.origin
-  return "https://wanderplanner.ai"
+  // El snippet se pega en blogs ajenos: siempre el dominio canónico, nunca
+  // localhost ni un preview de Vercel.
+  return SITE_URL
 }
 
 async function copyText(text: string, success: string) {
@@ -64,7 +64,6 @@ async function copyText(text: string, success: string) {
 
 type Generated = {
   startUrl: string
-  snippet: string
   prewarm: PrewarmResult | null
   skippedPrewarm: boolean
 }
@@ -82,6 +81,7 @@ export function PartnerButtonBuilder() {
   const [detectedDays, setDetectedDays] = useState<number | null>(null)
   const [generated, setGenerated] = useState<Generated | null>(null)
   const [allowSkip, setAllowSkip] = useState(false)
+  const [buttonVariant, setButtonVariant] = useState<PartnerButtonVariant>("color")
 
   const captchaEnabled = isTurnstileEnabled()
   const cleanedUrl = useMemo(() => cleanSourceUrl(sourceUrl), [sourceUrl])
@@ -111,7 +111,6 @@ export function PartnerButtonBuilder() {
     })
     return {
       startUrl,
-      snippet: buildEmbedSnippet({ href: startUrl, label: PARTNER_BUTTON_LABEL }),
       prewarm,
       skippedPrewarm: skipped,
     }
@@ -177,6 +176,9 @@ export function PartnerButtonBuilder() {
   }
 
   const summaryTitle = generated?.prewarm ? prewarmTitle(generated.prewarm) : null
+  const snippet = generated
+    ? buildEmbedSnippet({ href: generated.startUrl, variant: buttonVariant })
+    : ""
 
   return (
     <div className="flex min-h-[16rem] flex-col justify-center sm:min-h-[14rem]">
@@ -227,32 +229,63 @@ export function PartnerButtonBuilder() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <Label htmlFor="partner-snippet" className="text-white">
                 Snippet HTML (WordPress)
               </Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 text-white/70 hover:bg-white/10 hover:text-white"
-                onClick={() => void copyText(generated.snippet, "Snippet copiado")}
-              >
-                <Copy className="size-3.5" />
-                Copiar
-              </Button>
+              <div className="flex items-center gap-2">
+                <div
+                  role="tablist"
+                  aria-label="Apariencia del botón"
+                  className="flex rounded-md border border-white/15 p-0.5"
+                >
+                  {(
+                    [
+                      ["color", "Color"],
+                      ["negative", "Negativo"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={buttonVariant === id}
+                      className={cn(
+                        "h-7 rounded px-2.5 text-xs font-medium",
+                        buttonVariant === id
+                          ? "bg-white text-[hsl(20_8%_14%)]"
+                          : "text-white/70 hover:text-white",
+                      )}
+                      onClick={() => setButtonVariant(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+                  onClick={() => void copyText(snippet, "Snippet copiado")}
+                >
+                  <Copy className="size-3.5" />
+                  Copiar
+                </Button>
+              </div>
             </div>
             <pre
+              key={buttonVariant}
               id="partner-snippet"
               className="max-h-40 overflow-auto rounded-md border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-white/80"
             >
-              {generated.snippet}
+              {snippet}
             </pre>
           </div>
 
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium text-white">Vista previa</p>
-            <PartnerButtonPreview href={generated.startUrl} />
+            <PartnerButtonPreview href={generated.startUrl} variant={buttonVariant} />
           </div>
 
           <p className="flex items-start gap-2 text-xs text-white/60">

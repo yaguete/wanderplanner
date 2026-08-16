@@ -139,7 +139,7 @@ Configurar en Vercel → Project → Settings → Environment Variables. Todas s
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon` `public` | Pública; RLS protege datos. **Nunca** la `service_role` |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | [account.mapbox.com](https://account.mapbox.com/) → Access tokens | Token `pk.…` **restringido por URL** a `wanderplanner.ai` (y previews si hace falta) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile → site key | Clave pública del widget, visible en el navegador. Se usa en `/start`, `/login`, `/signup`, `/partners` y los chips del hero; autoriza sus hostnames en Cloudflare. En Supabase Auth **y** en Fly (`TURNSTILE_SECRET_KEY`) se configura la **secret key asociada**, nunca esta site key |
-| `NEXT_PUBLIC_APP_ORIGIN` | Dominio canónico del front | Opcional. Prod: `https://wanderplanner.ai`. Si falta, `/partners` usa `window.location.origin` (en Preview de Vercel incrustaría ese dominio efímero en el snippet del blogger) |
+| `NEXT_PUBLIC_APP_ORIGIN` | Dominio canónico del front | Opcional. Override de `SITE_URL` (`https://wanderplanner.ai`) para el snippet de `/partners`. Si falta, el kit usa `SITE_URL`; **nunca** `window.location.origin` (local y Preview incrustarían un host que el lector no puede abrir) |
 | `NEXT_PUBLIC_SOURCE_SUGGEST_ENABLED` | Kill switch del chip «Busca un destino» | Default `true`. `false` oculta la pestaña 2 |
 | `NEXT_PUBLIC_SOURCE_SUGGEST_WEB_ENABLED` | Widget Turnstile en la pestaña destino | Default `false`. Solo aplica si el API devolviera `need_captcha` (el escalón web ya no lo pide) |
 

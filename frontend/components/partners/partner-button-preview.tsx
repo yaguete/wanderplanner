@@ -1,15 +1,25 @@
 import { BrandMark } from "@/components/brand-mark"
-import { partnerButtonPreviewStyles } from "@/lib/partner-button"
+import {
+  PARTNER_BUTTON_ARIA_LABEL,
+  PARTNER_BUTTON_KICKER,
+  partnerButtonPreviewStyles,
+  type PartnerButtonVariant,
+} from "@/lib/partner-button"
 
-export const PARTNER_BUTTON_LABEL = "Planifica esta ruta con WanderPlanner"
-
-function ButtonInner({ label }: { label: string }) {
+function ButtonInner({ variant }: { variant: PartnerButtonVariant }) {
+  const styles = partnerButtonPreviewStyles(variant)
   return (
     <>
-      <span style={partnerButtonPreviewStyles.iconBox}>
-        <BrandMark variant="negative" className="h-[22px]" />
+      <span style={{ display: "inline-flex", flexShrink: 0, lineHeight: 0 }}>
+        <BrandMark variant="mono" className="h-[39px] w-auto" />
       </span>
-      <span>{label}</span>
+      <span style={styles.copy}>
+        <span style={styles.kicker}>{PARTNER_BUTTON_KICKER}</span>
+        <span style={styles.wordmark}>
+          <span className="font-bold">Wander</span>
+          <span className="font-light">Planner</span>
+        </span>
+      </span>
     </>
   )
 }
@@ -17,21 +27,25 @@ function ButtonInner({ label }: { label: string }) {
 /** Vista previa del snippet: `<a>` real o silueta para mocks (`aria-hidden`). */
 export function PartnerButtonPreview({
   href,
-  label = PARTNER_BUTTON_LABEL,
+  variant = "color",
   mode = "link",
 }: {
   href?: string
-  label?: string
+  variant?: PartnerButtonVariant
   mode?: "link" | "mock"
 }) {
+  const styles = partnerButtonPreviewStyles(variant)
+
+  const className = variant === "color" ? "hover:!bg-white" : undefined
+
   if (mode === "mock" || !href) {
     return (
       <span
         aria-hidden
-        className="pointer-events-none select-none"
-        style={partnerButtonPreviewStyles.anchor}
+        className={`pointer-events-none select-none ${className ?? ""}`.trim()}
+        style={styles.anchor}
       >
-        <ButtonInner label={label} />
+        <ButtonInner variant={variant} />
       </span>
     )
   }
@@ -41,9 +55,11 @@ export function PartnerButtonPreview({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      style={partnerButtonPreviewStyles.anchor}
+      aria-label={PARTNER_BUTTON_ARIA_LABEL}
+      className={className}
+      style={styles.anchor}
     >
-      <ButtonInner label={label} />
+      <ButtonInner variant={variant} />
     </a>
   )
 }

@@ -3,8 +3,57 @@
  * Los tracking params deben coincidir con backend/article_fetch.py (_TRACKING_PARAMS).
  */
 
-import { brandSvgMarkup } from "@/components/brand-mark"
+import { BRAND_COLOR, brandSvgMarkup } from "@/components/brand-mark"
 import { parseDaysParam } from "@/lib/partner-trip"
+
+export type PartnerButtonVariant = "color" | "negative"
+
+/** Kicker visual del botón. El nombre accesible es `PARTNER_BUTTON_ARIA_LABEL`. */
+export const PARTNER_BUTTON_KICKER = "Planifica este viaje en"
+export const PARTNER_BUTTON_ARIA_LABEL = "Planifica este viaje en WanderPlanner"
+
+const COLOR_BG = "#E8E5E4"
+const COLOR_HOVER_BG = "#ffffff"
+const NEGATIVE_BG = "#000000"
+const NEGATIVE_PAINT = "#ffffff"
+
+const COLOR_HOVER_CLASS = "wp-wanderplanner-btn"
+
+type VariantPaint = {
+  background: string
+  color: string
+  border: string
+}
+
+const VARIANT_PAINT: Record<PartnerButtonVariant, VariantPaint> = {
+  color: {
+    background: COLOR_BG,
+    color: BRAND_COLOR,
+    border: `1px solid ${BRAND_COLOR}`,
+  },
+  negative: {
+    background: NEGATIVE_BG,
+    color: NEGATIVE_PAINT,
+    border: `1px solid ${NEGATIVE_PAINT}`,
+  },
+}
+
+const ANCHOR_LAYOUT =
+  "display:inline-flex;align-items:center;gap:14px;padding:12px 16px;" +
+  "width:fit-content;max-width:100%;text-decoration:none;border-radius:12px;" +
+  "font-family:Inter,system-ui,-apple-system,sans-serif;" +
+  "line-height:1.15;box-sizing:border-box;"
+
+function anchorCss(variant: PartnerButtonVariant): string {
+  const paint = VARIANT_PAINT[variant]
+  const hover =
+    variant === "color" ? "transition:background-color .15s ease;" : ""
+  return (
+    ANCHOR_LAYOUT +
+    hover +
+    `background:${paint.background};color:${paint.color};border:${paint.border};`
+  )
+}
 
 /** Mantener en espejo con backend/article_fetch.py (_TRACKING_PARAMS). */
 export const TRACKING_PARAMS = new Set([
@@ -78,18 +127,10 @@ export function buildStartUrl({
   return `${base}/start?${params.toString()}`
 }
 
-const BUTTON_STYLE =
-  "display:inline-flex;align-items:center;gap:10px;padding:12px 18px;" +
-  "background:#2563eb;color:#ffffff;text-decoration:none;border-radius:8px;" +
-  "font-family:Inter,system-ui,-apple-system,sans-serif;font-size:15px;font-weight:500;" +
-  "line-height:1.2;border:0;box-sizing:border-box;"
-
-const ICON_BOX_STYLE =
-  "display:inline-flex;align-items:center;justify-content:center;" +
-  "width:28px;height:28px;border-radius:6px;background:#171717;color:#ffffff;flex-shrink:0;"
-
-/** Ardilla en negativo; WordPress puede filtrar el SVG — el <a> sigue viéndose bien sin él. */
-const BRAND_SVG = brandSvgMarkup("#ffffff", 16, 22)
+/** Ardilla del snippet; WordPress puede filtrar el SVG — el <a> sigue viéndose bien sin él. */
+function brandSvg(variant: PartnerButtonVariant): string {
+  return brandSvgMarkup(VARIANT_PAINT[variant].color, 28, 39)
+}
 
 /**
  * Snippet HTML autocontenido para pegar en un bloque HTML de WordPress.
@@ -97,51 +138,68 @@ const BRAND_SVG = brandSvgMarkup("#ffffff", 16, 22)
  */
 export function buildEmbedSnippet({
   href,
-  label = "Planifica esta ruta con WanderPlanner",
+  variant = "color",
 }: {
   href: string
-  label?: string
+  variant?: PartnerButtonVariant
 }): string {
   const safeHref = href.replace(/"/g, "&quot;")
-  const safeLabel = label
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-  return (
-    `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" style="${BUTTON_STYLE}">` +
-    `<span style="${ICON_BOX_STYLE}">${BRAND_SVG}</span>` +
-    `<span>${safeLabel}</span>` +
-    `</a>`
-  )
+  const paint = VARIANT_PAINT[variant]
+  const hoverRule =
+    variant === "color"
+      ? `<style>.${COLOR_HOVER_CLASS}:hover{background:${COLOR_HOVER_BG} !important}</style>\n`
+      : ""
+  const classAttr = variant === "color" ? ` class="${COLOR_HOVER_CLASS}"` : ""
+  return [
+    `${hoverRule}<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${classAttr}`,
+    `  aria-label="${PARTNER_BUTTON_ARIA_LABEL}"`,
+    `  style="${anchorCss(variant)}">`,
+    `  <span style="display:inline-flex;flex-shrink:0;line-height:0">${brandSvg(variant)}</span>`,
+    `  <span style="display:flex;flex-direction:column;gap:2px;color:${paint.color}">`,
+    `    <span style="font-size:13px;font-weight:400">${PARTNER_BUTTON_KICKER}</span>`,
+    `    <span style="font-size:18px;letter-spacing:-0.02em">`,
+    `      <span style="font-weight:700">Wander</span><span style="font-weight:300">Planner</span>`,
+    `    </span>`,
+    `  </span>`,
+    `</a>`,
+  ].join("\n")
 }
 
 /** Estilos de la vista previa JSX (espejo del snippet, sin dangerouslySetInnerHTML). */
-export const partnerButtonPreviewStyles = {
-  anchor: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "10px",
-    padding: "12px 18px",
-    background: "#2563eb",
-    color: "#ffffff",
-    textDecoration: "none",
-    borderRadius: "8px",
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-    fontSize: "15px",
-    fontWeight: 500,
-    lineHeight: 1.2,
-    border: 0,
-    boxSizing: "border-box" as const,
-  },
-  iconBox: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    background: "#171717",
-    color: "#ffffff",
-    flexShrink: 0,
-  },
+export function partnerButtonPreviewStyles(variant: PartnerButtonVariant = "color") {
+  const paint = VARIANT_PAINT[variant]
+  return {
+    anchor: {
+      display: "inline-flex",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: "14px",
+      padding: "12px 16px",
+      width: "fit-content",
+      maxWidth: "100%",
+      background: paint.background,
+      color: paint.color,
+      textDecoration: "none",
+      borderRadius: "12px",
+      fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+      lineHeight: 1.15,
+      border: paint.border,
+      boxSizing: "border-box" as const,
+      transition: variant === "color" ? "background-color .15s ease" : undefined,
+    },
+    copy: {
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "2px",
+      color: paint.color,
+    },
+    kicker: {
+      fontSize: "13px",
+      fontWeight: 400,
+    },
+    wordmark: {
+      fontSize: "18px",
+      letterSpacing: "-0.02em",
+    },
+  }
 }

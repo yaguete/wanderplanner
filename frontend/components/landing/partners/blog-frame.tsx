@@ -50,7 +50,7 @@ export function BlogFrame() {
             </p>
             <LandingStreetPhoto className="mt-4 h-28 w-full rounded-lg ring-1 ring-white/10 sm:h-32" />
             <div className="mt-5">
-              <PartnerButtonPreview mode="mock" />
+              <PartnerButtonPreview mode="mock" variant="negative" />
             </div>
             <div className="mt-6 flex flex-col gap-2 [mask-image:linear-gradient(to_bottom,#000_10%,transparent_100%)]">
               <div className="h-2 w-full rounded-full bg-white/10" />

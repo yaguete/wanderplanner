@@ -26,7 +26,7 @@ function Guarantee({
 
 /**
  * Réplica del snippet real del kit (`partner-button.ts`) dentro de un post
- * ficticio: el azul es el del botón que pega el blogger, no cromo nuestro.
+ * ficticio. En tarjeta clara, la variante color (marrón).
  */
 function BlogPostMockup() {
   return (

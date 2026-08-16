@@ -37,11 +37,11 @@ Tipos de ítem: chip neutro + punto de color (`ITEM_COLORS.dot`).
 
 ### Marca
 
-Isotipo: ardilla (cola llena + cuerpo a trazo). Color de marca `#9F8173` (`BRAND_COLOR` en [`frontend/components/brand-mark.tsx`](frontend/components/brand-mark.tsx)). **No es `--primary`**: el primary de UI sigue siendo tinta `20 8% 14%`; el marrón no se convierte en token de cromo (ni terracota, ni blue-600).
+Isotipo: ardilla (cola llena + cuerpo a trazo). Tinta del lockup `#86675B` (`BRAND_INK` en [`frontend/components/brand-mark.tsx`](frontend/components/brand-mark.tsx)); acento más claro `#9F8173` (`BRAND_COLOR`, velos / OG / favicon). **No es `--primary`**: el primary de UI sigue siendo tinta `20 8% 14%`; el marrón no se convierte en token de cromo (ni terracota, ni blue-600).
 
-- `BrandMark` — isotipo. Variantes: `color` (cromo claro), `mono` (`currentColor`), `negative` (blanco sobre fondo oscuro).
-- `BrandLockup` — isotipo + wordmark «WanderPlanner»; el nombre apoya en la base del logo.
-- **Dos marrones, por contraste, no por capricho.** El isotipo usa `BRAND_COLOR` `#9F8173`: es un elemento gráfico y le basta 3:1. El **wordmark es texto** y necesita 4.5:1, que `#9F8173` no da (3.6:1 sobre blanco, 3.3:1 sobre canvas), así que va en `BRAND_INK` `#86675B` — mismo tono (H 17°, S 19%), 10 puntos menos de luz, 5.1:1 y 4.7:1. No unifiques los dos valores «por limpieza»: hacerlo devuelve un fallo AA a todas las cabeceras de la app.
+- `BrandMark` — isotipo. Variantes: `color` (`BRAND_INK`, cromo claro), `mono` (`currentColor`), `negative` (blanco sobre fondo oscuro).
+- `BrandLockup` — isotipo + wordmark «WanderPlanner»; el nombre apoya en la base del logo. Ambos en `BRAND_INK` para un solo marrón.
+- **Dos marrones.** El lockup (isotipo + wordmark) usa `BRAND_INK` `#86675B`: el wordmark es texto y necesita 4.5:1, que `BRAND_COLOR` `#9F8173` no da (3.6:1 sobre blanco, 3.3:1 sobre canvas). Con tinta: 5.1:1 y 4.7:1. `BRAND_COLOR` queda para acentos (velos, OG, apple-icon). No uses `BRAND_COLOR` como color de texto en cabeceras.
 - `brandSvgMarkup()` — SVG autocontenido (snippet de partners, OG).
 
 Los paths del componente son el original. `public/brand/logo-{color,mono,negative}.svg` son copias manuales para prensa; no las referencia el código.
@@ -88,7 +88,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Arranque del hero: cápsula de chips (`LandingStart`) — **Pega un artículo** · **Busca un destino** · **Crea tu cuenta**. Chip activo = píldora negra sobre cápsula blanca. El panel bajo los chips tiene altura reservada; resultados y el registro compacto van en un popover que solapa el mockup, no en flujo.
 - Mockups del producto: reconstrucciones HTML, nunca capturas, y **no inventan UI que el producto no tiene** (citas en prosa, no chips de fuente). Viaje ficticio «Vietnam en 12 días» y atribución genérica `vía @unblogdeviajes` — nunca un partner real. Átomos en [`landing-mocks.tsx`](frontend/components/landing/landing-mocks.tsx).
 - Banda de blogueros sobre tinta `hsl(20 8% 11%)` (un paso más profunda que `--primary`), texto blanco.
-- **`/partners` es la landing en negativo** de esa tinta: misma arquitectura (hero + 3 zooms + CTA + footer), cromo `tone="negative"`. El hero genera el botón (`id="empezar"`); el marco es un post de blog con el CTA real. Los zooms son las garantías (atribución, afiliación, pestaña nueva + hosting), no el producto del viajero. Botón primario blanco; `--ring` blanco bajo `.landing-negative`. Los mockups de `/partners` van en **cromo negativo** (superficie `hsl(20 8% 14%)`, bordes `white/10`); los de `/` siguen claros. No redefinir `--canvas` en el wrapper. JS extra: el generador (`PartnerButtonBuilder`) y Turnstile `theme="dark"`.
+- **`/partners` es la landing en negativo** de esa tinta: misma arquitectura (hero + 3 zooms + CTA + footer), cromo `tone="negative"`. El hero genera el botón (`id="empezar"`); el marco es un post de blog con el CTA real. El snippet del kit tiene dos variantes (`color`: ardilla + wordmark en `#9F8173` sobre `#E8E5E4`; `negative`: blanco sobre negro con stroke blanco). Los zooms son las garantías (atribución, afiliación, pestaña nueva + hosting), no el producto del viajero. Botón primario blanco; `--ring` blanco bajo `.landing-negative`. Los mockups de `/partners` van en **cromo negativo** (superficie `hsl(20 8% 14%)`, bordes `white/10`); los de `/` siguen claros. No redefinir `--canvas` en el wrapper. JS extra: el generador (`PartnerButtonBuilder`) y Turnstile `theme="dark"`.
 - Reveal por scroll (`.landing-reveal`) solo con `animation-timeline: view()`; apagado si `prefers-reduced-motion`.
 - Cero JS de landing salvo el morph del logo (`LandingLockup`) y los chips de arranque (`LandingStart`). En `/partners`, además el generador del botón.
 

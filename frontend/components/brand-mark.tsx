@@ -1,12 +1,16 @@
 import { cn } from "@/lib/utils"
 
-/** Color de la marca (ardilla). Elemento gráfico: le basta 3:1. */
+/**
+ * Marrón de acento (velos, OG, favicon). Más claro que la tinta del lockup.
+ * No usar como color de texto: 3.6:1 sobre blanco / 3.3:1 sobre canvas.
+ */
 export const BRAND_COLOR = "#9F8173"
 
 /**
- * Marrón del wordmark. Mismo tono que `BRAND_COLOR` (H 17°, S 19%) pero 10
- * puntos más oscuro: como texto necesita 4.5:1 y `BRAND_COLOR` se queda en
- * 3.6:1 sobre blanco / 3.3:1 sobre canvas. Con este: 5.1:1 y 4.7:1.
+ * Tinta del lockup (isotipo + wordmark). Mismo tono que `BRAND_COLOR`
+ * (H 17°, S 19%), 10 puntos más oscuro: 5.1:1 sobre blanco / 4.7:1 sobre canvas.
+ * El wordmark es texto (necesita 4.5:1); la ardilla usa el mismo valor para
+ * que el lockup se lea de un solo marrón.
  */
 export const BRAND_INK = "#86675B"
 
@@ -21,7 +25,7 @@ export type BrandMarkVariant = "color" | "mono" | "negative"
 function paintFor(variant: BrandMarkVariant): string {
   if (variant === "negative") return "#fff"
   if (variant === "mono") return "currentColor"
-  return BRAND_COLOR
+  return BRAND_INK
 }
 
 /** Ardilla de WanderPlanner. `color` en cromo claro; `negative` sobre fondo oscuro. */
