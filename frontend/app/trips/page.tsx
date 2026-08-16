@@ -164,7 +164,8 @@ export default function TripsHomePage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
+    // Móvil: scrollea el documento (ver `trips-shell`), no este contenedor.
+    <div className="flex-1 md:overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
         <div className="mb-6 sm:mb-8">
           <div className="max-w-xl">

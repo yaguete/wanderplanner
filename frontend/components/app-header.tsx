@@ -49,6 +49,10 @@ export function AppHeader({ leading }: AppHeaderProps) {
     <header
       className={cn(
         "flex h-12 shrink-0 items-center gap-2.5 bg-canvas",
+        // Móvil: el documento scrollea bajo el header (ver `trips-shell`), así
+        // que se queda pegado arriba. El alto sale de `--wp-header-height`,
+        // que es de donde cuelgan las cabeceras de panel.
+        "max-md:sticky max-md:top-0 max-md:z-30",
         // Detalle del viaje: el panel es blanco; el listado de inicio comparte el canvas.
         isMobile && !onTripsHome && "bg-background",
         // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.

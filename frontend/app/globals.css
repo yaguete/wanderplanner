@@ -76,6 +76,14 @@
     --wp-nav-height: 3.5rem;
     --wp-nav-height-compact: 2.5rem;
     --wp-nav-clearance: calc(var(--wp-nav-gap) + var(--wp-nav-height) + 1rem);
+
+    /*
+     * Altura de `AppHeader`. En móvil el header va `sticky top-0` y las
+     * cabeceras de panel se pegan justo debajo, así que su alto tiene que
+     * salir de un único sitio: si se desincroniza, la cabecera del panel
+     * flota sobre el header o deja una franja de contenido asomando.
+     */
+    --wp-header-height: 3rem;
   }
 
   .dark {
@@ -124,6 +132,19 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/*
+ * `/trips` en móvil scrollea el documento (es la única forma de que el
+ * navegador colapse su barra de direcciones: solo reacciona al root scroller,
+ * nunca a uno anidado). El Asistente es la excepción — chat con composer
+ * anclado al teclado —, así que conserva shell fijo y congela el documento
+ * mientras está activo. Lo pone / lo quita `/trips/[tripId]`.
+ */
+html[data-wp-scroll-lock="1"],
+html[data-wp-scroll-lock="1"] body {
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

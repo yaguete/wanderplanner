@@ -141,7 +141,9 @@ export function TripMobileNav({
       aria-hidden={isHidden || undefined}
       className={cn(
         // Overlay: sin fondo propio; los toques fuera de la tarjeta atraviesan al contenido.
-        "pointer-events-none absolute inset-x-0 bottom-0 z-40",
+        // `fixed`, no `absolute`: el documento es el scroller en móvil, así que
+        // "abajo" tiene que ser el borde del viewport, no el final del documento.
+        "pointer-events-none fixed inset-x-0 bottom-0 z-40",
         "px-3 pt-2 pb-[var(--wp-nav-gap)]",
         "transition-[opacity,transform] duration-200 ease-out",
         isHidden && "translate-y-[120%] opacity-0",

@@ -807,7 +807,13 @@ export function AssistantPanelLayer({
         "relative flex min-h-0 flex-col overflow-hidden bg-background",
         isSection
           ? cn(
-              "@container absolute inset-0 z-10",
+              /*
+               * Sección móvil: chat con composer anclado al teclado, así que
+               * conserva shell fijo mientras el resto de `/trips` scrollea el
+               * documento. `/trips/[tripId]` congela el documento arriba
+               * mientras está activa, así que `fixed` cae justo bajo el header.
+               */
+              "@container fixed inset-x-0 bottom-0 top-[var(--wp-header-height)] z-10",
               open ? "visible" : "invisible pointer-events-none",
             )
           : "h-full w-full",

@@ -599,8 +599,28 @@ export default function ItineraryPanel({
   return (
     <div
       ref={panelRef}
-      className="relative flex h-full min-w-0 flex-col overflow-hidden bg-background"
+      className={cn(
+        "relative flex min-w-0 flex-col bg-background",
+        // Móvil: scrollea el documento (ver `trips-shell`), así que el panel
+        // crece con su contenido. Nunca `overflow-hidden` aquí: convertiría el
+        // panel en el scrollport de la cabecera sticky y su `top` la empujaría
+        // hacia abajo hasta tapar la barra Lista / Calendario / Mapa.
+        "max-md:min-h-[calc(100svh_-_var(--wp-header-height))]",
+        "md:h-full md:overflow-hidden",
+      )}
     >
+      {/*
+        Móvil: cabecera + barra de vista de Ruta forman UN bloque sticky bajo
+        el header del shell. La barra tiene que ir dentro: si scrollea con el
+        contenido, entrar en Calendario o Mapa —que no scrollean— deja al
+        usuario sin forma de volver a Lista.
+      */}
+      <div
+        className={cn(
+          "shrink-0",
+          "max-md:sticky max-md:top-[var(--wp-header-height)] max-md:z-20 max-md:bg-background",
+        )}
+      >
       <div
         className={cn(
           "relative shrink-0 border-b border-border/60 px-4",
@@ -700,7 +720,6 @@ export default function ItineraryPanel({
       </div>
 
       {isRoute ? (
-        <>
           <div className="flex shrink-0 items-center gap-3 px-4 py-2.5">
             <div className="panel-column flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <SegmentedControl
@@ -770,9 +789,13 @@ export default function ItineraryPanel({
             ) : null}
             </div>
           </div>
+      ) : null}
+      </div>
 
+      {isRoute ? (
+        <>
           {listMode === "list" ? (
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[var(--wp-nav-clearance)]">
+            <div className="px-4 pb-6 pt-2 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto">
               <div ref={daysFlipRef} className="panel-column">
               {trip.days.map((day, dayIndex) =>
                 inDayScope(focusDayNumber, dayIndex + 1) ? (
@@ -817,7 +840,9 @@ export default function ItineraryPanel({
               </div>
             </div>
           ) : listMode === "calendar" ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[var(--wp-nav-clearance)]">
+            // Móvil: alto propio, porque el panel ya no acota (el documento
+            // scrollea). El `flex-1` de dentro necesita una caja real.
+            <div className="flex flex-col overflow-hidden px-4 pb-4 pt-1 max-md:h-[70svh] max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1">
               <ItineraryCalendarView
                 key={trip.startDate ?? "nodates"}
                 startDate={trip.startDate}
@@ -828,7 +853,9 @@ export default function ItineraryPanel({
               />
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[var(--wp-nav-clearance)]">
+            // Ídem Calendario: el mapa necesita alto explícito o Mapbox
+            // se queda en el `min-h-[280px]` de su contenedor.
+            <div className="flex flex-col overflow-hidden px-4 pb-4 pt-1 max-md:h-[70svh] max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1">
               <ItineraryMapView
                 places={mapPlaces}
                 hubs={mapHubs}

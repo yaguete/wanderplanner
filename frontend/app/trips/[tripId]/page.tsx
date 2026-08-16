@@ -107,10 +107,38 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const [addSourceOpen, setAddSourceOpen] = useState(false)
   const [editTripOpen, setEditTripOpen] = useState(false)
 
+  /**
+   * Móvil: las tres secciones comparten un único scroller (el documento, para
+   * que el navegador pueda colapsar su barra de direcciones), así que la
+   * posición de cada una se guarda a mano al salir de ella.
+   */
+  const sectionScrollRef = useRef<Partial<Record<TripMobileSection, number>>>({})
+
   const selectMobileSection = useCallback((section: TripMobileSection) => {
-    setMobileSection(section)
+    setMobileSection((prev) => {
+      if (prev !== section) sectionScrollRef.current[prev] = window.scrollY
+      return section
+    })
     setMobileNavHidden(false)
   }, [])
+
+  /**
+   * Restaura el scroll al volver a una sección. El Asistente es la excepción:
+   * es un chat con composer anclado al teclado y conserva shell fijo, así que
+   * el documento se congela arriba mientras dura (y ahí el navegador no colapsa
+   * su barra — como cualquier chat en móvil).
+   */
+  useEffect(() => {
+    if (!isMobile) return
+    if (mobileSection === "assistant") {
+      window.scrollTo(0, 0)
+      document.documentElement.dataset.wpScrollLock = "1"
+      return () => {
+        delete document.documentElement.dataset.wpScrollLock
+      }
+    }
+    window.scrollTo(0, sectionScrollRef.current[mobileSection] ?? 0)
+  }, [isMobile, mobileSection])
 
   const onSourcesHeaderCollapsed = useCallback((collapsed: boolean) => {
     if (mobileSectionRef.current === "sources") setMobileNavHidden(collapsed)
@@ -184,6 +212,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     setEditTripOpen(false)
     setMobileSection("sources")
     setMobileNavHidden(false)
+    sectionScrollRef.current = {}
     if (!pendingSourceUrl) setAddSourceOpen(false)
   }
 
@@ -299,7 +328,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   if (!trip) return null
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col md:h-full md:min-h-0 md:overflow-hidden">
       <NewTripDialog
         open={editTripOpen}
         mode="edit"
@@ -333,17 +362,24 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
       {isMobile ? (
         <div
-          className="relative min-h-0 flex-1 overflow-hidden"
+          className="relative flex flex-1 flex-col"
           style={
             mobileNavHidden
               ? ({ "--wp-nav-height": "var(--wp-nav-height-compact)" } as CSSProperties)
               : undefined
           }
         >
+          {/*
+            Las secciones ya no se apilan en `absolute inset-0`: con el
+            documento como scroller la activa tiene que estar en flujo para
+            darle altura al documento. La inactiva va con `display:none` — el
+            componente sigue montado (React conserva su estado) y su posición
+            de scroll la guarda `sectionScrollRef`.
+          */}
           <div
             className={cn(
-              "@container absolute inset-0",
-              mobileSection === "sources" ? "visible z-[1]" : "invisible pointer-events-none",
+              "@container",
+              mobileSection === "sources" ? "flex flex-1 flex-col" : "hidden",
             )}
             aria-hidden={mobileSection !== "sources"}
           >
@@ -352,8 +388,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
           <div
             className={cn(
-              "@container absolute inset-0",
-              mobileSection === "plan" ? "visible z-[1]" : "invisible pointer-events-none",
+              "@container",
+              mobileSection === "plan" ? "flex flex-1 flex-col" : "hidden",
             )}
             aria-hidden={mobileSection !== "plan"}
           >

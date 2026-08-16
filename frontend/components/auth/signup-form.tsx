@@ -113,7 +113,7 @@ export function SignupForm({
             autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Yago"
+            placeholder="Alvin"
           />
         </div>
 

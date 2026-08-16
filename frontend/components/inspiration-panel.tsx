@@ -5,7 +5,7 @@
  * extracción por URL y consolidación en «Mi viaje» conservando procedencia y afiliado.
  */
 import { useState, useMemo, useEffect, useLayoutEffect, useCallback, useRef, type ReactNode, type KeyboardEvent } from "react"
-import { useVirtualizer } from "@tanstack/react-virtual"
+import { useVirtualizer, useWindowVirtualizer, type Virtualizer } from "@tanstack/react-virtual"
 import {
   Loader2,
   Plus,
@@ -622,8 +622,26 @@ export default function InspirationPanel({
   return (
     <div
       ref={panelRef}
-      className="flex h-full min-w-0 flex-col overflow-hidden bg-background"
+      className={cn(
+        "flex min-w-0 flex-col bg-background",
+        // Móvil: scrollea el documento, así que el panel crece con su contenido
+        // y solo garantiza fondo hasta el borde inferior de la pantalla.
+        "max-md:min-h-[calc(100svh_-_var(--wp-header-height))]",
+        "md:h-full md:overflow-hidden",
+      )}
     >
+      {/*
+        Móvil: todo el cromo del panel es UN bloque sticky bajo el header del
+        shell. Al replegarse el título + chips el bloque encoge y las pestañas
+        y el buscador suben solos, que es la razón de tenerlos aquí dentro:
+        encadenar `top` entre sticky de altura variable no se sostiene.
+      */}
+      <div
+        className={cn(
+          "shrink-0",
+          "max-md:sticky max-md:top-[var(--wp-header-height)] max-md:z-20 max-md:bg-background",
+        )}
+      >
       <div className={cn("shrink-0", collapsibleClass("max-h-40"))}>
         {isMobile ? (
           <div className="flex items-baseline gap-1.5 px-4 pb-1 pt-3.5">
@@ -762,8 +780,6 @@ export default function InspirationPanel({
         ) : null}
       </div>
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {currentSource || activePending ? (
             <div className="z-10 shrink-0 border-border bg-background px-4 pb-0 pt-1">
               <div className="panel-column">
@@ -843,13 +859,45 @@ export default function InspirationPanel({
             </div>
           ) : null}
 
+          {/*
+            Buscador unificado: vive en el cromo sticky, no dentro del cuerpo
+            de cada pestaña. La condición reproduce cuándo se veía antes —
+            con una extracción en curso el cuerpo no monta ninguna pestaña.
+          */}
+          {!activePending && (showCronicaSearch || showRutaSearch) ? (
+            <SourceSearchBar
+              query={sourceQuery}
+              onQueryChange={setSourceQuery}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Buscar actividad, lugar o restaurante"
+              ariaLabel={showCronicaSearch ? "Buscar en la crónica" : "Buscar en la ruta"}
+              matchNav={
+                showCronicaSearch && showMatchNav
+                  ? {
+                      index: matchCount === 0 ? 0 : Math.min(matchIndex, matchCount - 1),
+                      count: matchCount,
+                      onPrev: () => goToMatch(-1),
+                      onNext: () => goToMatch(1),
+                    }
+                  : null
+              }
+            />
+          ) : null}
+      </div>
+
+      <div className="relative flex min-w-0 flex-1 flex-col md:min-h-0 md:overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col md:min-h-0">
           <div
             className={cn(
-              "flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden",
-              // Crónica y Ruta: barra fija + scroll en el cuerpo
+              "flex min-w-0 flex-1 flex-col",
+              // Crónica y Ruta: barra fija + scroll en el cuerpo.
+              // En móvil no puede haber overflow declarado: con un eje en
+              // `hidden` el otro computa a `auto` y este contenedor se comería
+              // el scroll del documento (y con él, el colapso de la barra).
+              "md:min-h-0 md:overflow-x-hidden",
               sourceTab === "itinerary" || sourceTab === "source"
-                ? "overflow-hidden"
-                : "overflow-y-auto",
+                ? "md:overflow-hidden"
+                : "md:overflow-y-auto",
             )}
           >
             {activePending ? (
@@ -919,30 +967,8 @@ export default function InspirationPanel({
                 </div>
               </div>
             ) : sourceTab === "source" ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {showCronicaSearch ? (
-                  <SourceSearchBar
-                    query={sourceQuery}
-                    onQueryChange={setSourceQuery}
-                    onKeyDown={handleSearchKeyDown}
-                    placeholder="Buscar actividad, lugar o restaurante"
-                    ariaLabel="Buscar en la crónica"
-                    matchNav={
-                      showMatchNav
-                        ? {
-                            index:
-                              matchCount === 0
-                                ? 0
-                                : Math.min(matchIndex, matchCount - 1),
-                            count: matchCount,
-                            onPrev: () => goToMatch(-1),
-                            onNext: () => goToMatch(1),
-                          }
-                        : null
-                    }
-                  />
-                ) : null}
-                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)]">
+              <div className="flex flex-1 flex-col md:min-h-0 md:overflow-hidden">
+                <div className="px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto md:overflow-x-hidden">
                   <div className="panel-column">
                   {currentSource.articleHtml ? (
                     <div
@@ -1005,16 +1031,7 @@ export default function InspirationPanel({
                 )}
               />
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {showRutaSearch ? (
-                  <SourceSearchBar
-                    query={sourceQuery}
-                    onQueryChange={setSourceQuery}
-                    onKeyDown={handleSearchKeyDown}
-                    placeholder="Buscar actividad, lugar o restaurante"
-                    ariaLabel="Buscar en la ruta"
-                  />
-                ) : null}
+              <div className="flex flex-1 flex-col md:min-h-0 md:overflow-hidden">
                 {/* key: reset del virtualizador al cambiar fuente (la query ya vive arriba). */}
                 <SourceGroupedList
                   key={`${currentSource.id}-ruta`}
@@ -1283,7 +1300,7 @@ function SourceGroupedList({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex flex-1 flex-col md:min-h-0 md:overflow-hidden">
       {hasFilter && filteredGroups.length === 0 ? (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">
           Ningún ítem coincide con «{needle}».
@@ -1367,53 +1384,41 @@ function flattenSourceGroups(
   return rows
 }
 
-/** Lista virtualizada: solo monta las filas visibles (+ overscan). */
-function VirtualSourceRows({
-  groups,
-  renderItem,
-  resetKey,
-  onAddAllDay,
-}: {
+type VirtualSourceRowsProps = {
   groups: { day: number | null; items: SourceItem[] }[]
   renderItem: (item: SourceItem) => ReactNode
   resetKey: string
   onAddAllDay?: (day: number) => void
+}
+
+type SourceRow = ReturnType<typeof flattenSourceGroups>[number]
+
+function estimateRowSize(row: SourceRow | undefined, onAddAllDay?: (day: number) => void) {
+  if (!row || row.kind === "header") return onAddAllDay ? 40 : 28
+  // card ~80px + pb-2; más aire entre grupos (antes space-y-5)
+  return row.groupGap ? 108 : 92
+}
+
+/** Filas virtuales: idénticas contra la ventana o contra un contenedor propio. */
+function VirtualRowsBody({
+  rows,
+  virtualizer,
+  renderItem,
+  onAddAllDay,
+}: {
+  rows: SourceRow[]
+  virtualizer: Virtualizer<HTMLDivElement, Element> | Virtualizer<Window, Element>
+  renderItem: (item: SourceItem) => ReactNode
+  onAddAllDay?: (day: number) => void
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const rows = useMemo(() => flattenSourceGroups(groups), [groups])
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => {
-      const row = rows[index]
-      if (!row || row.kind === "header") return onAddAllDay ? 40 : 28
-      // card ~80px + pb-2; más aire entre grupos (antes space-y-5)
-      return row.groupGap ? 108 : 92
-    },
-    overscan: 10,
-  })
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 })
-    virtualizer.scrollToOffset(0)
-    // Solo al cambiar el filtro / resetKey
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetKey])
-
-  const virtualRows = virtualizer.getVirtualItems()
+  // Con scroller de ventana, `start` viene en coordenadas del documento:
+  // `scrollMargin` lo devuelve al origen de la lista (0 en el otro caso).
+  const scrollMargin = virtualizer.options.scrollMargin
 
   return (
-    <div
-      ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)]"
-    >
-      <div className="panel-column">
-      <div
-        className="relative w-full"
-        style={{ height: virtualizer.getTotalSize() }}
-      >
-        {virtualRows.map((vRow) => {
+    <div className="panel-column">
+      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map((vRow) => {
           const row = rows[vRow.index]
           if (!row) return null
           return (
@@ -1422,7 +1427,7 @@ function VirtualSourceRows({
               data-index={vRow.index}
               ref={virtualizer.measureElement}
               className="absolute left-0 top-0 w-full"
-              style={{ transform: `translateY(${vRow.start}px)` }}
+              style={{ transform: `translateY(${vRow.start - scrollMargin}px)` }}
             >
               {row.kind === "header" ? (
                 <DayGroupHeading day={row.day} onAddAll={onAddAllDay} compact />
@@ -1435,8 +1440,133 @@ function VirtualSourceRows({
           )
         })}
       </div>
-      </div>
     </div>
+  )
+}
+
+/** Desktop: el scroller es el propio contenedor de la lista. */
+function ElementVirtualSourceRows({
+  groups,
+  renderItem,
+  resetKey,
+  onAddAllDay,
+}: VirtualSourceRowsProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rows = useMemo(() => flattenSourceGroups(groups), [groups])
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => estimateRowSize(rows[index], onAddAllDay),
+    overscan: 10,
+  })
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+    virtualizer.scrollToOffset(0)
+    // Solo al cambiar el filtro / resetKey
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
+
+  return (
+    <div
+      ref={scrollRef}
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6"
+    >
+      <VirtualRowsBody
+        rows={rows}
+        virtualizer={virtualizer}
+        renderItem={renderItem}
+        onAddAllDay={onAddAllDay}
+      />
+    </div>
+  )
+}
+
+/** Móvil: el scroller es el documento (ver `trips-shell`), no la lista. */
+function WindowVirtualSourceRows({
+  groups,
+  renderItem,
+  resetKey,
+  onAddAllDay,
+}: VirtualSourceRowsProps) {
+  const listRef = useRef<HTMLDivElement>(null)
+  const rows = useMemo(() => flattenSourceGroups(groups), [groups])
+  /**
+   * Distancia de la lista al origen del documento. Medida contra el rect y no
+   * con `offsetTop`: hay ancestros posicionados por el camino y `offsetTop`
+   * mediría contra ellos, dejando la lista desplazada la altura del header.
+   */
+  const [scrollMargin, setScrollMargin] = useState(0)
+
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    // Redondeado: el subpíxel cambiaría el estado en cada frame sin mover nada.
+    const measure = () =>
+      setScrollMargin(Math.round(el.getBoundingClientRect().top + window.scrollY))
+    measure()
+    // La cabecera se repliega al bajar: el origen de la lista se mueve con ella.
+    // Coalescido a un frame — el `ResizeObserver` sobre el documento dispara en
+    // cada paso de esa animación y remedir por evento re-renderiza la lista entera.
+    let frame = 0
+    const ro = new ResizeObserver(() => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measure()
+      })
+    })
+    ro.observe(document.documentElement)
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      ro.disconnect()
+    }
+  }, [])
+
+  const virtualizer = useWindowVirtualizer({
+    count: rows.length,
+    estimateSize: (index) => estimateRowSize(rows[index], onAddAllDay),
+    overscan: 10,
+    scrollMargin,
+    /*
+     * `useWindowVirtualizer` fija el scroller (`window`) ya en el primer
+     * render, así que monta filas dentro del commit inicial. Al adjuntarse los
+     * refs de `measureElement`, el alto real difiere del estimado y la librería
+     * corrige con `flushSync` — desde la fase de commit, que es lo que React
+     * rechaza. Con re-render normal la corrección llega un frame después.
+     * `useVirtualizer` no lo necesita: su `getScrollElement` devuelve `null` en
+     * el primer render y no hay filas que medir todavía.
+     */
+    useFlushSync: false,
+  })
+
+  useEffect(() => {
+    window.scrollTo({ top: scrollMargin })
+    // Solo al cambiar el filtro / resetKey
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
+
+  return (
+    <div ref={listRef} className="px-4 pb-[var(--wp-nav-clearance)]">
+      <VirtualRowsBody
+        rows={rows}
+        virtualizer={virtualizer}
+        renderItem={renderItem}
+        onAddAllDay={onAddAllDay}
+      />
+    </div>
+  )
+}
+
+/** Lista virtualizada: solo monta las filas visibles (+ overscan). */
+function VirtualSourceRows(props: VirtualSourceRowsProps) {
+  const isMobile = useIsMobile()
+  // Un virtualizador por scroller: no se puede alternar el hook dentro de uno.
+  return isMobile ? (
+    <WindowVirtualSourceRows {...props} />
+  ) : (
+    <ElementVirtualSourceRows {...props} />
   )
 }
 

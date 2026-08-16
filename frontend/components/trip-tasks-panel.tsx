@@ -329,7 +329,8 @@ export function TripTasksPanel({
 
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)]",
+          // Móvil: scrollea el documento (ver `trips-shell`), no esta lista.
+          "px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto",
           hideSummary ? "pt-0" : "pt-2",
         )}
       >
