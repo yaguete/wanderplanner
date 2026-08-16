@@ -15,6 +15,7 @@ import {
   cleanSourceUrl,
   normalizeRefSlug,
   type PartnerButtonVariant,
+  type PartnerEmbedKind,
 } from "@/lib/partner-button"
 import { authorFromUrl } from "@/lib/itinerary-utils"
 import { MAX_AUTO_DAYS, isReservedRefSlug, parseDaysParam } from "@/lib/partner-trip"
@@ -39,6 +40,44 @@ function formatPrewarmBreakdown(counts: PrewarmCounts): string {
     esCount(counts.transport, "desplazamiento", "desplazamientos"),
     esCount(counts.basics, "descuento", "descuentos"),
   ].join(" · ")
+}
+
+function AppearanceTabs<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: T
+  onChange: (next: T) => void
+  options: readonly { id: T; label: string }[]
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className="flex rounded-md border border-white/15 p-0.5"
+    >
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          role="tab"
+          aria-selected={value === option.id}
+          className={cn(
+            "h-7 rounded px-2.5 text-xs font-medium",
+            value === option.id
+              ? "bg-white text-[hsl(20_8%_14%)]"
+              : "text-white/70 hover:text-white",
+          )}
+          onClick={() => onChange(option.id)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function prewarmTitle(result: PrewarmResult): string | null {
@@ -82,6 +121,7 @@ export function PartnerButtonBuilder() {
   const [generated, setGenerated] = useState<Generated | null>(null)
   const [allowSkip, setAllowSkip] = useState(false)
   const [buttonVariant, setButtonVariant] = useState<PartnerButtonVariant>("color")
+  const [embedKind, setEmbedKind] = useState<PartnerEmbedKind>("cta")
 
   const captchaEnabled = isTurnstileEnabled()
   const cleanedUrl = useMemo(() => cleanSourceUrl(sourceUrl), [sourceUrl])
@@ -177,7 +217,11 @@ export function PartnerButtonBuilder() {
 
   const summaryTitle = generated?.prewarm ? prewarmTitle(generated.prewarm) : null
   const snippet = generated
-    ? buildEmbedSnippet({ href: generated.startUrl, variant: buttonVariant })
+    ? buildEmbedSnippet({
+        href: generated.startUrl,
+        variant: buttonVariant,
+        kind: embedKind,
+      })
     : ""
 
   return (
@@ -233,35 +277,29 @@ export function PartnerButtonBuilder() {
               <Label htmlFor="partner-snippet" className="text-white">
                 Snippet HTML (WordPress)
               </Label>
-              <div className="flex items-center gap-2">
-                <div
-                  role="tablist"
-                  aria-label="Apariencia del botón"
-                  className="flex rounded-md border border-white/15 p-0.5"
-                >
-                  {(
+              <div className="flex flex-wrap items-center gap-2">
+                <AppearanceTabs
+                  label="Formato del embed"
+                  value={embedKind}
+                  onChange={setEmbedKind}
+                  options={
                     [
-                      ["color", "Color"],
-                      ["negative", "Negativo"],
+                      { id: "cta", label: "CTA" },
+                      { id: "banner", label: "Banner" },
                     ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      aria-selected={buttonVariant === id}
-                      className={cn(
-                        "h-7 rounded px-2.5 text-xs font-medium",
-                        buttonVariant === id
-                          ? "bg-white text-[hsl(20_8%_14%)]"
-                          : "text-white/70 hover:text-white",
-                      )}
-                      onClick={() => setButtonVariant(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                  }
+                />
+                <AppearanceTabs
+                  label="Apariencia"
+                  value={buttonVariant}
+                  onChange={setButtonVariant}
+                  options={
+                    [
+                      { id: "color", label: "Color" },
+                      { id: "negative", label: "Negativo" },
+                    ] as const
+                  }
+                />
                 <Button
                   type="button"
                   variant="ghost"
@@ -275,7 +313,7 @@ export function PartnerButtonBuilder() {
               </div>
             </div>
             <pre
-              key={buttonVariant}
+              key={`${embedKind}-${buttonVariant}`}
               id="partner-snippet"
               className="max-h-40 overflow-auto rounded-md border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-white/80"
             >
@@ -285,13 +323,17 @@ export function PartnerButtonBuilder() {
 
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium text-white">Vista previa</p>
-            <PartnerButtonPreview href={generated.startUrl} variant={buttonVariant} />
+            <PartnerButtonPreview
+              href={generated.startUrl}
+              variant={buttonVariant}
+              kind={embedKind}
+            />
           </div>
 
           <p className="flex items-start gap-2 text-xs text-white/60">
             <Check className="mt-0.5 size-3.5 shrink-0 text-white" aria-hidden />
-            Pega el snippet en un bloque HTML de tu post. El botón abre WanderPlanner en una
-            pestaña nueva.
+            Pega el snippet en un bloque HTML de tu post. El {embedKind === "banner" ? "banner" : "botón"} abre
+            WanderPlanner en una pestaña nueva.
           </p>
 
           <Button
@@ -305,7 +347,7 @@ export function PartnerButtonBuilder() {
               resetCaptcha()
             }}
           >
-            Generar otro botón
+            Generar otro CTA
           </Button>
         </div>
       ) : (

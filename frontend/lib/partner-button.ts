@@ -7,10 +7,21 @@ import { BRAND_COLOR, brandSvgMarkup } from "@/components/brand-mark"
 import { parseDaysParam } from "@/lib/partner-trip"
 
 export type PartnerButtonVariant = "color" | "negative"
+export type PartnerEmbedKind = "cta" | "banner"
 
 /** Kicker visual del botón. El nombre accesible es `PARTNER_BUTTON_ARIA_LABEL`. */
 export const PARTNER_BUTTON_KICKER = "Planifica este viaje en"
 export const PARTNER_BUTTON_ARIA_LABEL = "Planifica este viaje en WanderPlanner"
+
+export const PARTNER_BANNER_LINE_1 = "¿Tienes dudas? ¿Necesitas ayuda"
+export const PARTNER_BANNER_LINE_2_PREFIX = "para "
+export const PARTNER_BANNER_EMPHASIS = "planificar esta ruta"
+export const PARTNER_BANNER_CHIP_KICKER = "Prueba"
+export const PARTNER_BANNER_ARIA_LABEL =
+  "Prueba WanderPlanner: ¿necesitas ayuda para planificar esta ruta?"
+
+const BANNER_HOVER_CLASS = "wp-wanderplanner-banner"
+const COLOR_INK = "#1F1C1A"
 
 const COLOR_BG = "#E8E5E4"
 const COLOR_HOVER_BG = "#ffffff"
@@ -128,8 +139,97 @@ export function buildStartUrl({
 }
 
 /** Ardilla del snippet; WordPress puede filtrar el SVG — el <a> sigue viéndose bien sin él. */
-function brandSvg(variant: PartnerButtonVariant): string {
-  return brandSvgMarkup(VARIANT_PAINT[variant].color, 28, 39)
+function brandSvg(variant: PartnerButtonVariant, width = 28, height = 39): string {
+  return brandSvgMarkup(VARIANT_PAINT[variant].color, width, height)
+}
+
+function wordmarkSpans(): string {
+  return `<span style="font-weight:700">Wander</span><span style="font-weight:300">Planner</span>`
+}
+
+function chipInnerHtml(variant: PartnerButtonVariant, kicker: string): string {
+  const paint = VARIANT_PAINT[variant]
+  const chipBg = variant === "color" ? "#F4F2F1" : "transparent"
+  return (
+    `<span style="display:inline-flex;flex-shrink:0;align-items:center;gap:10px;` +
+    `padding:10px 14px;border-radius:10px;border:${paint.border};` +
+    `background:${chipBg};color:${paint.color};box-sizing:border-box">` +
+    `<span style="display:inline-flex;flex-shrink:0;line-height:0">${brandSvg(variant, 22, 31)}</span>` +
+    `<span style="display:flex;flex-direction:column;gap:1px;color:${paint.color};line-height:1.15">` +
+    `<span style="font-size:12px;font-weight:400">${kicker}</span>` +
+    `<span style="font-size:16px;letter-spacing:-0.02em">${wordmarkSpans()}</span>` +
+    `</span></span>`
+  )
+}
+
+function bannerCopyHtml(color: string): string {
+  return (
+    `<span style="display:flex;flex-direction:column;justify-content:center;gap:2px;` +
+    `flex:1;min-width:0;font-size:18px;font-weight:500;line-height:1.3;` +
+    `letter-spacing:-0.02em;text-align:left;color:${color}">` +
+    `<span>${PARTNER_BANNER_LINE_1}</span>` +
+    `<span>${PARTNER_BANNER_LINE_2_PREFIX}<span style="font-weight:700">${PARTNER_BANNER_EMPHASIS}</span>?</span>` +
+    `</span>`
+  )
+}
+
+function bannerCss(variant: PartnerButtonVariant): string {
+  const font =
+    "font-family:Inter,system-ui,-apple-system,sans-serif;text-decoration:none;" +
+    "box-sizing:border-box;width:100%;max-width:100%;"
+  const layout =
+    "display:flex;align-items:center;justify-content:space-between;gap:28px;" +
+    "flex-wrap:nowrap;padding:22px 26px;border-radius:16px;"
+  if (variant === "color") {
+    return (
+      layout +
+      font +
+      `background:${COLOR_BG};color:${COLOR_INK};border:0;` +
+      "transition:background-color .15s ease;"
+    )
+  }
+  return (
+    layout +
+    font +
+    "background:linear-gradient(90deg,#6B7380 0%,#121212 100%);color:#ffffff;border:0;"
+  )
+}
+
+function buildCtaSnippet(href: string, variant: PartnerButtonVariant): string {
+  const paint = VARIANT_PAINT[variant]
+  const hoverRule =
+    variant === "color"
+      ? `<style>.${COLOR_HOVER_CLASS}:hover{background:${COLOR_HOVER_BG} !important}</style>\n`
+      : ""
+  const classAttr = variant === "color" ? ` class="${COLOR_HOVER_CLASS}"` : ""
+  return [
+    `${hoverRule}<a href="${href}" target="_blank" rel="noopener noreferrer"${classAttr}`,
+    `  aria-label="${PARTNER_BUTTON_ARIA_LABEL}"`,
+    `  style="${anchorCss(variant)}">`,
+    `  <span style="display:inline-flex;flex-shrink:0;line-height:0">${brandSvg(variant)}</span>`,
+    `  <span style="display:flex;flex-direction:column;gap:2px;color:${paint.color}">`,
+    `    <span style="font-size:13px;font-weight:400">${PARTNER_BUTTON_KICKER}</span>`,
+    `    <span style="font-size:18px;letter-spacing:-0.02em">${wordmarkSpans()}</span>`,
+    `  </span>`,
+    `</a>`,
+  ].join("\n")
+}
+
+function buildBannerSnippet(href: string, variant: PartnerButtonVariant): string {
+  const copyColor = variant === "color" ? COLOR_INK : "#ffffff"
+  const hoverRule =
+    variant === "color"
+      ? `<style>.${BANNER_HOVER_CLASS}:hover{background:${COLOR_HOVER_BG} !important}</style>\n`
+      : ""
+  const classAttr = variant === "color" ? ` class="${BANNER_HOVER_CLASS}"` : ""
+  return [
+    `${hoverRule}<a href="${href}" target="_blank" rel="noopener noreferrer"${classAttr}`,
+    `  aria-label="${PARTNER_BANNER_ARIA_LABEL}"`,
+    `  style="${bannerCss(variant)}">`,
+    `  ${bannerCopyHtml(copyColor)}`,
+    `  ${chipInnerHtml(variant, PARTNER_BANNER_CHIP_KICKER)}`,
+    `</a>`,
+  ].join("\n")
 }
 
 /**
@@ -139,30 +239,16 @@ function brandSvg(variant: PartnerButtonVariant): string {
 export function buildEmbedSnippet({
   href,
   variant = "color",
+  kind = "cta",
 }: {
   href: string
   variant?: PartnerButtonVariant
+  kind?: PartnerEmbedKind
 }): string {
   const safeHref = href.replace(/"/g, "&quot;")
-  const paint = VARIANT_PAINT[variant]
-  const hoverRule =
-    variant === "color"
-      ? `<style>.${COLOR_HOVER_CLASS}:hover{background:${COLOR_HOVER_BG} !important}</style>\n`
-      : ""
-  const classAttr = variant === "color" ? ` class="${COLOR_HOVER_CLASS}"` : ""
-  return [
-    `${hoverRule}<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${classAttr}`,
-    `  aria-label="${PARTNER_BUTTON_ARIA_LABEL}"`,
-    `  style="${anchorCss(variant)}">`,
-    `  <span style="display:inline-flex;flex-shrink:0;line-height:0">${brandSvg(variant)}</span>`,
-    `  <span style="display:flex;flex-direction:column;gap:2px;color:${paint.color}">`,
-    `    <span style="font-size:13px;font-weight:400">${PARTNER_BUTTON_KICKER}</span>`,
-    `    <span style="font-size:18px;letter-spacing:-0.02em">`,
-    `      <span style="font-weight:700">Wander</span><span style="font-weight:300">Planner</span>`,
-    `    </span>`,
-    `  </span>`,
-    `</a>`,
-  ].join("\n")
+  return kind === "banner"
+    ? buildBannerSnippet(safeHref, variant)
+    : buildCtaSnippet(safeHref, variant)
 }
 
 /** Estilos de la vista previa JSX (espejo del snippet, sin dangerouslySetInnerHTML). */
@@ -199,6 +285,74 @@ export function partnerButtonPreviewStyles(variant: PartnerButtonVariant = "colo
     },
     wordmark: {
       fontSize: "18px",
+      letterSpacing: "-0.02em",
+    },
+  }
+}
+
+/** Estilos de la vista previa del banner (espejo del snippet). */
+export function partnerBannerPreviewStyles(variant: PartnerButtonVariant = "color") {
+  const isColor = variant === "color"
+  return {
+    anchor: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "nowrap" as const,
+      gap: "28px",
+      width: "100%",
+      maxWidth: "100%",
+      padding: "22px 26px",
+      borderRadius: "16px",
+      textDecoration: "none",
+      boxSizing: "border-box" as const,
+      fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+      background: isColor
+        ? COLOR_BG
+        : "linear-gradient(90deg, #6B7380 0%, #121212 100%)",
+      color: isColor ? COLOR_INK : "#ffffff",
+      border: 0,
+      transition: isColor ? "background-color .15s ease" : undefined,
+    },
+    copy: {
+      display: "flex",
+      flexDirection: "column" as const,
+      justifyContent: "center",
+      gap: "2px",
+      flex: 1,
+      minWidth: 0,
+      fontSize: "18px",
+      fontWeight: 500,
+      lineHeight: 1.3,
+      letterSpacing: "-0.02em",
+      textAlign: "left" as const,
+      color: isColor ? COLOR_INK : "#ffffff",
+    },
+    chip: {
+      display: "inline-flex",
+      flexShrink: 0,
+      alignItems: "center",
+      gap: "10px",
+      padding: "10px 14px",
+      borderRadius: "10px",
+      border: VARIANT_PAINT[variant].border,
+      background: isColor ? "#F4F2F1" : "transparent",
+      color: VARIANT_PAINT[variant].color,
+      boxSizing: "border-box" as const,
+    },
+    chipCopy: {
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "1px",
+      color: VARIANT_PAINT[variant].color,
+      lineHeight: 1.15,
+    },
+    chipKicker: {
+      fontSize: "12px",
+      fontWeight: 400,
+    },
+    chipWordmark: {
+      fontSize: "16px",
       letterSpacing: "-0.02em",
     },
   }
