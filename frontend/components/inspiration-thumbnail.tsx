@@ -3,12 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
-import {
-  buildBasicThumbQuery,
-  buildThumbQuery,
-  getBasicThumbnail,
-  getItemThumbnail,
-} from "@/lib/item-image"
+import { buildBasicThumbQuery, buildThumbQuery } from "@/lib/item-image"
 import { resolveThumbUrlOrNull } from "@/lib/thumbs"
 import { resolveVendorLogo } from "@/lib/vendor-logo"
 import {
@@ -51,8 +46,8 @@ type InspirationThumbnailProps = (ItineraryItemProps | BasicProps) & {
 }
 
 /**
- * Miniatura para la lista de inspiración: `thumbUrl` del servidor, o Places vía /thumb (nombre+región),
- * o Picsum como fallback. Carga diferida con IntersectionObserver.
+ * Miniatura para la lista de inspiración: `thumbUrl` del servidor o Places vía /thumb
+ * (nombre+región). Sin foto, hueco mudo — no Picsum. Carga diferida con IntersectionObserver.
  */
 export function InspirationThumbnail({ className, ...props }: InspirationThumbnailProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -114,7 +109,6 @@ function ItineraryItemInner({
   // en una rama y 5 en la otra (react-hooks/rules-of-hooks).
   const isTransportIcon = mode === "transportIcon"
 
-  const fallback = useMemo(() => getItemThumbnail(item), [item.id, item.type])
   const [src, setSrc] = useState<string | null>(() => item.thumbUrl ?? null)
   const [settled, setSettled] = useState(() => !!item.thumbUrl)
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -132,19 +126,19 @@ function ItineraryItemInner({
     setSettled(false)
     const q = buildThumbQuery(item.name, item.region, area)
     if (!q) {
-      setSrc(fallback)
+      setSrc(null)
       setSettled(true)
       return
     }
     void resolveThumbUrlOrNull(q).then((u) => {
       if (cancel) return
-      setSrc(u ?? fallback)
+      setSrc(u)
       setSettled(true)
     })
     return () => {
       cancel = true
     }
-  }, [isTransportIcon, item.id, item.thumbUrl, item.name, item.region, area, fallback])
+  }, [isTransportIcon, item.id, item.thumbUrl, item.name, item.region, area])
 
   if (isTransportIcon) {
     const visual = resolveTransportModeVisual({
@@ -164,8 +158,11 @@ function ItineraryItemInner({
     )
   }
 
-  if (!settled || !src) {
+  if (!settled) {
     return <div className="h-full w-full animate-pulse bg-muted" aria-hidden />
+  }
+  if (!src) {
+    return <div className="h-full w-full bg-muted" aria-hidden />
   }
   return (
     <PhotoPreview src={src} ready={imageLoaded}>
@@ -194,7 +191,6 @@ function BasicInner({
   area: string | null
   mode: "default" | "vendorLogo" | "transportIcon"
 }) {
-  const fallback = useMemo(() => getBasicThumbnail(item), [item.id, item.category])
   const logo = useMemo(
     () => resolveVendorLogo({ vendor: item.vendor, affiliateUrl: item.affiliateUrl }),
     [item.vendor, item.affiliateUrl],
@@ -220,22 +216,25 @@ function BasicInner({
     setSettled(false)
     const q = buildBasicThumbQuery(item.name, item.category, area)
     if (!q) {
-      setSrc(fallback)
+      setSrc(null)
       setSettled(true)
       return
     }
     void resolveThumbUrlOrNull(q).then((u) => {
       if (cancel) return
-      setSrc(u ?? fallback)
+      setSrc(u)
       setSettled(true)
     })
     return () => {
       cancel = true
     }
-  }, [mode, logo.src, item.id, item.thumbUrl, item.name, item.category, area, fallback])
+  }, [mode, logo.src, item.id, item.thumbUrl, item.name, item.category, area])
 
-  if (!settled || !src) {
+  if (!settled) {
     return <div className="h-full w-full animate-pulse bg-muted" aria-hidden />
+  }
+  if (!src) {
+    return <div className="h-full w-full bg-muted" aria-hidden />
   }
 
   const imgClass = cn(

@@ -1,11 +1,4 @@
-import type { BasicCategory, ItemType } from "@/types/itinerary"
-
-const TYPE_HINT: Record<ItemType, string> = {
-  transport: "road",
-  stay: "hotel",
-  food: "food",
-  activity: "landscape",
-}
+import type { BasicCategory } from "@/types/itinerary"
 
 const THUMB_QUERY_MAX = 200
 
@@ -62,22 +55,3 @@ export function buildBasicThumbQuery(
   return q
 }
 
-/** Thumbnail estable por ítem (Picsum; sin API key). */
-export function getItemThumbnail(item: { id: string; type: ItemType }): string {
-  const seed = `${item.type}-${item.id}-${TYPE_HINT[item.type]}`
-  return `https://picsum.photos/seed/${encodeURIComponent(seed)}/128/128`
-}
-
-const BASIC_HINT: Record<BasicCategory, string> = {
-  insurance: "shield",
-  sim: "wifi",
-  carRental: "car",
-  flight: "plane",
-  other: "sparkle",
-}
-
-/** Thumbnail para ítems de la pestaña Descuentos. */
-export function getBasicThumbnail(item: { id: string; category: BasicCategory }): string {
-  const seed = `basic-${item.category}-${item.id}-${BASIC_HINT[item.category]}`
-  return `https://picsum.photos/seed/${encodeURIComponent(seed)}/128/128`
-}

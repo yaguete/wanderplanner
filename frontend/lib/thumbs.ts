@@ -93,7 +93,7 @@ export async function fetchPlaceThumbnailByQuery(
     })
 
     if (!res.ok) {
-      memoryCache.set(key, null)
+      // 429/5xx: no cachear el fallo, para reintentar si el tope era transitorio.
       return null
     }
 
@@ -103,14 +103,13 @@ export async function fetchPlaceThumbnailByQuery(
     if (url) writeSessionKey(key, url)
     return url
   } catch {
-    memoryCache.set(key, null)
     return null
   } finally {
     release()
   }
 }
 
-/** Resuelve URL de miniatura; si falla, `null` (el caller aplica Picsum). */
+/** Resuelve URL de miniatura; si falla, `null` (el caller deja el hueco mudo). */
 export async function resolveThumbUrlOrNull(
   query: string | null | undefined,
 ): Promise<string | null> {

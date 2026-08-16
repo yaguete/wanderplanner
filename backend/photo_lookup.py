@@ -89,6 +89,10 @@ async def single_flight(key: str, coro_factory: Callable[[], Awaitable[T]]) -> T
         async with _locks_guard:
             if _inflight.get(key) is waiter:
                 _inflight.pop(key, None)
+        # Si nadie más esperaba, consume la excepción para no loguear
+        # "Future exception was never retrieved" (p. ej. un 429 de cuota).
+        if waiter.done() and not waiter.cancelled():
+            waiter.exception()
         raise
     else:
         if not waiter.done():

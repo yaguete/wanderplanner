@@ -179,6 +179,7 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         row: dict | None = None
+        stale: str | None = None
         if cfg:
             base, skey = cfg
             try:
@@ -192,16 +193,19 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
 
         if row and not row.get("miss"):
             uri = row.get("photo_uri")
-            if isinstance(uri, str) and uri.strip() and uri_still_fresh(row.get("photo_uri_expires_at")):
+            stale = uri.strip() if isinstance(uri, str) and uri.strip() else None
+            if stale and uri_still_fresh(row.get("photo_uri_expires_at")):
                 _log_thumb(cache_hit=True)
-                return {"url": uri}
+                return {"url": stale}
 
             photo_name = row.get("photo_name")
             if isinstance(photo_name, str) and photo_name.strip() and api_key:
-                await enforce_usage(user, "photo_lookup")
+                # El sitio ya está resuelto: getMedia solo renueva la URI de 45 min.
+                # Cobrar cuota de usuario aquí hace que un itinerario largo, visto
+                # un par de veces, dispare 429 y el front caiga a fotos aleatorias.
                 if not allow_paid_lookup():
                     _log_thumb(cache_hit=False, capped=True, query=query)
-                    return {"url": None}
+                    return {"url": stale}
                 try:
                     t0 = time.perf_counter()
                     fresh = await _get_media_uri(client, api_key, photo_name.strip())
@@ -230,8 +234,6 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                     except Exception:
                         pass
                 if fresh:
-                    if user is not None:
-                        await record_event(user.id, "photo_lookup", cost_hint=1)
                     _log_thumb(
                         cache_hit=False,
                         media_calls=1,
@@ -239,7 +241,15 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                         query=query,
                     )
                     return {"url": fresh}
-                # photo_name caducado → caer a searchText abajo
+                if stale:
+                    _log_thumb(
+                        cache_hit=False,
+                        media_calls=1,
+                        provider_ms=media_ms,
+                        query=query,
+                    )
+                    return {"url": stale}
+                # photo_name muerto y sin URI → caer a searchText abajo
 
         if not api_key:
             if user is not None and prior_media_calls:
@@ -250,7 +260,7 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                 provider_ms=prior_provider_ms if prior_media_calls else None,
                 query=query,
             )
-            return {"url": None}
+            return {"url": stale}
         if prior_media_calls == 0:
             await enforce_usage(user, "photo_lookup")
         if not allow_paid_lookup():
