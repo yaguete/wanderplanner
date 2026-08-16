@@ -437,7 +437,7 @@ export function ItineraryMapView({
   transportDistances: TransportDistances
   destination: string
   countryCodes?: string[]
-  /** Modo controlado desde el panel (dropdown junto a Lista/Mapa). */
+  /** Modo controlado desde el panel (dropdown junto a Lista · Calendario · Mapa). */
   mapMode: MapViewMode
   /** Día 1-based, o null = ruta completa. */
   focusDayNumber?: DayScope

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 export type SegmentedControlItem<T extends string> = {
   id: T
   label: string
-  icon: LucideIcon
+  icon?: LucideIcon
 }
 
 type SegmentedControlProps<T extends string> = {
@@ -16,13 +16,13 @@ type SegmentedControlProps<T extends string> = {
   value: T
   onValueChange: (id: T) => void
   ariaLabel: string
-  /** `compact`: Lista/Mapa (modo de visualización). */
+  /** `compact`: Lista · Calendario · Mapa (modo de visualización). */
   size?: "default" | "compact"
   className?: string
 }
 
 /**
- * Píldora segmented (Lista/Mapa y similares).
+ * Píldora segmented (Lista · Calendario · Mapa y similares).
  * Ancho según el **panel** (`@container` / `@md:`), no según la ventana.
  */
 export function SegmentedControl<T extends string>({
@@ -77,8 +77,10 @@ export function SegmentedControl<T extends string>({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className={cn("shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
-            <span className={cn(compact ? "inline" : "hidden truncate @md:inline")}>{label}</span>
+            {Icon ? (
+              <Icon className={cn("shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
+            ) : null}
+            <span className={cn("min-w-0", compact ? "inline truncate" : "hidden truncate @md:inline")}>{label}</span>
           </button>
         )
       })}

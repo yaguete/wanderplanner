@@ -89,6 +89,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       map-geocode-state.ts       # Estado del geocodificado del mapa
       trip-origin-resolve.ts     # Origen del viaje al crear/editar
       day-summary.ts       # POST /day-summary + firma de ítems del día
+      itinerary-calendar.ts # Rejilla mes/semana de Ruta (lunes; sin leer el reloj)
       assistant-suggestions.ts   # Snippets de arranque del asistente (sin LLM)
       site.ts              # SITE_URL canónica (metadataBase, sitemap, robots)
       legal.ts             # Titular e inventario de storage para /legal/* (sin nombres de proveedor)
@@ -118,7 +119,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ### Panel «Mi viaje»: cinco pestañas, no dos niveles
 
-[`itinerary-view-mode-tabs.tsx`](frontend/components/itinerary-view-mode-tabs.tsx) — **Ruta · Actividades · Alojamientos · Transporte · Básicos** en una sola fila. **Ruta** es el timeline (Lista/Mapa) y las otras cuatro son la **vista de tareas filtrada por categoría** (`VIEW_MODE_TASK_CATEGORIES`). No existe el nivel «Itinerario | Tareas» que describen planes antiguos.
+[`itinerary-view-mode-tabs.tsx`](frontend/components/itinerary-view-mode-tabs.tsx) — **Ruta · Actividades · Alojamientos · Transporte · Básicos** en una sola fila. **Ruta** es el timeline (**Lista · Calendario · Mapa**) y las otras cuatro son la **vista de tareas filtrada por categoría** (`VIEW_MODE_TASK_CATEGORIES`). No existe el nivel «Itinerario | Tareas» que describen planes antiguos. El calendario es vista de lectura (sin fechas: mes fantasma + CTA); el alta y la edición siguen en Lista.
 
 - El botón de alta de cada pestaña crea un **ítem real**: Transporte → [`transport-route-dialog.tsx`](frontend/components/transport-route-dialog.tsx); Alojamientos / Actividades → [`add-manual-item-dialog.tsx`](frontend/components/add-manual-item-dialog.tsx) con el tipo fijado.
 - El **`ExtraTask`** (tarea suelta sin día ni lugar) solo se crea desde **Básicos**.
@@ -140,7 +141,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Extracción de fuente: `startSourceExtraction` (fire-and-forget) → chip pendiente en Fuentes (`pendingSources`); sin modal bloqueante. Tope **5 fuentes/viaje** ([`trip-sources.ts`](frontend/lib/trip-sources.ts)). Quitar una fuente **no** borra ítems/basics ya consolidados en Mi viaje.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
-- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`), consentimiento (`wp-consent`, `wp-ai-transfer-consent`), claim de invitado (`wp-guest-trip-claim`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
+- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`, `wp-route-view`, `wp-calendar-scale`, `wp-map-mode`), consentimiento (`wp-consent`, `wp-ai-transfer-consent`), claim de invitado (`wp-guest-trip-claim`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
 - Miniaturas: no van en el payload de `/itinerary` (`thumb_url` null). `InspirationThumbnail` las pide a `GET /thumb` al entrar en viewport. Portadas: `GET /cover` vía [`unsplash.ts`](frontend/lib/unsplash.ts) (claves solo en backend).
 - Trámites de país (T4.4): pestaña **Básicos** → `GET /country-tasks` (Recomendaciones MAE + Haiku). Sugerencias aceptadas → `ExtraTask` con id `country:{iso}:{slug}`; descartes en `dismissedCountryTasks` (columna propia, **no** en `tasks`).
 - Descripción de día por IA: `POST /day-summary`; la firma de ítems (`summarySignature` en `UserDay`) apaga el botón si nada ha cambiado.
@@ -278,5 +279,6 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Tramos de transporte | [`route-legs.ts`](frontend/lib/route-legs.ts), [`transport-routes.ts`](frontend/lib/transport-routes.ts), [`transport-route-form.tsx`](frontend/components/transport-route-form.tsx), `taskKeyForItem`, mapa |
 | Búsqueda de lugares / hubs | [`place_search.py`](backend/place_search.py), [`mapbox.ts`](frontend/lib/mapbox.ts), [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts), [`usage.py`](backend/usage.py), `MAPBOX_ACCESS_TOKEN` |
 | Mapa | [`itinerary-map-view.tsx`](frontend/components/itinerary-map-view.tsx), [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts), [`map-geocode-state.ts`](frontend/lib/map-geocode-state.ts), coste de Directions |
+| Calendario de Ruta | [`itinerary-calendar-view.tsx`](frontend/components/itinerary-calendar-view.tsx), [`itinerary-calendar.ts`](frontend/lib/itinerary-calendar.ts), `wp-route-view` / `wp-calendar-scale` |
 | Marca / SEO | [`brand-mark.tsx`](frontend/components/brand-mark.tsx), [`site.ts`](frontend/lib/site.ts), [`robots.ts`](frontend/app/robots.ts), [`opengraph-image.tsx`](frontend/app/opengraph-image.tsx) |
 | Proveedor o modelo de IA (`ASSISTANT_MODEL`, cliente de [`assistant.py`](backend/assistant.py), extracción de [`main.py`](backend/main.py)) | Párrafo `#terceros` de [`/legal/privacidad`](frontend/app/legal/privacidad/page.tsx) (país + garantía), texto de [`ai-transfer-gate.tsx`](frontend/components/ai-transfer-gate.tsx) y `AI_TRANSFER_CONSENT_VERSION` en [`ai-transfer-consent.ts`](frontend/lib/ai-transfer-consent.ts) si cambia el país |

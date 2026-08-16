@@ -53,7 +53,7 @@ export const VIEW_MODE_ADD_ACTION_LABEL: Record<
 }
 
 /**
- * Pestañas del panel Mi viaje (píldora, como Lista/Mapa):
+ * Pestañas del panel Mi viaje (píldora, como Lista · Calendario · Mapa):
  * Ruta · Actividades · Alojamientos · Transporte · Básicos.
  * Fuentes usa PanelTabs (subrayado); aquí no.
  */

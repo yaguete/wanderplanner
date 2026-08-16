@@ -3,7 +3,7 @@
 /**
  * Panel «Mi viaje»: una sola cabecera con pestañas
  * Ruta · Actividades · Alojamientos · Transporte · Básicos.
- * Ruta = timeline + Lista/Mapa; el resto = filas de tarea por categoría.
+ * Ruta = timeline + Lista · Calendario · Mapa; el resto = filas de tarea por categoría.
  */
 import {
   useState,
@@ -17,6 +17,7 @@ import {
 } from "react"
 import {
   Check,
+  CalendarDays,
   ChevronDown,
   ChevronUp,
   List,
@@ -63,6 +64,13 @@ import {
   type ItineraryViewMode,
 } from "@/components/itinerary-view-mode-tabs"
 import { ItineraryMapView, MapDayDropdown, MapModeDropdown, persistMapMode, readStoredMapMode, type ItineraryMapPoint, type MapViewMode } from "@/components/itinerary-map-view"
+import {
+  ItineraryCalendarView,
+  persistRouteView,
+  readStoredRouteView,
+  type RouteViewMode,
+} from "@/components/itinerary-calendar-view"
+import { scrollDaySectionIntoView } from "@/lib/itinerary-day-scroll"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
 import { RouteLegDialog } from "@/components/route-leg-dialog"
@@ -212,10 +220,11 @@ export default function ItineraryPanel({
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [pendingDayAction, setPendingDayAction] = useState<DayDestructiveAction | null>(null)
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
-  const [listMode, setListMode] = useState<"list" | "map">("list")
+  const [listMode, setListMode] = useState<RouteViewMode>("list")
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
   const [mapMode, setMapMode] = useState<MapViewMode>("places")
   const [focusDayId, setFocusDayId] = useState<string | null>(null)
+  const pendingScrollDayIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const stored = readStoredMapMode()
@@ -224,10 +233,46 @@ export default function ItineraryPanel({
     })
   }, [])
 
+  useEffect(() => {
+    if (!trip) return
+    const stored = readStoredRouteView()
+    queueMicrotask(() => {
+      const next =
+        stored === "calendar" && trip.startDate == null ? "list" : stored
+      if (next !== "list") setListMode(next)
+    })
+    // Una vez por viaje: no reaplicar en cada mutación.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.id])
+
   const handleMapModeChange = useCallback((next: MapViewMode) => {
     setMapMode(next)
     persistMapMode(next)
   }, [])
+
+  const handleListModeChange = useCallback((next: RouteViewMode) => {
+    setListMode(next)
+    persistRouteView(next)
+  }, [])
+
+  const openDayFromCalendar = useCallback((dayId: string) => {
+    setFocusDayId((current) => (current && current !== dayId ? null : current))
+    pendingScrollDayIdRef.current = dayId
+    setListMode("list")
+    persistRouteView("list")
+  }, [])
+
+  useLayoutEffect(() => {
+    if (listMode !== "list") return
+    const id = pendingScrollDayIdRef.current
+    if (!id) return
+    pendingScrollDayIdRef.current = null
+    const root = panelRef.current
+    if (!root) return
+    requestAnimationFrame(() => {
+      scrollDaySectionIntoView(root, id)
+    })
+  }, [listMode, panelRef])
 
   const focusDayNumber = useMemo(
     () => dayScopeFromId(trip?.days ?? [], focusDayId),
@@ -398,18 +443,18 @@ export default function ItineraryPanel({
   const mapDayOptions = useMemo(() => {
     if (!trip) return []
     let counts: Map<number, number>
-    if (listMode === "list") {
-      counts = new Map()
-      trip.days.forEach((day, index) => {
-        counts.set(index + 1, day.items.length)
-      })
-    } else {
+    if (listMode === "map") {
       const placeCounts = mappableCountsByDay(collectItineraryPlaces(trip.days))
       const transportCounts = mappableCountsByDay([
         ...collectMapSegments(trip.days),
         ...collectMapGatewayAnchors(trip.days),
       ])
       counts = mapMode === "places" ? placeCounts : transportCounts
+    } else {
+      counts = new Map()
+      trip.days.forEach((day, index) => {
+        counts.set(index + 1, day.items.length)
+      })
     }
     return trip.days.map((day, index) => ({
       id: day.id,
@@ -661,14 +706,15 @@ export default function ItineraryPanel({
             <SegmentedControl
               items={[
                 { id: "list" as const, label: "Lista", icon: List },
+                { id: "calendar" as const, label: "Calendario", icon: CalendarDays },
                 { id: "map" as const, label: "Mapa", icon: MapIcon },
               ]}
               value={listMode}
-              onValueChange={setListMode}
+              onValueChange={handleListModeChange}
               ariaLabel="Vista de ruta"
               size="compact"
             />
-            {trip.days.length > 1 ? (
+            {trip.days.length > 1 && listMode !== "calendar" ? (
               <MapDayDropdown
                 days={mapDayOptions}
                 value={focusDayNumber == null ? null : focusDayId}
@@ -769,6 +815,17 @@ export default function ItineraryPanel({
                 ) : null,
               )}
               </div>
+            </div>
+          ) : listMode === "calendar" ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[var(--wp-nav-clearance)]">
+              <ItineraryCalendarView
+                key={trip.startDate ?? "nodates"}
+                startDate={trip.startDate}
+                numDays={trip.days.length}
+                days={trip.days}
+                onEditTrip={onEditTrip}
+                onOpenDay={openDayFromCalendar}
+              />
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-1 max-md:pb-[var(--wp-nav-clearance)]">
@@ -1396,7 +1453,10 @@ const DaySection = memo(function DaySection({
   const normalizedDesc = dayDescription.trim() ? normalizeDayLabel(dayDescription) : null
 
   return (
-    <div className="mb-7 last:mb-0">
+    <div
+      data-day-id={dayId}
+      className="mb-7 scroll-mt-3 rounded-md last:mb-0 motion-safe:transition-colors motion-safe:duration-300 data-[day-highlight]:bg-muted/70"
+    >
       <div className="mb-3 flex min-w-0 items-start gap-2.5 @md:items-center">
         <div className="flex shrink-0 items-center pt-0.5 @md:pt-0" onPointerDown={(e) => e.stopPropagation()}>
           <Checkbox

@@ -33,7 +33,7 @@ Fuente de verdad: este documento + tokens en `frontend/app/globals.css`.
 | `--border` | `0 0% 90%` | Bordes internos suaves |
 | `--radius` | `0.625rem` | Radios |
 
-Tipos de ítem: chip neutro + punto de color (`ITEM_COLORS.dot`).
+Tipos de ítem: chip neutro + punto de color (`ITEM_DOT_COLORS`). En el calendario de Ruta los badges son el mismo chip (fondo `muted`, borde neutro, punto de color, nombre truncado): nunca fondos saturados por tipo.
 
 ### Marca
 
@@ -57,7 +57,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Header: marca al rincón (alineada con la columna del sidebar) · toggles Fuentes / Viaje / Asistente (detalle) · avatar.
 - Tres paneles alícuota (`wp-trip-panels`); mínimo uno activo. Conmutación instantánea (sin animar `flex-grow`). Con 3 paneles y viewport &lt; ~1280px el sidebar se auto-colapsa a rail.
 - Título del viaje en la cabecera del panel Viaje (no en el header).
-- Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes y Mi viaje. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista/Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
+- Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes y Mi viaje. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista · Calendario · Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
 - Sidebar: colapsar con `PanelLeftClose`/`PanelLeftOpen` en el pie; «Inicio» y «Tus viajes» como filas hermanas.
 - Asistente: panel peer montado desde el inicio; chips de sugerencia sin esperar a Supabase si no hay conversación activa.
 
