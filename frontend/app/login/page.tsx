@@ -9,11 +9,13 @@ import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
+import { clearStash, prepareGuestTripClaim } from "@/lib/guest-trip-claim"
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { signIn, sendMagicLink } = useAuth()
+  const { signIn, sendMagicLink, isGuest, user } = useAuth()
   const next = searchParams.get("next") || "/trips"
 
   const [email, setEmail] = useState("")
@@ -30,6 +32,30 @@ function LoginForm() {
     setCaptchaKey((key) => key + 1)
   }
 
+  /**
+   * `/login` vive fuera de `/trips`: no hay `useTrips()` ni flush. El
+   * TripProvider ya hace flush al desmontar, fire-and-forget (~1 s de riesgo).
+   * El camino bueno es la modal de RegistrationGate.
+   *
+   * `sendMagicLink` usa `signInWithOtp` con `shouldCreateUser` por defecto
+   * true: un email nuevo crea cuenta y el viaje aterriza ahí (alta, no
+   * conversión in-place). Si el enlace se abre en otro dispositivo no hay
+   * stash y no hay claim.
+   */
+  const prepareIfGuest = async (): Promise<boolean> => {
+    if (!isGuest) return true
+    if (!user?.id) {
+      setError("No hay sesión de invitado.")
+      return false
+    }
+    const prepared = await prepareGuestTripClaim(createClient(), user.id)
+    if (!prepared.ok) {
+      setError(prepared.error)
+      return false
+    }
+    return true
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -39,9 +65,15 @@ function LoginForm() {
       return
     }
     setSubmitting(true)
+    const ready = await prepareIfGuest()
+    if (!ready) {
+      setSubmitting(false)
+      return
+    }
     const result = await signIn(email.trim(), password, captchaToken ?? undefined)
     setSubmitting(false)
     if (!result.ok) {
+      clearStash()
       resetCaptcha()
       setError(result.error)
       return
@@ -62,9 +94,15 @@ function LoginForm() {
       return
     }
     setSubmitting(true)
+    const ready = await prepareIfGuest()
+    if (!ready) {
+      setSubmitting(false)
+      return
+    }
     const result = await sendMagicLink(email.trim(), captchaToken ?? undefined)
     setSubmitting(false)
     if (!result.ok) {
+      clearStash()
       resetCaptcha()
       setError(result.error)
       return
@@ -76,7 +114,11 @@ function LoginForm() {
   return (
     <AuthShell
       title="Entra en tu cuenta"
-      subtitle="Sigue planificando donde lo dejaste."
+      subtitle={
+        isGuest
+          ? "Tu viaje actual se añadirá a esta cuenta."
+          : "Sigue planificando donde lo dejaste."
+      }
       footer={
         <>
           ¿Aún no tienes cuenta?{" "}
@@ -122,7 +164,7 @@ function LoginForm() {
           className="mt-1 h-11"
           disabled={submitting || (captchaEnabled && !captchaToken)}
         >
-          {submitting ? "Entrando…" : "Entrar"}
+          {submitting ? "Entrando…" : isGuest ? "Entrar y guardar mi viaje" : "Entrar"}
         </Button>
         <Button
           type="button"

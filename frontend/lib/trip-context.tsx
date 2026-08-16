@@ -34,6 +34,7 @@ import { fetchItinerary, ApiLimitError, isAbortError, type ItineraryProgressStag
 import { authorFromUrl, buildSource, formatGuideLabel } from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
+import { redeemGuestTripClaim } from "@/lib/guest-trip-claim"
 import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
@@ -148,6 +149,11 @@ interface TripContextValue {
   sources: Source[]
   /** Viajes y fuentes aún cargándose: la UI no debe concluir que un viaje no existe. */
   isLoading: boolean
+  /**
+   * Vacía el debounce del syncer y espera al persist. `false` si falló:
+   * el login de invitado no debe seguir (el viaje se perdería).
+   */
+  flushPendingSync: () => Promise<boolean>
   createTrip: (data: {
     name: string
     countries: string[]
@@ -323,6 +329,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const coverBackfillAttempted = useRef(new Set<string>())
   const syncerRef = useRef<TripsSyncer | null>(null)
   const hydratedFor = useRef<string | null>(null)
+  const claimAttemptedFor = useRef<string | null>(null)
 
   // En el render, no en un effect: `/start` dispara la extracción en el hijo
   // en el mismo commit en el que llegan los viajes. Un effect deja el ref a []
@@ -348,6 +355,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       syncerRef.current?.dispose()
       syncerRef.current = null
       hydratedFor.current = null
+      claimAttemptedFor.current = null
       coverBackfillAttempted.current.clear()
       for (const ac of abortByPendingIdRef.current.values()) ac.abort()
       abortByPendingIdRef.current.clear()
@@ -377,6 +385,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     let completed = false
     void (async () => {
       try {
+        // Redeem ANTES del primer load: si hay stash, el snapshot ya incluye
+        // el viaje del invitado. Sin stash es un getItem de localStorage.
+        if (claimAttemptedFor.current !== userId) {
+          await redeemGuestTripClaim(supabase, userId)
+          claimAttemptedFor.current = userId
+        }
+        if (!active) return
         const snapshot = await loadTripsState(supabase, userId)
         if (!active) return
         syncer.reset(snapshot)
@@ -417,6 +432,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("pagehide", flush)
       flush()
     }
+  }, [])
+
+  const flushPendingSync = useCallback(async () => {
+    const syncer = syncerRef.current
+    if (!syncer) return true
+    return syncer.flushNow()
   }, [])
 
   const applyCoverFromSource = useCallback(async (tripId: string, source: Source) => {
@@ -1591,6 +1612,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       trips,
       sources,
       isLoading,
+      flushPendingSync,
       createTrip,
       updateTrip,
       deleteTrip,
@@ -1636,7 +1658,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, flushPendingSync, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

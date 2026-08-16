@@ -29,6 +29,7 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260808210000_country_task_suggestions.sql
 #   migrations/20260808220000_trip_origin.sql
 #   migrations/20260816120000_ai_transfer_consent.sql
+#   migrations/20260816180000_guest_trip_claim.sql
 
 # Opción B: NO disponible hoy. `supabase db push` no funciona en este proyecto:
 # no hay supabase/config.toml, el CLI no está vinculado y el remoto no tiene
@@ -52,6 +53,18 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 
 **⚠️ T4B.1 origen del viaje:** `20260808220000_trip_origin.sql` añade `trips.origin` (jsonb nullable). El frontend la pide en `TRIP_COLUMNS`; si llega a producción **antes** que la migración, PostgREST responde *column does not exist* y **`/trips` deja de cargar para todos**. Orden obligatorio: **aplicar la migración en Supabase → verificar la columna → solo entonces mergear a `main`**. Aditiva e idempotente (`add column if not exists`): segura con el front viejo aún en producción.
 
+**Login de invitado → cuenta existente:** `20260816180000_guest_trip_claim.sql` crea `guest_trip_claims` + `prepare_guest_trip_claim()` / `claim_guest_trips()`. No añade columnas a `TRIP_COLUMNS`, así que un front nuevo contra una base vieja no tumba `/trips`: el botón «Ya tengo cuenta» aborta antes de `signIn` (`PGRST202`). Aun así, **aplicar la migración antes de mergear el front**. Verificar en SQL Editor (dos sesiones):
+
+```sql
+-- Como invitado (JWT anónimo):
+select public.prepare_guest_trip_claim();
+-- Como cuenta registrada, con el token devuelto:
+select public.claim_guest_trips('<token>');
+-- Comprobar que trips / sources / assistant_conversations cambiaron de user_id.
+-- Segundo canje del mismo token → {"status":"invalid"}
+-- Canje desde sesión anónima → {"status":"caller_anonymous"}
+```
+
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 
 ```
@@ -64,4 +77,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ…
 ## Opcional
 
 - **Bot protection / Turnstile** en Auth Settings si rellenas `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
-- **pg_cron**: las migraciones de cleanup intentan programar `cleanup_anonymous_users()` (04:00 UTC) y `cleanup_usage_events()` (04:15 UTC). Si la extensión no está disponible, invócalas a mano. **Producción (T7.3):** programar ambas junto al backup semanal.
+- **pg_cron**: las migraciones de cleanup intentan programar `cleanup_anonymous_users()` (04:00 UTC), `cleanup_usage_events()` (04:15 UTC) y `cleanup_guest_trip_claims()` (04:20 UTC). Si la extensión no está disponible, invócalas a mano. **Producción (T7.3):** programar las tres junto al backup semanal.

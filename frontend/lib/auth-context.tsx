@@ -5,7 +5,9 @@
  *
  * El modo invitado usa sesiones anónimas: el invitado ya es un `user_id` real, así que al
  * registrarse solo se le añaden email y contraseña (`upgradeGuest`) y conserva sus viajes
- * sin migración. `isGuest` es lo que consulta el RegistrationGate.
+ * sin migración. Para entrar en una cuenta *ya existente* el viaje viaja por
+ * `prepare_guest_trip_claim` / `claim_guest_trips` (`guest-trip-claim.ts`).
+ * `isGuest` es lo que consulta el RegistrationGate.
  */
 import {
   createContext,
@@ -28,6 +30,7 @@ import {
   type TravelerProfile,
 } from "@/lib/db/profile-repo"
 import { clearActiveConversationPointers } from "@/lib/db/assistant-repo"
+import { clearStash } from "@/lib/guest-trip-claim"
 
 export type AuthResult = { ok: true } | { ok: false; error: string }
 
@@ -264,6 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setSession(refreshed.session)
           setUser(refreshed.session.user)
         }
+        clearStash()
         return { ok: true }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
@@ -349,6 +353,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (data.user) {
           setUser(data.user)
         }
+        clearStash()
         return { ok: true }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }

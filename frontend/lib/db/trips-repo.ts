@@ -420,6 +420,7 @@ export class TripsSyncer {
   private timer: ReturnType<typeof setTimeout> | null = null
   private queue: Promise<void> = Promise.resolve()
   private disposed = false
+  private lastError: unknown = null
 
   constructor(
     supabase: SupabaseClient,
@@ -468,9 +469,22 @@ export class TripsSyncer {
     this.queue = this.queue
       .then(() => withRetry(() => this.persist(snapshot)))
       .catch((e) => {
+        this.lastError = e
         this.onError(e)
       })
     return this.queue
+  }
+
+  /**
+   * Como `flush()`, pero informa de si el persist acabó bien.
+   * El login de invitado aborta si esto es `false`: si no, el viaje se pierde
+   * al cambiar de sesión.
+   */
+  async flushNow(): Promise<boolean> {
+    if (this.disposed) return false
+    this.lastError = null
+    await this.flush()
+    return this.lastError == null
   }
 
   dispose(): void {

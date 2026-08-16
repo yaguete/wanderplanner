@@ -6,12 +6,13 @@
  * devuelve `false` cuando quien la intenta es un invitado.
  *
  * El registro usa `updateUser` sobre el mismo `user_id`, así que el viaje que ya ha planificado
- * se conserva sin migración.
+ * se conserva sin migración. «Ya tengo cuenta» prepara un claim, hace `signIn` a la cuenta
+ * existente y `claim_guest_trips` reasigna el viaje en la hidratación.
  *
  * Si el invitado ya envió email/contraseña pero aún no ha confirmado el correo, la modal
  * muestra el estado «pendiente de confirmación» en lugar de pedir el formulario otra vez.
  */
-import { createContext, useCallback, useContext, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import {
@@ -24,7 +25,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
+import { useTrips } from "@/lib/trip-context"
+import { createClient } from "@/lib/supabase/client"
+import {
+  clearStash,
+  prepareGuestTripClaim,
+} from "@/lib/guest-trip-claim"
 
 export type GateReason =
   | "new-trip"
@@ -32,6 +40,8 @@ export type GateReason =
   | "home"
   | "source-limit"
   | "assistant-limit"
+
+type GateMode = "signup" | "login"
 
 const COPY: Record<GateReason, { title: string; description: string }> = {
   "new-trip": {
@@ -76,8 +86,10 @@ function pendingEmailOf(user: User | null | undefined): string | null {
 
 export function RegistrationGateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const { user, isGuest, upgradeGuest, linkGuestEmail, refreshGuestStatus } = useAuth()
+  const { user, isGuest, upgradeGuest, linkGuestEmail, refreshGuestStatus, signIn } = useAuth()
+  const { flushPendingSync, pendingSources } = useTrips()
   const [reason, setReason] = useState<GateReason | null>(null)
+  const [mode, setMode] = useState<GateMode>("signup")
   const [pendingConfirm, setPendingConfirm] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -85,6 +97,11 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaKey, setCaptchaKey] = useState(0)
+  const keepClaimRef = useRef(false)
+  const captchaEnabled = isTurnstileEnabled()
+  const extractionLoading = pendingSources.some((p) => p.status === "loading")
 
   const pendingEmail = pendingEmailOf(user)
   const hasPendingUpgrade = Boolean(isGuest && pendingEmail)
@@ -94,6 +111,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
       if (!isGuest) return true
       setError(null)
       setNotice(null)
+      setMode("signup")
       setPendingConfirm(hasPendingUpgrade)
       if (hasPendingUpgrade && pendingEmail) {
         setEmail(pendingEmail)
@@ -104,11 +122,24 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     [isGuest, hasPendingUpgrade, pendingEmail],
   )
 
-  const closeGate = () => {
+  const resetGateState = () => {
     setReason(null)
     setPendingConfirm(false)
+    setMode("signup")
     setError(null)
     setNotice(null)
+    setSubmitting(false)
+  }
+
+  const closeGate = () => {
+    if (!keepClaimRef.current) clearStash()
+    keepClaimRef.current = false
+    resetGateState()
+  }
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null)
+    setCaptchaKey((key) => key + 1)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -134,7 +165,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
       setNotice(null)
       return
     }
-    closeGate()
+    keepClaimRef.current = true
+    resetGateState()
     router.refresh()
   }
 
@@ -158,6 +190,50 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     )
   }
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setNotice(null)
+    if (extractionLoading) {
+      setError("Espera a que termine de leer el artículo.")
+      return
+    }
+    if (captchaEnabled && !captchaToken) {
+      setError("Confirma que no eres un robot.")
+      return
+    }
+    if (!user?.id) {
+      setError("No hay sesión de invitado.")
+      return
+    }
+    setSubmitting(true)
+    const flushed = await flushPendingSync()
+    if (!flushed) {
+      setSubmitting(false)
+      setError("No hemos podido guardar los últimos cambios. Inténtalo de nuevo.")
+      return
+    }
+    const prepared = await prepareGuestTripClaim(createClient(), user.id)
+    if (!prepared.ok) {
+      setSubmitting(false)
+      setError(prepared.error)
+      return
+    }
+    const result = await signIn(email.trim(), password, captchaToken ?? undefined)
+    if (!result.ok) {
+      clearStash()
+      resetCaptcha()
+      setSubmitting(false)
+      setError(result.error)
+      return
+    }
+    keepClaimRef.current = true
+    const goHome = reason === "home" || reason === "new-trip"
+    resetGateState()
+    router.refresh()
+    if (goHome) router.push("/trips")
+  }
+
   const handleAlreadyConfirmed = async () => {
     setError(null)
     setNotice(null)
@@ -170,7 +246,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
       )
       return
     }
-    closeGate()
+    keepClaimRef.current = true
+    resetGateState()
     router.refresh()
   }
 
@@ -194,6 +271,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   const value = useMemo<GateValue>(() => ({ requireAccount }), [requireAccount])
   const copy = reason ? COPY[reason] : null
   const displayPendingEmail = pendingEmail ?? email.trim()
+  const loginBlocked = submitting || extractionLoading || (captchaEnabled && !captchaToken)
 
   return (
     <RegistrationGateContext.Provider value={value}>
@@ -236,6 +314,69 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                   Reenviar enlace
                 </Button>
               </div>
+            </>
+          ) : mode === "login" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Entra en tu cuenta</DialogTitle>
+                <DialogDescription>
+                  Tu viaje actual se añadirá a esta cuenta.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={(e) => void handleLogin(e)} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="gate-login-email">Email</Label>
+                  <Input
+                    id="gate-login-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu@email.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="gate-login-password">Contraseña</Label>
+                  <Input
+                    id="gate-login-password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+
+                {captchaEnabled ? (
+                  <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptchaToken} />
+                ) : null}
+
+                {error ? <p className="text-sm text-destructive">{error}</p> : null}
+                {extractionLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Espera a que termine de leer el artículo.
+                  </p>
+                ) : null}
+
+                <Button type="submit" className="h-11" disabled={loginBlocked}>
+                  {submitting ? "Entrando…" : "Entrar y guardar mi viaje"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-10"
+                  disabled={submitting}
+                  onClick={() => {
+                    setError(null)
+                    setNotice(null)
+                    setMode("signup")
+                  }}
+                >
+                  Crear cuenta
+                </Button>
+              </form>
             </>
           ) : (
             <>
@@ -293,6 +434,20 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                   disabled={submitting}
                 >
                   Prefiero un enlace por email
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-10 text-muted-foreground"
+                  disabled={submitting}
+                  onClick={() => {
+                    setError(null)
+                    setNotice(null)
+                    setPassword("")
+                    setMode("login")
+                  }}
+                >
+                  Ya tengo cuenta
                 </Button>
               </form>
             </>

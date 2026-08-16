@@ -93,6 +93,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       site.ts              # SITE_URL canónica (metadataBase, sitemap, robots)
       legal.ts             # Titular e inventario de storage para /legal/* (sin nombres de proveedor)
       cookie-consent.ts    # wp-consent (analítica); test:cookie-consent
+      guest-trip-claim.ts  # login de invitado → cuenta existente (`wp-guest-trip-claim`)
       ai-transfer-consent.ts # Consentimiento art. 49.1.a del asistente: `wp-ai-transfer-consent:{userId}`
                            # para la UI + `profiles.ai_transfer_consent_at/_version` como constancia
       db/                  # trips-repo, assistant-repo, profile-repo
@@ -127,7 +128,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - Sesión vía Supabase Auth. Middleware exige sesión (registrada **o anónima**) en `/trips` y `/account`.
 - **Invitado:** `signInAnonymously` (hay que activar Anonymous Sign-Ins en el dashboard). Mismo `user_id` que al registrarse.
-- **`RegistrationGate`:** con `user.is_anonymous`, bloquea segunda fuente / nuevo viaje / ir a inicio. Registro con `updateUser` (email+password) o enlace por email (`linkGuestEmail` → `updateUser({ email })`). **No** usar `signInWithOtp` en invitados (crearía otro usuario).
+- **`RegistrationGate`:** con `user.is_anonymous`, bloquea segunda fuente / nuevo viaje / ir a inicio. Registro con `updateUser` (email+password) o enlace por email (`linkGuestEmail` → `updateUser({ email })`). **«Ya tengo cuenta»** prepara un claim (`prepare_guest_trip_claim`) y, tras `signIn` a la cuenta existente, `claim_guest_trips` reasigna `trips` / `sources` / `assistant_conversations`. El mismo stash cubre `/login` si el invitado llega ahí. **No** usar `signInWithOtp` para *convertir* al invitado (crearía otro usuario); en `/login` sí se usa para entrar en otra cuenta.
 - Perfil: `profiles` + `favorite_references`; se inyecta en el briefing del asistente y en `preferred_domains` de Tavily.
 
 ## Persistencia (modelo documento)
@@ -139,7 +140,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Extracción de fuente: `startSourceExtraction` (fire-and-forget) → chip pendiente en Fuentes (`pendingSources`); sin modal bloqueante. Tope **5 fuentes/viaje** ([`trip-sources.ts`](frontend/lib/trip-sources.ts)). Quitar una fuente **no** borra ítems/basics ya consolidados en Mi viaje.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
-- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`), consentimiento (`wp-consent`, `wp-ai-transfer-consent`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
+- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`), consentimiento (`wp-consent`, `wp-ai-transfer-consent`), claim de invitado (`wp-guest-trip-claim`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
 - Miniaturas: no van en el payload de `/itinerary` (`thumb_url` null). `InspirationThumbnail` las pide a `GET /thumb` al entrar en viewport. Portadas: `GET /cover` vía [`unsplash.ts`](frontend/lib/unsplash.ts) (claves solo en backend).
 - Trámites de país (T4.4): pestaña **Básicos** → `GET /country-tasks` (Recomendaciones MAE + Haiku). Sugerencias aceptadas → `ExtraTask` con id `country:{iso}:{slug}`; descartes en `dismissedCountryTasks` (columna propia, **no** en `tasks`).
 - Descripción de día por IA: `POST /day-summary`; la firma de ítems (`summarySignature` en `UserDay`) apaga el botón si nada ha cambiado.
@@ -175,6 +176,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/components/partners/partner-button-builder.tsx`](frontend/components/partners/partner-button-builder.tsx).
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
 - [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously.
+- [`frontend/lib/guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) — stash + RPC para llevar el viaje del invitado a una cuenta existente.
 - [`frontend/components/auth/registration-gate.tsx`](frontend/components/auth/registration-gate.tsx).
 - [`frontend/lib/api.ts`](frontend/lib/api.ts) / [`assistant-api.ts`](frontend/lib/assistant-api.ts) / [`api-auth.ts`](frontend/lib/api-auth.ts) / [`thumbs.ts`](frontend/lib/thumbs.ts) / [`unsplash.ts`](frontend/lib/unsplash.ts) / [`country-tasks.ts`](frontend/lib/country-tasks.ts) — Bearer del access token; thumbs, covers y trámites.
 - [`frontend/lib/trip-tasks.ts`](frontend/lib/trip-tasks.ts) — Claves de tarea y agregación; única fuente de `taskKeyForItem`.
@@ -237,7 +239,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
 - ❌ **No mutes a mano** `trip.days[…].items` → solo `moveItemBetweenDays`.
 - ❌ **No expongas `SUPABASE_SERVICE_ROLE_KEY`** al frontend.
-- ❌ **No uses `signInWithOtp` para convertir invitados** → `upgradeGuest` / `linkGuestEmail`.
+- ❌ **No uses `signInWithOtp` para convertir invitados** → `upgradeGuest` / `linkGuestEmail`. Entrar en una cuenta ya existente desde invitado va por `prepare_guest_trip_claim` / `claim_guest_trips`.
+- ❌ **No reasignes `user_id` desde el cliente** → RLS lo bloquea. El único camino es [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) + [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql).
+- ❌ **No pongas `force row level security` en `trips` / `sources` / `assistant_conversations`** sin revisar esas funciones: el `security definer` deja de funcionar en silencio.
 - ❌ **No pidas portada Unsplash en `createTrip`** → `applyCoverFromSource`.
 - ❌ **No expongas claves de imágenes** (`GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`) al frontend / `NEXT_PUBLIC_*`.
 - ❌ **No mezcles conversaciones del asistente entre viajes**.
@@ -263,7 +267,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Esquema SQL / RLS | [`supabase/migrations/`](supabase/migrations/), [`supabase/README.md`](supabase/README.md) |
 | [`types/itinerary.ts`](frontend/types/itinerary.ts) | prompt itinerario, `itinerary-utils`, `main.py`, forma de jsonb |
 | `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
-| Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start` |
+| Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql) |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), perfil |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
