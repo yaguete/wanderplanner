@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Check, ExternalLink, Pencil, Plus, X, type LucideIcon } from "lucide-react"
+import { Check, ExternalLink, Pencil, Plus, Search, X, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { FlightSearchLink } from "@/components/flight-search-link"
@@ -50,6 +50,10 @@ type SourceCardProps = {
   isAdded?: boolean
   addedLabel?: string
   action: ReactNode
+  /** Desktop: toda la card (salvo lupita / acción) abre el selector de día. */
+  onSelect?: () => void
+  /** Busca el nombre en la Crónica de la fuente. */
+  onFindInSource?: () => void
   className?: string
 }
 
@@ -123,26 +127,59 @@ export function TravelItemCard(props: TravelItemCardProps) {
     return (
       <div
         className={cn(
-          "flex items-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm",
+          "relative flex items-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm",
           CARD_MOTION,
+          props.onSelect && "cursor-pointer",
           props.isAdded && "opacity-70",
           props.className,
         )}
       >
-        {props.thumbnail}
-        <div className="min-w-0 flex-1 pr-1">
+        {props.onSelect ? (
+          <button
+            type="button"
+            onClick={props.onSelect}
+            className="absolute inset-0 z-0 rounded-2xl outline-none ring-inset focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Añadir al itinerario"
+          />
+        ) : null}
+        <div className="relative z-[1] pointer-events-none shrink-0">{props.thumbnail}</div>
+        <div className="relative z-[1] pointer-events-none min-w-0 flex-1 pr-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <TypeBadge type={props.type} label={props.typeLabel} />
             {props.addedLabel ? <AddedBadge label={props.addedLabel} /> : null}
           </div>
-          <p className="mt-1.5 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
-            {props.title}
-          </p>
+          <div className="mt-1.5 flex items-center gap-0.5">
+            <p className="min-w-0 flex-1 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
+              {props.title}
+            </p>
+            {props.onFindInSource ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  props.onFindInSource?.()
+                }}
+                className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Buscar «${props.title}» en la crónica`}
+                title="Buscar en la crónica"
+              >
+                <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            ) : null}
+          </div>
           {props.detail ? (
             <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail}</p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center">{props.action}</div>
+        <div
+          className={cn(
+            "relative z-[1] flex shrink-0 items-center",
+            props.onSelect && "pointer-events-none",
+          )}
+        >
+          {props.action}
+        </div>
       </div>
     )
   }

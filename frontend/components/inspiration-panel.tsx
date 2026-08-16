@@ -577,6 +577,13 @@ export default function InspirationPanel({
     })
   }
 
+  const openChronicleSearch = useCallback((name: string) => {
+    const q = name.trim()
+    if (!q) return
+    setSourceQuery(q)
+    setSourceTab("source")
+  }, [])
+
   const tabs = [
     { id: "source" as const, label: "Crónica", icon: BookOpen },
     { id: "itinerary" as const, label: "Ruta", icon: MapPin },
@@ -980,6 +987,7 @@ export default function InspirationPanel({
                     thumbnailMode="transportIcon"
                     sourceTypeLabel="Desplazamiento"
                     onPick={() => setPicking({ kind: "item", item })}
+                    onFindInSource={() => openChronicleSearch(item.name)}
                   />
                 )}
               />
@@ -1012,6 +1020,7 @@ export default function InspirationPanel({
                       addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
                       tripStartDate={trip?.startDate ?? null}
                       onPick={() => setPicking({ kind: "item", item })}
+                      onFindInSource={() => openChronicleSearch(item.name)}
                     />
                   )}
                 />
@@ -1427,6 +1436,7 @@ function ItemRow({
   thumbnailMode,
   sourceTypeLabel,
   onPick,
+  onFindInSource,
 }: {
   item: SourceItem
   sourceArea: string | null
@@ -1436,9 +1446,10 @@ function ItemRow({
   thumbnailMode?: "default" | "transportIcon"
   sourceTypeLabel?: string
   onPick: () => void
+  onFindInSource: () => void
 }) {
   const isMobile = useIsMobile()
-  const card = (
+  return (
     <TravelItemCard
       variant="source"
       title={item.name}
@@ -1459,6 +1470,8 @@ function ItemRow({
           mode={thumbnailMode ?? "default"}
         />
       }
+      onSelect={isMobile ? undefined : onPick}
+      onFindInSource={onFindInSource}
       action={
         isMobile ? (
           <button
@@ -1479,21 +1492,5 @@ function ItemRow({
         )
       }
     />
-  )
-
-  // Desktop: toda la card abre el selector. Móvil: solo el «+», para no interferir con el scroll.
-  if (isMobile) {
-    return card
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      className="block w-full cursor-pointer rounded-2xl text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label="Añadir al itinerario"
-    >
-      {card}
-    </button>
   )
 }
