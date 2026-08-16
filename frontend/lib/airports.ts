@@ -45,7 +45,7 @@ function airportByCode(code: string): AirportRow | null {
 /**
  * Códigos IATA de área metropolitana. Solo para extremos ciudad/dirección:
  * «el más cercano» falla en Londres (LCY), París (LBG / aviación privada), etc.
- * OurAirports no contiene estos códigos; Kiwi `/deep` sí los acepta (verificado 13 ago 2026).
+ * OurAirports no contiene estos códigos; Skyscanner referrals admite IATA de ciudad.
  */
 const METRO_AREAS: readonly [code: string, lng: number, lat: number, radiusKm: number][] = [
   ["LON", -0.128, 51.507, 60],

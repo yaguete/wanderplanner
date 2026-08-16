@@ -103,8 +103,8 @@ export default function AvisoLegalPage() {
           quien cobra, si cobra, es él.
         </p>
         <p>
-          «Buscar vuelos» te lleva a Kiwi.com con el origen, el destino, las fechas y el
-          número de viajeros ya puestos, así que Kiwi ve esos datos. Hoy no cobramos
+          «Buscar vuelos» te lleva a Skyscanner con el origen, el destino, las fechas y el
+          número de viajeros ya puestos, así que Skyscanner ve esos datos. Hoy no cobramos
           comisión por esos clics; si algún día lo hacemos, se dirá aquí.
         </p>
       </LegalSection>

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict"
-import { flightSearchHrefForItem, isMirroredFlightRoundtrip } from "./flight-search"
+import {
+  FLIGHT_SEARCH_TRACKING_URL,
+  flightSearchHrefForItem,
+  isMirroredFlightRoundtrip,
+} from "./flight-search"
 import type { RoutePlace, RoutePlaceKind, TransportRoute, UserDay } from "@/types/itinerary"
 
 function place(
@@ -73,6 +77,42 @@ const trip7 = {
   numTravelers: 2,
 }
 
+function assertSkyscannerHref(
+  href: string | undefined,
+  expected: {
+    page: "day-view" | "calendar-month-view"
+    origin: string
+    destination: string
+    outboundDate?: string
+    inboundDate?: string
+    adults: string
+  },
+) {
+  assert.ok(href)
+  const wrap = new URL(href)
+  assert.equal(`${wrap.origin}${wrap.pathname}`, FLIGHT_SEARCH_TRACKING_URL)
+  const dest = wrap.searchParams.get("u")
+  assert.ok(dest, "missing Impact u=")
+  const inner = new URL(dest)
+  assert.equal(inner.origin, "https://www.skyscanner.net")
+  assert.equal(inner.pathname, `/g/referrals/v1/flights/${expected.page}`)
+  assert.equal(inner.searchParams.get("origin"), expected.origin)
+  assert.equal(inner.searchParams.get("destination"), expected.destination)
+  assert.equal(inner.searchParams.get("adultsv2"), expected.adults)
+  assert.equal(inner.searchParams.get("locale"), "es-ES")
+  assert.equal(inner.searchParams.get("market"), "ES")
+  assert.equal(inner.searchParams.get("currency"), "EUR")
+  if (expected.page === "day-view") {
+    assert.equal(inner.searchParams.get("outboundDate"), expected.outboundDate ?? null)
+    assert.equal(inner.searchParams.get("inboundDate"), expected.inboundDate ?? null)
+    assert.equal(inner.searchParams.get("cabinclass"), "economy")
+  } else {
+    assert.equal(inner.searchParams.get("outboundDate"), null)
+    assert.equal(inner.searchParams.get("inboundDate"), null)
+    assert.equal(inner.searchParams.get("cabinclass"), null)
+  }
+}
+
 // Tren / coche / bus / ferry / sin modo → null.
 for (const mode of ["train", "car", "bus", "ferry", null] as const) {
   assert.equal(
@@ -105,11 +145,16 @@ const accept = flightSearchHrefForItem({
   trip: trip7,
   days: daysWith(route({ from: BCN, to: BUD, leg: "outbound" })),
 })
-assert.deepEqual(accept, {
-  href: "https://www.kiwi.com/deep?from=BCN&to=BUD&departure=2027-09-14&return=2027-09-20&adults=2",
-  from: "BCN",
-  to: "BUD",
-  roundTrip: true,
+assert.equal(accept?.from, "BCN")
+assert.equal(accept?.to, "BUD")
+assert.equal(accept?.roundTrip, true)
+assertSkyscannerHref(accept?.href, {
+  page: "day-view",
+  origin: "BCN",
+  destination: "BUD",
+  outboundDate: "2027-09-14",
+  inboundDate: "2027-09-20",
+  adults: "2",
 })
 
 // Retorno en tren → solo ida, aunque los extremos reflejen.
@@ -122,10 +167,13 @@ assert.deepEqual(accept, {
     trip: trip7,
     days: daysWith(out, back),
   })
-  assert.equal(
-    hit?.href,
-    "https://www.kiwi.com/deep?from=BCN&to=BUD&departure=2027-09-14&adults=2",
-  )
+  assertSkyscannerHref(hit?.href, {
+    page: "day-view",
+    origin: "BCN",
+    destination: "BUD",
+    outboundDate: "2027-09-14",
+    adults: "2",
+  })
   assert.equal(hit?.roundTrip, false)
 }
 
@@ -138,10 +186,13 @@ assert.deepEqual(accept, {
     trip: trip7,
     days: [{ id: "x", label: "", items: [] }],
   })
-  assert.equal(
-    hit?.href,
-    "https://www.kiwi.com/deep?from=BCN&to=BUD&departure=2027-09-17&adults=2",
-  )
+  assertSkyscannerHref(hit?.href, {
+    page: "day-view",
+    origin: "BCN",
+    destination: "BUD",
+    outboundDate: "2027-09-17",
+    adults: "2",
+  })
 }
 
 // leg return → solo ida.
@@ -153,10 +204,13 @@ assert.deepEqual(accept, {
     trip: trip7,
     days: daysWith(route({ from: BCN, to: BUD, leg: "outbound" }), back),
   })
-  assert.equal(
-    hit?.href,
-    "https://www.kiwi.com/deep?from=BUD&to=BCN&departure=2027-09-20&adults=2",
-  )
+  assertSkyscannerHref(hit?.href, {
+    page: "day-view",
+    origin: "BUD",
+    destination: "BCN",
+    outboundDate: "2027-09-20",
+    adults: "2",
+  })
 }
 
 // Open-jaw (ida BCN→BUD, vuelta VIE→BCN) → solo ida.
@@ -169,10 +223,13 @@ assert.deepEqual(accept, {
     trip: trip7,
     days: daysWith(out, back),
   })
-  assert.equal(
-    hit?.href,
-    "https://www.kiwi.com/deep?from=BCN&to=BUD&departure=2027-09-14&adults=2",
-  )
+  assertSkyscannerHref(hit?.href, {
+    page: "day-view",
+    origin: "BCN",
+    destination: "BUD",
+    outboundDate: "2027-09-14",
+    adults: "2",
+  })
 }
 
 // Ida + retorno que refleja (vuelo) → round-trip con el día del retorno.
@@ -185,10 +242,14 @@ assert.deepEqual(accept, {
     trip: trip7,
     days: daysWith(out, back),
   })
-  assert.equal(
-    hit?.href,
-    "https://www.kiwi.com/deep?from=BCN&to=BUD&departure=2027-09-14&return=2027-09-20&adults=2",
-  )
+  assertSkyscannerHref(hit?.href, {
+    page: "day-view",
+    origin: "BCN",
+    destination: "BUD",
+    outboundDate: "2027-09-14",
+    inboundDate: "2027-09-20",
+    adults: "2",
+  })
 }
 
 // Fecha pasada → sin fechas, con origen/destino/pasajeros.
@@ -199,7 +260,12 @@ assert.deepEqual(accept, {
     trip: { startDate: "2020-01-01", numDays: 7, numTravelers: 2 },
     days: daysWith(route({ from: BCN, to: BUD, leg: "outbound" })),
   })
-  assert.equal(hit?.href, "https://www.kiwi.com/deep?from=BCN&to=BUD&adults=2")
+  assertSkyscannerHref(hit?.href, {
+    page: "calendar-month-view",
+    origin: "BCN",
+    destination: "BUD",
+    adults: "2",
+  })
 }
 
 // numTravelers 0 → adults=1; 14 → adults=9.
@@ -210,7 +276,12 @@ assert.deepEqual(accept, {
     trip: { startDate: null, numDays: 7, numTravelers: 0 },
     days: daysWith(route({ from: BCN, to: BUD, leg: "outbound" })),
   })
-  assert.equal(hit1?.href, "https://www.kiwi.com/deep?from=BCN&to=BUD&adults=1")
+  assertSkyscannerHref(hit1?.href, {
+    page: "calendar-month-view",
+    origin: "BCN",
+    destination: "BUD",
+    adults: "1",
+  })
 
   const hit9 = flightSearchHrefForItem({
     route: route({ from: BCN, to: BUD, leg: "outbound" }),
@@ -218,7 +289,12 @@ assert.deepEqual(accept, {
     trip: { startDate: null, numDays: 7, numTravelers: 14 },
     days: daysWith(route({ from: BCN, to: BUD, leg: "outbound" })),
   })
-  assert.equal(hit9?.href, "https://www.kiwi.com/deep?from=BCN&to=BUD&adults=9")
+  assertSkyscannerHref(hit9?.href, {
+    page: "calendar-month-view",
+    origin: "BCN",
+    destination: "BUD",
+    adults: "9",
+  })
 }
 
 // Ida y vuelta espejadas en avión; open-jaw y vuelta en tren no.

@@ -1,18 +1,22 @@
 /**
  * Enlace profundo de búsqueda de vuelos (T4B.3b, Nivel 1). Sin API ni precios.
  *
- * Proveedor: Kiwi `/deep` — verificado 13 ago 2026 con curl (Location de /searchDeep):
- * 1. IATA de aeropuerto: from=BCN&to=BUD se conserva.
- * 2. Códigos de área: LON, PAR, NYC, MIL, ROM, TYO, STO, YTO, BUE, MOW, SAO,
- *    RIO, CHI, WAS, OSA, SEL, BER, BKK, IST, JKT, BHZ, DTT, TEH se conservan.
- * 3. Fechas de entrada YYYY-MM-DD (Kiwi las reescribe a DD-MM-YYYY en el redirect).
- * 4. Solo ida: omitir `return` (el redirect no lo añade).
- * 5. Pasajeros: `adults` (comprobado 2 y 9).
- * 6. Sin fechas: Kiwi rellena un rango flexible (~1 mes desde mañana), no la home.
+ * Proveedor: Skyscanner via Impact `pxf.io/gOnd70?u=` — verificado 16 ago 2026
+ * (Location del 301 conserva origin/destination/fechas/adultos). El referrals
+ * API responde 403 a curl; el cliente previsto es el navegador.
  *
- * Ejemplo real: https://www.kiwi.com/deep?from=BCN&to=BUD&departure=2026-09-14&return=2026-09-20&adults=2
+ * 1. IATA de aeropuerto: origin=BCN&destination=BUD se conserva en el `u`.
+ * 2. Códigos de área: se emiten tal cual (LON, PAR, NYC…); la docs de
+ *    referrals admite IATA de ciudad. Tabla 3→4 letras solo si un hop real falla.
+ * 3. Fechas YYYY-MM-DD en outboundDate / inboundDate (`day-view`).
+ * 4. Solo ida: omitir inboundDate.
+ * 5. Pasajeros: adultsv2.
+ * 6. Sin fechas: calendar-month-view (day-view exige outboundDate).
  *
- * Cambiar de buscador = otro `build` en FLIGHT_SEARCH_PROVIDER. Nada más depende de Kiwi.
+ * El wrap Impact es siempre. FLIGHT_SEARCH_AFFILIATE_ID vacío = no cobramos
+ * comisión; el badge «afiliado» no se enciende.
+ *
+ * Cambiar de buscador = otro `build` en FLIGHT_SEARCH_PROVIDER.
  */
 import { resolveAirportCode } from "@/lib/airports"
 import { findLegItem } from "@/lib/route-legs"
@@ -39,25 +43,43 @@ type FlightSearchProvider = {
   build: (q: FlightQuery) => string
 }
 
-/** Enganche de afiliación PROPIO: solo vuelos, nunca fuentes. Vacío = sin afiliado. */
+/** Enganche de afiliación PROPIO: solo vuelos, nunca fuentes. Vacío = sin comisión / sin badge. */
 export const FLIGHT_SEARCH_AFFILIATE_ID = ""
 
-const kiwiProvider: FlightSearchProvider = {
-  id: "kiwi",
+/** Hop de Impact hacia Skyscanner. Cada «Buscar vuelos» pasa por aquí. */
+export const FLIGHT_SEARCH_TRACKING_URL = "https://skyscanner.pxf.io/gOnd70"
+
+function wrapAffiliate(destination: string): string {
+  const url = new URL(FLIGHT_SEARCH_TRACKING_URL)
+  url.searchParams.set("u", destination)
+  return url.toString()
+}
+
+function skyscannerPage(q: FlightQuery): string {
+  const page = q.departure ? "day-view" : "calendar-month-view"
+  const params = new URLSearchParams()
+  params.set("origin", q.from)
+  params.set("destination", q.to)
+  if (q.departure) {
+    params.set("outboundDate", q.departure)
+    if (q.return) params.set("inboundDate", q.return)
+    params.set("cabinclass", "economy")
+  }
+  params.set("adultsv2", String(q.adults))
+  params.set("locale", "es-ES")
+  params.set("market", "ES")
+  params.set("currency", "EUR")
+  return `https://www.skyscanner.net/g/referrals/v1/flights/${page}?${params.toString()}`
+}
+
+const skyscannerProvider: FlightSearchProvider = {
+  id: "skyscanner",
   build(q) {
-    const params = new URLSearchParams()
-    params.set("from", q.from)
-    params.set("to", q.to)
-    if (q.departure) params.set("departure", q.departure)
-    if (q.return) params.set("return", q.return)
-    params.set("adults", String(q.adults))
-    // affilid viaja en la query: rel="noreferrer" no rompe la atribución.
-    if (FLIGHT_SEARCH_AFFILIATE_ID) params.set("affilid", FLIGHT_SEARCH_AFFILIATE_ID)
-    return `https://www.kiwi.com/deep?${params.toString()}`
+    return wrapAffiliate(skyscannerPage(q))
   },
 }
 
-export const FLIGHT_SEARCH_PROVIDER: FlightSearchProvider = kiwiProvider
+export const FLIGHT_SEARCH_PROVIDER: FlightSearchProvider = skyscannerProvider
 
 const BLOCKING_RETURN_MODES: ReadonlySet<RouteMode> = new Set([
   "train",

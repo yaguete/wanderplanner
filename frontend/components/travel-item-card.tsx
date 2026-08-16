@@ -87,7 +87,7 @@ type PlannedCardProps = {
    * Hermano del bloque enlazado — nunca dentro del `<a>` afiliado.
    */
   taskIndicator?: ReactNode
-  /** T4B.3b: enlace Kiwi prerelleno. Fuera del `<a>` de affiliateUrl. */
+  /** T4B.3b: enlace Skyscanner prerellenado. Fuera del `<a>` de affiliateUrl. */
   flightSearch?: FlightSearchHit | null
   className?: string
 }
