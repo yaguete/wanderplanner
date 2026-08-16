@@ -41,8 +41,8 @@ export function TravelerProfileFields({
 
   return (
     <div className={cn("flex flex-col", compact ? "gap-4" : "gap-6")}>
-      <div className="flex flex-col gap-2">
-        <Label>¿Qué tipo de viajero eres?</Label>
+      <div className="flex flex-col gap-2" role="group" aria-label="Tipo de viajero">
+        {compact ? null : <Label>¿Qué tipo de viajero eres?</Label>}
         <p className="text-xs text-muted-foreground">
           El asistente adapta sus recomendaciones a lo que elijas. Puedes marcar varios.
         </p>

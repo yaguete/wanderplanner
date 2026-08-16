@@ -324,7 +324,7 @@ export function LandingStart() {
           hidden={tab !== "signup"}
         >
           {showSignupOverlay ? (
-            <div className="rounded-2xl border border-border bg-background p-5 text-left shadow-lg sm:p-6">
+            <div className="max-h-[min(72vh,40rem)] overflow-y-auto rounded-2xl border border-border bg-background p-5 text-left shadow-lg sm:p-6">
               <SignupForm variant="compact" />
             </div>
           ) : null}

@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { LandingHeader } from "@/components/landing/landing-header"
 import { LandingHero } from "@/components/landing/landing-hero"
 import { ValueProps } from "@/components/landing/value-props"
-import { ForBloggers } from "@/components/landing/for-bloggers"
 import { ClosingCta } from "@/components/landing/closing-cta"
 import { LandingFooter } from "@/components/landing/landing-footer"
 
@@ -33,7 +32,6 @@ export default function RootPage() {
         <main id="contenido">
           <LandingHero />
           <ValueProps />
-          <ForBloggers />
           <ClosingCta />
         </main>
         <LandingFooter />

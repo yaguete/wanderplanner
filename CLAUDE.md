@@ -62,7 +62,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     middleware.ts          # Sesión Supabase; protege /trips y /account
     components/            # UI + auth/ + partners/ + landing/ + tareas + tramos + mapa + nav móvil
       brand-mark.tsx       # isotipo ardilla, BrandLockup, brandSvgMarkup
-      landing/             # home pública + /partners en negativo; banda de blogueros
+      landing/             # home pública + /partners en negativo
       trips-shell.tsx      # providers + cromo de /trips (el layout es Server Component)
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
@@ -101,7 +101,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Rutas App Router y shell
 
-- **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), tres zooms de valor (`ValueProps`: fuentes / plan / oficiales), banda de blogueros, footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en la banda oscura y el footer, no en el hero.
+- **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), tres zooms de valor (`ValueProps`: fuentes / plan / oficiales), footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en el footer (`/partners`), no en el hero.
 - **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Stubs `noindex, follow` hasta T6.4 (copy real). No van en `sitemap.ts`.
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas). El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero).
 - **`/partners`** — Landing de marketing en negativo ([`app/partners/page.tsx`](frontend/app/partners/page.tsx) + [`components/landing/partners/`](frontend/components/landing/partners/)): misma arquitectura que `/` (hero + 3 zooms + CTA + footer) sobre tinta `hsl(20 8% 11%)`. El generador del botón vive en el hero (`id="empezar"`) y dispara `POST /partners/prewarm`. Indexable. Slugs reservados: `landing`, `wp-landing`, `start`, `admin`. **No** usa `AuthShell`.

@@ -2,11 +2,12 @@
 
 /**
  * Formulario de registro. `/signup` lo envuelve en AuthShell (variante completa);
- * la landing monta la variante compacta (nombre, email, contraseña).
+ * la landing monta la variante compacta (nombre, email, contraseña; perfil plegado).
  */
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,6 +39,7 @@ export function SignupForm({
   const [references, setReferences] = useState<FavoriteReferenceInput[]>([
     { label: "", url: "" },
   ])
+  const [showProfile, setShowProfile] = useState(!compact)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -75,9 +77,9 @@ export function SignupForm({
       email: email.trim(),
       password,
       displayName: name.trim() || null,
-      travelerTypes: compact ? [] : travelerTypes,
-      travelerNotes: compact ? null : travelerNotes.trim() || null,
-      favoriteReferences: compact ? [] : references,
+      travelerTypes,
+      travelerNotes: travelerNotes.trim() || null,
+      favoriteReferences: references,
     }
     const result = isGuest
       ? await upgradeGuest(payload)
@@ -142,7 +144,45 @@ export function SignupForm({
         </div>
       </div>
 
-      {compact ? null : (
+      {compact ? (
+        <div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-sm font-medium text-foreground/80 hover:text-foreground"
+            aria-expanded={showProfile}
+            onClick={() => setShowProfile((open) => !open)}
+          >
+            Cuéntanos qué clase de viajero/a eres
+            <ChevronDown
+              className={cn("size-3.5 transition-transform", showProfile && "rotate-180")}
+              aria-hidden
+            />
+          </button>
+          {showProfile ? (
+            <div className="mt-4 flex flex-col gap-4">
+              <TravelerProfileFields
+                compact
+                travelerTypes={travelerTypes}
+                onTravelerTypesChange={setTravelerTypes}
+                references={references}
+                onReferencesChange={setReferences}
+              />
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${prefix}traveler-notes`}>
+                  Algo más sobre cómo viajas (opcional)
+                </Label>
+                <Textarea
+                  id={`${prefix}traveler-notes`}
+                  value={travelerNotes}
+                  onChange={(e) => setTravelerNotes(e.target.value)}
+                  placeholder="Viajo con niños pequeños, prefiero alojamientos con cocina y evito madrugones."
+                  rows={3}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
         <>
           <TravelerProfileFields
             travelerTypes={travelerTypes}
