@@ -512,20 +512,23 @@ function DayCell({
 
   const numberClass = cn(
     "inline-flex size-6 shrink-0 items-center justify-center text-xs tabular-nums",
-    cell.isToday && inTrip
-      ? "rounded-full bg-foreground font-medium text-background"
-      : cell.isToday
-        ? "rounded-full bg-muted-foreground/30 font-medium text-foreground"
-        : inTrip
-          ? "font-medium text-foreground"
-          : cell.inMonth
-            ? "text-muted-foreground"
-            : "text-muted-foreground/50",
+    cell.isToday
+      ? "rounded-full bg-pink-500 font-medium text-white"
+      : inTrip
+        ? "font-medium text-foreground"
+        : cell.inMonth
+          ? "text-muted-foreground"
+          : "text-muted-foreground/50",
   )
 
   const numberEl = (
-    <span className={numberClass} aria-current={cell.isToday ? "date" : undefined}>
-      {dateNum}
+    <span className="inline-flex min-w-0 items-center gap-1">
+      <span className={numberClass} aria-current={cell.isToday ? "date" : undefined}>
+        {dateNum}
+      </span>
+      {cell.isToday ? (
+        <span className="hidden text-[10px] font-medium leading-none text-pink-500 md:inline">Hoy</span>
+      ) : null}
     </span>
   )
 
@@ -647,7 +650,7 @@ function RowDayLabel({
 }) {
   const weekday = WEEKDAYS[isoWeekdayMon0(iso)]
   return (
-    <div className="flex w-[4.5rem] shrink-0 items-center gap-1.5 pt-0.5">
+    <div className="flex min-w-[4.5rem] shrink-0 items-center gap-1.5 pt-0.5">
       {number}
       <span className="text-[11px] text-muted-foreground">{weekday}</span>
     </div>

@@ -618,6 +618,7 @@ export default function InspirationPanel({
   const rutaItemCount = groupedItems.reduce((n, g) => n + g.items.length, 0)
   const showRutaSearch = sourceTab === "itinerary" && rutaItemCount > 0
   const showCronicaSearch = sourceTab === "source" && !!currentSource
+  const showSearchToggle = showCronicaSearch || showRutaSearch
   const searchNeedle = sourceQuery.trim()
   const showMatchNav = showCronicaSearch && searchNeedle.length > 0 && !!currentSource?.articleHtml
 
@@ -859,11 +860,12 @@ export default function InspirationPanel({
                       onValueChange={setSourceTab}
                       ariaLabel="Vista de la fuente"
                     />
+                    {showSearchToggle ? (
                     <button
                       type="button"
                       aria-pressed={searchOpen}
                       aria-controls={
-                        searchOpen && (showCronicaSearch || showRutaSearch)
+                        searchOpen && showSearchToggle
                           ? "source-search"
                           : undefined
                       }
@@ -880,6 +882,7 @@ export default function InspirationPanel({
                     >
                       <Search className="h-3.5 w-3.5" strokeWidth={searchOpen ? 2.25 : 2} aria-hidden />
                     </button>
+                    ) : null}
                   </div>
                 </div>
               ) : (
@@ -898,7 +901,7 @@ export default function InspirationPanel({
             de cada pestaña. La condición reproduce cuándo se veía antes —
             con una extracción en curso el cuerpo no monta ninguna pestaña.
           */}
-          {!activePending && searchOpen && (showCronicaSearch || showRutaSearch) ? (
+          {!activePending && searchOpen && showSearchToggle ? (
             <SourceSearchBar
               query={sourceQuery}
               onQueryChange={setSourceQuery}
@@ -1057,10 +1060,9 @@ export default function InspirationPanel({
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
                     tripStartDate={trip?.startDate ?? null}
+                    onPick={() => setPicking({ kind: "item", item })}
                     thumbnailMode="transportIcon"
                     sourceTypeLabel="Desplazamiento"
-                    onPick={() => setPicking({ kind: "item", item })}
-                    onFindInSource={() => openChronicleSearch(item.name)}
                   />
                 )}
               />
@@ -1594,7 +1596,7 @@ function ItemRow({
   thumbnailMode?: "default" | "transportIcon"
   sourceTypeLabel?: string
   onPick: () => void
-  onFindInSource: () => void
+  onFindInSource?: () => void
 }) {
   const isMobile = useIsMobile()
   return (
