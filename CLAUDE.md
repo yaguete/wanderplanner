@@ -91,9 +91,10 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       day-summary.ts       # POST /day-summary + firma de ítems del día
       assistant-suggestions.ts   # Snippets de arranque del asistente (sin LLM)
       site.ts              # SITE_URL canónica (metadataBase, sitemap, robots)
-      legal.ts             # Titular, AI_PROVIDERS, inventario de storage para /legal/*
+      legal.ts             # Titular e inventario de storage para /legal/* (sin nombres de proveedor)
       cookie-consent.ts    # wp-consent (analítica); test:cookie-consent
-      ai-transfer-consent.ts # wp-ai-transfer-consent (asistente, art. 49.1.a)
+      ai-transfer-consent.ts # Consentimiento art. 49.1.a del asistente: `wp-ai-transfer-consent:{userId}`
+                           # para la UI + `profiles.ai_transfer_consent_at/_version` como constancia
       db/                  # trips-repo, assistant-repo, profile-repo
       supabase/            # client, server, middleware helpers
     hooks/                 # use-assistant-chat, use-collapsing-header,
@@ -253,7 +254,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No implementes búsqueda de vuelos con API / precios** → el buscador es Nivel 1 (enlace Kiwi). Afiliación propia solo en `FLIGHT_SEARCH_AFFILIATE_ID`; no toques `affiliateUrl` de fuentes. La tabla IATA se genera con `scripts/generate-airports.mjs`, no se edita `airports-data.ts` a mano.
 - ❌ **El uso in-app de sugerencias de fuentes no consume la cuota Tavily de la landing** → `GET /sources/suggest?scope=trip` con JWT (`trip_source_search`); sin JWT válido cae a `landing`. Tope IP en ambos scopes. Caché de respuesta TTL (`SOURCE_SUGGEST_RESPONSE_TTL_SEC`, default 6 h); `fresh=true` solo en «Buscar más».
 - ❌ **No escribas en `/legal/*` nada que el código no haga.** La política describe el producto real: `usage_events` no guarda IPs, Vercel Analytics no pone cookies, el fetcher no consulta `robots.txt` y `FLIGHT_SEARCH_AFFILIATE_ID` está vacío.
-- ❌ **No nombres un modelo ni un proveedor de IA en la prosa legal.** Van por categoría; los nombres viven en `AI_PROVIDERS` de [`lib/legal.ts`](frontend/lib/legal.ts), que se renderiza en la sección `#proveedores` con su `providersUpdatedAt` propio. **Cambiar `ASSISTANT_MODEL` o añadir un proveedor obliga a tocar ese array**, y si el país nuevo no tiene decisión de adecuación, también el texto del consentimiento del asistente.
+- ❌ **No nombres un modelo ni un proveedor de IA en la prosa legal.** El art. 13.1.e permite hablar por «categorías de destinatarios», y así el copy no caduca al rotar de modelo; los nombres se facilitan por correo. Lo que **sí** es obligatorio decir es el **país** y la **garantía**, escritos a mano en `#terceros` de [`/legal/privacidad`](frontend/app/legal/privacidad/page.tsx). Cambiar de proveedor a uno de un país nuevo obliga a repasar ese párrafo, el texto de [`ai-transfer-gate.tsx`](frontend/components/ai-transfer-gate.tsx) y a **subir `AI_TRANSFER_CONSENT_VERSION`**: un consentimiento informado solo cubre lo que el usuario llegó a leer.
 
 ## Dependencias críticas
 
@@ -274,4 +275,4 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Búsqueda de lugares / hubs | [`place_search.py`](backend/place_search.py), [`mapbox.ts`](frontend/lib/mapbox.ts), [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts), [`usage.py`](backend/usage.py), `MAPBOX_ACCESS_TOKEN` |
 | Mapa | [`itinerary-map-view.tsx`](frontend/components/itinerary-map-view.tsx), [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts), [`map-geocode-state.ts`](frontend/lib/map-geocode-state.ts), coste de Directions |
 | Marca / SEO | [`brand-mark.tsx`](frontend/components/brand-mark.tsx), [`site.ts`](frontend/lib/site.ts), [`robots.ts`](frontend/app/robots.ts), [`opengraph-image.tsx`](frontend/app/opengraph-image.tsx) |
-| Proveedor o modelo de IA (`ASSISTANT_MODEL`, cliente de [`assistant.py`](backend/assistant.py), extracción de [`main.py`](backend/main.py)) | `AI_PROVIDERS` y `providersUpdatedAt` en [`lib/legal.ts`](frontend/lib/legal.ts), sección `#proveedores` de `/legal/privacidad`, texto del consentimiento del asistente si cambia el país |
+| Proveedor o modelo de IA (`ASSISTANT_MODEL`, cliente de [`assistant.py`](backend/assistant.py), extracción de [`main.py`](backend/main.py)) | Párrafo `#terceros` de [`/legal/privacidad`](frontend/app/legal/privacidad/page.tsx) (país + garantía), texto de [`ai-transfer-gate.tsx`](frontend/components/ai-transfer-gate.tsx) y `AI_TRANSFER_CONSENT_VERSION` en [`ai-transfer-consent.ts`](frontend/lib/ai-transfer-consent.ts) si cambia el país |

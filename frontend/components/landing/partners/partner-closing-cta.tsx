@@ -14,10 +14,10 @@ export function PartnerClosingCta() {
       />
       <div className="landing-reveal relative mx-auto w-full max-w-6xl px-6 text-center">
         <h2 className="text-balance text-3xl font-semibold tracking-[-0.03em] sm:text-4xl lg:text-5xl">
-          Pon el botón al final de tu próximo post.
+          Pon un CTA en tu próxima publicación.
         </h2>
         <p className="mx-auto mt-5 max-w-2xl text-balance text-base text-white/70 sm:text-lg">
-          Dos minutos: pegas la URL, te llevas el snippet HTML y el primer lector no espera.
+          Dos minutos: pegas la URL, te llevas el snippet HTML y tus lectores empiezan a planificar inmediatamente.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button
@@ -25,14 +25,14 @@ export function PartnerClosingCta() {
             size="lg"
             className="h-12 w-full bg-white px-8 text-base text-[hsl(20_8%_14%)] hover:bg-white/90 sm:w-auto"
           >
-            <a href="#empezar">Generar mi botón</a>
+            <a href="#empezar">Generar mi CTA</a>
           </Button>
           <Button
             asChild
             variant="link"
             className="text-white/70 hover:text-white"
           >
-            <Link href="/">¿Planificas tus propios viajes?</Link>
+            <Link href="/">Empieza a planificar tu próximo viaje</Link>
           </Button>
         </div>
       </div>

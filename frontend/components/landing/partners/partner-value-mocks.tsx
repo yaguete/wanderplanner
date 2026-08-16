@@ -139,7 +139,7 @@ export function MockLectorVuelve() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden px-3 [mask-image:linear-gradient(to_bottom,#000_78%,transparent_100%)]">
+        <div className="max-h-52 min-h-0 overflow-hidden px-3 [mask-image:linear-gradient(to_bottom,#000_78%,transparent_100%)] sm:max-h-none sm:flex-1">
           <p className="text-[13px] leading-5 text-white/80">
             Si es tu primera vez en Vietnam, esta{" "}
             <span className="font-semibold text-white">ruta de 12 días</span> es el{" "}

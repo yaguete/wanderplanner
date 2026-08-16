@@ -202,6 +202,7 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   12. `20260808200000_dismissed_country_tasks.sql`
   13. `20260808210000_country_task_suggestions.sql`
   14. `20260808220000_trip_origin.sql`
+  15. `20260816120000_ai_transfer_consent.sql`
 
 ```bash
 # Con CLI vinculada al proyecto:
@@ -219,7 +220,7 @@ Detalle local y env: [`supabase/README.md`](supabase/README.md).
 
 ### Rollback (Supabase)
 
-- **Esquema:** las migraciones son forward-only. No hay `supabase db rollback` en producción. Para deshacer un cambio ya aplicado: escribe una **nueva migración compensatoria** (down SQL revisado a mano) y haz `supabase db push`.
+- **Esquema:** las migraciones son forward-only. No hay `supabase db rollback` en producción. Para deshacer un cambio ya aplicado: escribe una **nueva migración compensatoria** (down SQL revisado a mano) y aplícala como las demás, pegándola en el SQL Editor.
 - **Nunca** `supabase db reset --linked` contra producción (borra datos).
 - **Datos:** el plan Free no tiene backups automáticos ni PITR. La continuidad depende de dumps periódicos (ver deuda T7.3 del plan de producción). Un restore es restaurar un `pg_dump` / backup manual, no “un botón de rollback”.
 
@@ -274,7 +275,8 @@ vercel rollback                 # Instant Rollback
 vercel promote <deployment>     # deshacer rollback / reactivar auto-assign
 
 # Supabase
-supabase db push                # migraciones pendientes (forward-only)
+# Migraciones: SQL Editor del dashboard, pegando el fichero. `supabase db push`
+# NO funciona aquí (CLI sin vincular, sin historial en el remoto). Ver supabase/README.md.
 # Rollback de esquema = nueva migración compensatoria, no un undo mágico
 
 # Smoke

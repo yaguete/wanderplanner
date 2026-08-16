@@ -34,10 +34,10 @@ export function MockupWell({
       />
       <div
         className={cn(
-          "flex h-[34rem] flex-col overflow-hidden rounded-xl",
+          "flex flex-col overflow-hidden rounded-xl",
           negative
-            ? "border-white/10 bg-[hsl(20_8%_14%)] shadow-[0_1px_2px_rgb(0_0_0/0.35),0_28px_64px_-18px_rgb(0_0_0/0.55)]"
-            : "border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.18)]",
+            ? "h-auto border-white/10 bg-[hsl(20_8%_14%)] shadow-[0_1px_2px_rgb(0_0_0/0.35),0_28px_64px_-18px_rgb(0_0_0/0.55)] sm:h-[34rem]"
+            : "h-[34rem] border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.18)]",
         )}
       >
         {children}

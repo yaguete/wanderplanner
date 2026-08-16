@@ -34,16 +34,18 @@ export default function AvisoLegalPage() {
           {LEGAL.siteName} ({LEGAL.siteUrl}) es un servicio de {LEGAL.holderName}, persona
           física residente en {LEGAL.country}. Puedes escribirnos a <LegalMail />.
         </p>
-        {LEGAL.nif && LEGAL.address ? (
+        {LEGAL.nif ? <p>NIF: {LEGAL.nif}.</p> : null}
+        {LEGAL.address ? (
+          <p>Domicilio a efectos de notificaciones: {LEGAL.address}.</p>
+        ) : null}
+        {!LEGAL.nif || !LEGAL.address ? (
           <p>
-            NIF {LEGAL.nif}. Domicilio a efectos de notificaciones: {LEGAL.address}.
+            Facilitamos {!LEGAL.nif && !LEGAL.address ? "el NIF y el domicilio" : null}
+            {!LEGAL.nif && LEGAL.address ? "el NIF" : null}
+            {LEGAL.nif && !LEGAL.address ? "el domicilio" : null} a efectos de
+            notificaciones a quien lo solicite en ese correo.
           </p>
-        ) : (
-          <p>
-            Facilitamos el NIF y el domicilio a efectos de notificaciones a quien lo
-            solicite en ese correo.
-          </p>
-        )}
+        ) : null}
       </LegalSection>
 
       <LegalSection id="servicio" title="Qué es WanderPlanner">

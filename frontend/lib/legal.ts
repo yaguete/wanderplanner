@@ -42,8 +42,17 @@ export const LEGAL = {
   email: "hola@wanderplanner.ai",
   holderName: "Yago López",
   country: "España",
-  /** Art. 10 LSSI: obligatorios. Vacío = no inventar; la página lo dice en claro. */
-  nif: "",
+  /**
+   * Art. 10 LSSI. Los dos son independientes: se publica el que esté relleno y el
+   * aviso legal solo ofrece «a quien lo solicite» el que falte.
+   *
+   * `nif`: obligatorio por el art. 10.1.e. En autónomo es el DNI.
+   * `address`: el 10.1.a admite «residencia o domicilio o, en su defecto, la
+   * dirección de uno de sus establecimientos permanentes en España» — no tiene
+   * por qué ser el domicilio particular; sirve una dirección de domiciliación
+   * (gestoría, oficina virtual, coworking).
+   */
+  nif: "78726138J",
   address: "",
   updatedAt: "2026-08-16",
 } as const

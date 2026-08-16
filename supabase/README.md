@@ -28,9 +28,20 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260808200000_dismissed_country_tasks.sql
 #   migrations/20260808210000_country_task_suggestions.sql
 #   migrations/20260808220000_trip_origin.sql
+#   migrations/20260816120000_ai_transfer_consent.sql
 
-# Opción B (si tienes Supabase CLI vinculado):
-supabase db push
+# Opción B: NO disponible hoy. `supabase db push` no funciona en este proyecto:
+# no hay supabase/config.toml, el CLI no está vinculado y el remoto no tiene
+# historial (`supabase_migrations.schema_migrations` vacío, porque todo se ha
+# aplicado a mano). Si se ejecutara, intentaría replicar TODAS las migraciones
+# desde el init, y ese fichero tiene 24 `create policy` / `create trigger` sin
+# `if exists`: falla en el primero y no aplica nada.
+#
+# Para habilitarlo algún día, una sola vez (pide la contraseña de Postgres):
+#   supabase init
+#   supabase link --project-ref kzriijgdkrdruikmpufl
+#   supabase migration repair --status applied <las 15 versiones ya aplicadas>
+# A partir de ahí `supabase db push` sí aplica solo lo pendiente.
 ```
 
 `20260803180000_trip_tasks.sql` debe aplicarse **antes** de desplegar un frontend que lea `tasks` / `extra_tasks` / `num_travelers` / `currency` (si no, PostgREST 400 y `/trips` no carga). Es aditiva e idempotente: segura con el front viejo aún en producción.

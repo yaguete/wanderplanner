@@ -68,9 +68,9 @@ function CapabilityGrid({
 export function PartnerValueProps() {
   return (
     <>
-      <section id="atribucion" className="scroll-mt-24 pb-20 pt-24 sm:pb-24 sm:pt-32">
+      <section id="atribucion" className="scroll-mt-24 pb-6 pt-12 sm:pb-24 sm:pt-32">
         <div className="landing-reveal mx-auto w-full max-w-6xl px-6">
-          <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
             <div className="min-w-0 lg:order-1">
               <ValueCopy
                 title="Tu firma en cada tarjeta."
@@ -91,9 +91,9 @@ export function PartnerValueProps() {
         </div>
       </section>
 
-      <section id="afiliacion" className="scroll-mt-24 bg-white/[0.03] py-20 sm:py-28">
+      <section id="afiliacion" className="scroll-mt-24 bg-white/[0.03] pb-6 pt-8 sm:py-28">
         <div className="landing-reveal mx-auto w-full max-w-6xl px-6">
-          <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16">
             <div className="min-w-0">
               <ValueCopy
                 title="Si reservan, la comisión es tuya."
@@ -114,9 +114,9 @@ export function PartnerValueProps() {
         </div>
       </section>
 
-      <section id="trafico" className="scroll-mt-24 pb-24 pt-20 sm:pb-32 sm:pt-24">
+      <section id="trafico" className="scroll-mt-24 pb-8 pt-8 sm:pb-32 sm:pt-24">
         <div className="landing-reveal mx-auto w-full max-w-6xl px-6">
-          <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
             <div className="min-w-0 lg:order-1">
               <ValueCopy
                 title="Tu artículo se queda abierto."
