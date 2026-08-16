@@ -358,6 +358,9 @@ export function PartnerButtonBuilder() {
             void handleGenerate(false)
           }}
         >
+          <h2 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+            Genera el CTA para tu contenido
+          </h2>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="partner-url" className="text-white">
               URL del post
@@ -443,7 +446,7 @@ export function PartnerButtonBuilder() {
             className="mt-1 h-11 bg-white text-[hsl(20_8%_14%)] hover:bg-white/90"
             disabled={submitting || (captchaEnabled && (!showCaptcha || !captchaToken))}
           >
-            {submitting ? "Generando…" : "Generar mi botón"}
+            {submitting ? "Generando…" : "Generar CTA"}
           </Button>
 
           {allowSkip ? (
