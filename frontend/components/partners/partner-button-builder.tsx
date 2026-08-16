@@ -18,6 +18,7 @@ import {
   cleanSourceUrl,
   normalizeRefSlug,
 } from "@/lib/partner-button"
+import { authorFromUrl } from "@/lib/itinerary-utils"
 import { MAX_AUTO_DAYS, isReservedRefSlug, parseDaysParam } from "@/lib/partner-trip"
 import { prewarmSource, type PrewarmResult } from "@/lib/partners-api"
 import { cn } from "@/lib/utils"
@@ -53,7 +54,6 @@ type Generated = {
 
 export function PartnerButtonBuilder() {
   const [sourceUrl, setSourceUrl] = useState("")
-  const [refSlug, setRefSlug] = useState("")
   const [daysRaw, setDaysRaw] = useState("")
   const [showDays, setShowDays] = useState(false)
   const [showCaptcha, setShowCaptcha] = useState(false)
@@ -68,7 +68,11 @@ export function PartnerButtonBuilder() {
 
   const captchaEnabled = isTurnstileEnabled()
   const cleanedUrl = useMemo(() => cleanSourceUrl(sourceUrl), [sourceUrl])
-  const normalizedRef = useMemo(() => normalizeRefSlug(refSlug), [refSlug])
+  // Misma regla que en /trips: el autor / ref sale del hostname.
+  const normalizedRef = useMemo(
+    () => (cleanedUrl ? normalizeRefSlug(authorFromUrl(cleanedUrl)) : ""),
+    [cleanedUrl],
+  )
   const forcedDays = parseDaysParam(daysRaw || null)
 
   function armCaptcha() {
@@ -105,11 +109,11 @@ export function PartnerButtonBuilder() {
       return
     }
     if (!normalizedRef) {
-      setError("Introduce un slug de partner (p. ej. tu-blog).")
+      setError("No se pudo sacar el alias del dominio. Revisa la URL.")
       return
     }
     if (isReservedRefSlug(normalizedRef)) {
-      setError("Ese slug está reservado. Elige el nombre de tu blog.")
+      setError("Ese dominio produce un alias reservado. Usa la URL de tu blog.")
       return
     }
     if (daysRaw.trim() && forcedDays == null) {
@@ -156,7 +160,7 @@ export function PartnerButtonBuilder() {
   }
 
   return (
-    <div className="flex min-h-[22rem] flex-col justify-center sm:min-h-[20rem]">
+    <div className="flex min-h-[16rem] flex-col justify-center sm:min-h-[14rem]">
       {generated ? (
         <div className="flex flex-col gap-5">
           {generated.prewarm ? (
@@ -261,50 +265,29 @@ export function PartnerButtonBuilder() {
             void handleGenerate(false)
           }}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="partner-url" className="text-white">
-                URL del post
-              </Label>
-              <Input
-                id="partner-url"
-                type="url"
-                required
-                placeholder="https://tublog.com/ruta-7-dias/"
-                value={sourceUrl}
-                onChange={(e) => {
-                  armCaptcha()
-                  setSourceUrl(e.target.value)
-                }}
-                onFocus={armCaptcha}
-                disabled={submitting}
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="partner-ref" className="text-white">
-                Slug de partner
-              </Label>
-              <Input
-                id="partner-ref"
-                required
-                placeholder="aliasdelpartner"
-                value={refSlug}
-                onChange={(e) => {
-                  armCaptcha()
-                  setRefSlug(e.target.value)
-                }}
-                onFocus={armCaptcha}
-                disabled={submitting}
-                className={fieldClass}
-              />
-              {normalizedRef && normalizedRef !== refSlug.trim() ? (
-                <p className="text-xs text-white/60">
-                  Se usará como <code className="text-white">{normalizedRef}</code>
-                </p>
-              ) : null}
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="partner-url" className="text-white">
+              URL del post
+            </Label>
+            <Input
+              id="partner-url"
+              type="url"
+              required
+              placeholder="https://tublog.com/ruta-7-dias/"
+              value={sourceUrl}
+              onChange={(e) => {
+                armCaptcha()
+                setSourceUrl(e.target.value)
+              }}
+              onFocus={armCaptcha}
+              disabled={submitting}
+              className={fieldClass}
+            />
+            {normalizedRef && !isReservedRefSlug(normalizedRef) ? (
+              <p className="text-xs text-white/60">
+                La firma será <code className="text-white">vía @{normalizedRef}</code>
+              </p>
+            ) : null}
           </div>
 
           <div>

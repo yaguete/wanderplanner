@@ -9,21 +9,37 @@ const ITEM_GLOW =
   "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
   "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)"
 
+/** Halo más contenido: marca al centro, un susurro de las tintas de ítem. */
+const NEGATIVE_GLOW =
+  "radial-gradient(55% 50% at 50% 0%, #9F817340, transparent 72%)," +
+  "radial-gradient(38% 45% at 12% 18%, hsl(199 89% 48% / 0.16), transparent 70%)," +
+  "radial-gradient(36% 42% at 88% 14%, hsl(262 83% 58% / 0.14), transparent 70%)"
+
 export function MockupWell({
   children,
   className,
+  tone = "light",
 }: {
   children: ReactNode
   className?: string
+  tone?: "light" | "negative"
 }) {
+  const negative = tone === "negative"
   return (
     <div className={cn("relative isolate", className)}>
       <div
         aria-hidden
         className="pointer-events-none absolute -inset-1 -z-10 rounded-[2.5rem] blur-xl"
-        style={{ background: ITEM_GLOW }}
+        style={{ background: negative ? NEGATIVE_GLOW : ITEM_GLOW }}
       />
-      <div className="flex h-[34rem] flex-col overflow-hidden rounded-xl border border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.18)]">
+      <div
+        className={cn(
+          "flex h-[34rem] flex-col overflow-hidden rounded-xl",
+          negative
+            ? "border-white/10 bg-[hsl(20_8%_14%)] shadow-[0_1px_2px_rgb(0_0_0/0.35),0_28px_64px_-18px_rgb(0_0_0/0.55)]"
+            : "border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.18)]",
+        )}
+      >
         {children}
       </div>
     </div>

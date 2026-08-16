@@ -5,34 +5,78 @@ export function LandingItemRow({
   dot,
   name,
   meta,
+  tone = "light",
 }: {
   dot: string
   name: string
   meta?: string
+  tone?: "light" | "negative"
 }) {
+  const negative = tone === "negative"
   return (
-    <div className="flex items-start gap-2.5 rounded-lg border border-border bg-background px-3 py-2">
+    <div
+      className={cn(
+        "flex items-start gap-2.5 rounded-lg border px-3 py-2",
+        negative ? "border-white/10 bg-white/[0.04]" : "border-border bg-background",
+      )}
+    >
       <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", dot)} />
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-medium leading-5 text-foreground">{name}</p>
-        {meta ? <p className="truncate text-[11px] leading-4 text-muted-foreground">{meta}</p> : null}
+        <p
+          className={cn(
+            "truncate text-[13px] font-medium leading-5",
+            negative ? "text-white" : "text-foreground",
+          )}
+        >
+          {name}
+        </p>
+        {meta ? (
+          <p
+            className={cn(
+              "truncate text-[11px] leading-4",
+              negative ? "text-white/60" : "text-muted-foreground",
+            )}
+          >
+            {meta}
+          </p>
+        ) : null}
       </div>
     </div>
   )
 }
 
 /** Pestaña de mockup: subrayado si está activa. */
-export function MockTab({ label, active }: { label: string; active?: boolean }) {
+export function MockTab({
+  label,
+  active,
+  tone = "light",
+}: {
+  label: string
+  active?: boolean
+  tone?: "light" | "negative"
+}) {
+  const negative = tone === "negative"
   return (
     <span
       className={cn(
         "relative inline-flex min-h-8 shrink-0 items-center pb-2 text-[11px]",
-        active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
+        active
+          ? negative
+            ? "font-semibold text-white"
+            : "font-semibold text-foreground"
+          : negative
+            ? "font-medium text-white/50"
+            : "font-medium text-muted-foreground",
       )}
     >
       <span className="truncate">{label}</span>
       {active ? (
-        <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
+        <span
+          className={cn(
+            "absolute inset-x-0 bottom-0 h-0.5 rounded-full",
+            negative ? "bg-white" : "bg-primary",
+          )}
+        />
       ) : null}
     </span>
   )
