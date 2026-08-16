@@ -29,6 +29,7 @@ jobs:
       - run: npm run test:assistant-context
       - run: npm run test:trip-origin
       - run: npm run test:text-highlight
+      - run: npm run test:chronicle-search
       - run: npm run test:trip-sources
       - run: npm run test:map-day-scope
       - run: npm run test:geocode-validate

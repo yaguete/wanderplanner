@@ -18,6 +18,7 @@
     "test:route-legs": "tsx lib/route-legs.test.ts",
     "test:transport-routes": "tsx lib/transport-routes.test.ts",
     "test:text-highlight": "tsx lib/text-highlight.test.ts",
+    "test:chronicle-search": "tsx lib/chronicle-search.test.ts",
     "test:trip-sources": "tsx lib/trip-sources.test.ts",
     "test:map-day-scope": "tsx lib/map-day-scope.test.ts",
     "test:geocode-validate": "tsx lib/geocode-validate.test.ts",

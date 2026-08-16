@@ -52,6 +52,7 @@ import {
   highlightTextInElement,
   setActiveHighlight,
 } from "@/lib/text-highlight"
+import { chronicleSearchNeedles } from "@/lib/chronicle-search"
 import type { Source, SourceBasicItem, SourceItem, UserDayItem } from "@/types/itinerary"
 import { toast } from "sonner"
 
@@ -458,7 +459,19 @@ export default function InspirationPanel({
         return
       }
 
-      const marks = highlightTextInElement(root, needle)
+      let usedNeedle = needle
+      let marks = highlightTextInElement(root, usedNeedle)
+      if (marks.length === 0) {
+        for (const alt of chronicleSearchNeedles(needle).slice(1)) {
+          marks = highlightTextInElement(root, alt)
+          if (marks.length > 0) {
+            usedNeedle = alt
+            break
+          }
+        }
+      }
+      if (usedNeedle !== needle) setSourceQuery(usedNeedle)
+
       marksRef.current = marks
       setMatchCount(marks.length)
       const idx = marks.length === 0 ? 0 : Math.min(matchIndexRef.current, marks.length - 1)
@@ -466,7 +479,7 @@ export default function InspirationPanel({
       setMatchIndex(idx)
       const activeEl = setActiveHighlight(marks, idx)
       if (!activeEl) {
-        lastScrolledQueryRef.current = needle
+        lastScrolledQueryRef.current = usedNeedle
         lastScrolledIndexRef.current = null
         return
       }
@@ -476,7 +489,7 @@ export default function InspirationPanel({
           if (activeEl.isConnected) activeEl.scrollIntoView({ block: "center" })
         })
       })
-      lastScrolledQueryRef.current = needle
+      lastScrolledQueryRef.current = usedNeedle
       lastScrolledIndexRef.current = idx
     }
 
