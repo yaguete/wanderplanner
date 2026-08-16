@@ -79,6 +79,7 @@ import {
   dayScopeFromId,
   daysForScope,
   filterByDayScope,
+  inDayScope,
   mappableCountsByDay,
 } from "@/lib/map-day-scope"
 import {
@@ -214,7 +215,7 @@ export default function ItineraryPanel({
   const [listMode, setListMode] = useState<"list" | "map">("list")
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
   const [mapMode, setMapMode] = useState<MapViewMode>("places")
-  const [mapFocusDayId, setMapFocusDayId] = useState<string | null>(null)
+  const [focusDayId, setFocusDayId] = useState<string | null>(null)
 
   useEffect(() => {
     const stored = readStoredMapMode()
@@ -229,9 +230,14 @@ export default function ItineraryPanel({
   }, [])
 
   const focusDayNumber = useMemo(
-    () => dayScopeFromId(trip?.days ?? [], mapFocusDayId),
-    [trip, mapFocusDayId],
+    () => dayScopeFromId(trip?.days ?? [], focusDayId),
+    [trip, focusDayId],
   )
+
+  const handleFocusDayChange = useCallback((next: string | null) => {
+    setFocusDayId(next)
+    setSelectedDayIds(new Set())
+  }, [])
 
   useEffect(() => {
     setHeaderCollapsed(false)
@@ -391,12 +397,20 @@ export default function ItineraryPanel({
 
   const mapDayOptions = useMemo(() => {
     if (!trip) return []
-    const placeCounts = mappableCountsByDay(collectItineraryPlaces(trip.days))
-    const transportCounts = mappableCountsByDay([
-      ...collectMapSegments(trip.days),
-      ...collectMapGatewayAnchors(trip.days),
-    ])
-    const counts = mapMode === "places" ? placeCounts : transportCounts
+    let counts: Map<number, number>
+    if (listMode === "list") {
+      counts = new Map()
+      trip.days.forEach((day, index) => {
+        counts.set(index + 1, day.items.length)
+      })
+    } else {
+      const placeCounts = mappableCountsByDay(collectItineraryPlaces(trip.days))
+      const transportCounts = mappableCountsByDay([
+        ...collectMapSegments(trip.days),
+        ...collectMapGatewayAnchors(trip.days),
+      ])
+      counts = mapMode === "places" ? placeCounts : transportCounts
+    }
     return trip.days.map((day, index) => ({
       id: day.id,
       dayNumber: index + 1,
@@ -407,7 +421,7 @@ export default function ItineraryPanel({
       ),
       mappableCount: counts.get(index + 1) ?? 0,
     }))
-  }, [trip, mapMode])
+  }, [trip, mapMode, listMode])
 
   // Índice de posición global (por día) para reglas de flechas arriba/abajo; debe coincidir con `moveItemOneStep`.
   const itemLocationById = useMemo(() => {
@@ -654,23 +668,23 @@ export default function ItineraryPanel({
               ariaLabel="Vista de ruta"
               size="compact"
             />
+            {trip.days.length > 1 ? (
+              <MapDayDropdown
+                days={mapDayOptions}
+                value={focusDayNumber == null ? null : focusDayId}
+                onChange={handleFocusDayChange}
+              />
+            ) : null}
             {listMode === "map" ? (
-              <>
-                {trip.days.length > 1 ? (
-                  <MapDayDropdown
-                    days={mapDayOptions}
-                    value={focusDayNumber == null ? null : mapFocusDayId}
-                    onChange={setMapFocusDayId}
-                  />
-                ) : null}
-                <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
-              </>
+              <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
             ) : null}
             {listMode === "list" ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
                 <button
                   type="button"
-                  onClick={() => openManualDialog(null)}
+                  onClick={() =>
+                    openManualDialog(focusDayNumber == null ? null : focusDayId)
+                  }
                   className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
                   aria-label="Añadir ítem"
                 >
@@ -714,44 +728,46 @@ export default function ItineraryPanel({
           {listMode === "list" ? (
             <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2 max-md:pb-[var(--wp-nav-clearance)]">
               <div ref={daysFlipRef} className="panel-column">
-              {trip.days.map((day, dayIndex) => (
-                <DaySection
-                  key={day.id}
-                  tripId={tripId}
-                  dayId={day.id}
-                  dayIndex={dayIndex}
-                  dayCount={trip.days.length}
-                  days={trip.days}
-                  flightSearchTrip={flightSearchTrip}
-                  dayDescription={getDayUserDescription(day.label)}
-                  dayDateLabel={
-                    formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex))
-                  }
-                  summarySignature={day.summarySignature ?? null}
-                  countryCodes={trip.countries}
-                  items={day.items}
-                  resolveRegion={resolveRegion}
-                  isDaySelected={selectedDayIds.has(day.id)}
-                  onDaySelectChange={setDaySelected}
-                  onResetDay={handleResetDay}
-                  onRemoveItem={handleRemoveItem}
-                  onMoveItemUp={onMoveItemUp}
-                  onMoveItemDown={onMoveItemDown}
-                  onAddManualItem={openManualDialog}
-                  onSetTaskState={handleSetTaskState}
-                  taskStates={trip.tasks}
-                  showOutboundPlaceholder={
-                    dayIndex === 0 && !hasRouteLeg(trip.days, "outbound")
-                  }
-                  showReturnPlaceholder={
-                    dayIndex === trip.days.length - 1 && !hasRouteLeg(trip.days, "return")
-                  }
-                  onOpenRouteLeg={openRouteLegDialog}
-                  onEditTransport={handleEditTransport}
-                  updateDayLabel={updateDayLabel}
-                  applyDaySummary={applyDaySummary}
-                />
-              ))}
+              {trip.days.map((day, dayIndex) =>
+                inDayScope(focusDayNumber, dayIndex + 1) ? (
+                  <DaySection
+                    key={day.id}
+                    tripId={tripId}
+                    dayId={day.id}
+                    dayIndex={dayIndex}
+                    dayCount={trip.days.length}
+                    days={trip.days}
+                    flightSearchTrip={flightSearchTrip}
+                    dayDescription={getDayUserDescription(day.label)}
+                    dayDateLabel={
+                      formatDayDate(dateISOForDayIndex(trip.startDate, dayIndex))
+                    }
+                    summarySignature={day.summarySignature ?? null}
+                    countryCodes={trip.countries}
+                    items={day.items}
+                    resolveRegion={resolveRegion}
+                    isDaySelected={selectedDayIds.has(day.id)}
+                    onDaySelectChange={setDaySelected}
+                    onResetDay={handleResetDay}
+                    onRemoveItem={handleRemoveItem}
+                    onMoveItemUp={onMoveItemUp}
+                    onMoveItemDown={onMoveItemDown}
+                    onAddManualItem={openManualDialog}
+                    onSetTaskState={handleSetTaskState}
+                    taskStates={trip.tasks}
+                    showOutboundPlaceholder={
+                      dayIndex === 0 && !hasRouteLeg(trip.days, "outbound")
+                    }
+                    showReturnPlaceholder={
+                      dayIndex === trip.days.length - 1 && !hasRouteLeg(trip.days, "return")
+                    }
+                    onOpenRouteLeg={openRouteLegDialog}
+                    onEditTransport={handleEditTransport}
+                    updateDayLabel={updateDayLabel}
+                    applyDaySummary={applyDaySummary}
+                  />
+                ) : null,
+              )}
               </div>
             </div>
           ) : (

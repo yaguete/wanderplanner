@@ -143,15 +143,17 @@ export type MapDayOption = {
 
 const MAP_DAY_ALL = "all"
 
-/** Dropdown de día del mapa (mismo cromo que Recorrido / Desplazamientos). */
+/** Dropdown de día de la ruta (lista y mapa; mismo cromo que Recorrido / Desplazamientos). */
 export function MapDayDropdown({
   days,
   value,
   onChange,
+  ariaLabel = "Filtrar por día",
 }: {
   days: MapDayOption[]
   value: string | null
   onChange: (next: string | null) => void
+  ariaLabel?: string
 }) {
   const selected = days.find((d) => d.id === value)
   const triggerLabel = selected ? `Día ${selected.dayNumber}` : "Ruta completa"
@@ -180,7 +182,7 @@ export function MapDayDropdown({
             "text-muted-foreground hover:text-foreground",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
-          aria-label="Día del mapa"
+          aria-label={ariaLabel}
         >
           {triggerLabel}
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
