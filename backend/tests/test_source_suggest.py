@@ -343,13 +343,27 @@ def test_cache_hits_for_query_dedupes_canonical():
 
 
 def test_cache_row_skips_destination_index():
+    # Control: mismo host y misma query, pero URL de ruta concreta. Tiene que ser
+    # hit sí o sí. Sin este control, sacar el dominio de la lista de curados hace
+    # que las dos aserciones de abajo pasen por el motivo equivocado: la fila se
+    # descarta en host_is_curated y nunca se llega a is_destination_index.
+    article = {
+        "url": "https://lacosmopolilla.com/japon-en-15-dias/",
+        "og_title": "Japón en 15 días",
+        "destination": "Japón",
+        "validated_at": _fresh_iso(1),
+    }
+    assert hit_from_cache_row(article, "japon") is not None
+
     row = {
-        "url": "https://comiviajeros.com/guia-de-japon",
+        "url": "https://lacosmopolilla.com/guia-de-japon",
         "og_title": "Japan",
         "destination": "Japón",
         "validated_at": _fresh_iso(1),
     }
+    # Portada de país: con la query del destino no es una ruta extraíble…
     assert hit_from_cache_row(row, "japon") is None
+    # …pero sin query no hay nada que indexar y sigue siendo una fuente válida.
     assert hit_from_cache_row(row) is not None
 
 
