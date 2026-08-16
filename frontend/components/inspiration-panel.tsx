@@ -171,6 +171,8 @@ export default function InspirationPanel({
   >(null)
   /** Query compartida Crónica ↔ Ruta (no Desplazamientos/Descuentos). */
   const [sourceQuery, setSourceQuery] = useState("")
+  /** Barra de búsqueda: un solo interruptor para Crónica y Ruta. */
+  const [searchOpen, setSearchOpen] = useState(false)
   const [matchIndex, setMatchIndex] = useState(0)
   const [matchCount, setMatchCount] = useState(0)
   const articleRef = useRef<HTMLDivElement>(null)
@@ -593,9 +595,19 @@ export default function InspirationPanel({
   const openChronicleSearch = useCallback((name: string) => {
     const q = name.trim()
     if (!q) return
+    setSearchOpen(true)
     setSourceQuery(q)
     setSourceTab("source")
   }, [])
+
+  const toggleSearch = useCallback(() => {
+    if (searchOpen) {
+      setSearchOpen(false)
+      setSourceQuery("")
+    } else {
+      setSearchOpen(true)
+    }
+  }, [searchOpen])
 
   const tabs = [
     { id: "source" as const, label: "Crónica", icon: BookOpen },
@@ -841,12 +853,35 @@ export default function InspirationPanel({
                         : "mt-4 @md:mt-5",
                   )}
                 >
-                  <PanelTabs
-                    items={tabs}
-                    value={sourceTab}
-                    onValueChange={setSourceTab}
-                    ariaLabel="Vista de la fuente"
-                  />
+                  <div className="flex min-w-0 items-end justify-between gap-2">
+                    <PanelTabs
+                      items={tabs}
+                      value={sourceTab}
+                      onValueChange={setSourceTab}
+                      ariaLabel="Vista de la fuente"
+                    />
+                    <button
+                      type="button"
+                      aria-pressed={searchOpen}
+                      aria-controls={
+                        searchOpen && (showCronicaSearch || showRutaSearch)
+                          ? "source-search"
+                          : undefined
+                      }
+                      aria-label={searchOpen ? "Ocultar buscador" : "Mostrar buscador"}
+                      title={searchOpen ? "Ocultar buscador" : "Buscar"}
+                      onClick={toggleSearch}
+                      className={cn(
+                        "mb-2 inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                        searchOpen
+                          ? "bg-muted text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                    >
+                      <Search className="h-3.5 w-3.5" strokeWidth={searchOpen ? 2.25 : 2} aria-hidden />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 // Reserva altura de tabs (PanelTabs ≈ min-h-8) para no colapsar el panel.
@@ -864,7 +899,7 @@ export default function InspirationPanel({
             de cada pestaña. La condición reproduce cuándo se veía antes —
             con una extracción en curso el cuerpo no monta ninguna pestaña.
           */}
-          {!activePending && (showCronicaSearch || showRutaSearch) ? (
+          {!activePending && searchOpen && (showCronicaSearch || showRutaSearch) ? (
             <SourceSearchBar
               query={sourceQuery}
               onQueryChange={setSourceQuery}
@@ -1170,7 +1205,7 @@ function SourceSearchBar({
   const trailingPad = showNav ? "pr-28" : hasFilter ? "pr-9" : undefined
 
   return (
-    <div className="shrink-0 bg-background px-4 pb-3 pt-4">
+    <div id="source-search" className="shrink-0 bg-background px-4 pb-3 pt-4">
       <div className="panel-column relative">
         <Search
           className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -1183,6 +1218,7 @@ function SourceSearchBar({
           placeholder={placeholder}
           className={cn("h-9 pl-8 text-base md:text-sm", trailingPad)}
           aria-label={ariaLabel}
+          autoFocus
         />
         {showNav ? (
           <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
