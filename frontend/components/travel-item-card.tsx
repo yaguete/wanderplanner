@@ -50,7 +50,7 @@ type SourceCardProps = {
   isAdded?: boolean
   addedLabel?: string
   action: ReactNode
-  /** Desktop: toda la card (salvo lupita / acción) abre el selector de día. */
+  /** Desktop: toda la card (salvo miniatura, lupita y acción) abre el selector de día. */
   onSelect?: () => void
   /** Busca el nombre en la Crónica de la fuente. */
   onFindInSource?: () => void
@@ -142,7 +142,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
             aria-label="Añadir al itinerario"
           />
         ) : null}
-        <div className="relative z-[1] pointer-events-none shrink-0">{props.thumbnail}</div>
+        <div className="relative z-[1] pointer-events-auto shrink-0">{props.thumbnail}</div>
         <div className="relative z-[1] pointer-events-none min-w-0 flex-1 pr-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <TypeBadge type={props.type} label={props.typeLabel} />
