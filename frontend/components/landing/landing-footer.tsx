@@ -1,12 +1,13 @@
 import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
+import { CookieSettingsButton } from "@/components/cookie-settings-button"
 import { cn } from "@/lib/utils"
 import type { LandingTone } from "./landing-tone"
 
 export function LandingFooter({
   tone = "light",
   audienceHref = "/partners",
-  audienceLabel = "Para blogueros",
+  audienceLabel = "Para creadores/as",
 }: {
   tone?: LandingTone
   audienceHref?: string
@@ -59,9 +60,15 @@ export function LandingFooter({
               <Link href="/legal/privacidad" className={cn("text-sm", muted)}>
                 Privacidad
               </Link>
-              <Link href="/legal/cookies" className={cn("text-sm", muted)}>
-                Cookies
-              </Link>
+              <p className="flex items-center gap-1.5 text-sm">
+                <Link href="/legal/cookies" className={muted}>
+                  Cookies
+                </Link>
+                <span className={negative ? "text-white/40" : "text-muted-foreground"} aria-hidden>
+                  ·
+                </span>
+                <CookieSettingsButton className={cn("text-sm", muted)} />
+              </p>
             </nav>
           </div>
 

@@ -15,17 +15,17 @@ export function ClosingCta() {
       />
       <div className="landing-reveal relative mx-auto w-full max-w-6xl px-6 text-center">
         <h2 className="text-balance text-3xl font-semibold tracking-[-0.03em] sm:text-4xl lg:text-5xl">
-          ¿Dónde te lleva el próximo artículo que leas?
+          ¿Ya tienes en mente tu próximo viaje?
         </h2>
         <p className="mx-auto mt-5 max-w-2xl text-balance text-base text-foreground/70 sm:text-lg">
-          Crea tu cuenta gratis y convierte tu próxima lectura en tu próximo viaje.
+          Crea tu cuenta gratis y convierte tus fuentes de inspiración en tu plan viaje.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="h-12 w-full px-8 text-base sm:w-auto">
             <Link href="/signup">Empezar a planificar</Link>
           </Button>
           <Button asChild variant="link">
-            <Link href="#empezar">o empieza con un artículo</Link>
+            <Link href="#empezar">o compienza con una referencia</Link>
           </Button>
         </div>
       </div>

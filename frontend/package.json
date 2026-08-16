@@ -24,7 +24,8 @@
     "test:airports": "tsx lib/airports.test.ts",
     "test:flight-search": "tsx lib/flight-search.test.ts",
     "test:partner-trip": "tsx lib/partner-trip.test.ts",
-    "test:trip-source-suggestions": "tsx lib/trip-source-suggestions.test.ts"
+    "test:trip-source-suggestions": "tsx lib/trip-source-suggestions.test.ts",
+    "test:cookie-consent": "tsx lib/cookie-consent.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

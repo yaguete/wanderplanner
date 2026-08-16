@@ -1,29 +1,144 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import { LegalDocument, LegalMail, LegalSection } from "@/components/legal/legal-document"
+import { LEGAL, MAE_TRAVEL_ADVICE_URL } from "@/lib/legal"
 
 export const metadata: Metadata = {
   title: "Aviso legal",
-  robots: { index: false, follow: true },
+  description: "Titular, condiciones de uso e información legal de WanderPlanner.",
 }
+
+const TOC = [
+  { id: "titular", label: "Titular" },
+  { id: "servicio", label: "Qué es WanderPlanner" },
+  { id: "contenido-terceros", label: "Artículos de otros" },
+  { id: "inteligencia-artificial", label: "Inteligencia artificial" },
+  { id: "enlaces-comerciales", label: "Enlaces que salen del sitio" },
+  { id: "uso", label: "Uso del servicio" },
+  { id: "ley", label: "Ley aplicable" },
+] as const
 
 export default function AvisoLegalPage() {
   return (
-    <main className="mx-auto w-full max-w-2xl px-6 py-24">
-      <h1 className="text-3xl font-semibold tracking-tight">Aviso legal</h1>
-      <p className="mt-6 text-muted-foreground">
-        Estamos terminando de redactar este documento. Si tienes cualquier duda,
-        escríbenos a{" "}
-        <a
-          href="mailto:hola@wanderplanner.ai"
-          className="font-medium text-foreground underline underline-offset-4"
-        >
-          hola@wanderplanner.ai
-        </a>
-        .
-      </p>
-      <Link href="/" className="mt-10 inline-block text-sm font-medium underline underline-offset-4">
-        ← Volver al inicio
-      </Link>
-    </main>
+    <LegalDocument
+      title="Aviso legal"
+      lede={
+        <p>
+          Quién está detrás de WanderPlanner y con qué condiciones puedes usarlo.
+        </p>
+      }
+      toc={TOC}
+    >
+      <LegalSection id="titular" title="Titular">
+        <p>
+          {LEGAL.siteName} ({LEGAL.siteUrl}) es un servicio de {LEGAL.holderName}, persona
+          física residente en {LEGAL.country}. Puedes escribirnos a <LegalMail />.
+        </p>
+        {LEGAL.nif && LEGAL.address ? (
+          <p>
+            NIF {LEGAL.nif}. Domicilio a efectos de notificaciones: {LEGAL.address}.
+          </p>
+        ) : (
+          <p>
+            Facilitamos el NIF y el domicilio a efectos de notificaciones a quien lo
+            solicite en ese correo.
+          </p>
+        )}
+      </LegalSection>
+
+      <LegalSection id="servicio" title="Qué es WanderPlanner">
+        <p>
+          Pegas el artículo de un viajero en el que confías, o buscas un destino, y
+          WanderPlanner lo convierte en un itinerario tuyo: días, sitios, tareas y un
+          asistente al que preguntar. Es gratuito.
+        </p>
+        <p>
+          Si tienes un blog, en{" "}
+          <Link href="/partners" className="font-medium text-foreground underline underline-offset-4">
+            /partners
+          </Link>{" "}
+          puedes generar un botón para el final de tus posts. Tu marca, tu tráfico y tus
+          enlaces de afiliación siguen siendo tuyos.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="contenido-terceros" title="Artículos de otros">
+        <p>
+          Los artículos que procesamos son de sus autores. Los leemos porque tú pegas la
+          URL o porque el propio autor nos lo pide desde su blog, conservamos siempre la
+          atribución y enlazamos al original.
+        </p>
+        <p>
+          Si eres el autor y quieres que retiremos un artículo, escríbenos a <LegalMail />{" "}
+          con la dirección. Lo hacemos en un plazo máximo de 72 horas laborables.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="inteligencia-artificial" title="Inteligencia artificial">
+        <p>
+          El itinerario y las respuestas del asistente los genera un sistema de
+          inteligencia artificial. Puede equivocarse: inventar un horario, colocar mal un
+          sitio u olvidar un trámite. Lo que ves es una propuesta que decides tú, nunca una
+          reserva ni un consejo profesional.
+        </p>
+        <p>
+          Los trámites de país que sugerimos resumen las{" "}
+          <a
+            href={MAE_TRAVEL_ADVICE_URL}
+            className="font-medium text-foreground underline underline-offset-4"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Recomendaciones de viaje del Ministerio de Asuntos Exteriores
+          </a>
+          . Consulta siempre la fuente oficial antes de viajar.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="enlaces-comerciales" title="Enlaces que salen del sitio">
+        <p>
+          Si el artículo original traía enlaces de afiliación del autor, los conservamos:
+          quien cobra, si cobra, es él.
+        </p>
+        <p>
+          «Buscar vuelos» te lleva a Kiwi.com con el origen, el destino, las fechas y el
+          número de viajeros ya puestos, así que Kiwi ve esos datos. Hoy no cobramos
+          comisión por esos clics; si algún día lo hacemos, se dirá aquí.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="uso" title="Uso del servicio">
+        <p>
+          Necesitas al menos 14 años. Hay límites de uso para que las herramientas de IA no
+          se disparen de coste; si los superas, el servicio te avisa. Podemos suspender una
+          cuenta que ataque el servicio, extraiga sitios ajenos a destajo o suplante a
+          alguien.
+        </p>
+        <p>
+          El servicio se ofrece tal cual, sin garantía de estar siempre disponible. No
+          respondemos de reservas perdidas, información desactualizada ni de lo que hagas
+          con un itinerario generado. La marca y el código son nuestros; tus viajes y tus
+          notas son tuyos.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="ley" title="Ley aplicable">
+        <p>
+          Se aplica la ley española. Para cualquier disputa, y salvo que las normas de
+          consumo digan otra cosa, los juzgados del domicilio del titular.
+        </p>
+        <p>
+          Qué hacemos con tus datos está en la{" "}
+          <Link href="/legal/privacidad" className="font-medium text-foreground underline underline-offset-4">
+            política de privacidad
+          </Link>{" "}
+          y en la de{" "}
+          <Link href="/legal/cookies" className="font-medium text-foreground underline underline-offset-4">
+            cookies
+          </Link>
+          .
+        </p>
+      </LegalSection>
+    </LegalDocument>
   )
 }

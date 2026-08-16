@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/lib/auth-context"
+import { AnalyticsGate } from "@/components/analytics-gate"
+import { CookieBanner } from "@/components/cookie-banner"
 import { Toaster } from "@/components/ui/sonner"
 import { SITE_URL } from "@/lib/site"
 import "./globals.css"
@@ -39,8 +40,9 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <Toaster />
+          <CookieBanner />
         </AuthProvider>
-        <Analytics />
+        <AnalyticsGate />
       </body>
     </html>
   )

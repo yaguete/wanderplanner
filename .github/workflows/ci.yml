@@ -36,6 +36,7 @@ jobs:
       - run: npm run test:flight-search
       - run: npm run test:partner-trip
       - run: npm run test:trip-source-suggestions
+      - run: npm run test:cookie-consent
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
       # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
       # degradados a warning en eslint.config.mjs y no bloquean.

@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { BrandWordmark } from "@/components/brand-mark"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { LandingLockup } from "./landing-lockup"
 import type { LandingTone } from "./landing-tone"
@@ -7,9 +8,12 @@ import type { LandingTone } from "./landing-tone"
 export function LandingHeader({
   tone = "light",
   homeHref = "/",
+  showSignup = false,
 }: {
   tone?: LandingTone
   homeHref?: string
+  /** En páginas sin cápsula de alta (p. ej. /legal): CTA junto a Entrar. */
+  showSignup?: boolean
 }) {
   const negative = tone === "negative"
   return (
@@ -23,7 +27,7 @@ export function LandingHeader({
         >
           <BrandWordmark variant={negative ? "negative" : "color"} />
         </Link>
-        <nav className="flex items-center" aria-label="Principal">
+        <nav className="flex items-center gap-3 sm:gap-4" aria-label="Principal">
           <Link
             href="/login"
             className={cn(
@@ -35,6 +39,11 @@ export function LandingHeader({
           >
             Entrar
           </Link>
+          {showSignup ? (
+            <Button asChild size="sm" className="h-9 px-3.5">
+              <Link href="/signup">Crear cuenta</Link>
+            </Button>
+          ) : null}
         </nav>
       </div>
       <LandingLockup tone={tone} href={homeHref} />

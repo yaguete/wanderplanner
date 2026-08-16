@@ -37,7 +37,7 @@ export default function PartnersPage() {
         <LandingFooter
           tone="negative"
           audienceHref="/"
-          audienceLabel="Para viajeros"
+          audienceLabel="Para viajeros/as"
         />
       </div>
     </>

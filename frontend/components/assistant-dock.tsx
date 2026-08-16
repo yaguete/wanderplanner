@@ -56,7 +56,15 @@ import { ITEM_LABELS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
+import { AiTransferGate } from "@/components/ai-transfer-gate"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
+import {
+  fetchAiTransferConsent,
+  hasAiTransferConsent,
+  recordAiTransferConsent,
+  rememberAiTransferConsent,
+} from "@/lib/ai-transfer-consent"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { MAX_SOURCES_PER_TRIP, sourceMatchKey } from "@/lib/trip-sources"
 import { toast } from "sonner"
 
@@ -474,6 +482,8 @@ export function AssistantPanelLayer({
   const [assistantPendingId, setAssistantPendingId] = useState<string | null>(null)
   const [view, setView] = useState<PanelView>("chat")
   const [pendingDelete, setPendingDelete] = useState<AssistantConversationSummary | null>(null)
+  /** `null` = aún no se sabe (primer render o consulta en vuelo): el gate no deja pulsar. */
+  const [aiConsent, setAiConsent] = useState<boolean | null>(null)
   // Reset de vista solo al cambiar de viaje — no al abrir/cerrar el panel.
   const [viewTripId, setViewTripId] = useState(tripId)
   if (viewTripId !== tripId) {
@@ -490,6 +500,35 @@ export function AssistantPanelLayer({
     addItemToDay,
   } = useTrips()
   const { user } = useAuth()
+  const userId = user?.id ?? null
+
+  // El navegador responde al instante; si no sabe nada, se mira la constancia del
+  // perfil (otro dispositivo, o almacenamiento borrado). Si Supabase falla, se
+  // pregunta otra vez: es el lado seguro y nunca deja el asistente inservible.
+  useEffect(() => {
+    if (!userId) {
+      setAiConsent(null)
+      return
+    }
+    if (hasAiTransferConsent(userId)) {
+      setAiConsent(true)
+      return
+    }
+    if (!isSupabaseConfigured()) {
+      setAiConsent(false)
+      return
+    }
+    let cancelled = false
+    void fetchAiTransferConsent(createClient(), userId).then((granted) => {
+      if (cancelled) return
+      if (granted) rememberAiTransferConsent(userId)
+      setAiConsent(granted)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
   const trip = getTrip(tripId)
   // Identidad estable: `getTripSources` devuelve un array nuevo en cada render y
   // eso invalidaba `addedSourceUrls` → `memo(MessageBubble)` → re-parseo del
@@ -967,7 +1006,7 @@ export function AssistantPanelLayer({
               bottom: isSection && keyboardOpen ? keyboardInset : 0,
             }}
           >
-            {(canShowSuggestionsEarly || hydrated) && messages.length === 0 ? (
+            {(canShowSuggestionsEarly || hydrated) && messages.length === 0 && aiConsent === true ? (
               <div className="pointer-events-auto mb-2 flex flex-col items-start gap-1.5">
                 {suggestions.map((s) => (
                   <button
@@ -990,14 +1029,29 @@ export function AssistantPanelLayer({
                   : "bg-background shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
               )}
             >
-              <ChatComposer
-                inputRef={inputRef}
-                disabled={!trip}
-                isStreaming={isStreaming}
-                onSend={handleComposerSend}
-                onStop={stop}
-                conversationKey={activeConversationId}
-              />
+              {aiConsent === true ? (
+                <ChatComposer
+                  inputRef={inputRef}
+                  disabled={!trip}
+                  isStreaming={isStreaming}
+                  onSend={handleComposerSend}
+                  onStop={stop}
+                  conversationKey={activeConversationId}
+                />
+              ) : (
+                <AiTransferGate
+                  ready={aiConsent !== null && Boolean(userId)}
+                  onAccept={() => {
+                    if (!userId) return
+                    rememberAiTransferConsent(userId)
+                    setAiConsent(true)
+                    // La constancia va en diferido: si falla, no se le cierra la puerta.
+                    if (isSupabaseConfigured()) {
+                      void recordAiTransferConsent(createClient(), userId)
+                    }
+                  }}
+                />
+              )}
 
               {/* Nav incrustado: composer + pestañas como un único elemento flotante. */}
               {isSection && bottomNav && !keyboardOpen ? (

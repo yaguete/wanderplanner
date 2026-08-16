@@ -553,3 +553,17 @@ body:has(.landing-negative) {
     linear-gradient(to right, hsl(0 0% 100% / 0.055) 1px, transparent 1px),
     linear-gradient(to bottom, hsl(0 0% 100% / 0.055) 1px, transparent 1px);
 }
+
+@media print {
+  .landing-header,
+  .landing-flying-lockup,
+  .legal-veil,
+  .cookie-banner,
+  .legal-shell footer {
+    display: none !important;
+  }
+  .legal-main {
+    padding-top: 0 !important;
+    max-width: none;
+  }
+}

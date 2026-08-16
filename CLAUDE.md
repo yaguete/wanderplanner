@@ -55,12 +55,12 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
   frontend/
     app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips, /legal…
       robots.ts            # Allow /; Disallow /trips y /account; NO /start
-      sitemap.ts           # / y /partners (indexables; /legal/* noindex hasta T6.4)
+      sitemap.ts           # /, /partners y /legal/* (indexables)
       opengraph-image.tsx  # OG 1200×630 (next/og + brandSvgMarkup)
       apple-icon.tsx       # 180×180, ardilla #9F8173 sobre blanco opaco
       icon.svg             # favicon SVG con prefers-color-scheme
     middleware.ts          # Sesión Supabase; protege /trips y /account
-    components/            # UI + auth/ + partners/ + landing/ + tareas + tramos + mapa + nav móvil
+    components/            # UI + auth/ + partners/ + landing/ + legal/ + tareas + tramos + mapa + nav móvil
       brand-mark.tsx       # isotipo ardilla, BrandLockup, brandSvgMarkup
       landing/             # home pública + /partners en negativo
       trips-shell.tsx      # providers + cromo de /trips (el layout es Server Component)
@@ -91,6 +91,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       day-summary.ts       # POST /day-summary + firma de ítems del día
       assistant-suggestions.ts   # Snippets de arranque del asistente (sin LLM)
       site.ts              # SITE_URL canónica (metadataBase, sitemap, robots)
+      legal.ts             # Titular, AI_PROVIDERS, inventario de storage para /legal/*
+      cookie-consent.ts    # wp-consent (analítica); test:cookie-consent
+      ai-transfer-consent.ts # wp-ai-transfer-consent (asistente, art. 49.1.a)
       db/                  # trips-repo, assistant-repo, profile-repo
       supabase/            # client, server, middleware helpers
     hooks/                 # use-assistant-chat, use-collapsing-header,
@@ -102,11 +105,11 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 ## Rutas App Router y shell
 
 - **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), tres zooms de valor (`ValueProps`: fuentes / plan / oficiales), footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en el footer (`/partners`), no en el hero.
-- **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Stubs `noindex, follow` hasta T6.4 (copy real). No van en `sitemap.ts`.
+- **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Copy real, indexables, en `sitemap.ts`. Cromo de la landing de viajeros ([`legal/layout.tsx`](frontend/app/legal/layout.tsx)); `/legal` redirige al aviso. Identidad y proveedores de IA en [`lib/legal.ts`](frontend/lib/legal.ts).
 - **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas). El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero).
 - **`/partners`** — Landing de marketing en negativo ([`app/partners/page.tsx`](frontend/app/partners/page.tsx) + [`components/landing/partners/`](frontend/components/landing/partners/)): misma arquitectura que `/` (hero + 3 zooms + CTA + footer) sobre tinta `hsl(20 8% 11%)`. El generador del botón vive en el hero (`id="empezar"`) y dispara `POST /partners/prewarm`. Indexable. Slugs reservados: `landing`, `wp-landing`, `start`, `admin`. **No** usa `AuthShell`.
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos y de los chips del hero: sesión anónima + viaje borrador + fuente precargada. Reusa el borrador vacío del usuario si existe (`reuseOrInsertDraftTrip`) para no multiplicar viajes. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado; los chips usan `ref=wp-landing` (reservado, no es un partner). **Rastreable + `noindex, follow`**: Google tiene que leer el meta; no va en `Disallow`.
-- **Layout raíz** — Inter, `AuthProvider`, Analytics. **Sin** `TripProvider`. Metadata (`metadataBase`, OG, Twitter) en [`app/layout.tsx`](frontend/app/layout.tsx).
+- **Layout raíz** — Inter, `AuthProvider`, `CookieBanner`, `AnalyticsGate` (Vercel Analytics solo con consentimiento). **Sin** `TripProvider`. Metadata (`metadataBase`, OG, Twitter) en [`app/layout.tsx`](frontend/app/layout.tsx).
 - **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx) es Server Component (`robots: noindex, nofollow`). Los providers viven en [`trips-shell.tsx`](frontend/components/trips-shell.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable, main sobre canvas gris). Único sitio de `useTrips()`.
 - **`/trips`** — Listado Activos/Archivados; empty/loading con spinner mientras `isLoading`.
 - **`/trips/[tripId]`** — Desktop: tres paneles alícuota (Fuentes · Viaje · Asistente) con toggles en el header (`wp-trip-panels`); título del viaje en el header. **Móvil: nav inferior de tres secciones** ([`trip-mobile-nav.tsx`](frontend/components/trip-mobile-nav.tsx): Fuentes · Mi viaje · Asistente), con cabecera que se colapsa al hacer scroll ([`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts)) y ajuste al teclado virtual ([`use-virtual-keyboard.ts`](frontend/hooks/use-virtual-keyboard.ts)).
@@ -135,7 +138,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - Extracción de fuente: `startSourceExtraction` (fire-and-forget) → chip pendiente en Fuentes (`pendingSources`); sin modal bloqueante. Tope **5 fuentes/viaje** ([`trip-sources.ts`](frontend/lib/trip-sources.ts)). Quitar una fuente **no** borra ítems/basics ya consolidados en Mi viaje.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
 - Asistente: [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts); `activeConversationId` en localStorage por `userId`+`tripId` (se limpia en login/logout explícitos; el histórico permanece en Supabase). Conversaciones caen por `ON DELETE CASCADE` al borrar el viaje.
-- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
+- Preferencias UI menores (`wp-trips-view`, `wp-trip-panels`, `wp-sidebar-collapsed`), consentimiento (`wp-consent`, `wp-ai-transfer-consent`) y cachés de thumbs/Mapbox/country-tasks/sugerencias de fuentes (`wp-trip-source-suggest`) en session/local storage.
 - Miniaturas: no van en el payload de `/itinerary` (`thumb_url` null). `InspirationThumbnail` las pide a `GET /thumb` al entrar en viewport. Portadas: `GET /cover` vía [`unsplash.ts`](frontend/lib/unsplash.ts) (claves solo en backend).
 - Trámites de país (T4.4): pestaña **Básicos** → `GET /country-tasks` (Recomendaciones MAE + Haiku). Sugerencias aceptadas → `ExtraTask` con id `country:{iso}:{slug}`; descartes en `dismissedCountryTasks` (columna propia, **no** en `tasks`).
 - Descripción de día por IA: `POST /day-summary`; la firma de ítems (`summarySignature` en `UserDay`) apaga el botón si nada ha cambiado.
@@ -249,6 +252,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No optimices rendimiento sin medir antes.** Los tres paneles montados hacen que el coste percibido casi nunca esté donde parece: dos rondas de optimización sobre la Ruta (que renderiza en 18 ms) no movieron la aguja porque el segundo entero estaba en el asistente cerrado.
 - ❌ **No implementes búsqueda de vuelos con API / precios** → el buscador es Nivel 1 (enlace Kiwi). Afiliación propia solo en `FLIGHT_SEARCH_AFFILIATE_ID`; no toques `affiliateUrl` de fuentes. La tabla IATA se genera con `scripts/generate-airports.mjs`, no se edita `airports-data.ts` a mano.
 - ❌ **El uso in-app de sugerencias de fuentes no consume la cuota Tavily de la landing** → `GET /sources/suggest?scope=trip` con JWT (`trip_source_search`); sin JWT válido cae a `landing`. Tope IP en ambos scopes. Caché de respuesta TTL (`SOURCE_SUGGEST_RESPONSE_TTL_SEC`, default 6 h); `fresh=true` solo en «Buscar más».
+- ❌ **No escribas en `/legal/*` nada que el código no haga.** La política describe el producto real: `usage_events` no guarda IPs, Vercel Analytics no pone cookies, el fetcher no consulta `robots.txt` y `FLIGHT_SEARCH_AFFILIATE_ID` está vacío.
+- ❌ **No nombres un modelo ni un proveedor de IA en la prosa legal.** Van por categoría; los nombres viven en `AI_PROVIDERS` de [`lib/legal.ts`](frontend/lib/legal.ts), que se renderiza en la sección `#proveedores` con su `providersUpdatedAt` propio. **Cambiar `ASSISTANT_MODEL` o añadir un proveedor obliga a tocar ese array**, y si el país nuevo no tiene decisión de adecuación, también el texto del consentimiento del asistente.
 
 ## Dependencias críticas
 
@@ -269,3 +274,4 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Búsqueda de lugares / hubs | [`place_search.py`](backend/place_search.py), [`mapbox.ts`](frontend/lib/mapbox.ts), [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts), [`usage.py`](backend/usage.py), `MAPBOX_ACCESS_TOKEN` |
 | Mapa | [`itinerary-map-view.tsx`](frontend/components/itinerary-map-view.tsx), [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts), [`map-geocode-state.ts`](frontend/lib/map-geocode-state.ts), coste de Directions |
 | Marca / SEO | [`brand-mark.tsx`](frontend/components/brand-mark.tsx), [`site.ts`](frontend/lib/site.ts), [`robots.ts`](frontend/app/robots.ts), [`opengraph-image.tsx`](frontend/app/opengraph-image.tsx) |
+| Proveedor o modelo de IA (`ASSISTANT_MODEL`, cliente de [`assistant.py`](backend/assistant.py), extracción de [`main.py`](backend/main.py)) | `AI_PROVIDERS` y `providersUpdatedAt` en [`lib/legal.ts`](frontend/lib/legal.ts), sección `#proveedores` de `/legal/privacidad`, texto del consentimiento del asistente si cambia el país |

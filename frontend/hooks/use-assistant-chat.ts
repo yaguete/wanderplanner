@@ -28,6 +28,7 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/auth-context"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { hasAiTransferConsent } from "@/lib/ai-transfer-consent"
 import { toast } from "sonner"
 
 export type ChatAction = AssistantAction & {
@@ -304,6 +305,9 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       const trimmed = text.trim()
       const currentTrip = tripRef.current
       if (!trimmed || !currentTrip || isStreaming) return
+      // Cinturón: el dock ya tapa el composer sin consentimiento, pero el envío
+      // no puede depender de que la UI esté bien montada.
+      if (!hasAiTransferConsent(userId)) return
 
       setError(null)
 
@@ -457,7 +461,7 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
       setStatusLabel(null)
       abortRef.current = null
     },
-    [isStreaming, persistActiveId, loadTripSourcesWithArticles, requireAccount],
+    [isStreaming, persistActiveId, loadTripSourcesWithArticles, requireAccount, userId],
   )
 
   const setActionStatus = useCallback(
