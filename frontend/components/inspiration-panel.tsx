@@ -29,7 +29,6 @@ import { TravelItemCard } from "@/components/travel-item-card"
 import { InspirationThumbnail } from "@/components/inspiration-thumbnail"
 import {
   AddSourceDialog,
-  AddSourceFlow,
   AddSourceProgress,
   AddSourceErrorState,
   MaxSourcesDialog,
@@ -1131,49 +1130,19 @@ export default function InspirationPanel({
         />
       ) : null}
 
-      {/* Desktop: diálogo URL. Móvil: sheet inferior. */}
-      {!isMobile ? (
-        <AddSourceDialog
-          open={addSourceOpen}
-          onOpenChange={setAddSourceOpen}
-          initialUrl={initialSourceUrl}
-          onSubmit={handleStartExtract}
-          guardBeforeSubmit={guardBeforeSubmit}
-          trip={trip}
-          sources={sources}
-          pendingUrls={tripPendings.map((p) => p.url)}
-          atSourceCap={atSourceCap}
-          loadingPendingCount={loadingPendingCount}
-          isMobile={false}
-        />
-      ) : addSourceOpen ? (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-[45] bg-foreground/25 sm:hidden"
-            aria-label="Cerrar añadir fuente"
-            onClick={() => setAddSourceOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-label="Añadir fuente"
-            className="fixed bottom-[calc(var(--wp-nav-gap)+var(--wp-nav-height)+0.5rem)] left-3 right-3 z-[50] max-h-[60vh] space-y-2 overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:hidden"
-          >
-            <AddSourceFlow
-              initialUrl={initialSourceUrl}
-              onSubmit={handleStartExtract}
-              onCancel={() => setAddSourceOpen(false)}
-              guardBeforeSubmit={guardBeforeSubmit}
-              trip={trip}
-              sources={sources}
-              pendingUrls={tripPendings.map((p) => p.url)}
-              atSourceCap={atSourceCap}
-              loadingPendingCount={loadingPendingCount}
-              isMobile
-            />
-          </div>
-        </>
-      ) : null}
+      <AddSourceDialog
+        open={addSourceOpen}
+        onOpenChange={setAddSourceOpen}
+        initialUrl={initialSourceUrl}
+        onSubmit={handleStartExtract}
+        guardBeforeSubmit={guardBeforeSubmit}
+        trip={trip}
+        sources={sources}
+        pendingUrls={tripPendings.map((p) => p.url)}
+        atSourceCap={atSourceCap}
+        loadingPendingCount={loadingPendingCount}
+        isMobile={isMobile}
+      />
 
       <MaxSourcesDialog open={maxSourcesOpen} onOpenChange={setMaxSourcesOpen} />
     </div>

@@ -195,7 +195,7 @@ function AddSourceSuggestions({
   )
 }
 
-/** Formulario de URL compartido (Dialog desktop y sheet móvil). */
+/** Formulario de URL: cabecera + campo + sugerencias + pie fijo (móvil a pantalla completa). */
 export function AddSourceFlow({
   initialUrl,
   onSubmit,
@@ -240,36 +240,47 @@ export function AddSourceFlow({
   const canSubmit = url.trim().length > 0
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor={urlId}>URL del artículo</Label>
-        <Input
-          id={urlId}
-          value={url}
-          onChange={(e) => {
-            setUrl(e.target.value)
-            if (error) setError(null)
-          }}
-          placeholder="https://blog.com/mi-viaje-a..."
-          autoFocus={!isMobileViewport()}
-          aria-invalid={!!error}
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-10 pt-6">
+        <DialogHeader className="space-y-1.5 text-left">
+          <DialogTitle className="text-lg font-semibold tracking-tight">
+            Añadir fuente
+          </DialogTitle>
+          <DialogDescription>
+            Pega la URL de un artículo de viajes o elige una sugerencia. Destilaremos la ruta
+            para consolidarla en tu viaje.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor={urlId}>URL del artículo</Label>
+          <Input
+            id={urlId}
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value)
+              if (error) setError(null)
+            }}
+            placeholder="https://blog.com/mi-viaje-a..."
+            autoFocus={!isMobileViewport()}
+            aria-invalid={!!error}
+          />
+          {error ? (
+            <p className="text-xs text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        <AddSourceSuggestions
+          trip={trip}
+          sources={sources}
+          pendingUrls={pendingUrls}
+          atSourceCap={atSourceCap}
+          loadingPendingCount={loadingPendingCount}
+          isMobile={isMobile}
+          onPick={commit}
         />
-        {error ? (
-          <p className="text-xs text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
       </div>
-      <AddSourceSuggestions
-        trip={trip}
-        sources={sources}
-        pendingUrls={pendingUrls}
-        atSourceCap={atSourceCap}
-        loadingPendingCount={loadingPendingCount}
-        isMobile={isMobile}
-        onPick={commit}
-      />
-      <DialogFooter className="gap-2 sm:gap-0">
+      <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancelar
         </Button>
@@ -289,7 +300,7 @@ export type AddSourceDialogProps = {
   guardBeforeSubmit?: () => boolean
 } & AddSourceSuggestContext
 
-/** Diálogo desktop: URL + sugerencias del destino. */
+/** Diálogo URL + sugerencias: en móvil, pantalla completa como el resto de formularios. */
 export function AddSourceDialog({
   open,
   onOpenChange,
@@ -305,14 +316,11 @@ export function AddSourceDialog({
 }: AddSourceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Añadir fuente</DialogTitle>
-          <DialogDescription>
-            Pega la URL de un artículo de viajes o elige una sugerencia. Destilaremos la ruta
-            para consolidarla en tu viaje.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        fullscreenOnMobile
+        hideClose
+        className="sm:max-h-[min(90vh,40rem)] sm:max-w-lg"
+      >
         <AddSourceFlow
           initialUrl={initialUrl}
           onSubmit={(url) => {
