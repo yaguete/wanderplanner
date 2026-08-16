@@ -67,7 +67,7 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com/) → API keys | Extracción `/itinerary` (Claude Haiku) |
 | `DEEPSEEK_API_KEY` | [platform.deepseek.com](https://platform.deepseek.com/) | Asistente `/assistant/chat` |
 | `TAVILY_API_KEY` | [tavily.com](https://tavily.com/) → dashboard | Búsqueda web del asistente |
-| `GOOGLE_PLACES_API_KEY` | Google Cloud → APIs & Services → Places API (New) | Miniaturas `/thumb`. Acepta también alias `GOOGLE_MAPS_API_KEY` |
+| `GOOGLE_PLACES_API_KEY` | Google Cloud → APIs & Services → Places API (New) | Miniaturas `/thumb` (stay/food y fallback). Acepta también alias `GOOGLE_MAPS_API_KEY`. Las actividades van primero a Wikimedia Commons (sin clave) |
 | `UNSPLASH_ACCESS_KEY` | [unsplash.com/oauth/applications](https://unsplash.com/oauth/applications) | Portadas `/cover` (solo backend; **nunca** `NEXT_PUBLIC_*`) |
 | `SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Mismo proyecto que el front |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` | **Solo backend.** Cachés `article_extractions` / `place_thumbs` / `destination_covers` / `country_task_suggestions` y `usage_events` |

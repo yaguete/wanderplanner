@@ -21,7 +21,7 @@ Caché global stale-while-revalidate (`article_extractions`):
   - expired/miss → fetch + Claude síncrono
   - refresh=true → validación remota síncrona; Claude solo si cambió el contenido útil
 
-Las miniaturas y portadas NO se resuelven aquí: ver GET /thumb (Places) y GET /cover (Unsplash).
+Las miniaturas y portadas NO se resuelven aquí: ver GET /thumb (Commons + Places) y GET /cover (Unsplash).
 """
 from __future__ import annotations
 

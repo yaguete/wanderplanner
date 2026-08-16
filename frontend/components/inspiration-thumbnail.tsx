@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { buildBasicThumbQuery, buildThumbQuery } from "@/lib/item-image"
-import { resolveThumbUrlOrNull } from "@/lib/thumbs"
+import { resolveThumbUrlOrNull, type ThumbAttribution } from "@/lib/thumbs"
 import { resolveVendorLogo } from "@/lib/vendor-logo"
 import {
   resolveTransportModeVisual,
@@ -46,8 +46,8 @@ type InspirationThumbnailProps = (ItineraryItemProps | BasicProps) & {
 }
 
 /**
- * Miniatura para la lista de inspiración: `thumbUrl` del servidor o Places vía /thumb
- * (nombre+región). Sin foto, hueco mudo — no Picsum. Carga diferida con IntersectionObserver.
+ * Miniatura para la lista de inspiración: `thumbUrl` del servidor o GET /thumb
+ * (Commons en actividades, Places de cola). Sin foto, hueco mudo. Carga diferida.
  */
 export function InspirationThumbnail({ className, ...props }: InspirationThumbnailProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -110,6 +110,7 @@ function ItineraryItemInner({
   const isTransportIcon = mode === "transportIcon"
 
   const [src, setSrc] = useState<string | null>(() => item.thumbUrl ?? null)
+  const [attribution, setAttribution] = useState<ThumbAttribution | null>(null)
   const [settled, setSettled] = useState(() => !!item.thumbUrl)
   const [imageLoaded, setImageLoaded] = useState(false)
 
@@ -117,6 +118,7 @@ function ItineraryItemInner({
     // En modo icono no se pinta foto: ni se resuelve miniatura ni se gasta cuota.
     if (isTransportIcon) return
     setImageLoaded(false)
+    setAttribution(null)
     if (item.thumbUrl) {
       setSrc(item.thumbUrl)
       setSettled(true)
@@ -130,15 +132,16 @@ function ItineraryItemInner({
       setSettled(true)
       return
     }
-    void resolveThumbUrlOrNull(q).then((u) => {
+    void resolveThumbUrlOrNull(q, { kind: item.type, name: item.name }).then((payload) => {
       if (cancel) return
-      setSrc(u)
+      setSrc(payload.url)
+      setAttribution(payload.attribution)
       setSettled(true)
     })
     return () => {
       cancel = true
     }
-  }, [isTransportIcon, item.id, item.thumbUrl, item.name, item.region, area])
+  }, [isTransportIcon, item.id, item.thumbUrl, item.name, item.region, item.type, area])
 
   if (isTransportIcon) {
     const visual = resolveTransportModeVisual({
@@ -165,7 +168,7 @@ function ItineraryItemInner({
     return <div className="h-full w-full bg-muted" aria-hidden />
   }
   return (
-    <PhotoPreview src={src} ready={imageLoaded}>
+    <PhotoPreview src={src} ready={imageLoaded} attribution={attribution}>
       {!imageLoaded ? (
         <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden />
       ) : null}
@@ -220,9 +223,9 @@ function BasicInner({
       setSettled(true)
       return
     }
-    void resolveThumbUrlOrNull(q).then((u) => {
+    void resolveThumbUrlOrNull(q, { kind: "basic", name: item.name }).then((payload) => {
       if (cancel) return
-      setSrc(u)
+      setSrc(payload.url)
       setSettled(true)
     })
     return () => {
@@ -283,10 +286,12 @@ function BasicInner({
 function PhotoPreview({
   src,
   ready,
+  attribution,
   children,
 }: {
   src: string
   ready: boolean
+  attribution?: ThumbAttribution | null
   children: ReactNode
 }) {
   const finePointer = useFinePointer()
@@ -301,7 +306,7 @@ function PhotoPreview({
   if (!ready) return children
 
   const lightboxUi = (
-    <ThumbLightbox src={src} open={lightbox} onOpenChange={setLightbox} />
+    <ThumbLightbox src={src} open={lightbox} onOpenChange={setLightbox} attribution={attribution} />
   )
 
   if (finePointer === true) {
@@ -318,6 +323,7 @@ function PhotoPreview({
           className="z-[80] w-auto overflow-hidden rounded-xl border-border p-0 shadow-lg"
         >
           <img src={src} alt="" className="h-72 w-72 object-cover" />
+          <AttributionLine attribution={attribution} className="px-3 py-2" />
         </HoverCardContent>
       </HoverCard>
     )
@@ -354,14 +360,42 @@ function PhotoPreview({
   )
 }
 
+function AttributionLine({
+  attribution,
+  className,
+}: {
+  attribution?: ThumbAttribution | null
+  className?: string
+}) {
+  if (!attribution) return null
+  const label = `Foto: ${attribution.author} · ${attribution.license}`
+  const textClass = cn("block max-w-72 truncate text-[11px] leading-snug text-muted-foreground", className)
+  if (!attribution.creditUrl) {
+    return <p className={textClass}>{label}</p>
+  }
+  return (
+    <a
+      href={attribution.creditUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(textClass, "underline-offset-2 hover:underline")}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {label}
+    </a>
+  )
+}
+
 function ThumbLightbox({
   src,
   open,
   onOpenChange,
+  attribution,
 }: {
   src: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  attribution?: ThumbAttribution | null
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -377,6 +411,11 @@ function ThumbLightbox({
           alt=""
           className="max-h-[80vh] w-full rounded-xl object-contain"
         />
+        {attribution ? (
+          <div className="mt-2 rounded-md bg-background/90 px-2 py-1.5 text-center">
+            <AttributionLine attribution={attribution} className="mx-auto max-w-full" />
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

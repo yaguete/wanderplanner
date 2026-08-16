@@ -90,7 +90,7 @@ export default function PrivacidadPage() {
           Supabase (cuentas, base de datos y correos de acceso), Vercel (alojamiento de la
           web), Fly.io (servidor, en Ámsterdam), Cloudflare (comprobar que no eres un
           robot), Tavily (buscar artículos), Mapbox (mapas y lugares), Google (fotos de
-          sitios) y Unsplash (portadas).
+          sitios), Wikimedia (fotos de sitios) y Unsplash (portadas).
         </p>
         <p>
           Para convertir artículos en itinerarios y para el asistente usamos proveedores de

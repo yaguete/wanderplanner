@@ -1,32 +1,50 @@
 /**
- * Miniaturas de ítems vía GET /thumb (Places en el backend).
- * Misma forma que el antiguo fetch Unsplash: memoria + sessionStorage + cola de concurrencia.
+ * Miniaturas de ítems vía GET /thumb (Commons para actividades, Places de cola).
+ * Caché en memoria + sessionStorage; cola de concurrencia.
  */
 import { authHeaders } from "@/lib/api-auth"
+import type { ItemType } from "@/types/itinerary"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
-const SESSION_KEY = "wp-place-thumb-v1"
+const SESSION_KEY = "wp-place-thumb-v2"
 const MAX_SESSION_ENTRIES = 80
 
-const memoryCache = new Map<string, string | null>()
+export type ThumbProvider = "wikimedia" | "places"
 
-function readSessionMap(): Record<string, string> {
+export type ThumbAttribution = {
+  author: string
+  license: string
+  creditUrl: string
+}
+
+export type ThumbPayload = {
+  url: string | null
+  provider: ThumbProvider | null
+  attribution: ThumbAttribution | null
+}
+
+const EMPTY: ThumbPayload = { url: null, provider: null, attribution: null }
+
+const memoryCache = new Map<string, ThumbPayload>()
+
+function readSessionMap(): Record<string, ThumbPayload> {
   if (typeof window === "undefined") return {}
   try {
     const raw = sessionStorage.getItem(SESSION_KEY)
     if (!raw) return {}
-    return JSON.parse(raw) as Record<string, string>
+    return JSON.parse(raw) as Record<string, ThumbPayload>
   } catch {
     return {}
   }
 }
 
-function writeSessionKey(key: string, url: string) {
+function writeSessionKey(key: string, payload: ThumbPayload) {
   if (typeof window === "undefined") return
+  if (!payload.url) return
   try {
     const m = readSessionMap()
-    m[key] = url
+    m[key] = payload
     const keys = Object.keys(m)
     while (keys.length > MAX_SESSION_ENTRIES) {
       const drop = keys.shift()
@@ -65,19 +83,50 @@ function cacheKey(query: string): string {
   return query.trim().toLowerCase()
 }
 
+function apiKind(kind?: ItemType | "basic"): "activity" | "stay" | "food" | "transport" {
+  if (kind === "stay" || kind === "food" || kind === "transport") return kind
+  if (kind === "basic") return "stay"
+  return "activity"
+}
+
+function parsePayload(data: unknown): ThumbPayload {
+  if (!data || typeof data !== "object") return EMPTY
+  const raw = data as {
+    url?: string | null
+    provider?: string | null
+    attribution?: Partial<ThumbAttribution> | null
+  }
+  const url = typeof raw.url === "string" && raw.url.trim() ? raw.url.trim() : null
+  if (!url) return EMPTY
+  const provider = raw.provider === "wikimedia" || raw.provider === "places" ? raw.provider : null
+  const a = raw.attribution
+  const attribution =
+    provider === "wikimedia" && a && typeof a.author === "string" && typeof a.license === "string"
+      ? {
+          author: a.author,
+          license: a.license,
+          creditUrl: typeof a.creditUrl === "string" ? a.creditUrl : "",
+        }
+      : null
+  return { url, provider, attribution }
+}
+
 /**
- * Devuelve URL de miniatura (Places vía backend) o `null`.
- * Caché en memoria y sessionStorage; cola de concurrencia.
+ * Miniatura vía backend o `null` en url. Caché en memoria y sessionStorage.
  */
 export async function fetchPlaceThumbnailByQuery(
   query: string | null | undefined,
-): Promise<string | null> {
-  if (!query?.trim()) return null
-  const key = cacheKey(query)
-  if (memoryCache.has(key)) return memoryCache.get(key) ?? null
+  opts?: { kind?: ItemType | "basic"; name?: string | null },
+): Promise<ThumbPayload> {
+  if (!query?.trim()) return EMPTY
+  const kind = opts?.kind ?? "activity"
+  const name = (opts?.name ?? "").trim()
+  const q = query.trim().toLowerCase()
+  const key = cacheKey(q)
+  if (memoryCache.has(key)) return memoryCache.get(key) ?? EMPTY
   if (typeof window !== "undefined") {
     const sm = readSessionMap()[key]
-    if (sm) {
+    if (sm?.url) {
       memoryCache.set(key, sm)
       return sm
     }
@@ -85,33 +134,34 @@ export async function fetchPlaceThumbnailByQuery(
 
   await acquire()
   try {
-    if (memoryCache.has(key)) return memoryCache.get(key) ?? null
+    if (memoryCache.has(key)) return memoryCache.get(key) ?? EMPTY
 
-    const params = new URLSearchParams({ q: key })
+    const params = new URLSearchParams({ q, kind: apiKind(kind) })
+    if (name) params.set("n", name)
     const res = await fetch(`${API_BASE}/thumb?${params}`, {
       headers: { ...(await authHeaders()) },
     })
 
     if (!res.ok) {
       // 429/5xx: no cachear el fallo, para reintentar si el tope era transitorio.
-      return null
+      return EMPTY
     }
 
-    const data = (await res.json()) as { url?: string | null }
-    const url = typeof data.url === "string" && data.url.trim() ? data.url : null
-    memoryCache.set(key, url)
-    if (url) writeSessionKey(key, url)
-    return url
+    const payload = parsePayload(await res.json())
+    memoryCache.set(key, payload)
+    writeSessionKey(key, payload)
+    return payload
   } catch {
-    return null
+    return EMPTY
   } finally {
     release()
   }
 }
 
-/** Resuelve URL de miniatura; si falla, `null` (el caller deja el hueco mudo). */
+/** Resuelve miniatura; si falla, payload vacío (el caller deja el hueco mudo). */
 export async function resolveThumbUrlOrNull(
   query: string | null | undefined,
-): Promise<string | null> {
-  return fetchPlaceThumbnailByQuery(query)
+  opts?: { kind?: ItemType | "basic"; name?: string | null },
+): Promise<ThumbPayload> {
+  return fetchPlaceThumbnailByQuery(query, opts)
 }

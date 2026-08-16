@@ -1,7 +1,11 @@
 """
-GET /thumb?q=<consulta> — miniatura vía Google Places (New), con caché global en `place_thumbs`.
+GET /thumb?q=<consulta>&kind=&n= — miniatura.
 
-No desplegar a producción sin T1.2 (metering). Cinturón mínimo: longitud de q + MAX_PHOTO_LOOKUPS_DAY.
+Actividades: Wikimedia Commons primero (URL estable, sin cuota). Stay/food/transport
+y el miss de Commons caen a Google Places (New). Caché global en `place_thumbs`.
+
+Wikimedia va por delante de enforce_usage: un usuario al tope diario sigue viendo
+monumentos; el 429 solo aparece cuando hay que pagar a Google.
 
 Política Places Photo (docs Google, julio 2026 — Place Photos New / photos.getMedia):
   - Con skipHttpRedirect=true, `photoUri` es *short-lived* y NO debe persistirse como única
@@ -9,12 +13,12 @@ Política Places Photo (docs Google, julio 2026 — Place Photos New / photos.ge
   - El `name` del recurso (`places/…/photos/…`) es lo que se guarda de forma duradera; si caduca,
     hay que repetir Text Search (New) para obtener un name fresco.
   - `photos/…/media` (getMedia) es facturable: un acierto de caché con URI fresca no llama a Google.
+  - Un hit `provider=wikimedia` no llama a Places: photo_name no es un recurso de Google.
 """
 from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 from typing import Any
 
@@ -36,11 +40,14 @@ from photo_lookup import (
     uri_still_fresh,
 )
 from usage import enforce_usage, record_event
+from wikimedia_thumbs import WikiThumb, lookup_wikimedia_thumb, normalize_for_match
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 TABLE = "place_thumbs"
+_THUMB_KINDS = frozenset({"activity", "stay", "food", "transport"})
+_WIKI_KINDS = frozenset({"activity"})
 
 
 def _google_key() -> str:
@@ -48,9 +55,7 @@ def _google_key() -> str:
 
 
 def _normalize_for_match(text: str | None) -> str:
-    if not text:
-        return ""
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    return normalize_for_match(text)
 
 
 def _pick_best_google_place(places: list[dict], query: str) -> dict | None:
@@ -148,16 +153,21 @@ def _log_thumb(
     cache_hit: bool,
     search_calls: int = 0,
     media_calls: int = 0,
+    wiki_calls: int = 0,
+    provider: str | None = None,
     provider_ms: int | None = None,
     capped: bool = False,
     query: str | None = None,
 ) -> None:
+    billed = bool(search_calls or media_calls or wiki_calls)
     fields: dict[str, Any] = {
         "event": "thumb",
         "cache_hit": cache_hit,
         "search_calls": search_calls,
         "media_calls": media_calls,
-        "provider_ms": provider_ms if (search_calls or media_calls) else None,
+        "wiki_calls": wiki_calls,
+        "provider": provider,
+        "provider_ms": provider_ms if billed else None,
     }
     if capped:
         fields["capped"] = True
@@ -166,16 +176,66 @@ def _log_thumb(
     log_kv(logger, **fields)
 
 
-async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
+def _payload(
+    url: str | None,
+    provider: str | None = None,
+    attribution: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not url:
+        return {"url": None, "provider": None, "attribution": None}
+    attr = attribution if provider == "wikimedia" else None
+    return {"url": url, "provider": provider, "attribution": attr}
+
+
+def _row_attribution(row: dict[str, Any]) -> dict[str, Any] | None:
+    raw = row.get("attribution")
+    return raw if isinstance(raw, dict) else None
+
+
+async def _upsert_wikimedia(
+    client: httpx.AsyncClient,
+    cfg: tuple[str, str],
+    query: str,
+    wiki: WikiThumb,
+) -> None:
+    base, skey = cfg
+    try:
+        await _upsert_row(
+            client,
+            base,
+            skey,
+            {
+                "query": query,
+                "photo_name": None,
+                "photo_uri": wiki.url,
+                "photo_uri_expires_at": None,
+                "miss": False,
+                "resolved_at": now_iso(),
+                "provider": "wikimedia",
+                "attribution": wiki.attribution(),
+            },
+        )
+    except Exception:
+        pass
+
+
+async def _resolve_thumb(
+    query: str,
+    user: AuthUser | None,
+    *,
+    kind: str = "activity",
+    name: str | None = None,
+) -> dict[str, Any]:
     """
-    Resuelve miniatura. Con single_flight, solo quien dispara la resolución real
-    paga cuota de usuario; los waiters reciben el resultado gratis (asimetría deseable).
+    Resuelve miniatura. Wikimedia (actividades) va antes de la cuota de Places.
+    Con single_flight, solo quien dispara la resolución real paga; los waiters
+    reutilizan el resultado.
     """
     api_key = _google_key()
     cfg = supabase_config()
-    # Acumuladores si un getMedia de URI caducada falla y caemos a searchText.
     prior_media_calls = 0
     prior_provider_ms = 0
+    wiki_calls = 0
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         row: dict | None = None
@@ -189,23 +249,33 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
 
         if row and row.get("miss") and is_miss_fresh(row.get("resolved_at")):
             _log_thumb(cache_hit=True)
-            return {"url": None}
+            return _payload(None)
 
         if row and not row.get("miss"):
             uri = row.get("photo_uri")
             stale = uri.strip() if isinstance(uri, str) and uri.strip() else None
+            cached_provider = row.get("provider") if isinstance(row.get("provider"), str) else None
+            if cached_provider == "wikimedia" and stale:
+                _log_thumb(cache_hit=True, provider="wikimedia")
+                return _payload(stale, "wikimedia", _row_attribution(row))
+
             if stale and uri_still_fresh(row.get("photo_uri_expires_at")):
-                _log_thumb(cache_hit=True)
-                return {"url": stale}
+                _log_thumb(cache_hit=True, provider="places")
+                return _payload(stale, "places")
 
             photo_name = row.get("photo_name")
-            if isinstance(photo_name, str) and photo_name.strip() and api_key:
+            if (
+                cached_provider != "wikimedia"
+                and isinstance(photo_name, str)
+                and photo_name.strip()
+                and api_key
+            ):
                 # El sitio ya está resuelto: getMedia solo renueva la URI de 45 min.
                 # Cobrar cuota de usuario aquí hace que un itinerario largo, visto
                 # un par de veces, dispare 429 y el front caiga a fotos aleatorias.
                 if not allow_paid_lookup():
-                    _log_thumb(cache_hit=False, capped=True, query=query)
-                    return {"url": stale}
+                    _log_thumb(cache_hit=False, capped=True, query=query, provider="places")
+                    return _payload(stale, "places" if stale else None)
                 try:
                     t0 = time.perf_counter()
                     fresh = await _get_media_uri(client, api_key, photo_name.strip())
@@ -229,6 +299,7 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                                 "photo_uri_expires_at": photo_uri_expiry_iso(),
                                 "miss": False,
                                 "resolved_at": now_iso(),
+                                "provider": "places",
                             },
                         )
                     except Exception:
@@ -237,19 +308,41 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                     _log_thumb(
                         cache_hit=False,
                         media_calls=1,
+                        provider="places",
                         provider_ms=media_ms,
                         query=query,
                     )
-                    return {"url": fresh}
+                    return _payload(fresh, "places")
                 if stale:
                     _log_thumb(
                         cache_hit=False,
                         media_calls=1,
+                        provider="places",
                         provider_ms=media_ms,
                         query=query,
                     )
-                    return {"url": stale}
+                    return _payload(stale, "places")
                 # photo_name muerto y sin URI → caer a searchText abajo
+
+        if kind in _WIKI_KINDS:
+            t0 = time.perf_counter()
+            try:
+                wiki = await lookup_wikimedia_thumb(query, name)
+            except Exception:
+                wiki = None
+            wiki_ms = int((time.perf_counter() - t0) * 1000)
+            wiki_calls = 1
+            if wiki:
+                if cfg:
+                    await _upsert_wikimedia(client, cfg, query, wiki)
+                _log_thumb(
+                    cache_hit=False,
+                    wiki_calls=1,
+                    provider="wikimedia",
+                    provider_ms=wiki_ms,
+                    query=query,
+                )
+                return _payload(wiki.url, "wikimedia", wiki.attribution())
 
         if not api_key:
             if user is not None and prior_media_calls:
@@ -257,10 +350,11 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
             _log_thumb(
                 cache_hit=False,
                 media_calls=prior_media_calls,
+                wiki_calls=wiki_calls,
                 provider_ms=prior_provider_ms if prior_media_calls else None,
                 query=query,
             )
-            return {"url": stale}
+            return _payload(stale, "places" if stale else None)
         if prior_media_calls == 0:
             await enforce_usage(user, "photo_lookup")
         if not allow_paid_lookup():
@@ -269,11 +363,12 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
             _log_thumb(
                 cache_hit=False,
                 media_calls=prior_media_calls,
+                wiki_calls=wiki_calls,
                 provider_ms=prior_provider_ms if prior_media_calls else None,
                 capped=True,
                 query=query,
             )
-            return {"url": None}
+            return _payload(None)
 
         provider_ms = prior_provider_ms
         search_calls = 0
@@ -303,6 +398,8 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                             "photo_uri_expires_at": None,
                             "miss": True,
                             "resolved_at": now_iso(),
+                            "provider": None,
+                            "attribution": None,
                         },
                     )
                 except Exception:
@@ -314,10 +411,11 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                 cache_hit=False,
                 search_calls=search_calls,
                 media_calls=media_calls,
+                wiki_calls=wiki_calls,
                 provider_ms=provider_ms,
                 query=query,
             )
-            return {"url": None}
+            return _payload(None)
 
         try:
             t0 = time.perf_counter()
@@ -342,6 +440,8 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
                         "photo_uri_expires_at": photo_uri_expiry_iso() if uri else None,
                         "miss": uri is None,
                         "resolved_at": now_iso(),
+                        "provider": "places" if uri else None,
+                        "attribution": None,
                     },
                 )
             except Exception:
@@ -354,28 +454,38 @@ async def _resolve_thumb(query: str, user: AuthUser | None) -> dict[str, Any]:
             cache_hit=False,
             search_calls=search_calls,
             media_calls=media_calls,
+            wiki_calls=wiki_calls,
+            provider="places" if uri else None,
             provider_ms=provider_ms,
             query=query,
         )
-        return {"url": uri}
+        return _payload(uri, "places" if uri else None)
 
 
 @router.get("/thumb")
 async def get_thumb(
     q: str = Query(""),
+    kind: str = Query("activity"),
+    n: str = Query(""),
     user: AuthUser | None = Depends(require_user),
 ):
     """
-    Miniatura Places por consulta. 200 {"url": string|null}.
+    Miniatura por consulta. 200 {url, provider, attribution}.
 
-    No desplegar a producción sin T1.2.
+    `kind=activity` (default) prueba Commons antes de Places. stay/food/transport
+    van directo a Places. `n` es el nombre del ítem, solo para puntuar Wikipedia.
     """
     query = normalize_query(q)
     if not query:
-        return JSONResponse({"url": None})
+        return JSONResponse(_payload(None))
+
+    resolved_kind = kind.strip().lower() if kind else "activity"
+    if resolved_kind not in _THUMB_KINDS:
+        resolved_kind = "activity"
+    item_name = " ".join(n.strip().split()) if n and n.strip() else None
 
     async def run() -> dict[str, Any]:
-        return await _resolve_thumb(query, user)
+        return await _resolve_thumb(query, user, kind=resolved_kind, name=item_name)
 
     result = await single_flight(f"thumb:{query}", run)
     return JSONResponse(result)
