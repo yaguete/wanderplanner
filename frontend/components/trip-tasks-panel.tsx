@@ -32,6 +32,7 @@ import { EmptyState } from "@/components/empty-state"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CountryTasksSection } from "@/components/country-tasks-section"
 import { FlightSearchLink } from "@/components/flight-search-link"
+import { bookingStayHref } from "@/lib/booking-dates"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
@@ -600,7 +601,13 @@ function TaskRow({
             </p>
             {task.affiliateUrl ? (
               <a
-                href={task.affiliateUrl}
+                href={
+                  bookingStayHref({
+                    href: task.affiliateUrl,
+                    startDate,
+                    dayIndexes: task.dayIndexes,
+                  }) ?? task.affiliateUrl
+                }
                 target="_blank"
                 rel="noreferrer noopener"
                 className="wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium"

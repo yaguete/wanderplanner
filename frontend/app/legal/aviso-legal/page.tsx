@@ -100,7 +100,8 @@ export default function AvisoLegalPage() {
       <LegalSection id="enlaces-comerciales" title="Enlaces que salen del sitio">
         <p>
           Si el artículo original traía enlaces de afiliación del autor, los conservamos:
-          quien cobra, si cobra, es él.
+          quien cobra, si cobra, es él. Si el enlace es de Booking y el viaje tiene fechas,
+          las añadimos al mismo enlace; el afiliado del autor no cambia.
         </p>
         <p>
           «Buscar vuelos» te lleva a Skyscanner con el origen, el destino, las fechas y el

@@ -56,6 +56,7 @@ import {
 } from "@/lib/trip-tasks"
 import type { ItemType, RouteLeg, Trip, TripTaskCategory, TripTaskState, UserDay, UserDayItem } from "@/types/itinerary"
 import { flightSearchHrefForItem } from "@/lib/flight-search"
+import { bookingStayHref, stayDayIndexesForItem } from "@/lib/booking-dates"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
@@ -1152,7 +1153,15 @@ function DayItineraryTimeline({
                 sourceAuthor={item.sourceAuthor}
                 detail={item.detail}
                 regionLabel={resolveRegion(item)}
-                href={item.affiliateUrl}
+                href={
+                  item.type === "stay"
+                    ? bookingStayHref({
+                        href: item.affiliateUrl,
+                        startDate: flightSearchTrip.startDate,
+                        dayIndexes: stayDayIndexesForItem(days, item),
+                      })
+                    : item.affiliateUrl
+                }
                 flightSearch={
                   item.route
                     ? flightSearchHrefForItem({
