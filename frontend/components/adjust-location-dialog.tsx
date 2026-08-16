@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import {
   geocodeFreeText,
+  resolvePermanentCoords,
   seedGeocodeCache,
   suggestPlaces,
   type GeocodeSuggestion,
@@ -133,6 +134,12 @@ export function AdjustLocationDialog({
     setSuggestions([])
     setListOpen(false)
     seedGeocodeCache(s.placeName, s.center, countryCodes)
+    // `s.center` es del dataset temporal y no se puede guardar. Pedimos la
+    // permanente por detrás; si no llega, se confirma la temporal como siempre.
+    void resolvePermanentCoords(s.placeName, s.center, { countryCodes }).then((coords) => {
+      if (coords === s.center) return
+      setSelectedPlace((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
+    })
   }
 
   const handleSubmit = () => {

@@ -26,6 +26,7 @@ import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import {
   geocodeFreeText,
+  resolvePermanentCoords,
   seedGeocodeCache,
   suggestPlaces,
   type GeocodeSuggestion,
@@ -179,6 +180,12 @@ export function AddManualItemDialog({
     setSuggestions([])
     setListOpen(false)
     seedGeocodeCache(s.placeName, s.center, countryCodes)
+    // `s.center` es del dataset temporal y no se puede guardar. Pedimos la
+    // permanente por detrás; si no llega, se guarda la temporal como siempre.
+    void resolvePermanentCoords(s.placeName, s.center, { countryCodes }).then((coords) => {
+      if (coords === s.center) return
+      setSelectedPlace((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
+    })
   }
 
   const handlePlaceChange = (value: string) => {

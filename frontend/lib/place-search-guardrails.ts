@@ -51,6 +51,23 @@ export function isHubKind(kind: RoutePlaceKind | null | undefined): boolean {
 }
 
 /**
+ * Geocoding permanente (`mapbox.places-permanent`): el único dataset cuyo
+ * resultado la licencia de Mapbox permite guardar en base de datos.
+ *
+ * Activo por defecto — la cuenta lo tiene contratado y sin él estaríamos
+ * persistiendo coordenadas del dataset temporal. `false` lo apaga y la app
+ * vuelve a guardar la coordenada temporal, que es lo que hacía antes.
+ *
+ * Ojo: hasta que se corrigió, esto se pedía como `permanent=true` sobre
+ * `mapbox.places`, que ignora los parámetros que no conoce. El flag existía
+ * pero no cambiaba nada.
+ */
+export function isPermanentGeocodingEnabled(): boolean {
+  const raw = (process.env.NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING ?? "").trim().toLowerCase()
+  return raw !== "false" && raw !== "0" && raw !== "off"
+}
+
+/**
  * Convierte el extremo elegido a un lugar persistible.
  * Si el hub no está licenciado, cae a la ciudad ancla (nunca inventa coords).
  */

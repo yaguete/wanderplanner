@@ -72,10 +72,11 @@ async def places_suggest(
         "autocomplete": "true",
         "language": "es",
     }
-    if permanent:
-        params["permanent"] = "true"
-
-    url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{quote(q)}.json"
+    # El permanente es un endpoint distinto, no un parámetro: mapbox.places
+    # ignora en silencio `permanent=true` y responde 200 igual, así que pedirlo
+    # por query devolvía resultados temporales creyendo que eran persistibles.
+    dataset = "mapbox.places-permanent" if permanent else "mapbox.places"
+    url = f"https://api.mapbox.com/geocoding/v5/{dataset}/{quote(q)}.json"
 
     try:
         async with httpx.AsyncClient(timeout=12.0) as client:

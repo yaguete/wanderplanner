@@ -3,9 +3,10 @@
  * Requiere `NEXT_PUBLIC_MAPBOX_TOKEN` (token público pk.…).
  * Search Box `/category` (T4B.3) para hubs de transporte por proximidad.
  *
- * Licencia (T4B.3 §9.11):
- * - Ciudades/direcciones persistidas: activar geocoding permanente con
- *   `NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING=true` (producto Mapbox aparte).
+ * Licencia (T4B.3 §9.11) — dos escalones:
+ * - Autocompletar (`suggestPlaces`): dataset temporal, barato, NO persistible.
+ * - Persistir: `resolvePermanentCoords` contra `mapbox.places-permanent`, una
+ *   llamada por lugar guardado. Kill switch `NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING=false`.
  * - Resultados de Search Box son efímeros salvo contrato explícito; ver
  *   `place-search-guardrails.ts` (`ALLOW_TRANSPORT_HUB_PERSISTENCE`).
  * - Kill switch: `NEXT_PUBLIC_TRANSPORT_PLACE_SEARCH_ENABLED=false`.
@@ -13,7 +14,10 @@
  *   (`TRANSPORT_PLACE_SEARCH_ENABLED` en el servidor).
  */
 import type { RoutePlaceKind } from "@/types/itinerary"
-import { isPlaceSearchEnabled } from "@/lib/place-search-guardrails"
+import {
+  isPermanentGeocodingEnabled,
+  isPlaceSearchEnabled,
+} from "@/lib/place-search-guardrails"
 import {
   featureTypeFromMapboxId,
   type GeocodeCandidate,
@@ -252,8 +256,22 @@ function appendCountryParams(
   }
 }
 
-function buildGeocodeUrl(query: string, params: URLSearchParams): string {
-  return `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?${params}`
+/**
+ * Datasets de Geocoding v5. El permanente es un **endpoint distinto**, no un
+ * parámetro: `mapbox.places` ignora en silencio `permanent=true` (devuelve 200
+ * igual que con cualquier parámetro inventado), así que pedirlo por query nunca
+ * hizo nada.
+ */
+const GEOCODE_DATASET = "mapbox.places"
+const GEOCODE_DATASET_PERMANENT = "mapbox.places-permanent"
+
+function buildGeocodeUrl(
+  query: string,
+  params: URLSearchParams,
+  options?: { permanent?: boolean },
+): string {
+  const dataset = options?.permanent ? GEOCODE_DATASET_PERMANENT : GEOCODE_DATASET
+  return `https://api.mapbox.com/geocoding/v5/${dataset}/${encodeURIComponent(query)}.json?${params}`
 }
 
 type MapboxFeature = {
@@ -337,8 +355,11 @@ export type GeocodeSuggestion = {
 
 /**
  * Autocompletado: varios candidatos (`autocomplete=true`). No usa la caché de un solo punto.
- * Con `permanent: true` (default) pide geocodificación permanente — necesaria si el
- * usuario puede persistir el candidato en `route` / `trip.origin`.
+ *
+ * Escalón barato, **siempre temporal**: son candidatos de pantalla y no se
+ * persisten. La coordenada que acaba en el jsonb la resuelve
+ * `resolvePermanentCoords` al confirmar la selección, una sola vez por lugar
+ * guardado en vez de una por tecla pulsada.
  */
 export async function suggestPlaces(
   text: string,
@@ -347,8 +368,6 @@ export async function suggestPlaces(
     countryCodes?: string[] | null
     limit?: number
     signal?: AbortSignal
-    /** Default true: coordenadas aptas para persistir (Mapbox permanent). */
-    permanent?: boolean
   },
 ): Promise<GeocodeSuggestion[]> {
   if (!isPlaceSearchEnabled()) return []
@@ -360,13 +379,6 @@ export async function suggestPlaces(
     autocomplete: "true",
     language: "es",
   })
-  if (
-    options?.permanent !== false &&
-    (process.env.NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING ?? "").trim().toLowerCase() ===
-      "true"
-  ) {
-    params.set("permanent", "true")
-  }
   const proximity = options?.proximity ?? null
   if (proximity) {
     params.set("proximity", `${proximity[0]},${proximity[1]}`)
@@ -393,6 +405,93 @@ export async function suggestPlaces(
     })
   }
   return out
+}
+
+/** Descarta el punto permanente si no se parece al elegido (ver `resolvePermanentCoords`). */
+const PERMANENT_MAX_DRIFT_KM = 25
+const PERMANENT_TIMEOUT_MS = 5000
+
+/**
+ * Coordenada definitiva de un lugar **ya elegido**, contra el dataset permanente
+ * de Mapbox. Es el único resultado que la licencia permite guardar en base de
+ * datos; el de `suggestPlaces` es temporal y solo vale para pintar el desplegable.
+ *
+ * Contrato deliberado: **no puede fallar**. Devuelve el `fallback` que le pasa el
+ * caller —la coordenada temporal que ya tenía— si el permanente está apagado,
+ * responde error, tarda de más o devuelve un punto que no se parece al elegido.
+ * Es lo que hace seguro llamarla desde cualquier sitio: en el peor caso se
+ * persiste exactamente lo mismo que se persistía antes de existir esta función.
+ *
+ * Una llamada por lugar guardado, con caché: el permanente se factura aparte y
+ * más caro que el temporal, así que no vale para autocompletar.
+ */
+export async function resolvePermanentCoords(
+  label: string,
+  fallback: LngLat,
+  options?: {
+    countryCodes?: string[] | null
+    proximity?: [number, number] | null
+    /** Tope de distancia contra `fallback` para aceptar el resultado. Default 25 km. */
+    maxDriftKm?: number
+    timeoutMs?: number
+    signal?: AbortSignal
+  },
+): Promise<LngLat> {
+  const name = label?.trim()
+  if (!name || !MAPBOX_TOKEN?.trim()) return fallback
+  if (!isPermanentGeocodingEnabled()) return fallback
+
+  const cKey = countryParamsKey(options?.countryCodes)
+  const key = geocodeQueryKey(`__perm__${name}`, options?.proximity ?? null, cKey, "perm")
+  const cached = getFromMemory(key) ?? readLocalCache(key)
+  if (cached) return cached
+
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    limit: "1",
+    autocomplete: "false",
+    language: "es",
+  })
+  if (options?.proximity) {
+    params.set("proximity", `${options.proximity[0]},${options.proximity[1]}`)
+  }
+  appendCountryParams(params, options?.countryCodes)
+
+  const controller = new AbortController()
+  const timer = setTimeout(
+    () => controller.abort(),
+    options?.timeoutMs ?? PERMANENT_TIMEOUT_MS,
+  )
+  const onExternalAbort = () => controller.abort()
+  options?.signal?.addEventListener("abort", onExternalAbort)
+
+  try {
+    const url = buildGeocodeUrl(name, params, { permanent: true })
+    const res = await fetch(url, { signal: controller.signal })
+    if (!res.ok) return fallback
+    const data = (await res.json()) as { features?: MapboxFeature[] }
+    const c = data.features?.[0]?.center
+    if (!c || c.length < 2) return fallback
+
+    const point: LngLat = { lng: c[0]!, lat: c[1]! }
+    // El permanente responde a la etiqueta, no al id del candidato: si apunta a
+    // otro sitio (homónimo en otro país), preferimos no cambiar lo que eligió el
+    // usuario. Mejor una coordenada temporal correcta que una permanente errónea.
+    const drift = haversineKm(point, fallback)
+    if (!Number.isFinite(drift) || drift > (options?.maxDriftKm ?? PERMANENT_MAX_DRIFT_KM)) {
+      return fallback
+    }
+
+    setMemory(key, point.lng, point.lat)
+    writeLocalCache(key, point.lng, point.lat, { label: name })
+    return point
+  } catch {
+    // Aborto, timeout, red caída, JSON roto: nos quedamos con lo de siempre.
+    return fallback
+  } finally {
+    clearTimeout(timer)
+    options?.signal?.removeEventListener("abort", onExternalAbort)
+  }
 }
 
 /** Sembrar la caché de geocodeFreeText para un place_name ya elegido (acelerador opcional). */

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import {
+  resolvePermanentCoords,
   seedGeocodeCache,
   suggestPlaces,
   searchTransportHubs,
@@ -417,6 +418,9 @@ export function TransportRouteForm({
             cityFromRef.current = null
             setHubFrom(emptyHubSide())
           }}
+          onCityCoordsUpgraded={(place) => {
+            if (cityFromRef.current?.label === place.label) cityFromRef.current = place
+          }}
         />
         <HubSidePanel
           kind={hubKind}
@@ -444,6 +448,9 @@ export function TransportRouteForm({
           onCityCleared={() => {
             cityToRef.current = null
             setHubTo(emptyHubSide())
+          }}
+          onCityCoordsUpgraded={(place) => {
+            if (cityToRef.current?.label === place.label) cityToRef.current = place
           }}
         />
         <HubSidePanel
@@ -578,6 +585,7 @@ function EndpointField({
   required,
   onCitySelected,
   onCityCleared,
+  onCityCoordsUpgraded,
 }: {
   id: string
   label: string
@@ -587,6 +595,8 @@ function EndpointField({
   required?: boolean
   onCitySelected?: (place: RoutePlace) => void
   onCityCleared?: () => void
+  /** Llega tarde, con la coordenada permanente. Solo reapunta el ancla; no toca hubs. */
+  onCityCoordsUpgraded?: (place: RoutePlace) => void
 }) {
   return (
     <div className="relative space-y-2">
@@ -659,6 +669,19 @@ function EndpointField({
                     error: null,
                   })
                   seedGeocodeCache(s.placeName, s.center)
+                  // La coordenada de arriba es del dataset temporal: sirve para la
+                  // UI pero no se puede guardar. Pedimos la permanente en segundo
+                  // plano y la sustituimos si llega; si no, se persiste la temporal.
+                  void resolvePermanentCoords(s.placeName, s.center).then((coords) => {
+                    if (coords === s.center) return
+                    const upgraded: RoutePlace = { ...place, coords }
+                    setEndpoint((prev) =>
+                      prev.selected?.kind === "city" && prev.selected.label === place.label
+                        ? { ...prev, selected: upgraded }
+                        : prev,
+                    )
+                    onCityCoordsUpgraded?.(upgraded)
+                  })
                 }}
               >
                 <span className="font-medium text-foreground">{s.text}</span>
@@ -723,7 +746,7 @@ function usePlaceSuggest({
       abortRef.current = ac
       budgetRef.current = recordSuggest(budgetRef.current)
       setEndpoint((s) => ({ ...s, loading: true }))
-      void suggestPlaces(q, { limit: 6, signal: ac.signal, permanent: true })
+      void suggestPlaces(q, { limit: 6, signal: ac.signal })
         .then((list) => {
           if (ac.signal.aborted) return
           setEndpoint((s) => ({

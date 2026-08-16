@@ -34,6 +34,7 @@ import {
 } from "@/lib/trip-dates"
 import {
   geocodeFreeText,
+  resolvePermanentCoords,
   seedGeocodeCache,
   suggestPlaces,
   type GeocodeSuggestion,
@@ -254,6 +255,12 @@ export function NewTripDialog({
     setListOpen(false)
     setOriginError(null)
     seedGeocodeCache(s.placeName, s.center)
+    // `s.center` es del dataset temporal y `trip.origin` se persiste: pedimos la
+    // permanente por detrás. Si no llega, se guarda la temporal como siempre.
+    void resolvePermanentCoords(s.placeName, s.center).then((coords) => {
+      if (coords === s.center) return
+      setSelectedOrigin((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
+    })
   }
 
   const handleOriginChange = (value: string) => {
