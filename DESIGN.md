@@ -54,11 +54,11 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 
 ### Desktop
 - Shell: canvas gris + sidebar colapsable (expandido / icon-rail, `wp-sidebar-collapsed`).
-- Header: marca al rincón (alineada con la columna del sidebar) · toggles Fuentes / Viaje / Asistente (detalle) · avatar.
+- Header: marca al rincón (alineada con la columna del sidebar) · colapso (`PanelLeftClose`/`PanelLeftOpen`, junto a la marca) · toggles Fuentes / Viaje / Asistente (detalle). El avatar vive en el pie del sidebar.
 - Tres paneles alícuota (`wp-trip-panels`); mínimo uno activo. Conmutación instantánea (sin animar `flex-grow`). Con 3 paneles y viewport &lt; ~1280px el sidebar se auto-colapsa a rail.
 - Título del viaje en la cabecera del panel Viaje (no en el header).
 - Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes y Mi viaje. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista · Calendario · Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
-- Sidebar: colapsar con `PanelLeftClose`/`PanelLeftOpen` en el pie; «Inicio» y «Tus viajes» como filas hermanas.
+- Sidebar: «Inicio» y «Tus viajes» como filas hermanas; pie de cuenta (avatar + nombre expandido, solo avatar en rail).
 - Asistente: panel peer montado desde el inicio; chips de sugerencia sin esperar a Supabase si no hay conversación activa.
 
 ### Móvil
@@ -94,7 +94,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 
 ### Superficies de cuenta
 - `/login`, `/signup`, `/forgot-password` y `/reset-password` comparten cromo propio, sin sidebar: marca arriba, una columna centrada (`max-w-md`) y **el mismo fondo que la landing `/`**: canvas cálido + `.landing-grid-texture` + velo de marca al 8%. Antes había aquí un radial `hsl(221 83% 53%)` — blue-600, prohibido más abajo — que además enfriaba el embudo justo al salir de `/`. `/account` (perfil) y `/account/settings` (email, contraseña, borrar cuenta) viven en el shell de `/trips` (header + sidebar + canvas). `/partners` ya no usa `AuthShell`.
-- Avatar de la cabecera: menú (nombre, email, Perfil, Configuración, cerrar sesión) en desktop y móvil.
+- Menú de cuenta (nombre, email, Perfil, Configuración, cerrar sesión): pie del sidebar en desktop; cabecera en móvil.
 - Invitados (sesión anónima): el avatar muestra «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de Perfil / Configuración.
 - `RegistrationGate`: modal breve (nombre, email, contraseña dos veces) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio. Recuperación de contraseña en `/forgot-password` → `/reset-password`.
 

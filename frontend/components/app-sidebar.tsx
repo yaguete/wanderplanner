@@ -9,14 +9,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useTrips } from "@/lib/trip-context"
 import { NewTripDialog } from "@/components/new-trip-dialog"
+import { SidebarAccountFooter } from "@/components/account-menu"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
 
 /**
- * Espacio que deja de estar disponible para la lista cuando el CTA se fija al pie:
- * padding del scroll (p-2) + pie (pt-2.5 + botón ~32 + pb-2).
+ * Lo que cuesta fijar el CTA encima de la cuenta, sin la fila de cuenta
+ * (esa se mide). p-2 del scroll + pt-2.5 + botón ~32 + hueco pb-2 del CTA.
  */
-const PINNED_CHROME_PX = 66
+const PINNED_CHROME_PX = 74
 
 function NewTripButton({
   className,
@@ -81,6 +82,7 @@ export function AppSidebar({
   const [pinNewTrip, setPinNewTrip] = useState(false)
   const asideRef = useRef<HTMLElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const accountRef = useRef<HTMLDivElement>(null)
 
   const isHome = pathname === "/trips" || pathname === "/trips/"
   const activeTripId = pathname.match(/^\/trips\/([^/]+)/)?.[1] ?? null
@@ -89,16 +91,23 @@ export function AppSidebar({
   useEffect(() => {
     const aside = asideRef.current
     const content = contentRef.current
-    if (!aside || !content || rail) return
+    const account = accountRef.current
+    if (rail) {
+      setPinNewTrip(false)
+      return
+    }
+    if (!aside || !content) return
 
     const update = () => {
-      setPinNewTrip(content.scrollHeight > aside.clientHeight - PINNED_CHROME_PX)
+      const accountH = accountRef.current?.offsetHeight ?? 0
+      setPinNewTrip(content.scrollHeight > aside.clientHeight - accountH - PINNED_CHROME_PX)
     }
 
     update()
     const ro = new ResizeObserver(update)
     ro.observe(aside)
     ro.observe(content)
+    if (account) ro.observe(account)
     return () => ro.disconnect()
   }, [activeTrips.length, rail])
 
@@ -252,17 +261,24 @@ export function AppSidebar({
         ) : null}
       </div>
 
-      {!rail && pinNewTrip ? (
-        <div className="relative shrink-0 bg-canvas px-2 pb-2 pt-2.5">
-          <div
-            className="pointer-events-none absolute inset-x-0 -top-4 h-4 bg-gradient-to-t from-canvas to-transparent"
-            aria-hidden
-          />
-          <div className="pl-1">
+      <div
+        className={cn(
+          "relative shrink-0 bg-canvas",
+          rail ? "flex flex-col items-center pb-2" : "px-2 pb-2",
+          !rail && pinNewTrip && "pt-2.5",
+        )}
+      >
+        <div
+          className="pointer-events-none absolute inset-x-0 -top-4 h-4 bg-gradient-to-t from-canvas to-transparent"
+          aria-hidden
+        />
+        {!rail && pinNewTrip ? (
+          <div className="pl-1 pb-2">
             <NewTripButton onClick={openNewTrip} />
           </div>
-        </div>
-      ) : null}
+        ) : null}
+        <SidebarAccountFooter ref={accountRef} rail={rail} />
+      </div>
 
       <NewTripDialog
         open={newTripOpen}
