@@ -26,6 +26,10 @@ export type AssistantAction =
       name: string
       detail?: string | null
       region?: string | null
+      source_id?: string | null
+      source_item_id?: string | null
+      source_author?: string | null
+      day_number?: number | null
     }
   | {
       kind: "move_item"
@@ -33,9 +37,60 @@ export type AssistantAction =
       to_day_id: string
       name?: string | null
       why?: string | null
+      anchor_item_id?: string | null
+      position?: "before" | "after" | null
       from_day_id?: string | null
       from_day_number?: number | null
       to_day_number?: number | null
+    }
+  | {
+      kind: "swap_items"
+      item_id_a: string
+      item_id_b: string
+      name_a?: string | null
+      name_b?: string | null
+      why?: string | null
+      day_number_a?: number | null
+      day_number_b?: number | null
+    }
+  | {
+      kind: "remove_item"
+      item_id: string
+      name?: string | null
+      why?: string | null
+      day_number?: number | null
+      cost_at_risk?: number | null
+    }
+  | {
+      kind: "add_transport"
+      day_id: string
+      from: string
+      to: string
+      mode?: string | null
+      why?: string | null
+      day_number?: number | null
+    }
+  | {
+      kind: "add_extra_task"
+      title: string
+      category: string
+      why?: string | null
+    }
+  | {
+      kind: "add_basic"
+      source_id: string
+      source_basic_id: string
+      name?: string | null
+      why?: string | null
+      source_author?: string | null
+    }
+  | {
+      kind: "set_task_cost"
+      task_ref: string
+      cost: number
+      why?: string | null
+      task_title?: string | null
+      previous_cost?: number | null
     }
 
 export type AssistantStreamHandlers = {
@@ -45,6 +100,7 @@ export type AssistantStreamHandlers = {
   onSegment?: () => void
   onStatus?: (label: string | null) => void
   onAction?: (action: AssistantAction) => void
+  onFollowups?: (prompts: string[]) => void
   onDone?: () => void
   onError?: (error: string | ApiLimitError) => void
 }
@@ -126,6 +182,14 @@ export async function streamAssistant(
         case "action":
           handlers.onAction?.(payload as AssistantAction)
           break
+        case "followups": {
+          const raw = payload.prompts
+          const prompts = Array.isArray(raw)
+            ? raw.map((p) => String(p).trim()).filter(Boolean).slice(0, 3)
+            : []
+          if (prompts.length) handlers.onFollowups?.(prompts)
+          break
+        }
         case "done":
           handlers.onDone?.()
           break

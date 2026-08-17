@@ -13,7 +13,7 @@ import {
   buildUserProfileBriefing,
   preferredDomainsFrom,
 } from "@/lib/assistant-context"
-import { snapshotMoveProposal } from "@/lib/assistant-actions"
+import { snapshotAssistantAction, actionDedupeKey } from "@/lib/assistant-actions"
 import { resolveTripCountryCodes } from "@/lib/countries"
 import {
   ConversationSyncer,
@@ -42,6 +42,7 @@ export type ChatMessage = {
   role: "user" | "assistant"
   content: string
   actions?: ChatAction[]
+  followups?: string[]
 }
 
 export type AssistantConversationSummary = {
@@ -59,7 +60,16 @@ const TOOL_STATUS: Record<string, string> = {
   propose_add_source: "Preparando propuesta…",
   propose_add_item: "Preparando propuesta…",
   propose_move_item: "Preparando cambio de día…",
+  propose_swap_items: "Preparando intercambio…",
+  propose_remove_item: "Preparando cambio…",
+  propose_add_transport: "Preparando traslado…",
+  propose_add_extra_task: "Preparando tarea…",
+  propose_add_basic: "Preparando básico…",
+  propose_set_task_cost: "Preparando coste…",
+  suggest_followups: "Preparando sugerencias…",
 }
+
+const MAX_ACTIONS_PER_TURN = 5
 
 /** Une bocadillos consecutivos del asistente al enviar historial al API. */
 function toApiHistory(messages: ChatMessage[]): AssistantChatMessage[] {
@@ -78,7 +88,12 @@ function toApiHistory(messages: ChatMessage[]): AssistantChatMessage[] {
 }
 
 function isEmptyAssistant(m: ChatMessage): boolean {
-  return m.role === "assistant" && !m.content.trim() && !(m.actions?.length)
+  return (
+    m.role === "assistant" &&
+    !m.content.trim() &&
+    !(m.actions?.length) &&
+    !(m.followups?.length)
+  )
 }
 
 function sortByUpdatedDesc(a: AssistantConversation, b: AssistantConversation) {
@@ -366,6 +381,9 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
         })
       }
 
+      const seenKeys = new Set<string>()
+      let actionsThisTurn = 0
+
       await streamAssistant(
         {
           trip_briefing: briefing,
@@ -399,13 +417,16 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
             }
           },
           onAction: (action) => {
-            const snapshotted =
-              action.kind === "move_item"
-                ? {
-                    ...action,
-                    ...snapshotMoveProposal(currentTrip.days, action),
-                  }
-                : action
+            if (actionsThisTurn >= MAX_ACTIONS_PER_TURN) return
+            const key = actionDedupeKey(action)
+            if (seenKeys.has(key)) return
+            seenKeys.add(key)
+            actionsThisTurn += 1
+            const snapshotted = snapshotAssistantAction(
+              currentTrip,
+              briefingSources,
+              action,
+            )
             const chatAction: ChatAction = {
               ...snapshotted,
               id: crypto.randomUUID(),
@@ -416,13 +437,39 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
               for (let i = prev.length - 1; i >= 0; i--) {
                 const m = prev[i]
                 if (m.role !== "assistant") continue
-                if (m.content.trim() || (m.actions?.length ?? 0) > 0 || m.id === currentAssistantId) {
+                if (
+                  m.content.trim() ||
+                  (m.actions?.length ?? 0) > 0 ||
+                  (m.followups?.length ?? 0) > 0 ||
+                  m.id === currentAssistantId
+                ) {
                   attachId = m.id
                   break
                 }
               }
               return prev.map((m) =>
                 m.id === attachId ? { ...m, actions: [...(m.actions ?? []), chatAction] } : m,
+              )
+            })
+          },
+          onFollowups: (prompts) => {
+            setMessages((prev) => {
+              let attachId = currentAssistantId
+              for (let i = prev.length - 1; i >= 0; i--) {
+                const m = prev[i]
+                if (m.role !== "assistant") continue
+                if (
+                  m.content.trim() ||
+                  (m.actions?.length ?? 0) > 0 ||
+                  (m.followups?.length ?? 0) > 0 ||
+                  m.id === currentAssistantId
+                ) {
+                  attachId = m.id
+                  break
+                }
+              }
+              return prev.map((m) =>
+                m.id === attachId ? { ...m, followups: prompts } : m,
               )
             })
           },

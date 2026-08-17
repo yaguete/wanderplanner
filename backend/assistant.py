@@ -121,13 +121,12 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "propose_add_item",
             "description": (
-                "Propone añadir un ítem a un día del itinerario del usuario. "
-                "Úsala solo cuando el usuario pida recomendaciones o sitios "
-                "para añadir al plan: una recomendación concreta = una llamada "
-                "(day_id del briefing). No la uses en preguntas informativas, "
-                "de visados, de opinión sobre el plan, ni al hablar de un ítem "
-                "que ya está en el itinerario (para moverlo usa propose_move_item). "
-                "No lo añade automáticamente; el usuario debe confirmar."
+                "Propone añadir un ítem a un día del itinerario. "
+                "Si el sitio YA está extraído en Fuentes, pasa source_id y "
+                "source_item_id del briefing (consolida autor y afiliado). "
+                "Si es una recomendación nueva, omite esos ids. "
+                "region geocodifica el ítem en el mapa: no lo dejes vacío si conoces el sitio. "
+                "No lo añade automáticamente; el usuario confirma."
             ),
             "parameters": {
                 "type": "object",
@@ -143,6 +142,14 @@ TOOLS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Pista geográfica corta (pueblo, provincia)",
                     },
+                    "source_id": {
+                        "type": "string",
+                        "description": "id de la Fuente si consolidar un ítem extraído",
+                    },
+                    "source_item_id": {
+                        "type": "string",
+                        "description": "id del ítem extraído (id=`…` en Ítems extraídos)",
+                    },
                 },
                 "required": ["day_id", "type", "name"],
             },
@@ -154,33 +161,188 @@ TOOLS: list[dict[str, Any]] = [
             "name": "propose_move_item",
             "description": (
                 "Propone mover un ítem que YA está en el itinerario a otro día "
-                "(o al final del mismo día). Úsala cuando el usuario pida "
-                "reorganizar el plan o cuando recomiendes pasar una parada "
-                "existente a otro día. item_id y to_day_id salen del briefing. "
-                "No lo mueve automáticamente; el usuario debe confirmar. "
-                "No la uses para añadir sitios nuevos (eso es propose_add_item)."
+                "o a otra posición del mismo día. Para 'después del palacio' usa "
+                "anchor_item_id del palacio y position=after. "
+                "No muevas ida/vuelta. El usuario confirma."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "item_id": {
+                    "item_id": {"type": "string"},
+                    "to_day_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "why": {"type": "string"},
+                    "anchor_item_id": {
                         "type": "string",
-                        "description": "id del ítem en el briefing (id=`…`)",
+                        "description": "Ítem relativo (id=`…`) para before/after",
                     },
-                    "to_day_id": {
+                    "position": {
                         "type": "string",
-                        "description": "id del día destino (### Día N — id=`…`)",
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Nombre del ítem, para la tarjeta de confirmación",
-                    },
-                    "why": {
-                        "type": "string",
-                        "description": "Motivo breve del cambio de día",
+                        "enum": ["before", "after"],
                     },
                 },
                 "required": ["item_id", "to_day_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_swap_items",
+            "description": (
+                "Intercambia dos ítems del plan (de día y/o de posición). "
+                "Una llamada por par. No intercambies ida/vuelta. El usuario confirma."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id_a": {"type": "string"},
+                    "item_id_b": {"type": "string"},
+                    "name_a": {"type": "string"},
+                    "name_b": {"type": "string"},
+                    "why": {"type": "string"},
+                },
+                "required": ["item_id_a", "item_id_b"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_remove_item",
+            "description": (
+                "Propone quitar un ítem del plan. No quites ida/vuelta. "
+                "El usuario confirma; se perderá el coste apuntado de esa reserva."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "why": {"type": "string"},
+                },
+                "required": ["item_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_add_transport",
+            "description": (
+                "Propone un traslado INTERNO (ciudad A → ciudad B) en un día. "
+                "No lo uses para la ida o la vuelta del viaje. Sin coordenadas: "
+                "el usuario completará el formulario. El usuario confirma."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day_id": {"type": "string"},
+                    "from": {"type": "string", "description": "Origen (texto, p. ej. Innsbruck)"},
+                    "to": {"type": "string", "description": "Destino (texto)"},
+                    "mode": {
+                        "type": "string",
+                        "enum": ["car", "train", "bus", "flight", "ferry", "other"],
+                    },
+                    "why": {"type": "string"},
+                },
+                "required": ["day_id", "from", "to"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_add_extra_task",
+            "description": (
+                "Propone una tarea suelta en Básicos (SIM, viñeta, EHIC, peajes, "
+                "trámites). category: paperwork o health para trámites; basic para "
+                "SIM/seguro; other si no encaja. El usuario confirma."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "accommodation",
+                            "transport",
+                            "activity",
+                            "food",
+                            "basic",
+                            "paperwork",
+                            "health",
+                            "other",
+                        ],
+                    },
+                    "why": {"type": "string"},
+                },
+                "required": ["title", "category"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_add_basic",
+            "description": (
+                "Propone añadir a Básicos un descuento/oferta YA extraído de una "
+                "Fuente (source_id + source_basic_id del briefing). Conserva afiliado. "
+                "No inventes básicos. El usuario confirma."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source_id": {"type": "string"},
+                    "source_basic_id": {"type": "string"},
+                    "why": {"type": "string"},
+                },
+                "required": ["source_id", "source_basic_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_set_task_cost",
+            "description": (
+                "Apunta el coste TOTAL de una reserva en trip.tasks. "
+                "task_ref es el ref=`…` de ## Tareas del viaje. "
+                "SOLO si el usuario da la cifra o pide apuntarla. Nunca inventes precios."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_ref": {"type": "string"},
+                    "cost": {"type": "number", "description": "Coste total de la reserva, no por persona"},
+                    "why": {"type": "string"},
+                },
+                "required": ["task_ref", "cost"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_followups",
+            "description": (
+                "Sugerencias cortas (1-3) para los chips encima del cajón, al cierre "
+                "de tu respuesta. Solo cosas que puedes hacer ahora: buscar, ficha "
+                "país, o proponer una mutación de esta lista. Nada de auditorías, "
+                "clima detallado por día, ni clonar un día de la guía."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompts": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                        "maxItems": 3,
+                    },
+                },
+                "required": ["prompts"],
             },
         },
     },
@@ -230,6 +392,48 @@ def _resolve_country_code(country: str) -> str | None:
         if needle in name.casefold() or name.casefold() in needle:
             return code
     return None
+
+
+def _opt_str(args: dict[str, Any], key: str) -> str | None:
+    raw = args.get(key)
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
+def _normalize_prompts(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in out:
+            out.append(text)
+        if len(out) >= 3:
+            break
+    return out
+
+
+FOLLOWUPS_KIND = "_followups"
+TERMINAL_TOOLS = frozenset({"suggest_followups"})
+_PROPOSED_ACK = json.dumps(
+    {
+        "status": "proposed",
+        "message": (
+            "Tarjeta mostrada. No recuentes la propuesta ni pidas confirmación "
+            "en el texto; el usuario ya la ve."
+        ),
+    },
+    ensure_ascii=False,
+)
+
+
+def is_terminal_round(full_content: str, tool_names: list[str]) -> bool:
+    """True si esta ronda ya cerró en prosa y solo llamó tools terminales (followups)."""
+    return bool(full_content.strip()) and bool(tool_names) and all(
+        name in TERMINAL_TOOLS for name in tool_names
+    )
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -308,10 +512,7 @@ async def _run_tool(
             "title": str(args.get("title") or "").strip(),
             "why": str(args.get("why") or "").strip(),
         }
-        return json.dumps(
-            {"status": "proposed", "message": "Propuesta enviada al usuario; espera su confirmación."},
-            ensure_ascii=False,
-        ), action
+        return _PROPOSED_ACK, action
 
     if name == "propose_add_item":
         action = {
@@ -319,13 +520,12 @@ async def _run_tool(
             "day_id": str(args.get("day_id") or "").strip(),
             "type": str(args.get("type") or "activity").strip(),
             "name": str(args.get("name") or "").strip(),
-            "detail": (str(args["detail"]).strip() if args.get("detail") is not None else None),
-            "region": (str(args["region"]).strip() if args.get("region") is not None else None),
+            "detail": _opt_str(args, "detail"),
+            "region": _opt_str(args, "region"),
+            "source_id": _opt_str(args, "source_id"),
+            "source_item_id": _opt_str(args, "source_item_id"),
         }
-        return json.dumps(
-            {"status": "proposed", "message": "Propuesta enviada al usuario; espera su confirmación."},
-            ensure_ascii=False,
-        ), action
+        return _PROPOSED_ACK, action
 
     if name == "propose_move_item":
         item_id = str(args.get("item_id") or "").strip()
@@ -335,19 +535,122 @@ async def _run_tool(
                 {"error": "item_id y to_day_id son obligatorios"},
                 ensure_ascii=False,
             ), None
-        name = str(args.get("name") or "").strip()
-        why = str(args.get("why") or "").strip()
+        position = _opt_str(args, "position")
+        if position not in (None, "before", "after"):
+            position = None
         action = {
             "kind": "move_item",
             "item_id": item_id,
             "to_day_id": to_day_id,
-            "name": name or None,
-            "why": why or None,
+            "name": _opt_str(args, "name"),
+            "why": _opt_str(args, "why"),
+            "anchor_item_id": _opt_str(args, "anchor_item_id"),
+            "position": position,
         }
+        return _PROPOSED_ACK, action
+
+    if name == "propose_swap_items":
+        item_id_a = str(args.get("item_id_a") or "").strip()
+        item_id_b = str(args.get("item_id_b") or "").strip()
+        if not item_id_a or not item_id_b:
+            return json.dumps(
+                {"error": "item_id_a e item_id_b son obligatorios"},
+                ensure_ascii=False,
+            ), None
+        action = {
+            "kind": "swap_items",
+            "item_id_a": item_id_a,
+            "item_id_b": item_id_b,
+            "name_a": _opt_str(args, "name_a"),
+            "name_b": _opt_str(args, "name_b"),
+            "why": _opt_str(args, "why"),
+        }
+        return _PROPOSED_ACK, action
+
+    if name == "propose_remove_item":
+        item_id = str(args.get("item_id") or "").strip()
+        if not item_id:
+            return json.dumps({"error": "item_id es obligatorio"}, ensure_ascii=False), None
+        action = {
+            "kind": "remove_item",
+            "item_id": item_id,
+            "name": _opt_str(args, "name"),
+            "why": _opt_str(args, "why"),
+        }
+        return _PROPOSED_ACK, action
+
+    if name == "propose_add_transport":
+        day_id = str(args.get("day_id") or "").strip()
+        from_label = str(args.get("from") or "").strip()
+        to_label = str(args.get("to") or "").strip()
+        if not day_id or not from_label or not to_label:
+            return json.dumps(
+                {"error": "day_id, from y to son obligatorios"},
+                ensure_ascii=False,
+            ), None
+        action = {
+            "kind": "add_transport",
+            "day_id": day_id,
+            "from": from_label,
+            "to": to_label,
+            "mode": _opt_str(args, "mode"),
+            "why": _opt_str(args, "why"),
+        }
+        return _PROPOSED_ACK, action
+
+    if name == "propose_add_extra_task":
+        title = str(args.get("title") or "").strip()
+        category = str(args.get("category") or "").strip() or "other"
+        if not title:
+            return json.dumps({"error": "title es obligatorio"}, ensure_ascii=False), None
+        action = {
+            "kind": "add_extra_task",
+            "title": title,
+            "category": category,
+            "why": _opt_str(args, "why"),
+        }
+        return _PROPOSED_ACK, action
+
+    if name == "propose_add_basic":
+        source_id = str(args.get("source_id") or "").strip()
+        source_basic_id = str(args.get("source_basic_id") or "").strip()
+        if not source_id or not source_basic_id:
+            return json.dumps(
+                {"error": "source_id y source_basic_id son obligatorios"},
+                ensure_ascii=False,
+            ), None
+        action = {
+            "kind": "add_basic",
+            "source_id": source_id,
+            "source_basic_id": source_basic_id,
+            "why": _opt_str(args, "why"),
+        }
+        return _PROPOSED_ACK, action
+
+    if name == "propose_set_task_cost":
+        task_ref = str(args.get("task_ref") or "").strip()
+        if not task_ref:
+            return json.dumps({"error": "task_ref es obligatorio"}, ensure_ascii=False), None
+        try:
+            cost = float(args.get("cost"))
+        except (TypeError, ValueError):
+            return json.dumps({"error": "cost debe ser un número"}, ensure_ascii=False), None
+        action = {
+            "kind": "set_task_cost",
+            "task_ref": task_ref,
+            "cost": cost,
+            "why": _opt_str(args, "why"),
+        }
+        return _PROPOSED_ACK, action
+
+    if name == "suggest_followups":
+        prompts = _normalize_prompts(args.get("prompts"))
+        if not prompts:
+            return json.dumps({"error": "prompts vacío"}, ensure_ascii=False), None
         return json.dumps(
-            {"status": "proposed", "message": "Propuesta enviada al usuario; espera su confirmación."},
+            {"status": "ok", "prompts": prompts},
             ensure_ascii=False,
-        ), action
+        ), {"kind": FOLLOWUPS_KIND, "prompts": prompts}
 
     return json.dumps({"error": f"Herramienta desconocida: {name}"}, ensure_ascii=False), None
 
@@ -374,6 +677,13 @@ _TOOL_COUNT_KEYS = (
     "propose_add_item",
     "propose_add_source",
     "propose_move_item",
+    "propose_swap_items",
+    "propose_remove_item",
+    "propose_add_transport",
+    "propose_add_extra_task",
+    "propose_add_basic",
+    "propose_set_task_cost",
+    "suggest_followups",
 )
 
 
@@ -466,7 +776,11 @@ async def _stream_chat(
             else:
                 assistant_msg["content"] = None
 
-            if allow_tools and tool_acc and finish_reason == "tool_calls":
+            # DeepSeek a veces escribe prosa Y emite tool_calls con
+            # finish_reason=stop (no "tool_calls"). Exigir ese valor
+            # descartaba la tarjeta: el modelo decía que la había
+            # enviado y el usuario no veía nada.
+            if allow_tools and tool_acc:
                 # Cierra el bocadillo actual antes de las tools (si hubo texto).
                 if full_content.strip():
                     yield _sse("segment", {})
@@ -487,8 +801,10 @@ async def _stream_chat(
                 assistant_msg["tool_calls"] = tool_calls_payload
                 messages.append(assistant_msg)
 
+                called_names: list[str] = []
                 for tc in tool_calls_payload:
                     fname = tc["function"]["name"]
+                    called_names.append(fname)
                     if fname in tool_counts:
                         tool_counts[fname] += 1
                     raw_args = tc["function"]["arguments"]
@@ -503,7 +819,9 @@ async def _stream_chat(
                     tool_content, action = await _run_tool(
                         fname, args, req.preferred_domains
                     )
-                    if action:
+                    if action and action.get("kind") == FOLLOWUPS_KIND:
+                        yield _sse("followups", {"prompts": action.get("prompts") or []})
+                    elif action:
                         actions_emitted += 1
                         yield _sse("action", action)
                     yield _sse("tool", {"name": fname, "status": "done"})
@@ -515,6 +833,10 @@ async def _stream_chat(
                             "content": tool_content,
                         }
                     )
+                if is_terminal_round(full_content, called_names):
+                    yield _sse("status", {"label": None})
+                    yield _sse("done", {})
+                    return
                 continue
 
             # Respuesta final (sin más tools), o cierre forzado de la ronda reservada.

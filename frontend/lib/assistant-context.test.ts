@@ -104,14 +104,59 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
           ],
         },
       ],
+      tasks: {
+        "activity:palacio de mirabell": {
+          status: "pending",
+          cost: 18,
+          cancellable: null,
+          notes: null,
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
+      },
     }),
-    [],
+    [
+      {
+        id: "src-1",
+        url: "https://example.com/guia",
+        author: "blog",
+        title: "Guía Salzburgo",
+        area: "Salzburgo",
+        totalDays: 4,
+        items: [
+          {
+            id: "src-item-rest",
+            type: "food",
+            name: "Stiftskeller",
+            detail: null,
+            dayHint: 2,
+            region: "Salzburgo",
+          },
+        ],
+        basics: [
+          {
+            id: "src-basic-sim",
+            category: "sim",
+            name: "eSIM Austria",
+            detail: null,
+            vendor: "Holafly",
+            affiliateUrl: "https://example.com/sim",
+          },
+        ],
+        articleHtml: "",
+        ogImage: null,
+      },
+    ],
   )
   assert.match(md, /### Día 1 — id=`day-4` — Salzburgo/)
   assert.match(
     md,
     /- id=`item-mirabell` \[Actividad\] \*\*Palacio de Mirabell\*\* · Salzburgo — Jardines/,
   )
+  assert.match(md, /## Tareas del viaje/)
+  assert.match(md, /ref=`activity:palacio de mirabell`/)
+  assert.match(md, /18 EUR/)
+  assert.match(md, /- id=`src-item-rest` \[Restaurante\] \*\*Stiftskeller\*\*/)
+  assert.match(md, /- id=`src-basic-sim` \[SIM \/ eSIM\] \*\*eSIM Austria\*\*/)
 }
 
 console.log("assistant-context + mapbox country: ok")

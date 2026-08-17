@@ -52,7 +52,8 @@ import {
   setActiveHighlight,
 } from "@/lib/text-highlight"
 import { chronicleSearchNeedles } from "@/lib/chronicle-search"
-import type { Source, SourceBasicItem, SourceItem, UserDayItem } from "@/types/itinerary"
+import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
+import { userDayItemFromSource } from "@/lib/item-provenance"
 import { toast } from "sonner"
 
 function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
@@ -67,22 +68,6 @@ function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
     if (`día ${day}`.includes(needle) || `dia ${day}`.includes(needle)) return true
   }
   return false
-}
-
-function userDayItemFromSource(item: SourceItem, source: Source): UserDayItem {
-  return {
-    id: crypto.randomUUID(),
-    sourceItemId: item.id,
-    sourceId: source.id,
-    type: item.type,
-    name: item.name,
-    detail: item.detail,
-    sourceAuthor: source.author,
-    region: item.region ?? source.area ?? null,
-    affiliateUrl: item.affiliateUrl ?? null,
-    vendor: item.vendor ?? null,
-    sourceRouteHint: item.sourceRouteHint,
-  }
 }
 
 function daysWhereAllSourceItemsPresent(

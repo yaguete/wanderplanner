@@ -6,6 +6,8 @@ import { BASIC_LABELS, ITEM_LABELS } from "@/lib/item-styles"
 import { itemProvenanceLabel } from "@/lib/item-provenance"
 import { countriesPlainList } from "@/lib/countries"
 import { travelerTypeLabels } from "@/lib/traveler-profile"
+import { TASK_CATEGORY_LABELS } from "@/lib/task-labels"
+import { buildTripTasks } from "@/lib/trip-tasks"
 import type { FavoriteReference, TravelerProfile } from "@/lib/db/profile-repo"
 
 /** Presupuesto total aproximado de caracteres del briefing. */
@@ -138,8 +140,23 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
     for (const b of trip.basics) {
       const cat = BASIC_LABELS[b.category] ?? b.category
       lines.push(
-        `- [${cat}] **${b.name}**${b.vendor ? ` (${b.vendor})` : ""}${b.detail ? ` — ${b.detail}` : ""}${b.affiliateUrl ? ` · ${b.affiliateUrl}` : ""}`,
+        `- id=\`${b.id}\` [${cat}] **${b.name}**${b.vendor ? ` (${b.vendor})` : ""}${b.detail ? ` — ${b.detail}` : ""}${b.affiliateUrl ? ` · ${b.affiliateUrl}` : ""}`,
       )
+    }
+  }
+  lines.push("")
+
+  lines.push("## Tareas del viaje")
+  const tasks = buildTripTasks(trip)
+  if (!tasks.length) {
+    lines.push("(ninguna)")
+  } else {
+    const currency = (trip.currency || "EUR").trim().toUpperCase()
+    for (const task of tasks) {
+      const cat = TASK_CATEGORY_LABELS[task.category] ?? task.category
+      const cost =
+        task.state?.cost != null ? `${task.state.cost} ${currency}` : "sin coste"
+      lines.push(`- ref=\`${task.id}\` [${cat}] **${task.title}** · ${cost}`)
     }
   }
   lines.push("")
@@ -170,7 +187,9 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
         const typeLabel = ITEM_LABELS[it.type] ?? it.type
         const day = it.dayHint != null ? ` · día hint ${it.dayHint}` : ""
         const region = it.region ? ` · ${it.region}` : ""
-        lines.push(`- [${typeLabel}] **${it.name}**${region}${day}${it.detail ? ` — ${it.detail}` : ""}`)
+        lines.push(
+          `- id=\`${it.id}\` [${typeLabel}] **${it.name}**${region}${day}${it.detail ? ` — ${it.detail}` : ""}`,
+        )
       }
     }
     lines.push("")
@@ -181,7 +200,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
       for (const b of src.basics) {
         const cat = BASIC_LABELS[b.category] ?? b.category
         lines.push(
-          `- [${cat}] **${b.name}**${b.vendor ? ` (${b.vendor})` : ""}${b.affiliateUrl ? ` · ${b.affiliateUrl}` : ""}`,
+          `- id=\`${b.id}\` [${cat}] **${b.name}**${b.vendor ? ` (${b.vendor})` : ""}${b.affiliateUrl ? ` · ${b.affiliateUrl}` : ""}`,
         )
       }
     }

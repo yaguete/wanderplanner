@@ -13,6 +13,7 @@ export type AssistantMessage = {
   role: "user" | "assistant"
   content: string
   actions?: Array<AssistantAction & { id: string; status: "pending" | "accepted" | "dismissed" }>
+  followups?: string[]
 }
 
 export type AssistantConversation = {
