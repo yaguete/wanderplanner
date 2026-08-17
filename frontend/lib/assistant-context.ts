@@ -124,7 +124,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
         const region = item.region ? ` · ${item.region}` : ""
         const detail = item.detail ? ` — ${item.detail}` : ""
         lines.push(
-          `- [${typeLabel}] **${item.name}**${region}${detail} (${itemProvenanceLabel(item)}; sourceId=${item.sourceId})`,
+          `- id=\`${item.id}\` [${typeLabel}] **${item.name}**${region}${detail} (${itemProvenanceLabel(item)}; sourceId=${item.sourceId})`,
         )
       }
     }

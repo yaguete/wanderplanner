@@ -93,6 +93,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       day-summary.ts       # POST /day-summary + firma de ítems del día
       itinerary-calendar.ts # Rejilla mes/semana de Ruta (lunes; sin leer el reloj)
       assistant-suggestions.ts   # Snippets de arranque del asistente (sin LLM)
+      assistant-actions.ts  # Resolver propuestas de mover ítems (`propose_move_item`)
       site.ts              # SITE_URL canónica (metadataBase, sitemap, robots)
       legal.ts             # Titular e inventario de storage para /legal/* (sin nombres de proveedor)
       cookie-consent.ts    # wp-consent (analítica); test:cookie-consent
@@ -281,7 +282,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | [`types/itinerary.ts`](frontend/types/itinerary.ts) | prompt itinerario, `itinerary-utils`, `main.py`, forma de jsonb |
 | `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
 | Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql) |
-| Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), perfil |
+| Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-dock.tsx`](frontend/components/assistant-dock.tsx), [`assistant-actions.ts`](frontend/lib/assistant-actions.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), [`travel_assistant.md`](backend/agents/travel_assistant.md), perfil. Propuestas: `propose_add_item` / `propose_add_source` / `propose_move_item` (esta última confirma vía `moveItemBetweenDays`). |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
 | Sugerencias de fuentes (landing + Añadir fuente) | [`landing-start.tsx`](frontend/components/landing/landing-start.tsx), [`source-suggest-list.tsx`](frontend/components/source-suggest-list.tsx), [`source_suggest.py`](backend/source_suggest.py), [`source-suggest.ts`](frontend/lib/source-suggest.ts), [`trip-source-suggestions.ts`](frontend/lib/trip-source-suggestions.ts), [`landing_source_domains.py`](backend/landing_source_domains.py), `ref=wp-landing`, kind `trip_source_search` |

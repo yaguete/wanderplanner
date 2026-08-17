@@ -27,6 +27,16 @@ export type AssistantAction =
       detail?: string | null
       region?: string | null
     }
+  | {
+      kind: "move_item"
+      item_id: string
+      to_day_id: string
+      name?: string | null
+      why?: string | null
+      from_day_id?: string | null
+      from_day_number?: number | null
+      to_day_number?: number | null
+    }
 
 export type AssistantStreamHandlers = {
   onDelta?: (text: string) => void

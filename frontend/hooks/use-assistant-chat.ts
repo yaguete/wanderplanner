@@ -13,6 +13,7 @@ import {
   buildUserProfileBriefing,
   preferredDomainsFrom,
 } from "@/lib/assistant-context"
+import { snapshotMoveProposal } from "@/lib/assistant-actions"
 import { resolveTripCountryCodes } from "@/lib/countries"
 import {
   ConversationSyncer,
@@ -57,6 +58,7 @@ const TOOL_STATUS: Record<string, string> = {
   get_country_brief: "Consultando ficha país…",
   propose_add_source: "Preparando propuesta…",
   propose_add_item: "Preparando propuesta…",
+  propose_move_item: "Preparando cambio de día…",
 }
 
 /** Une bocadillos consecutivos del asistente al enviar historial al API. */
@@ -397,8 +399,15 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
             }
           },
           onAction: (action) => {
+            const snapshotted =
+              action.kind === "move_item"
+                ? {
+                    ...action,
+                    ...snapshotMoveProposal(currentTrip.days, action),
+                  }
+                : action
             const chatAction: ChatAction = {
-              ...action,
+              ...snapshotted,
               id: crypto.randomUUID(),
               status: "pending",
             }

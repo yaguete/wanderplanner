@@ -13,6 +13,7 @@
     "test:task-labels": "tsx lib/task-labels.test.ts",
     "test:day-summary": "tsx lib/day-summary.test.ts",
     "test:assistant-context": "tsx lib/assistant-context.test.ts",
+    "test:assistant-actions": "tsx lib/assistant-actions.test.ts",
     "test:assistant-suggestions": "tsx lib/assistant-suggestions.test.ts",
     "test:trip-origin": "tsx lib/trip-origin-resolve.test.ts",
     "test:route-legs": "tsx lib/route-legs.test.ts",

@@ -174,8 +174,12 @@ li[data-wp-draggable] {
   touch-action: none;
 }
 
+/*
+ * Fuera de @layer: gana a `hidden` de Tailwind. Por eso el default es
+ * `none`; `use-itinerary-dnd` pone `flex` inline solo durante el arrastre.
+ */
 .wp-insert-line {
-  display: flex;
+  display: none;
   align-items: center;
   height: 10px;
   transform: translateY(-50%);

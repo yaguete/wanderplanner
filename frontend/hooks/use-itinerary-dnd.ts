@@ -140,7 +140,7 @@ function clearLift(li: HTMLElement): void {
 
 function hideLine(line: HTMLElement | null): void {
   if (!line) return
-  line.style.display = ""
+  line.style.display = "none"
   line.style.top = ""
 }
 

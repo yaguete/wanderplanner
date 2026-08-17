@@ -83,4 +83,35 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   assert.equal(countryCodeFromMapboxFeature({}), null)
 }
 
+{
+  const md = buildTripBriefing(
+    baseTrip({
+      days: [
+        {
+          id: "day-4",
+          label: "Salzburgo",
+          items: [
+            {
+              id: "item-mirabell",
+              sourceItemId: "src-item",
+              sourceId: "src-1",
+              type: "activity",
+              name: "Palacio de Mirabell",
+              detail: "Jardines",
+              sourceAuthor: "blog",
+              region: "Salzburgo",
+            },
+          ],
+        },
+      ],
+    }),
+    [],
+  )
+  assert.match(md, /### Día 1 — id=`day-4` — Salzburgo/)
+  assert.match(
+    md,
+    /- id=`item-mirabell` \[Actividad\] \*\*Palacio de Mirabell\*\* · Salzburgo — Jardines/,
+  )
+}
+
 console.log("assistant-context + mapbox country: ok")

@@ -15,6 +15,7 @@ import {
 } from "react"
 import {
   ArrowLeft,
+  ArrowRightLeft,
   ArrowUp,
   History,
   Link2,
@@ -55,6 +56,7 @@ import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
 import { ITEM_LABELS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
+import { resolveMoveItem } from "@/lib/assistant-actions"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { AiTransferGate } from "@/components/ai-transfer-gate"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
@@ -131,9 +133,10 @@ function ActionCard({
   onDismiss: () => void
 }) {
   if (action.status === "accepted") {
+    const label = action.kind === "move_item" ? "Movido en el viaje" : "Añadido al viaje"
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-        Añadido al viaje
+        {label}
       </div>
     )
   }
@@ -172,7 +175,39 @@ function ActionCard({
     )
   }
 
-  const typeLabel = ITEM_LABELS[action.type as ItemType] ?? action.type
+  if (action.kind === "move_item") {
+    const fromN = action.from_day_number
+    const toN = action.to_day_number
+    const dayLine =
+      typeof fromN === "number" && typeof toN === "number"
+        ? fromN === toN
+          ? `Al final del día ${toN}`
+          : `Día ${fromN} → día ${toN}`
+        : "A otro día del plan"
+    return (
+      <div className="rounded-lg border border-border bg-background p-3 shadow-sm">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-foreground">
+          <ArrowRightLeft className="h-3.5 w-3.5 text-primary" />
+          Mover en el plan
+        </div>
+        <p className="text-sm font-medium text-foreground">{action.name?.trim() || "Ítem"}</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{dayLine}</p>
+        {action.why ? (
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{action.why}</p>
+        ) : null}
+        <div className="mt-2.5 flex gap-2">
+          <Button type="button" size="sm" className="h-7 text-xs" disabled={busy} onClick={onAccept}>
+            Mover
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" disabled={busy} onClick={onDismiss}>
+            Descartar
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const typeLabel = ITEM_LABELS[action.type] ?? action.type
   return (
     <div className="rounded-lg border border-border bg-background p-3 shadow-sm">
       <div className="mb-1 text-xs font-medium text-foreground">Añadir al día</div>
@@ -498,6 +533,7 @@ export function AssistantPanelLayer({
     startSourceExtraction,
     pendingSources,
     addItemToDay,
+    moveItemBetweenDays,
   } = useTrips()
   const { user } = useAuth()
   const userId = user?.id ?? null
@@ -707,6 +743,24 @@ export function AssistantPanelLayer({
             setAssistantPendingId(result.pendingId)
           }
           setActionStatus(messageId, action.id, "accepted")
+        } else if (action.kind === "move_item") {
+          const resolved = resolveMoveItem(trip.days, action)
+          if (!resolved.ok) {
+            toast.error(
+              resolved.reason === "day_missing"
+                ? "Ese día ya no está en el viaje"
+                : "Esa parada ya no está en el viaje",
+            )
+            setActionStatus(messageId, action.id, "dismissed")
+            return
+          }
+          moveItemBetweenDays(tripId, {
+            fromDayId: resolved.fromDayId,
+            toDayId: resolved.toDayId,
+            itemId: resolved.itemId,
+            toIndex: resolved.toIndex,
+          })
+          setActionStatus(messageId, action.id, "accepted")
         } else {
           const dayExists = trip.days.some((d) => d.id === action.day_id)
           if (!dayExists) {
@@ -735,7 +789,7 @@ export function AssistantPanelLayer({
         setActionBusyId(null)
       }
     },
-    [trip, addedSourceUrls, startSourceExtraction, addItemToDay, setActionStatus, tripId],
+    [trip, addedSourceUrls, startSourceExtraction, addItemToDay, moveItemBetweenDays, setActionStatus, tripId],
   )
 
   const handleDismissAction = useCallback(

@@ -126,7 +126,7 @@ TOOLS: list[dict[str, Any]] = [
                 "para añadir al plan: una recomendación concreta = una llamada "
                 "(day_id del briefing). No la uses en preguntas informativas, "
                 "de visados, de opinión sobre el plan, ni al hablar de un ítem "
-                "que ya está en el itinerario. "
+                "que ya está en el itinerario (para moverlo usa propose_move_item). "
                 "No lo añade automáticamente; el usuario debe confirmar."
             ),
             "parameters": {
@@ -145,6 +145,42 @@ TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["day_id", "type", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_move_item",
+            "description": (
+                "Propone mover un ítem que YA está en el itinerario a otro día "
+                "(o al final del mismo día). Úsala cuando el usuario pida "
+                "reorganizar el plan o cuando recomiendes pasar una parada "
+                "existente a otro día. item_id y to_day_id salen del briefing. "
+                "No lo mueve automáticamente; el usuario debe confirmar. "
+                "No la uses para añadir sitios nuevos (eso es propose_add_item)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {
+                        "type": "string",
+                        "description": "id del ítem en el briefing (id=`…`)",
+                    },
+                    "to_day_id": {
+                        "type": "string",
+                        "description": "id del día destino (### Día N — id=`…`)",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Nombre del ítem, para la tarjeta de confirmación",
+                    },
+                    "why": {
+                        "type": "string",
+                        "description": "Motivo breve del cambio de día",
+                    },
+                },
+                "required": ["item_id", "to_day_id"],
             },
         },
     },
@@ -291,6 +327,28 @@ async def _run_tool(
             ensure_ascii=False,
         ), action
 
+    if name == "propose_move_item":
+        item_id = str(args.get("item_id") or "").strip()
+        to_day_id = str(args.get("to_day_id") or "").strip()
+        if not item_id or not to_day_id:
+            return json.dumps(
+                {"error": "item_id y to_day_id son obligatorios"},
+                ensure_ascii=False,
+            ), None
+        name = str(args.get("name") or "").strip()
+        why = str(args.get("why") or "").strip()
+        action = {
+            "kind": "move_item",
+            "item_id": item_id,
+            "to_day_id": to_day_id,
+            "name": name or None,
+            "why": why or None,
+        }
+        return json.dumps(
+            {"status": "proposed", "message": "Propuesta enviada al usuario; espera su confirmación."},
+            ensure_ascii=False,
+        ), action
+
     return json.dumps({"error": f"Herramienta desconocida: {name}"}, ensure_ascii=False), None
 
 
@@ -315,6 +373,7 @@ _TOOL_COUNT_KEYS = (
     "get_country_brief",
     "propose_add_item",
     "propose_add_source",
+    "propose_move_item",
 )
 
 

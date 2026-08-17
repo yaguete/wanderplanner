@@ -27,6 +27,7 @@ jobs:
       - run: npm run test:task-labels
       - run: npm run test:day-summary
       - run: npm run test:assistant-context
+      - run: npm run test:assistant-actions
       - run: npm run test:trip-origin
       - run: npm run test:text-highlight
       - run: npm run test:chronicle-search
