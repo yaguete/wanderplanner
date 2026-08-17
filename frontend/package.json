@@ -30,6 +30,7 @@
     "test:trip-source-suggestions": "tsx lib/trip-source-suggestions.test.ts",
     "test:cookie-consent": "tsx lib/cookie-consent.test.ts",
     "test:itinerary-calendar": "tsx lib/itinerary-calendar.test.ts",
+    "test:itinerary-dnd": "tsx lib/itinerary-dnd.test.ts",
     "test:guest-trip-claim": "tsx lib/guest-trip-claim.test.ts"
   },
   "dependencies": {

@@ -80,6 +80,10 @@ export function useCollapsingHeader(
       // siguiente se mide desde donde quedó el scroll y no desde antes.
       lastTopByScroller.set(target, top)
 
+      // Auto-scroll del arrastre de cards: no leer el scroll programático
+      // como gesto o la cabecera se repliega y caduca el snapshot de rects.
+      if (document.documentElement.dataset.wpDragging === "1") return
+
       // Volver arriba expande: es una condición absoluta, no un delta, así que
       // no puede realimentarse (expandir con `top <= 8` no mueve el scroll).
       if (top <= 8) {

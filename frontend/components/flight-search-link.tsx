@@ -28,6 +28,8 @@ export function FlightSearchLink({
       rel="noreferrer noopener"
       title={label}
       aria-label={label}
+      data-no-drag=""
+      draggable={false}
       className={cn(
         "wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium",
         className,

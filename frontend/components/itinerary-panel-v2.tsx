@@ -13,13 +13,11 @@ import {
   useCallback,
   useMemo,
   memo,
-  type ComponentType,
 } from "react"
 import {
   Check,
   CalendarDays,
-  ChevronDown,
-  ChevronUp,
+  GripVertical,
   List,
   Loader2,
   Map as MapIcon,
@@ -28,7 +26,6 @@ import {
   RotateCcw,
   Sparkles,
   X,
-  type LucideProps,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -103,7 +100,9 @@ import {
 } from "@/components/day-destructive-confirm-dialog"
 import { hasRouteLeg, isRouteLegItem } from "@/lib/route-legs"
 import { useListFlip } from "@/hooks/use-list-flip"
+import { useItineraryDnd } from "@/hooks/use-itinerary-dnd"
 import { useStableList } from "@/hooks/use-stable-list"
+import type { MoveParams } from "@/lib/itinerary-dnd"
 
 const CATEGORY_EMPTY: Record<
   Exclude<ItineraryViewMode, "itinerary">,
@@ -218,6 +217,9 @@ export default function ItineraryPanel({
     [sourceAreaById],
   )
   const { rootRef: daysFlipRef, capture: captureDaysFlip } = useListFlip()
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  const listChromeRef = useRef<HTMLDivElement>(null)
+  const insertLineRef = useRef<HTMLDivElement>(null)
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [pendingDayAction, setPendingDayAction] = useState<DayDestructiveAction | null>(null)
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
@@ -469,74 +471,22 @@ export default function ItineraryPanel({
     }))
   }, [trip, mapMode, listMode])
 
-  // Índice de posición global (por día) para reglas de flechas arriba/abajo; debe coincidir con `moveItemOneStep`.
-  const itemLocationById = useMemo(() => {
-    const map = new Map<string, { dayId: string; dayIndex: number; itemIndex: number }>()
-    if (!trip) return map
-    trip.days.forEach((day, dayIndex) => {
-      day.items.forEach((item, itemIndex) => {
-        map.set(item.id, { dayId: day.id, dayIndex, itemIndex })
-      })
-    })
-    return map
-  }, [trip])
-
-  const moveItemOneStep = useCallback(
-    (itemId: string, direction: "up" | "down") => {
-      if (!trip) return
-      const current = itemLocationById.get(itemId)
-      if (!current) return
-      const currentDay = trip.days[current.dayIndex]
-      if (!currentDay) return
-
-      let toDayId = current.dayId
-      let toIndex = current.itemIndex
-
-      if (direction === "up") {
-        if (current.itemIndex > 0) {
-          toIndex = current.itemIndex - 1
-        } else {
-          const prevDay = trip.days[current.dayIndex - 1]
-          if (!prevDay) return
-          toDayId = prevDay.id
-          toIndex = prevDay.items.length
-        }
-      } else {
-        if (current.itemIndex < currentDay.items.length - 1) {
-          toIndex = current.itemIndex + 1
-        } else {
-          // Pasar al día siguiente aunque esté vacío (índice 0) para no saltar días sin ítems.
-          const nextDay = trip.days[current.dayIndex + 1]
-          if (!nextDay) return
-          toDayId = nextDay.id
-          toIndex = 0
-        }
-      }
-
-      moveItemBetweenDays(tripId, {
-        fromDayId: current.dayId,
-        toDayId,
-        itemId,
-        toIndex,
-      })
+  const onDragMoveItem = useCallback(
+    (params: MoveParams) => {
+      moveItemBetweenDays(tripId, params)
     },
-    [itemLocationById, moveItemBetweenDays, trip, tripId],
+    [moveItemBetweenDays, tripId],
   )
 
-  // Callbacks estables para memo(DaySection): el cuerpo lee el último moveItemOneStep vía ref.
-  const moveItemOneStepRef = useRef(moveItemOneStep)
-  // eslint-disable-next-line react-hooks/refs -- ref de "último valor": la escritura en render es idempotente y solo se lee desde manejadores de eventos.
-  moveItemOneStepRef.current = moveItemOneStep
-
-  const onMoveItemUp = useCallback((itemId: string) => {
-    captureDaysFlip()
-    moveItemOneStepRef.current(itemId, "up")
-  }, [captureDaysFlip])
-
-  const onMoveItemDown = useCallback((itemId: string) => {
-    captureDaysFlip()
-    moveItemOneStepRef.current(itemId, "down")
-  }, [captureDaysFlip])
+  useItineraryDnd({
+    enabled: Boolean(trip) && viewMode === "itinerary" && listMode === "list",
+    rootRef: daysFlipRef,
+    scrollRef: listScrollRef,
+    chromeRef: listChromeRef,
+    lineRef: insertLineRef,
+    capture: captureDaysFlip,
+    onMove: onDragMoveItem,
+  })
 
   const setDaySelected = useCallback((dayId: string, checked: boolean) => {
     setSelectedDayIds((prev) => {
@@ -617,6 +567,7 @@ export default function ItineraryPanel({
         usuario sin forma de volver a Lista.
       */}
       <div
+        ref={listChromeRef}
         className={cn(
           "shrink-0",
           "max-md:sticky max-md:top-[var(--wp-header-height)] max-md:z-20 max-md:bg-background",
@@ -796,8 +747,16 @@ export default function ItineraryPanel({
       {isRoute ? (
         <>
           {listMode === "list" ? (
-            <div className="px-4 pb-6 pt-2 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto">
-              <div ref={daysFlipRef} className="panel-column">
+            <div
+              ref={listScrollRef}
+              className="px-4 pb-6 pt-2 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto"
+            >
+              <div ref={daysFlipRef} className="panel-column relative">
+              <div
+                ref={insertLineRef}
+                aria-hidden
+                className="wp-insert-line pointer-events-none absolute left-0 right-0 z-[2] hidden"
+              />
               {trip.days.map((day, dayIndex) =>
                 inDayScope(focusDayNumber, dayIndex + 1) ? (
                   <DaySection
@@ -805,7 +764,6 @@ export default function ItineraryPanel({
                     tripId={tripId}
                     dayId={day.id}
                     dayIndex={dayIndex}
-                    dayCount={trip.days.length}
                     days={trip.days}
                     flightSearchTrip={flightSearchTrip}
                     dayDescription={getDayUserDescription(day.label)}
@@ -820,8 +778,6 @@ export default function ItineraryPanel({
                     onDaySelectChange={setDaySelected}
                     onResetDay={handleResetDay}
                     onRemoveItem={handleRemoveItem}
-                    onMoveItemUp={onMoveItemUp}
-                    onMoveItemDown={onMoveItemDown}
                     onAddManualItem={openManualDialog}
                     onSetTaskState={handleSetTaskState}
                     taskStates={trip.tasks}
@@ -1015,13 +971,10 @@ export default function ItineraryPanel({
 function DayItineraryTimeline({
   items,
   dayIndex,
-  dayCount,
   days,
   flightSearchTrip,
   resolveRegion,
   onRemoveItem,
-  onMoveItemUp,
-  onMoveItemDown,
   taskStates,
   onSetTaskState,
   onEditRouteLeg,
@@ -1030,13 +983,10 @@ function DayItineraryTimeline({
 }: {
   items: UserDayItem[]
   dayIndex: number
-  dayCount: number
   days: UserDay[]
   flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers">
   resolveRegion: (item: UserDayItem) => string | null
   onRemoveItem: (itemId: string) => void
-  onMoveItemUp: (itemId: string) => void
-  onMoveItemDown: (itemId: string) => void
   taskStates: Record<string, TripTaskState>
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
   onEditRouteLeg?: (item: UserDayItem) => void
@@ -1127,6 +1077,7 @@ function DayItineraryTimeline({
             <li
               key={item.id}
               data-flip-id={item.id}
+              {...(!isLeg ? { "data-wp-draggable": "1" } : {})}
               ref={(el) => {
                 if (index === 0) firstLiRef.current = el
                 if (index === n - 1) lastLiRef.current = el
@@ -1192,16 +1143,7 @@ function DayItineraryTimeline({
                 }
                 titleAdornment={titleAdornment}
                 taskIndicator={taskIndicator}
-                moveControls={
-                  isLeg ? undefined : (
-                    <MoveControls
-                      canUp={!(dayIndex === 0 && index === 0)}
-                      canDown={!(dayIndex === dayCount - 1 && index === n - 1)}
-                      onUp={() => onMoveItemUp(item.id)}
-                      onDown={() => onMoveItemDown(item.id)}
-                    />
-                  )
-                }
+                moveControls={isLeg ? undefined : <DragHandle />}
               />
             </li>
           )
@@ -1211,50 +1153,16 @@ function DayItineraryTimeline({
   )
 }
 
-function MoveButton({
-  icon: Icon,
-  label,
-  disabled,
-  onClick,
-}: {
-  icon: ComponentType<LucideProps>
-  label: string
-  disabled: boolean
-  onClick: () => void
-}) {
+function DragHandle() {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onClick()
-      }}
-      className="inline-flex h-6 w-7 items-center justify-center text-foreground/60 transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:text-foreground/20"
-      aria-label={label}
+    <div
+      data-wp-drag-handle=""
+      role="button"
+      tabIndex={0}
+      aria-label="Reordenar ítem"
+      className="inline-flex h-8 w-7 items-center justify-center rounded-lg text-foreground/40 transition-colors hover:bg-muted/60 hover:text-foreground/70"
     >
-      <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-    </button>
-  )
-}
-
-function MoveControls({
-  canUp,
-  canDown,
-  onUp,
-  onDown,
-}: {
-  canUp: boolean
-  canDown: boolean
-  onUp: () => void
-  onDown: () => void
-}) {
-  return (
-    <div className="flex flex-col items-center overflow-hidden rounded-full border border-border/70 bg-card shadow-sm transition-shadow hover:shadow-md">
-      <MoveButton icon={ChevronUp} label="Mover ítem hacia arriba" disabled={!canUp} onClick={onUp} />
-      <span className="h-px w-4 bg-border/60" aria-hidden />
-      <MoveButton icon={ChevronDown} label="Mover ítem hacia abajo" disabled={!canDown} onClick={onDown} />
+      <GripVertical className="h-4 w-4" strokeWidth={1.8} aria-hidden />
     </div>
   )
 }
@@ -1341,7 +1249,6 @@ const DaySection = memo(function DaySection({
   tripId,
   dayId,
   dayIndex,
-  dayCount,
   days,
   flightSearchTrip,
   dayDescription,
@@ -1354,8 +1261,6 @@ const DaySection = memo(function DaySection({
   onDaySelectChange,
   onResetDay,
   onRemoveItem,
-  onMoveItemUp,
-  onMoveItemDown,
   onAddManualItem,
   taskStates,
   onSetTaskState,
@@ -1369,7 +1274,6 @@ const DaySection = memo(function DaySection({
   tripId: string
   dayId: string
   dayIndex: number
-  dayCount: number
   days: UserDay[]
   flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers">
   dayDescription: string
@@ -1382,8 +1286,6 @@ const DaySection = memo(function DaySection({
   onDaySelectChange: (dayId: string, checked: boolean) => void
   onResetDay: (dayId: string) => void
   onRemoveItem: (dayId: string, itemId: string) => void
-  onMoveItemUp: (itemId: string) => void
-  onMoveItemDown: (itemId: string) => void
   onAddManualItem: (dayId?: string | null) => void
   taskStates: Record<string, TripTaskState>
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
@@ -1694,13 +1596,10 @@ const DaySection = memo(function DaySection({
         <DayItineraryTimeline
           items={items}
           dayIndex={dayIndex}
-          dayCount={dayCount}
           days={days}
           flightSearchTrip={flightSearchTrip}
           resolveRegion={resolveRegion}
           onRemoveItem={(itemId) => onRemoveItem(dayId, itemId)}
-          onMoveItemUp={onMoveItemUp}
-          onMoveItemDown={onMoveItemDown}
           taskStates={taskStates}
           onSetTaskState={onSetTaskState}
           emphasized={isDaySelected}

@@ -147,6 +147,65 @@ html[data-wp-scroll-lock="1"] body {
   overscroll-behavior: none;
 }
 
+/*
+ * Arrastre de cards en Ruta › Lista. El flag lo pone / quita
+ * `use-itinerary-dnd` (cero setState). `user-select` aquí y no en el
+ * pointerdown: un preventDefault prematuro mataría el click del enlace.
+ */
+html[data-wp-dragging="1"],
+html[data-wp-dragging="1"] * {
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+li[data-wp-draggable] {
+  -webkit-touch-callout: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-wp-drag-handle] {
+    cursor: grab;
+  }
+}
+
+[data-wp-drag-handle] {
+  touch-action: none;
+}
+
+.wp-insert-line {
+  display: flex;
+  align-items: center;
+  height: 10px;
+  transform: translateY(-50%);
+}
+
+.wp-insert-line::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-left: 5px;
+  border-radius: 9999px;
+  background-color: hsl(var(--foreground) / 0.5);
+  box-shadow: 0 0 0 4px hsl(var(--background));
+}
+
+.wp-insert-line::after {
+  content: "";
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 2px;
+  margin-left: 6px;
+  border-radius: 9999px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    hsl(var(--muted-foreground) / 0.4) 0 3px,
+    transparent 3px 8px
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

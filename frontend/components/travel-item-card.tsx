@@ -374,6 +374,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
         CARD_MOTION,
         props.className,
       )}
+      data-wp-drag-card=""
     >
       <div className="flex min-h-0 items-stretch">
         {props.href ? (
@@ -381,6 +382,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
             href={props.href}
             target="_blank"
             rel="noreferrer noopener"
+            draggable={false}
             className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
           >
             {icon}
