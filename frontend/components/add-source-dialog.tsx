@@ -168,34 +168,38 @@ function AddSourceSuggestions({
   }
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">Sugeridas para {query}</p>
-      {loading && visible.length === 0 ? (
-        <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
-      ) : null}
-      {visible.length > 0 ? (
-        <SourceSuggestList hits={visible} onSelect={handleSelect} compactSubtitle />
-      ) : null}
-      {showEmpty ? (
-        <div className="space-y-2">
-          <p className="px-1 text-sm text-muted-foreground">
-            No quedan sugerencias para este destino.
-          </p>
-          <button
-            type="button"
-            onClick={handleMore}
-            disabled={loading}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
-          >
-            Buscar más
-          </button>
-        </div>
-      ) : null}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <p className="shrink-0 text-xs font-medium text-muted-foreground">
+        Sugeridas para {query}
+      </p>
+      <div className="min-h-0 flex-1 overflow-y-auto pt-2">
+        {loading && visible.length === 0 ? (
+          <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
+        ) : null}
+        {visible.length > 0 ? (
+          <SourceSuggestList hits={visible} onSelect={handleSelect} compactSubtitle />
+        ) : null}
+        {showEmpty ? (
+          <div className="space-y-2">
+            <p className="px-1 text-sm text-muted-foreground">
+              No quedan sugerencias para este destino.
+            </p>
+            <button
+              type="button"
+              onClick={handleMore}
+              disabled={loading}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+            >
+              Buscar más
+            </button>
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
 
-/** Formulario de URL: cabecera + campo + sugerencias + pie fijo (móvil a pantalla completa). */
+/** Formulario de URL: cabecera + campo fijos; solo scrollean las sugerencias. */
 export function AddSourceFlow({
   initialUrl,
   onSubmit,
@@ -240,8 +244,8 @@ export function AddSourceFlow({
   const canSubmit = url.trim().length > 0
 
   return (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-10 pt-6">
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 space-y-4 px-6 pt-6">
         <DialogHeader className="space-y-1.5 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
             Añadir fuente
@@ -270,6 +274,8 @@ export function AddSourceFlow({
             </p>
           ) : null}
         </div>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col px-6 pb-4 pt-4">
         <AddSourceSuggestions
           trip={trip}
           sources={sources}

@@ -4,6 +4,7 @@ import {
   confirmationNameFor,
   matchesAccountConfirmation,
   validatePasswordChange,
+  validatePasswordPair,
 } from "./account-security"
 import type { TravelerProfile } from "./db/profile-repo"
 
@@ -115,5 +116,9 @@ assert.equal(
   }),
   null,
 )
+
+assert.equal(validatePasswordPair("123", "123"), "La contraseña debe tener al menos 6 caracteres.")
+assert.equal(validatePasswordPair("secret1", "secret2"), "Las contraseñas no coinciden.")
+assert.equal(validatePasswordPair("secret1", "secret1"), null)
 
 console.log("account-security tests passed")

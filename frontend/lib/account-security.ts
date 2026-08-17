@@ -41,6 +41,17 @@ export function confirmationNameFor(
   return local || shown
 }
 
+/** Alta de cuenta: longitud mínima y las dos casillas iguales. */
+export function validatePasswordPair(password: string, repeat: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return "La contraseña debe tener al menos 6 caracteres."
+  }
+  if (password !== repeat) {
+    return "Las contraseñas no coinciden."
+  }
+  return null
+}
+
 export function validatePasswordChange(input: {
   current: string
   next: string

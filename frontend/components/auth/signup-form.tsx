@@ -2,7 +2,7 @@
 
 /**
  * Formulario de registro. `/signup` lo envuelve en AuthShell (variante completa);
- * la landing monta la variante compacta (nombre, email, contraseña; perfil plegado).
+ * la landing monta la variante compacta (nombre, email, contraseña dos veces; perfil plegado).
  */
 import { useState } from "react"
 import Link from "next/link"
@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { TravelerProfileFields } from "@/components/auth/traveler-profile-fields"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
+import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +35,7 @@ export function SignupForm({
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [passwordRepeat, setPasswordRepeat] = useState("")
   const [travelerTypes, setTravelerTypes] = useState<string[]>([])
   const [travelerNotes, setTravelerNotes] = useState("")
   const [references, setReferences] = useState<FavoriteReferenceInput[]>([
@@ -71,6 +73,15 @@ export function SignupForm({
       setError("Confirma que no eres un robot.")
       return
     }
+    if (!name.trim()) {
+      setError("Escribe tu nombre.")
+      return
+    }
+    const passwordError = validatePasswordPair(password, passwordRepeat)
+    if (passwordError) {
+      setError(passwordError)
+      return
+    }
     setSubmitting(true)
 
     const payload = {
@@ -94,6 +105,7 @@ export function SignupForm({
     setNotice(
       "Cuenta creada. Si te pedimos confirmar el email, revisa tu correo antes de entrar.",
     )
+    if (result.signedIn === false) return
     router.push(next)
     router.refresh()
   }
@@ -111,6 +123,7 @@ export function SignupForm({
           <Input
             id={`${prefix}name`}
             autoComplete="name"
+            required
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Alvin"
@@ -137,9 +150,22 @@ export function SignupForm({
             type="password"
             autoComplete="new-password"
             required
-            minLength={6}
+            minLength={MIN_PASSWORD_LENGTH}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5 text-left">
+          <Label htmlFor={`${prefix}password-repeat`}>Repetir contraseña</Label>
+          <Input
+            id={`${prefix}password-repeat`}
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={MIN_PASSWORD_LENGTH}
+            value={passwordRepeat}
+            onChange={(e) => setPasswordRepeat(e.target.value)}
           />
         </div>
       </div>

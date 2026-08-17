@@ -11,8 +11,10 @@
  *
  * Si el invitado ya envió email/contraseña pero aún no ha confirmado el correo, la modal
  * muestra el estado «pendiente de confirmación» en lugar de pedir el formulario otra vez.
+ * Mientras sigue siendo invitado, la modal reaparece sola cada 5 minutos (si no hay otra
+ * abierta) para incentivar el registro.
  */
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import {
@@ -33,6 +35,7 @@ import {
   clearStash,
   prepareGuestTripClaim,
 } from "@/lib/guest-trip-claim"
+import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 
 export type GateReason =
   | "new-trip"
@@ -71,6 +74,8 @@ const COPY: Record<GateReason, { title: string; description: string }> = {
   },
 }
 
+const GUEST_SIGNUP_NUDGE_MS = 5 * 60 * 1000
+
 type GateValue = {
   /** `true` si la acción puede continuar; `false` si se ha abierto la modal de registro. */
   requireAccount: (reason: GateReason) => boolean
@@ -94,6 +99,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [passwordRepeat, setPasswordRepeat] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -121,6 +127,25 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     },
     [isGuest, hasPendingUpgrade, pendingEmail],
   )
+  const requireAccountRef = useRef(requireAccount)
+  requireAccountRef.current = requireAccount
+
+  useEffect(() => {
+    if (!isGuest || reason !== null) return
+    let timeoutId = 0
+    const schedule = (ms: number) => {
+      timeoutId = window.setTimeout(tick, ms)
+    }
+    const tick = () => {
+      if (document.querySelector('[role="dialog"][data-state="open"]')) {
+        schedule(15_000)
+        return
+      }
+      requireAccountRef.current("home")
+    }
+    schedule(GUEST_SIGNUP_NUDGE_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [isGuest, reason])
 
   const resetGateState = () => {
     setReason(null)
@@ -146,6 +171,15 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     e.preventDefault()
     setError(null)
     setNotice(null)
+    if (!name.trim()) {
+      setError("Escribe tu nombre.")
+      return
+    }
+    const passwordError = validatePasswordPair(password, passwordRepeat)
+    if (passwordError) {
+      setError(passwordError)
+      return
+    }
     setSubmitting(true)
     const result = await upgradeGuest({
       email: email.trim(),
@@ -171,6 +205,10 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   }
 
   const handleMagicLink = async () => {
+    if (!name.trim()) {
+      setError("Escribe tu nombre.")
+      return
+    }
     if (!email.trim()) {
       setError("Escribe tu email para recibir el enlace.")
       return
@@ -391,6 +429,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                   <Input
                     id="gate-name"
                     autoComplete="name"
+                    required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
@@ -414,9 +453,21 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                     type="password"
                     autoComplete="new-password"
                     required
-                    minLength={6}
+                    minLength={MIN_PASSWORD_LENGTH}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="gate-password-repeat">Repetir contraseña</Label>
+                  <Input
+                    id="gate-password-repeat"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    minLength={MIN_PASSWORD_LENGTH}
+                    value={passwordRepeat}
+                    onChange={(e) => setPasswordRepeat(e.target.value)}
                   />
                 </div>
 
@@ -444,6 +495,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                     setError(null)
                     setNotice(null)
                     setPassword("")
+                    setPasswordRepeat("")
                     setMode("login")
                   }}
                 >

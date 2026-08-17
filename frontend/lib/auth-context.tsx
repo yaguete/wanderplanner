@@ -30,9 +30,10 @@ import {
   type TravelerProfile,
 } from "@/lib/db/profile-repo"
 import { clearActiveConversationPointers } from "@/lib/db/assistant-repo"
+import { AUTH_EMAIL_EXISTS, AUTH_ERROR_FALLBACK, authErrorMessage, isDuplicateSignUp } from "@/lib/auth-errors"
 import { clearStash } from "@/lib/guest-trip-claim"
 
-export type AuthResult = { ok: true } | { ok: false; error: string }
+export type AuthResult = { ok: true; signedIn?: boolean } | { ok: false; error: string }
 
 type ProfileInput = {
   displayName: string | null
@@ -97,8 +98,7 @@ function pendingEmailOf(user: User | null | undefined): string | null {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 function errorMessage(e: unknown): string {
-  if (e instanceof Error) return e.message
-  return "Algo ha fallado. Inténtalo de nuevo."
+  return authErrorMessage(e)
 }
 
 function isMissingRpc(error: { code?: string; message?: string } | null): boolean {
@@ -113,7 +113,10 @@ function passwordChangeError(error: { message?: string; code?: string } | null):
     return "La contraseña actual no es correcta."
   }
   if (/captcha/i.test(msg)) return "Confirma que no eres un robot."
-  return msg || "No hemos podido cambiar la contraseña."
+  const translated = authErrorMessage(error)
+  return translated === AUTH_ERROR_FALLBACK
+    ? msg || "No hemos podido cambiar la contraseña."
+    : translated
 }
 
 const DELETE_MISSING_RPC_ERROR =
@@ -234,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: captchaToken ? { captchaToken } : undefined,
       })
-      if (error) return { ok: false, error: error.message }
+      if (error) return { ok: false, error: authErrorMessage(error) }
       return { ok: true }
     } catch (e) {
       return { ok: false, error: errorMessage(e) }
@@ -260,12 +263,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 : undefined,
           },
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) return { ok: false, error: authErrorMessage(error) }
+        if (isDuplicateSignUp(data)) {
+          return { ok: false, error: AUTH_EMAIL_EXISTS }
+        }
         // Sin confirmación por email hay sesión inmediata y podemos guardar el perfil.
         if (data.user && data.session) {
           await persistProfile(data.user.id, profileData)
         }
-        return { ok: true }
+        return { ok: true, signedIn: Boolean(data.session) }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
       }
@@ -285,7 +291,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ? { display_name: profileData.displayName }
             : undefined,
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) return { ok: false, error: authErrorMessage(error) }
         if (data.user) {
           await persistProfile(data.user.id, profileData)
           setUser(data.user)
@@ -317,7 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             ...(options?.captchaToken ? { captchaToken: options.captchaToken } : {}),
           },
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) return { ok: false, error: authErrorMessage(error) }
         return { ok: true }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
@@ -341,7 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 : undefined,
           },
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) return { ok: false, error: authErrorMessage(error) }
         return { ok: true }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
@@ -360,7 +366,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email,
           data: trimmedName ? { display_name: trimmedName } : undefined,
         })
-        if (error) return { ok: false, error: error.message }
+        if (error) return { ok: false, error: authErrorMessage(error) }
         if (data.user && trimmedName) {
           // Solo el nombre: no pisar traveler_types / notes / favoritos ya guardados.
           const { error: profileError } = await supabase

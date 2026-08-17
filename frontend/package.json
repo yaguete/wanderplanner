@@ -36,7 +36,8 @@
     "test:itinerary-calendar": "tsx lib/itinerary-calendar.test.ts",
     "test:itinerary-dnd": "tsx lib/itinerary-dnd.test.ts",
     "test:guest-trip-claim": "tsx lib/guest-trip-claim.test.ts",
-    "test:account-security": "tsx lib/account-security.test.ts"
+    "test:account-security": "tsx lib/account-security.test.ts",
+    "test:auth-errors": "tsx lib/auth-errors.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
