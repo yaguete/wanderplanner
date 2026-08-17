@@ -107,4 +107,69 @@ function source(overrides: Partial<Source> = {}): Source {
   ])
 }
 
+{
+  const loaded = baseTrip({
+    startDate: "2026-08-25",
+    endDate: "2026-08-28",
+    days: [
+      {
+        id: "d1",
+        label: "",
+        items: [
+          {
+            id: "t",
+            sourceItemId: "t",
+            sourceId: "s",
+            type: "transport",
+            name: "Tren",
+            detail: null,
+            sourceAuthor: "a",
+          },
+          {
+            id: "a",
+            sourceItemId: "a",
+            sourceId: "s",
+            type: "activity",
+            name: "Casco",
+            detail: null,
+            sourceAuthor: "a",
+          },
+          {
+            id: "b",
+            sourceItemId: "b",
+            sourceId: "s",
+            type: "activity",
+            name: "Ambras",
+            detail: null,
+            sourceAuthor: "a",
+          },
+          {
+            id: "c",
+            sourceItemId: "c",
+            sourceId: "s",
+            type: "food",
+            name: "Almuerzo",
+            detail: null,
+            sourceAuthor: "a",
+          },
+        ],
+      },
+      { id: "d2", label: "", items: [] },
+    ],
+  })
+  const chips = buildAssistantSuggestions(loaded, [])
+  assert.ok(chips[0]!.includes("visado"))
+  assert.ok(chips.includes("¿Qué tiempo crees que hará en las fechas de mi viaje?"))
+  assert.ok(!chips.includes("Revisa qué huecos tiene el plan"))
+  assert.ok(!chips.some((s) => /está muy cargado/i.test(s)))
+}
+
+{
+  const thin = baseTrip({
+    days: [{ id: "d1", label: "", items: [] }],
+  })
+  const chips = buildAssistantSuggestions(thin, [])
+  assert.ok(chips[0]!.includes("visado"))
+}
+
 console.log("assistant-suggestions.test.ts: ok")

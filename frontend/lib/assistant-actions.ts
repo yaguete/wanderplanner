@@ -556,3 +556,61 @@ export function snapshotAssistantAction(
   }
   return action
 }
+
+const STALE_REASONS = new Set(["item_missing", "day_missing", "source_missing", "duplicate", "task_missing"])
+
+/** True si una propuesta pending ya no se puede aplicar al viaje actual. */
+export function isAssistantActionStale(
+  trip: Trip,
+  sources: readonly Source[],
+  action: AssistantAction,
+): boolean {
+  if (action.kind === "move_item") {
+    const resolved = resolveMoveItem(trip.days, action)
+    return !resolved.ok && STALE_REASONS.has(resolved.reason)
+  }
+  if (action.kind === "swap_items") {
+    const resolved = resolveSwapItems(
+      trip.days,
+      action.item_id_a,
+      action.item_id_b,
+      action.name_a,
+      action.name_b,
+    )
+    return !resolved.ok && resolved.reason === "item_missing"
+  }
+  if (action.kind === "remove_item") {
+    const resolved = resolveRemoveItem(trip, action.item_id, action.name)
+    return !resolved.ok && resolved.reason === "item_missing"
+  }
+  if (action.kind === "add_item") {
+    if (action.source_id && action.source_item_id) {
+      const resolved = resolveConsolidateSourceItem(
+        trip,
+        sources,
+        action.source_id,
+        action.source_item_id,
+        action.day_id,
+      )
+      return !resolved.ok && STALE_REASONS.has(resolved.reason)
+    }
+    return !trip.days.some((d) => d.id === action.day_id)
+  }
+  if (action.kind === "add_transport") {
+    return !trip.days.some((d) => d.id === action.day_id.trim())
+  }
+  if (action.kind === "add_basic") {
+    const resolved = resolveAddSourceBasic(
+      trip,
+      sources,
+      action.source_id,
+      action.source_basic_id,
+    )
+    return !resolved.ok && STALE_REASONS.has(resolved.reason)
+  }
+  if (action.kind === "set_task_cost") {
+    const resolved = resolveSetTaskCost(trip, action.task_ref, action.cost)
+    return !resolved.ok && resolved.reason === "task_missing"
+  }
+  return false
+}

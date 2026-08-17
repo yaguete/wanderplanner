@@ -157,6 +157,9 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   assert.match(md, /18 EUR/)
   assert.match(md, /- id=`src-item-rest` \[Restaurante\] \*\*Stiftskeller\*\*/)
   assert.match(md, /- id=`src-basic-sim` \[SIM \/ eSIM\] \*\*eSIM Austria\*\*/)
+  assert.match(md, /## Señales del plan/)
+  assert.match(md, /horizonte meteo:/)
+  assert.match(md, /día 1: 1 ítem/)
 }
 
 console.log("assistant-context + mapbox country: ok")

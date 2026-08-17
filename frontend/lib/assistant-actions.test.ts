@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import type { Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import {
   applyMoveToDays,
+  isAssistantActionStale,
   locateDayItem,
   resolveConsolidateSourceItem,
   resolveMoveItem,
@@ -337,6 +338,52 @@ const days: UserDay[] = daysOf(
   const ghost = resolveSetTaskCost(trip, "activity:inventado", 10)
   assert.equal(ghost.ok, false)
   if (!ghost.ok) assert.equal(ghost.reason, "task_missing")
+}
+
+{
+  const staleTrip: Trip = {
+    id: "t1",
+    name: "Tirol",
+    countries: ["AT"],
+    startDate: null,
+    endDate: null,
+    numDays: 2,
+    expectations: null,
+    cover: "✈️",
+    coverUrl: null,
+    sourceIds: [],
+    days,
+    basics: [],
+    tasks: {},
+    extraTasks: [],
+    dismissedCountryTasks: [],
+    numTravelers: null,
+    currency: "EUR",
+    origin: null,
+    archived: false,
+  }
+  assert.equal(
+    isAssistantActionStale(staleTrip, [], {
+      kind: "remove_item",
+      item_id: "ghost",
+    }),
+    true,
+  )
+  assert.equal(
+    isAssistantActionStale(staleTrip, [], {
+      kind: "remove_item",
+      item_id: "mirabell",
+    }),
+    false,
+  )
+  assert.equal(
+    isAssistantActionStale(staleTrip, [], {
+      kind: "move_item",
+      item_id: "ghost",
+      to_day_id: "d5",
+    }),
+    true,
+  )
 }
 
 console.log("assistant-actions: ok")

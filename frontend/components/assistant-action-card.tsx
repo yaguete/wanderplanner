@@ -99,6 +99,7 @@ export function ActionCard({
   currency,
   canUndo,
   undone,
+  stale,
   onAccept,
   onDismiss,
   onUndo,
@@ -108,6 +109,7 @@ export function ActionCard({
   currency: string
   canUndo: boolean
   undone: boolean
+  stale?: boolean
   onAccept: () => void
   onDismiss: () => void
   onUndo: () => void
@@ -135,6 +137,13 @@ export function ActionCard({
     return (
       <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         Propuesta descartada
+      </div>
+    )
+  }
+  if (stale && action.status === "pending") {
+    return (
+      <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Ya no aplica
       </div>
     )
   }
@@ -204,6 +213,9 @@ export function ActionCard({
           <p className="mt-1.5 text-xs text-destructive">
             Se perderán los {formatMoney(action.cost_at_risk, currency)} apuntados.
           </p>
+        ) : null}
+        {action.why ? (
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{action.why}</p>
         ) : null}
         <ProposalButtons confirm="Quitar" busy={busy} onAccept={onAccept} onDismiss={onDismiss} destructive />
       </div>

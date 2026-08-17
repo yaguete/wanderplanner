@@ -2,11 +2,33 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import httpx
 
 TAVILY_URL = "https://api.tavily.com/search"
+
+# Los blogs favoritos no son meteorología: si `include_domains` los llena, Tavily
+# no abre la web y el modelo cree que no hay previsión.
+_WEATHER_QUERY_RE = re.compile(
+    r"(previsi[oó]n(?:es)?(?:\s+meteorol)?"
+    r"|meteorolog"
+    r"|\bclima\b"
+    r"|\bforecast\b"
+    r"|\bweather\b"
+    r"|\blluvi"
+    r"|\bllover\b"
+    r"|accuweather|meteoblue|wetter\.com|weatherspark"
+    r"|(?:el|qu[eé])\s+tiempo\b"
+    r"|tiempo\s+(?:en|para|que)\b"
+    r"|\brain\b)",
+    re.I,
+)
+
+
+def looks_like_weather_query(query: str) -> bool:
+    return bool(_WEATHER_QUERY_RE.search(query or ""))
 
 
 def _normalize_results(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -58,6 +80,10 @@ async def tavily_search(
     pasada restringida a esos dominios; si devuelve poco, se repite la búsqueda abierta y se
     concatenan los resultados, marcando cuáles vienen de una referencia del usuario.
 
+    Las consultas de previsión (`looks_like_weather_query`) **no** usan esos dominios: los blogs
+    rellenan el cupo y el modelo concluye que no hay meteorología. Ahí se busca en abierto y se
+    pide `include_answer`.
+
     `strict=True` no cae a la búsqueda abierta: el caller controla el escalón
     (GET /sources/suggest no debe disparar Tavily web sin Turnstile).
     """
@@ -70,6 +96,7 @@ async def tavily_search(
         return {"error": "query vacía"}
 
     n = max(1, min(int(max_results or 5), 10))
+    weather = looks_like_weather_query(q)
     base_payload: dict[str, Any] = {
         "api_key": api_key,
         "query": q,
@@ -77,7 +104,10 @@ async def tavily_search(
         "include_raw_content": include_raw_content,
         "search_depth": "basic",
     }
-    domains = [d for d in (preferred_domains or []) if d]
+    if weather:
+        base_payload["include_answer"] = True
+    # Previsión: no restringir a blogs; si no, Tavily rellena con crónicas de viaje.
+    domains = [] if weather else [d for d in (preferred_domains or []) if d]
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         preferred_results: list[dict[str, Any]] = []

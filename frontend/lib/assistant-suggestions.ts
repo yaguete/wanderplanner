@@ -56,16 +56,16 @@ function utilitySnippet(hasDates: boolean, dest: string | null): string {
     : "¿Qué no puede faltar en mi mochila de viaje?"
 }
 
-/**
- * Hasta 3 sugerencias accionables. Si hay destino, lo nombra; si no, cae a genéricas.
- * El segundo hueco es fijo: tiempo (con fechas) o mochila (sin ellas).
- */
-export function buildAssistantSuggestions(
-  trip: Trip | null | undefined,
-  sources: Source[] = [],
-): string[] {
-  if (!trip) return [...FALLBACK]
+function filterUsed(prompts: string[], usedPrompts: readonly string[]): string[] {
+  const used = new Set(usedPrompts.map((s) => s.trim()).filter(Boolean))
+  return prompts.filter((s) => !used.has(s))
+}
 
+export type AssistantSuggestionOptions = {
+  usedPrompts?: readonly string[]
+}
+
+function genericSuggestions(trip: Trip, sources: Source[]): string[] {
   const dest = tripDestinationLabel(trip, sources)
   const codes = resolveTripCountryCodes(trip, sources)
   const onlySpain = codes.length > 0 && codes.every((c) => c === "ES")
@@ -108,4 +108,18 @@ export function buildAssistantSuggestions(
     .find((s) => s !== first && s !== utility) ?? FALLBACK[2]
 
   return [first, utility, third]
+}
+
+/**
+ * Hasta 3 sugerencias de arranque (chat vacío): visado / tiempo / presupuesto…
+ * Las de auditoría (huecos, ritmo, clima) las propone el modelo en followups.
+ */
+export function buildAssistantSuggestions(
+  trip: Trip | null | undefined,
+  sources: Source[] = [],
+  options: AssistantSuggestionOptions = {},
+): string[] {
+  const used = options.usedPrompts ?? []
+  if (!trip) return filterUsed([...FALLBACK], used)
+  return filterUsed(genericSuggestions(trip, sources), used).slice(0, 3)
 }

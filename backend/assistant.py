@@ -44,8 +44,10 @@ TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "web_search",
             "description": (
-                "Busca en internet información actual (requisitos, blogs, horarios, etc.) "
-                "cuando no esté en las fuentes del usuario ni en la ficha país."
+                "Busca en internet información actual (requisitos, previsión meteorológica, "
+                "horarios, blogs) cuando no esté en las fuentes del usuario ni en la ficha país. "
+                "Para el tiempo, usa «weather forecast» + ciudad + fechas (AccuWeather, Meteoblue); "
+                "no busques en blogs de viaje."
             ),
             "parameters": {
                 "type": "object",

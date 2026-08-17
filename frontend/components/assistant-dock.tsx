@@ -54,9 +54,11 @@ import { useTrips } from "@/lib/trip-context"
 import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
 import type { MoveParams } from "@/lib/itinerary-dnd"
+import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
 import {
   buildAssistantTransportStub,
   inverseMoveParams,
+  isAssistantActionStale,
   parseTaskCategory,
   resolveAddSourceBasic,
   resolveConsolidateSourceItem,
@@ -67,7 +69,6 @@ import {
 } from "@/lib/assistant-actions"
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { AiTransferGate } from "@/components/ai-transfer-gate"
-import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
 import {
   fetchAiTransferConsent,
   hasAiTransferConsent,
@@ -101,18 +102,52 @@ type AssistantPanelLayerProps = {
   bottomNav?: ReactNode
 }
 
-function composerSnippetsFor(
-  isStreaming: boolean,
-  messages: ChatMessage[],
-  emptySuggestions: string[],
-): string[] {
-  if (isStreaming) return []
-  if (messages.length === 0) return emptySuggestions
+function composerFollowupsFor(isStreaming: boolean, messages: ChatMessage[]): string[] {
+  if (isStreaming || messages.length === 0) return []
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!
     if (m.role === "assistant") return (m.followups ?? []).slice(0, 3)
   }
   return []
+}
+
+const CHIP_CLASS =
+  "rounded-full border border-border bg-background px-3 py-1.5 text-left text-xs text-primary transition-colors hover:border-transparent hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+
+function SuggestionChips({
+  prompts,
+  layout,
+  disabled,
+  onPick,
+}: {
+  prompts: readonly string[]
+  layout: "stack" | "row"
+  disabled: boolean
+  onPick: (prompt: string) => void
+}) {
+  if (prompts.length === 0) return null
+  return (
+    <div
+      className={
+        layout === "stack"
+          ? "flex flex-col items-start gap-1.5"
+          : "flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      }
+      aria-label="Sugerencias"
+    >
+      {prompts.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onPick(s)}
+          disabled={disabled}
+          className={layout === "row" ? `shrink-0 ${CHIP_CLASS}` : CHIP_CLASS}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function StatusPill({ label }: { label: string }) {
@@ -154,6 +189,7 @@ const MessageBubble = memo(function MessageBubble({
   currency,
   undoableIds,
   undoneIds,
+  staleActionIds,
   onAcceptAction,
   onDismissAction,
   onUndoAction,
@@ -167,6 +203,7 @@ const MessageBubble = memo(function MessageBubble({
   currency: string
   undoableIds: ReadonlySet<string>
   undoneIds: ReadonlySet<string>
+  staleActionIds: ReadonlySet<string>
   onAcceptAction: (messageId: string, action: ChatAction) => void
   onDismissAction: (messageId: string, action: ChatAction) => void
   onUndoAction: (messageId: string, action: ChatAction) => void
@@ -224,6 +261,7 @@ const MessageBubble = memo(function MessageBubble({
               currency={currency}
               canUndo={undoableIds.has(action.id)}
               undone={undoneIds.has(action.id)}
+              stale={staleActionIds.has(action.id)}
               onAccept={() => onAcceptAction(message.id, action)}
               onDismiss={() => onDismissAction(message.id, action)}
               onUndo={() => onUndoAction(message.id, action)}
@@ -531,10 +569,6 @@ export function AssistantPanelLayer({
   const assistantLoading =
     tripLoadingPending?.id === assistantPendingId ? tripLoadingPending : null
   const busySourceUrl = assistantLoading?.url ?? null
-  const suggestions = useMemo(
-    () => buildAssistantSuggestions(trip, sources),
-    [trip, sources],
-  )
   /** Sin conversación activa en localStorage → chips ya; si hay id, esperar a hydrated. */
   const canShowSuggestionsEarly = useMemo(() => {
     const uid = user?.id
@@ -562,7 +596,27 @@ export function AssistantPanelLayer({
     deleteConversation,
   } = useAssistantChat(tripId, trip, sources)
 
-  const composerSnippets = composerSnippetsFor(isStreaming, messages, suggestions)
+  const suggestions = useMemo(
+    () => buildAssistantSuggestions(trip, sources),
+    [trip, sources],
+  )
+  const composerFollowups = composerFollowupsFor(isStreaming, messages)
+  const staleActionIdKey = useMemo(() => {
+    if (!trip) return ""
+    const ids: string[] = []
+    for (const m of messages) {
+      for (const a of m.actions ?? []) {
+        if (a.status !== "pending") continue
+        if (isAssistantActionStale(trip, sources, a)) ids.push(a.id)
+      }
+    }
+    ids.sort()
+    return ids.join("\0")
+  }, [trip, sources, messages])
+  const staleActionIds = useMemo(
+    () => new Set(staleActionIdKey === "" ? [] : staleActionIdKey.split("\0")),
+    [staleActionIdKey],
+  )
 
   useEffect(() => {
     // En móvil no auto-enfocamos: levantaría el teclado al entrar en la pestaña.
@@ -1173,12 +1227,12 @@ export function AssistantPanelLayer({
           <div ref={chatScrollRef} className="min-h-0 flex-1">
             <ScrollArea className="h-full">
               <div className="space-y-3 p-4">
-                {!hydrated ? null : messages.length === 0 ? (
+                {messages.length === 0 && (hydrated || canShowSuggestionsEarly) ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Pregúntame sobre tus fuentes, el plan o requisitos oficiales. Puedo buscar en
                     internet y proponer fuentes o ítems para que tú confirmes.
                   </p>
-                ) : (
+                ) : !hydrated ? null : (
                   messages.map((m) => (
                     <MessageBubble
                       key={m.id}
@@ -1188,6 +1242,7 @@ export function AssistantPanelLayer({
                       currency={(trip?.currency || "EUR").toUpperCase()}
                       undoableIds={undoableIds}
                       undoneIds={undoneIds}
+                      staleActionIds={staleActionIds}
                       onAcceptAction={onAcceptAction}
                       onDismissAction={onDismissAction}
                       onUndoAction={onUndoAction}
@@ -1252,23 +1307,25 @@ export function AssistantPanelLayer({
             }}
           >
             {aiConsent === true &&
-            composerSnippets.length > 0 &&
-            (messages.length > 0 || canShowSuggestionsEarly || hydrated) ? (
-              <div
-                className="pointer-events-auto mb-2 flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                aria-label="Sugerencias"
-              >
-                {composerSnippets.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => void send(s)}
-                    disabled={!trip}
-                    className="shrink-0 rounded-full border border-primary px-3 py-1.5 text-xs text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-                  >
-                    {s}
-                  </button>
-                ))}
+            messages.length === 0 &&
+            suggestions.length > 0 &&
+            (hydrated || canShowSuggestionsEarly) ? (
+              <div className="pointer-events-auto mb-2">
+                <SuggestionChips
+                  prompts={suggestions}
+                  layout="stack"
+                  disabled={!trip}
+                  onPick={(s) => void send(s)}
+                />
+              </div>
+            ) : aiConsent === true && composerFollowups.length > 0 ? (
+              <div className="pointer-events-auto mb-2">
+                <SuggestionChips
+                  prompts={composerFollowups}
+                  layout="row"
+                  disabled={!trip}
+                  onPick={(s) => void send(s)}
+                />
               </div>
             ) : null}
             <div

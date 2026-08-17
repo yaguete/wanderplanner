@@ -8,6 +8,10 @@ import { countriesPlainList } from "@/lib/countries"
 import { travelerTypeLabels } from "@/lib/traveler-profile"
 import { TASK_CATEGORY_LABELS } from "@/lib/task-labels"
 import { buildTripTasks } from "@/lib/trip-tasks"
+import {
+  collectPlanSignals,
+  formatPlanSignalsMarkdown,
+} from "@/lib/assistant-plan-signals"
 import type { FavoriteReference, TravelerProfile } from "@/lib/db/profile-repo"
 
 /** Presupuesto total aproximado de caracteres del briefing. */
@@ -132,6 +136,9 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
     }
     lines.push("")
   })
+
+  lines.push(formatPlanSignalsMarkdown(collectPlanSignals(trip)))
+  lines.push("")
 
   lines.push("## Básicos del viaje")
   if (!trip.basics.length) {
