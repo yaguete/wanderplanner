@@ -95,6 +95,30 @@ resetTripSourceSuggestionsCache()
 }
 
 {
+  // Ciudad en el área: no promocionar al país inferido («Spain» → ES).
+  const city = tripSuggestQuery(baseTrip({ name: "Navidades en Cuenca 2026" }), [
+    source({ area: "Cuenca, Spain" }),
+  ])
+  assert.equal(city?.query, "Cuenca")
+  assert.notEqual(city?.query, "España")
+}
+
+{
+  const cityBeatsExplicitCountry = tripSuggestQuery(
+    baseTrip({ name: "Viaje", countries: ["ES"] }),
+    [source({ area: "Cuenca, España" })],
+  )
+  assert.equal(cityBeatsExplicitCountry?.query, "Cuenca")
+}
+
+{
+  const countryArticle = tripSuggestQuery(baseTrip({ name: "Viaje" }), [
+    source({ area: "España" }),
+  ])
+  assert.equal(countryArticle?.query, "España")
+}
+
+{
   const fromName = tripSuggestQuery(baseTrip({ name: "Uganda", countries: [] }), [])
   assert.equal(fromName?.query, "Uganda")
 }

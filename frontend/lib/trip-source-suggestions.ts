@@ -65,8 +65,10 @@ export function tripSuggestSignature(
 }
 
 /**
- * Destino para `GET /sources/suggest`. No usa `tripDestinationLabel` (esa etiqueta
- * alimenta los chips del asistente). Con ≥3 países toma los 2 primeros códigos.
+ * Destino para `GET /sources/suggest`. Prioriza el área de la fuente (ciudad
+ * o región del artículo) sobre el país inferido: «Cuenca, Spain» → «Cuenca»,
+ * no «España». Sin área, hasta 2 países; si no, el nombre del viaje.
+ * No usa `tripDestinationLabel` (esa etiqueta alimenta los chips del asistente).
  */
 export function tripSuggestQuery(
   trip: Pick<Trip, "name" | "countries" | "days">,
@@ -76,20 +78,20 @@ export function tripSuggestQuery(
     performance.mark("wp-tripSuggestQuery-start")
   }
   try {
-    const codes = resolveTripCountryCodes(trip, sources)
-    const picked = codes.slice(0, 2)
     let raw: string | null = null
-    if (picked.length >= 1) {
-      const names = picked
-        .map((c) => getCountryByCode(c)?.name)
-        .filter((n): n is string => Boolean(n))
-      if (names.length) raw = joinEs(names)
+    const area = sources.map((s) => s.area?.trim()).find(Boolean)
+    if (area) {
+      const head = area.split(",")[0]!.trim()
+      if (head.length >= 2 && head.length <= 40) raw = head
     }
     if (!raw) {
-      const area = sources.map((s) => s.area?.trim()).find(Boolean)
-      if (area) {
-        const head = area.split(",")[0]!.trim()
-        if (head.length >= 2 && head.length <= 40) raw = head
+      const codes = resolveTripCountryCodes(trip, sources)
+      const picked = codes.slice(0, 2)
+      if (picked.length >= 1) {
+        const names = picked
+          .map((c) => getCountryByCode(c)?.name)
+          .filter((n): n is string => Boolean(n))
+        if (names.length) raw = joinEs(names)
       }
     }
     if (!raw) {
