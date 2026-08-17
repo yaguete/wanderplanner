@@ -34,6 +34,7 @@ jobs:
       - run: npm run test:text-highlight
       - run: npm run test:chronicle-search
       - run: npm run test:trip-sources
+      - run: npm run test:inspirational-source
       - run: npm run test:map-day-scope
       - run: npm run test:geocode-validate
       - run: npm run test:mapbox-permanent

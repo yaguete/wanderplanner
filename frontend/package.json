@@ -22,6 +22,7 @@
     "test:text-highlight": "tsx lib/text-highlight.test.ts",
     "test:chronicle-search": "tsx lib/chronicle-search.test.ts",
     "test:trip-sources": "tsx lib/trip-sources.test.ts",
+    "test:inspirational-source": "tsx lib/inspirational-source.test.ts",
     "test:map-day-scope": "tsx lib/map-day-scope.test.ts",
     "test:geocode-validate": "tsx lib/geocode-validate.test.ts",
     "test:mapbox-permanent": "tsx lib/mapbox-permanent.test.ts",

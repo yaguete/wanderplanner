@@ -256,7 +256,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No pidas portada Unsplash en `createTrip`** → `applyCoverFromSource`.
 - ❌ **No expongas claves de imágenes** (`GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`) al frontend / `NEXT_PUBLIC_*`.
 - ❌ **No mezcles conversaciones del asistente entre viajes**.
-- ❌ **No muestres «Añadir fuente» en enlaces institucionales** → [`inspirational-source.ts`](frontend/lib/inspirational-source.ts).
+- ❌ **No muestres «Añadir fuente» en citas del chat** (taquillas, museos, ministerios, OTAs). El botón no va en el markdown: indexar un artículo es `propose_add_source` o el panel Fuentes. Heurística en [`inspirational-source.ts`](frontend/lib/inspirational-source.ts).
 - ❌ **No reintroduzcas el breadcrumb en móvil** ni el nav inferior en desktop.
 - ❌ **No quites el margen sordo (`SETTLE_MS`) de [`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts).** En móvil la cabecera va dentro del scroller que escucha: replegarla acorta el documento, eso genera más eventos de scroll y el hook los lee como gesto. Sin margen la realimentación no converge (simulada: 400+ cambios de estado en un solo gesto; con margen, 2). Lo mismo vale para cualquier `ResizeObserver` sobre `documentElement`: coalesce a un frame.
 - ❌ **No acotes un panel de `/trips` con `overflow-hidden` en móvil teniendo cabecera sticky dentro.** El panel pasa a ser el scrollport del sticky y su `top` empuja la cabecera hacia abajo, tapando la barra que hay debajo (así se perdía Lista/Calendario/Mapa y no había forma de salir de Calendario ni de Mapa). Lo que necesite caja propia se la pone él (`max-md:h-[70svh]`), no el panel.

@@ -29,6 +29,7 @@ from country_briefs import (
     list_known_codes,
     fetch_and_cache,
 )
+from inspirational_source import is_inspirational_source_url
 from obs import log_kv
 from usage import enforce_usage, record_event
 from web_search import tavily_search
@@ -103,9 +104,11 @@ TOOLS: list[dict[str, Any]] = [
             "name": "propose_add_source",
             "description": (
                 "Propone al usuario añadir una URL como fuente de inspiración "
-                "(blogs, guías o crónicas de viaje). No uses esta herramienta con "
-                "webs institucionales (gobiernos, embajadas, visados, inmigración, OMS…). "
-                "No la añade automáticamente; el usuario debe confirmar en la UI."
+                "(artículo de blog, guía o crónica de viaje extraíble a itinerario). "
+                "No uses esta herramienta con webs institucionales, oficiales de una "
+                "atracción (museos, palacios, taquillas), OTAs ni tiendas de entradas: "
+                "esas URLs se citan en el texto. No la añade automáticamente; el usuario "
+                "debe confirmar en la UI."
             ),
             "parameters": {
                 "type": "object",
@@ -508,9 +511,21 @@ async def _run_tool(
         ), None
 
     if name == "propose_add_source":
+        url = str(args.get("url") or "").strip()
+        if not is_inspirational_source_url(url):
+            return json.dumps(
+                {
+                    "error": (
+                        "Esa URL no es una fuente de inspiración extraíble "
+                        "(blog/guía/crónica). Cítala en el texto si es el origen "
+                        "de un dato; no la propongas como fuente del viaje."
+                    )
+                },
+                ensure_ascii=False,
+            ), None
         action = {
             "kind": "add_source",
-            "url": str(args.get("url") or "").strip(),
+            "url": url,
             "title": str(args.get("title") or "").strip(),
             "why": str(args.get("why") or "").strip(),
         }

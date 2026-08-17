@@ -119,3 +119,39 @@ def test_is_terminal_round():
     assert is_terminal_round("Te recomiendo moverlo.", ["suggest_followups", "propose_move_item"]) is False
     assert is_terminal_round("", ["suggest_followups"]) is False
     assert is_terminal_round("Hola", []) is False
+
+
+async def test_propose_add_source_accepts_article():
+    content, action = await _run_tool(
+        "propose_add_source",
+        {
+            "url": " https://lacosmopolilla.com/que-ver-en-austria-ruta-10-dias/ ",
+            "title": "Austria en 10 días",
+            "why": "Encaja con el ritmo",
+        },
+    )
+    assert json.loads(content)["status"] == "proposed"
+    assert action["kind"] == "add_source"
+    assert action["url"] == "https://lacosmopolilla.com/que-ver-en-austria-ruta-10-dias/"
+
+
+async def test_propose_add_source_rejects_ticket_shop():
+    content, action = await _run_tool(
+        "propose_add_source",
+        {
+            "url": "https://eisriesenwelt.axess.shop/en",
+            "title": "Entradas",
+            "why": "Precio oficial",
+        },
+    )
+    assert action is None
+    assert "error" in json.loads(content)
+
+
+async def test_propose_add_source_rejects_venue_homepage():
+    content, action = await _run_tool(
+        "propose_add_source",
+        {"url": "https://belvedere.at", "title": "Belvedere", "why": "Oficial"},
+    )
+    assert action is None
+    assert "error" in json.loads(content)

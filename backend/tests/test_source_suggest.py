@@ -232,6 +232,14 @@ def test_tavily_drops_institutional():
         )
         is None
     )
+    assert (
+        hit_from_tavily(
+            {"url": "https://belvedere.at/en/tickets", "title": "Tickets"},
+            origin="web",
+            query="viena",
+        )
+        is None
+    )
     hit = hit_from_tavily(
         {
             "url": "https://lacosmopolilla.com/vietnam-en-12-dias/",

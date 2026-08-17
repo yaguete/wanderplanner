@@ -1,10 +1,7 @@
 "use client"
 
-import { Loader2, Plus } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
-import { sourceMatchKey } from "@/lib/trip-sources"
 import { cn } from "@/lib/utils"
 
 function isHttpUrl(href: string | undefined): href is string {
@@ -15,16 +12,9 @@ function isHttpUrl(href: string | undefined): href is string {
 export function AssistantMarkdown({
   content,
   className,
-  onAddSourceLink,
-  busyUrl,
-  addedUrls,
 }: {
   content: string
   className?: string
-  /** Añade la URL como fuente del viaje (botón «Añadir fuente»). */
-  onAddSourceLink?: (url: string) => void
-  busyUrl?: string | null
-  addedUrls?: ReadonlySet<string>
 }) {
   if (!content.trim()) return null
 
@@ -57,16 +47,8 @@ export function AssistantMarkdown({
             if (!isHttpUrl(href)) {
               return <span className="font-medium text-foreground">{children}</span>
             }
-
-            const normalized = sourceMatchKey(href)
-            const added = Boolean(
-              addedUrls?.has(normalized) || addedUrls?.has(href),
-            )
-            const busy = busyUrl === href || busyUrl === normalized
-            // Solo blogs/guías: no ofrecer «Añadir fuente» en ministerios, visados, etc.
-            const showAdd = Boolean(onAddSourceLink) && isInspirationalSourceUrl(href)
-
-            const link = (
+            // Cita, no CTA: indexar un artículo va por propose_add_source o el panel Fuentes.
+            return (
               <a
                 href={href}
                 target="_blank"
@@ -75,51 +57,6 @@ export function AssistantMarkdown({
               >
                 {children}
               </a>
-            )
-
-            // Sin botón: enlace en línea (misma baseline que el texto).
-            // Con botón: columna debajo; el flex-col sacaría el link de la línea base.
-            if (!showAdd) return link
-
-            return (
-              <span className="my-1 inline-flex max-w-full min-w-0 flex-col items-start gap-1.5 align-top text-left not-prose">
-                {link}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!busy && !added) onAddSourceLink?.(href)
-                  }}
-                  disabled={busy || added}
-                  className={cn(
-                    "inline-flex h-7 w-fit max-w-full items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors",
-                    added
-                      ? "cursor-default border-border bg-muted/40 text-muted-foreground"
-                      : "border-border bg-background text-foreground hover:bg-muted",
-                    "disabled:pointer-events-none disabled:opacity-60",
-                  )}
-                  aria-label={
-                    added
-                      ? "Fuente ya añadida"
-                      : busy
-                        ? "Añadiendo fuente"
-                        : "Añadir como fuente al viaje"
-                  }
-                >
-                  {busy ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                      Añadiendo…
-                    </>
-                  ) : added ? (
-                    "Fuente añadida"
-                  ) : (
-                    <>
-                      <Plus className="h-3 w-3" aria-hidden />
-                      Añadir fuente
-                    </>
-                  )}
-                </button>
-              </span>
             )
           },
         }}

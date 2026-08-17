@@ -76,6 +76,7 @@ import {
   rememberAiTransferConsent,
 } from "@/lib/ai-transfer-consent"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
 import { MAX_SOURCES_PER_TRIP, sourceMatchKey } from "@/lib/trip-sources"
 import { toast } from "sonner"
 
@@ -193,9 +194,6 @@ const MessageBubble = memo(function MessageBubble({
   onAcceptAction,
   onDismissAction,
   onUndoAction,
-  onAddSourceLink,
-  busySourceUrl,
-  addedSourceUrls,
 }: {
   message: ChatMessage
   isStreamingTail: boolean
@@ -207,9 +205,6 @@ const MessageBubble = memo(function MessageBubble({
   onAcceptAction: (messageId: string, action: ChatAction) => void
   onDismissAction: (messageId: string, action: ChatAction) => void
   onUndoAction: (messageId: string, action: ChatAction) => void
-  onAddSourceLink: (url: string) => void
-  busySourceUrl: string | null
-  addedSourceUrls: ReadonlySet<string>
 }) {
   const isUser = message.role === "user"
   if (
@@ -239,12 +234,7 @@ const MessageBubble = memo(function MessageBubble({
   return (
     <div className="w-full min-w-0 space-y-2 text-sm leading-relaxed text-foreground">
       {message.content.trim() ? (
-        <AssistantMarkdown
-          content={message.content}
-          onAddSourceLink={onAddSourceLink}
-          busyUrl={busySourceUrl}
-          addedUrls={addedSourceUrls}
-        />
+        <AssistantMarkdown content={message.content} />
       ) : isStreamingTail ? (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -491,7 +481,7 @@ export function AssistantPanelLayer({
   )
   const [undoableIds, setUndoableIds] = useState<ReadonlySet<string>>(() => new Set())
   const [undoneIds, setUndoneIds] = useState<ReadonlySet<string>>(() => new Set())
-  /** Pending iniciado desde este dock (pill / busy de enlaces); no el del panel Fuentes. */
+  /** Pending iniciado desde este dock (pill «Añadiendo fuente…» de una tarjeta). */
   const [assistantPendingId, setAssistantPendingId] = useState<string | null>(null)
   const [view, setView] = useState<PanelView>("chat")
   const [pendingDelete, setPendingDelete] = useState<AssistantConversationSummary | null>(null)
@@ -568,7 +558,6 @@ export function AssistantPanelLayer({
 
   const assistantLoading =
     tripLoadingPending?.id === assistantPendingId ? tripLoadingPending : null
-  const busySourceUrl = assistantLoading?.url ?? null
   /** Sin conversación activa en localStorage → chips ya; si hay id, esperar a hydrated. */
   const canShowSuggestionsEarly = useMemo(() => {
     const uid = user?.id
@@ -699,29 +688,6 @@ export function AssistantPanelLayer({
     [send],
   )
 
-  const handleAddSourceLink = useCallback(
-    (url: string) => {
-      const normalized = sourceMatchKey(url)
-      if (!trip || tripLoadingPending) return
-      if (addedSourceUrls.has(normalized)) return
-      const result = startSourceExtraction(tripId, url)
-      if (!result.ok) {
-        if (result.reason === "max-sources") {
-          toast.error(
-            `Has llegado al máximo de ${MAX_SOURCES_PER_TRIP} fuentes en este viaje. Quita alguna para añadir otra.`,
-          )
-        } else if (result.reason === "already-loading") {
-          toast.message("Espera a que termine la fuente en curso")
-        } else {
-          toast.error("No se pudo iniciar la extracción")
-        }
-        return
-      }
-      setAssistantPendingId(result.pendingId)
-    },
-    [trip, tripLoadingPending, addedSourceUrls, startSourceExtraction, tripId],
-  )
-
   const markUndoable = useCallback((actionId: string) => {
     setUndoableIds((prev) => new Set(prev).add(actionId))
   }, [])
@@ -740,6 +706,14 @@ export function AssistantPanelLayer({
       setActionBusyId(action.id)
       try {
         if (action.kind === "add_source") {
+          if (!isInspirationalSourceUrl(action.url)) {
+            failAction(
+              messageId,
+              action.id,
+              "Esa URL no es una guía extraíble. Cítala en el chat; para Fuentes usa un artículo de blog.",
+            )
+            return
+          }
           const normalized = sourceMatchKey(action.url)
           if (!addedSourceUrls.has(normalized)) {
             const result = startSourceExtraction(tripId, action.url)
@@ -1019,22 +993,16 @@ export function AssistantPanelLayer({
    * viendo el viaje actual sin invalidar el memo de cada mensaje.
    */
   const handlersRef = useRef({
-    handleAddSourceLink,
     handleAcceptAction,
     handleDismissAction,
     handleUndoAction,
   })
   // eslint-disable-next-line react-hooks/refs -- ref de "último valor": la escritura en render es idempotente y solo se lee desde manejadores de eventos.
   handlersRef.current = {
-    handleAddSourceLink,
     handleAcceptAction,
     handleDismissAction,
     handleUndoAction,
   }
-  const onAddSourceLink = useCallback(
-    (url: string) => handlersRef.current.handleAddSourceLink(url),
-    [],
-  )
   const onAcceptAction = useCallback(
     (messageId: string, action: ChatAction) =>
       handlersRef.current.handleAcceptAction(messageId, action),
@@ -1240,9 +1208,6 @@ export function AssistantPanelLayer({
                       onAcceptAction={onAcceptAction}
                       onDismissAction={onDismissAction}
                       onUndoAction={onUndoAction}
-                      onAddSourceLink={onAddSourceLink}
-                      busySourceUrl={busySourceUrl}
-                      addedSourceUrls={addedSourceUrls}
                     />
                   ))
                 )}

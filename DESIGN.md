@@ -71,7 +71,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Mensajes del **usuario**: bocadillo alineado a la derecha, fondo `muted`.
 - Mensajes del **asistente**: sin caja ni borde; texto a ancho del panel.
 - Scroll: al enviar, la pregunta queda anclada arriba; auto-follow solo si el usuario está al fondo.
-- Enlaces institucionales: clicables, sin botón «Añadir fuente».
+- Enlaces del chat: clicables, sin botón «Añadir fuente». Citar el origen de un dato ≠ indexar el artículo. Añadir una fuente va por `propose_add_source` (tarjeta) o por el panel Fuentes.
 
 ### Home de viajes
 - Tarjetas/lista con portada fotográfica (`coverUrl`) o emoji; acciones Archivar / Editar / Eliminar a primer nivel.
@@ -104,6 +104,6 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - No volver al asistente overlay / FAB en desktop ni a `react-resizable-panels` para el detalle.
 - No reintroducir breadcrumb de viaje ni nav inferior en desktop.
 - No envolver las respuestas del asistente en cards con borde/sombra.
-- No ofrecer «Añadir fuente» sobre webs gubernamentales / de visados como si fueran blogs de inspiración.
+- No ofrecer «Añadir fuente» sobre taquillas, webs oficiales de una atracción u OTAs como si fueran blogs de inspiración. El chat cita enlaces; indexar un artículo es `propose_add_source` o el panel Fuentes.
 - No bloquear al invitado antes de que vea valor: la primera fuente del CTA entra sin cuenta; la puerta salta en la segunda fuente, al crear otro viaje o al ir a inicio.
 - No desmontar paneles desktop al apagarlos (se pierde scroll / Crónica / borrador del composer).
