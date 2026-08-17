@@ -231,8 +231,8 @@ export default function AccountSettingsPage() {
                   {showDelete ? (
                     <div>
                       <p className="text-sm text-muted-foreground">
-                        Se van contigo el perfil, los viajes, las fuentes que añadiste y las
-                        conversaciones del asistente. Esta acción no se puede deshacer.
+                        Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste y todas tus
+                        conversaciones con el asistente. Esta acción no se puede deshacer.
                       </p>
                       <Button
                         type="button"

@@ -25,6 +25,7 @@ import {
   geocodeRegionAnchor,
   getDirections,
   MAPBOX_TOKEN,
+  searchPlaceCandidates,
   type LngLat,
 } from "@/lib/mapbox"
 import {
@@ -35,10 +36,12 @@ import {
   type GeocodeState,
 } from "@/lib/map-geocode-state"
 import {
+  candidatePassesAnchor,
   offsetStackedApproximate,
   pickGeocodeOutcome,
   type RegionAnchor,
 } from "@/lib/geocode-validate"
+import { isIndependentRegionHint } from "@/lib/map-destination"
 import { filterByDayScope, type DayScope } from "@/lib/map-day-scope"
 import {
   buildPlacesRoute,
@@ -604,7 +607,7 @@ export function ItineraryMapView({
         ...new Set(
           placesNow
             .map((p) => p.region?.trim())
-            .filter((r): r is string => Boolean(r && r.length > 0)),
+            .filter((r): r is string => Boolean(r && isIndependentRegionHint(r))),
         ),
       ]
       const anchors = new Map<string, RegionAnchor>()
@@ -654,8 +657,21 @@ export function ItineraryMapView({
           if (cached) return cached
 
           const region = p.region?.trim() || null
-          const anchor =
-            (region ? anchors.get(region.toLowerCase()) : undefined) ?? destAnchor
+          let regionAnchor =
+            region && isIndependentRegionHint(region)
+              ? anchors.get(region.toLowerCase())
+              : undefined
+          if (regionAnchor && destAnchor) {
+            const asCandidate = {
+              coord: regionAnchor.coord,
+              featureType: regionAnchor.featureType,
+            }
+            if (!candidatePassesAnchor(asCandidate, destAnchor)) {
+              regionAnchor = undefined
+            }
+          }
+          const anchor = regionAnchor ?? destAnchor
+          if (!anchor) return null
           const tripDestination = region || dest || null
           const forPoint = new Set<string>([
             ...codesNow.map((c) => c.trim().toLowerCase()).filter((c) => c.length === 2),
@@ -663,17 +679,21 @@ export function ItineraryMapView({
           for (const c of collectCountryCodesFromHint(tripDestination)) forPoint.add(c)
           for (const c of collectCountryCodesFromHint(p.region)) forPoint.add(c)
           const codes = forPoint.size > 0 ? Array.from(forPoint) : unionForBias
-          const proximity: [number, number] | null = anchor
-            ? [anchor.coord.lng, anchor.coord.lat]
-            : destAnchor
-              ? [destAnchor.coord.lng, destAnchor.coord.lat]
-              : null
-          const candidates = await geocodeName(p.name, {
+          const proximity: [number, number] = [anchor.coord.lng, anchor.coord.lat]
+          let candidates = await searchPlaceCandidates(p.name, {
             proximity,
-            tripDestination,
             countryCodes: codes.length > 0 ? codes : undefined,
+            signal: ac.signal,
           })
-          const outcome = pickGeocodeOutcome(candidates, anchor)
+          if (ac.signal.aborted) return null
+          if (candidates.length === 0) {
+            candidates = await geocodeName(p.name, {
+              proximity,
+              tripDestination,
+              countryCodes: codes.length > 0 ? codes : undefined,
+            })
+          }
+          const outcome = pickGeocodeOutcome(candidates, anchor, p.name)
           if (outcome.precision === "unlocated") return null
           const fix: PlaceFix =
             outcome.precision === "exact"
@@ -1273,7 +1293,7 @@ export function ItineraryMapView({
       popupDataByIdRef.current.set(v.id, {
         name: v.point.name,
         label: v.label,
-        adjustable: v.approximate && Boolean(onPersistItemCoords),
+        adjustable: Boolean(onPersistItemCoords),
       })
       const existing = markersByIdRef.current.get(v.id)
 

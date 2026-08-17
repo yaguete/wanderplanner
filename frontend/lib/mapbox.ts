@@ -1,7 +1,7 @@
 /**
  * Mapbox: geocoding (nombres → coordenadas) y Directions (ruta por carretera).
  * Requiere `NEXT_PUBLIC_MAPBOX_TOKEN` (token público pk.…).
- * Search Box `/category` (T4B.3) para hubs de transporte por proximidad.
+ * Search Box `/forward` para POIs del itinerario; `/category` (T4B.3) para hubs.
  *
  * Licencia (T4B.3 §9.11) — dos escalones:
  * - Autocompletar (`suggestPlaces`): dataset temporal, barato, NO persistible.
@@ -20,13 +20,15 @@ import {
 } from "@/lib/place-search-guardrails"
 import {
   featureTypeFromMapboxId,
+  regionAnchorQueryLadder,
+  sharesSignificantToken,
   type GeocodeCandidate,
   type RegionAnchor,
 } from "@/lib/geocode-validate"
 
-const CACHE_VERSION = 4
-const CACHE_PREFIX = "wp-mapbox-geo-v4"
-const LEGACY_GEO_CACHE_KEY = "wp-mapbox-geo-v3"
+const CACHE_VERSION = 5
+const CACHE_PREFIX = "wp-mapbox-geo-v5"
+const LEGACY_GEO_CACHE_KEY = "wp-mapbox-geo-v4"
 const TTL_MS = 30 * 24 * 60 * 60 * 1000
 const REGION_ANCHOR_TYPES = "place,locality,district,region,country"
 
@@ -353,13 +355,161 @@ export type GeocodeSuggestion = {
   countryCode: string | null
 }
 
+type SearchBoxForwardHit = {
+  id: string
+  text: string
+  placeName: string
+  coord: LngLat
+  featureType: string
+  countryCode: string | null
+}
+
+type SearchBoxForwardFeature = {
+  geometry?: { type?: string; coordinates?: [number, number] }
+  properties?: {
+    mapbox_id?: string
+    name?: string
+    name_preferred?: string
+    full_address?: string
+    place_formatted?: string
+    feature_type?: string
+    poi_category?: string[]
+    coordinates?: { longitude?: number; latitude?: number }
+    context?: { country?: { country_code?: string; name?: string } }
+  }
+}
+
+function searchBoxCountryParam(codes: string[] | null | undefined): string | null {
+  if (!codes?.length) return null
+  const uniq = [...new Set(codes.map((c) => c.trim().toLowerCase()).filter((c) => c.length === 2))]
+  return uniq.length ? uniq.join(",") : null
+}
+
+function coordsFromSearchBoxFeature(f: SearchBoxForwardFeature): LngLat | null {
+  const p = f.properties?.coordinates
+  if (p?.longitude != null && p?.latitude != null) {
+    return { lng: p.longitude, lat: p.latitude }
+  }
+  const c = f.geometry?.coordinates
+  if (c && c.length >= 2) return { lng: c[0], lat: c[1] }
+  return null
+}
+
+function countryCodeFromSearchBox(f: SearchBoxForwardFeature): string | null {
+  const raw = f.properties?.context?.country?.country_code?.trim().toUpperCase()
+  return raw && /^[A-Z]{2}$/.test(raw) ? raw : null
+}
+
+/** Search Box `/forward`. Resultados temporales: caché solo de sesión, no localStorage. */
+async function searchBoxForward(
+  query: string,
+  options?: {
+    proximity?: [number, number] | null
+    countryCodes?: string[] | null
+    limit?: number
+    signal?: AbortSignal
+  },
+): Promise<SearchBoxForwardHit[]> {
+  if (!MAPBOX_TOKEN?.trim() || !query.trim()) return []
+  const limit = Math.min(Math.max(options?.limit ?? 5, 1), 10)
+  const params = new URLSearchParams({
+    q: query.trim(),
+    access_token: MAPBOX_TOKEN,
+    language: "es",
+    limit: String(limit),
+  })
+  if (options?.proximity) {
+    params.set("proximity", `${options.proximity[0]},${options.proximity[1]}`)
+  }
+  const country = searchBoxCountryParam(options?.countryCodes)
+  if (country) params.set("country", country)
+
+  const url = `https://api.mapbox.com/search/searchbox/v1/forward?${params}`
+  try {
+    const res = await fetch(url, { signal: options?.signal })
+    if (!res.ok) return []
+    const data = (await res.json()) as { features?: SearchBoxForwardFeature[] }
+    const out: SearchBoxForwardHit[] = []
+    for (const f of data.features ?? []) {
+      const coord = coordsFromSearchBoxFeature(f)
+      if (!coord) continue
+      const text =
+        f.properties?.name_preferred?.trim() ||
+        f.properties?.name?.trim() ||
+        ""
+      if (!text) continue
+      const placeName =
+        f.properties?.full_address?.trim() ||
+        [text, f.properties?.place_formatted?.trim()].filter(Boolean).join(", ") ||
+        text
+      out.push({
+        id: f.properties?.mapbox_id ?? `${text}-${coord.lng}-${coord.lat}`,
+        text,
+        placeName,
+        coord,
+        featureType: f.properties?.feature_type?.trim() || "unknown",
+        countryCode: countryCodeFromSearchBox(f),
+      })
+    }
+    return out
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err
+    return []
+  }
+}
+
+const searchBoxSessionCache = new Map<string, GeocodeCandidate[]>()
+
+function searchBoxPlaceCacheKey(
+  name: string,
+  proximity: [number, number],
+  countryKey: string,
+): string {
+  return `${name.trim().toLowerCase()}|${proximity[0].toFixed(3)}_${proximity[1].toFixed(3)}|${countryKey}`
+}
+
 /**
- * Autocompletado: varios candidatos (`autocomplete=true`). No usa la caché de un solo punto.
- *
- * Escalón barato, **siempre temporal**: son candidatos de pantalla y no se
- * persisten. La coordenada que acaba en el jsonb la resuelve
- * `resolvePermanentCoords` al confirmar la selección, una sola vez por lugar
- * guardado en vez de una por tecla pulsada.
+ * POIs del itinerario vía Search Box `/forward`. `mapbox.places` v5 no indexa
+ * restaurantes ni monumentos: devuelve calles homónimas. Sin `proximity` no
+ * busca (un «Taberna El Botijo» suelto se iría a otra ciudad).
+ * Caché de sesión; no localStorage (datos temporales de licencia).
+ */
+export async function searchPlaceCandidates(
+  name: string,
+  options: {
+    proximity: [number, number]
+    countryCodes?: string[] | null
+    signal?: AbortSignal
+  },
+): Promise<GeocodeCandidate[]> {
+  if (!MAPBOX_TOKEN?.trim() || !name?.trim()) return []
+  const proximity = options.proximity
+  if (!Number.isFinite(proximity[0]) || !Number.isFinite(proximity[1])) return []
+  const cKey = countryParamsKey(options.countryCodes)
+  const key = searchBoxPlaceCacheKey(name, proximity, cKey)
+  const cached = searchBoxSessionCache.get(key)
+  if (cached && cached.length > 0) return cached
+
+  const hits = await searchBoxForward(name.trim(), {
+    proximity,
+    countryCodes: options.countryCodes,
+    limit: 5,
+    signal: options.signal,
+  })
+  const candidates: GeocodeCandidate[] = hits.map((h) => ({
+    coord: h.coord,
+    featureType: h.featureType,
+    placeName: h.placeName,
+    text: h.text,
+  }))
+  if (candidates.length > 0) searchBoxSessionCache.set(key, candidates)
+  return candidates
+}
+
+/**
+ * Autocompletado de lugares. Search Box `/forward` (tiene POIs); si no hay
+ * hits, Geocoding v5. Siempre temporal: la coordenada que acaba en el jsonb
+ * la resuelve `resolvePermanentCoords` al confirmar.
  */
 export async function suggestPlaces(
   text: string,
@@ -373,20 +523,52 @@ export async function suggestPlaces(
   if (!isPlaceSearchEnabled()) return []
   if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return []
   const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
+  const proximity = options?.proximity ?? null
+  const fromBox = await searchBoxForward(text.trim(), {
+    proximity,
+    countryCodes: options?.countryCodes,
+    limit,
+    signal: options?.signal,
+  })
+  if (fromBox.length > 0) {
+    return fromBox.map((f) => ({
+      id: f.id,
+      placeName: f.placeName,
+      text: f.text,
+      center: f.coord,
+      countryCode: f.countryCode,
+    }))
+  }
+  return suggestPlacesGeocodingV5(text.trim(), {
+    proximity,
+    countryCodes: options?.countryCodes,
+    limit,
+    signal: options?.signal,
+  })
+}
+
+async function suggestPlacesGeocodingV5(
+  text: string,
+  options: {
+    proximity: [number, number] | null
+    countryCodes?: string[] | null
+    limit: number
+    signal?: AbortSignal
+  },
+): Promise<GeocodeSuggestion[]> {
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
-    limit: String(limit),
+    limit: String(options.limit),
     autocomplete: "true",
     language: "es",
   })
-  const proximity = options?.proximity ?? null
-  if (proximity) {
-    params.set("proximity", `${proximity[0]},${proximity[1]}`)
+  if (options.proximity) {
+    params.set("proximity", `${options.proximity[0]},${options.proximity[1]}`)
   }
-  appendCountryParams(params, options?.countryCodes)
+  appendCountryParams(params, options.countryCodes)
 
-  const url = buildGeocodeUrl(text.trim(), params)
-  const res = await fetch(url, { signal: options?.signal })
+  const url = buildGeocodeUrl(text, params)
+  const res = await fetch(url, { signal: options.signal })
   if (!res.ok) return []
   const data = (await res.json()) as { features?: MapboxFeature[] }
   const out: GeocodeSuggestion[] = []
@@ -572,30 +754,64 @@ export async function geocodeRegionAnchor(
   options?: { countryCodes?: string[] },
 ): Promise<RegionAnchor | null> {
   if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return null
+  const ladder = regionAnchorQueryLadder(text)
+  if (ladder.length === 0) return null
   const cKey =
     options?.countryCodes && options.countryCodes.length
       ? countryParamsKey(options.countryCodes)
       : "none"
-  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}`)
+  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}|t5`)
   const mem = getAnchorFromMemory(key) ?? readAnchorCache(key)
   if (mem) return mem
 
-  const hit = await geocodeFirstHit(text, {
-    countryCodes: options?.countryCodes,
+  for (const q of ladder) {
+    const hits = await geocodeAnchorHits(q, options?.countryCodes)
+    const hit = hits.find((h) => sharesSignificantToken(q, `${h.label} ${h.placeName}`))
+    if (!hit) continue
+    const value: RegionAnchor = {
+      coord: hit.coord,
+      featureType: hit.featureType,
+      label: hit.label,
+    }
+    setAnchorMemory(key, value)
+    writeLocalCache(key, value.coord.lng, value.coord.lat, {
+      featureType: value.featureType,
+      label: value.label,
+    })
+    return value
+  }
+  return null
+}
+
+async function geocodeAnchorHits(
+  text: string,
+  countryCodes?: string[],
+): Promise<Array<{ coord: LngLat; featureType: string; label: string; placeName: string }>> {
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    limit: "5",
+    autocomplete: "false",
+    language: "es",
     types: REGION_ANCHOR_TYPES,
   })
-  if (!hit) return null
-  const value: RegionAnchor = {
-    coord: hit.coord,
-    featureType: hit.featureType,
-    label: hit.label,
+  appendCountryParams(params, countryCodes)
+  const url = buildGeocodeUrl(text.trim(), params)
+  const res = await fetch(url)
+  if (!res.ok) return []
+  const data = (await res.json()) as { features?: MapboxFeature[] }
+  const out: Array<{ coord: LngLat; featureType: string; label: string; placeName: string }> = []
+  for (const f of data.features ?? []) {
+    const c = f.center
+    if (!c || c.length < 2) continue
+    const label = f.text?.trim() || f.place_name?.trim() || text.trim()
+    out.push({
+      coord: { lng: c[0], lat: c[1] },
+      featureType: featureTypeFromMapboxId(f.id),
+      label,
+      placeName: f.place_name?.trim() || "",
+    })
   }
-  setAnchorMemory(key, value)
-  writeLocalCache(key, value.coord.lng, value.coord.lat, {
-    featureType: value.featureType,
-    label: value.label,
-  })
-  return value
+  return out
 }
 
 /**

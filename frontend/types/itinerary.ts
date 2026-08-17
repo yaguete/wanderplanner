@@ -149,7 +149,7 @@ export interface TripOrigin {
 export interface Trip {
   id: string
   name: string
-  /** Códigos ISO 3166-1 alpha-2; opcionales. La creación de viaje ya no exige países (geocodificación: `UserDayItem.region` y nombre del viaje). */
+  /** Códigos ISO 3166-1 alpha-2; opcionales. La creación de viaje ya no exige países (geocodificación: `source.area` + `UserDayItem.region`). */
   countries: string[]
   /**
    * Rango YYYY-MM-DD opcional. `endDate` se deriva de `startDate + numDays − 1`

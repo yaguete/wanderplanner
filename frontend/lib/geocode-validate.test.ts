@@ -1,12 +1,16 @@
 import assert from "node:assert/strict"
 import { haversineMeters } from "./map-route-geometry"
 import {
+  candidateNameMatchesQuery,
   candidatePassesAnchor,
   featureTypeFromMapboxId,
+  isWeakRegionHint,
   maxDistanceMetersForAnchorType,
   offsetStackedApproximate,
   pickFirstValidCandidate,
   pickGeocodeOutcome,
+  regionAnchorQueryLadder,
+  sharesSignificantToken,
   type RegionAnchor,
 } from "./geocode-validate"
 
@@ -71,14 +75,14 @@ assert.equal(countryOutcome.precision, "approximate")
 assert.equal(pickGeocodeOutcome([], null).precision, "unlocated")
 assert.equal(
   pickGeocodeOutcome([{ coord: { lng: 1, lat: 2 }, featureType: "poi" }], null).precision,
-  "exact",
+  "unlocated",
 )
 assert.equal(
   pickGeocodeOutcome(
     [{ coord: { lng: 1, lat: 2 }, featureType: "place", text: "Foo" }],
     null,
   ).precision,
-  "approximate",
+  "unlocated",
 )
 
 // Un `place` dentro del radio es el centro de la ciudad, no el sitio: approximate.
@@ -125,8 +129,54 @@ const goldenesDachl = {
 assert.equal(pickFirstValidCandidate([innsbruckAsPlace, goldenesDachl], innsbruck), goldenesDachl)
 assert.equal(pickGeocodeOutcome([innsbruckAsPlace, goldenesDachl], innsbruck).precision, "exact")
 
-// address dentro del radio sigue siendo exacto.
-assert.equal(pickGeocodeOutcome([alfacar], granada).precision, "exact")
+// address cuyo nombre coincide con la query sigue siendo exacto.
+const alfacarNamed = { ...alfacar, text: "Alfacar", placeName: "Alfacar, Granada" }
+assert.equal(pickGeocodeOutcome([alfacarNamed], granada, "Alfacar").precision, "exact")
+assert.equal(candidateNameMatchesQuery(alfacarNamed, "Alfacar"), true)
+
+// Caso Málaga: ancla locality «Centro» + address «Calle Cuenca» no es el Gallo.
+const malagaCentro: RegionAnchor = {
+  coord: { lng: -4.417962, lat: 36.72497 },
+  featureType: "locality",
+  label: "Centro, Málaga",
+}
+const calleCuenca = {
+  coord: { lng: -4.420937, lat: 36.750699 },
+  featureType: "address",
+  text: "Calle Cuenca",
+  placeName: "Calle Cuenca, 29014 Málaga, provincia de Málaga, España",
+}
+const galloMalaga = pickGeocodeOutcome(
+  [calleCuenca],
+  malagaCentro,
+  "El Gallo Gastrobar",
+)
+assert.equal(galloMalaga.precision, "approximate")
+if (galloMalaga.precision === "approximate") {
+  assert.equal(galloMalaga.coord.lng, malagaCentro.coord.lng)
+  assert.equal(galloMalaga.anchorLabel, "Centro, Málaga")
+}
+assert.equal(candidateNameMatchesQuery(calleCuenca, "El Gallo Gastrobar"), false)
+assert.equal(
+  candidateNameMatchesQuery(
+    { coord: { lng: 0, lat: 0 }, featureType: "address", text: "Calle Casas Colgadas" },
+    "Casas Colgadas",
+  ),
+  true,
+)
+
+// Ancla: «Cuenca, Zona Centro» no comparte token significativo con «Centro, Málaga».
+assert.equal(sharesSignificantToken("Cuenca, Zona Centro", "Centro, Málaga"), false)
+assert.equal(sharesSignificantToken("Cuenca", "Cuenca, provincia de Cuenca"), true)
+assert.equal(isWeakRegionHint("Zona Centro"), true)
+assert.equal(isWeakRegionHint("Casco Antiguo"), true)
+assert.equal(isWeakRegionHint("Cuenca, Zona Centro"), false)
+assert.deepEqual(regionAnchorQueryLadder("Cuenca, Zona Centro"), [
+  "Cuenca, Zona Centro",
+  "Cuenca",
+])
+assert.deepEqual(regionAnchorQueryLadder("Zona Centro"), [])
+assert.deepEqual(regionAnchorQueryLadder("Cuenca"), ["Cuenca"])
 
 const stacked = offsetStackedApproximate([
   { id: "a", coord: { lng: 11.404, lat: 47.27 }, precision: "approximate" },

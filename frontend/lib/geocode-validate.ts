@@ -1,7 +1,8 @@
 /**
- * Validación de candidatos de Geocoding v5 contra un ancla de región.
+ * Validación de candidatos de geocoding contra un ancla de región.
  * Puro: sin I/O. La distancia filtra homónimos lejanos; el tipo del candidato
  * decide exact vs approximate (un `place` es el centro de la ciudad, no el sitio).
+ * Un `address`/`street` cuyo nombre no coincide con la query no es el sitio.
  */
 import { haversineMeters } from "./map-route-geometry"
 
@@ -49,10 +50,13 @@ const COARSE_TYPES = new Set([
   "country",
 ])
 
+const STREET_LIKE_TYPES = new Set(["address", "street"])
+
 /** Menor = más específico. Empates conservan el orden de Mapbox. */
 const TYPE_SPECIFICITY: Record<string, number> = {
   poi: 0,
   address: 1,
+  street: 1,
   neighborhood: 2,
   locality: 3,
   place: 4,
@@ -61,6 +65,33 @@ const TYPE_SPECIFICITY: Record<string, number> = {
   region: 7,
   country: 8,
 }
+
+/** Barrios / puntos cardinales: no anclan solos y no cuentan para el match de tokens. */
+const WEAK_GEO_TOKENS = new Set([
+  "zona",
+  "centro",
+  "downtown",
+  "casco",
+  "antiguo",
+  "historico",
+  "barrio",
+  "pueblo",
+  "ciudad",
+  "provincia",
+  "region",
+  "norte",
+  "este",
+  "oeste",
+  "calle",
+  "avenida",
+  "plaza",
+  "paseo",
+  "ronda",
+  "old",
+  "town",
+])
+
+const MIN_TOKEN_LEN = 4
 
 function typeSpecificity(featureType: string): number {
   return TYPE_SPECIFICITY[featureType] ?? 9
@@ -75,6 +106,99 @@ function candidateAnchorLabel(candidate: GeocodeCandidate, fallback?: string): s
     if (first) return first
   }
   return fallback?.trim() ?? ""
+}
+
+function normalizeGeoText(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/['’`]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+/** Tokens ≥4 letras que no son barrio/calle genéricos. */
+export function significantTokens(text: string): string[] {
+  if (!text.trim()) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const t of normalizeGeoText(text).split(" ")) {
+    if (t.length < MIN_TOKEN_LEN || WEAK_GEO_TOKENS.has(t) || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out
+}
+
+/**
+ * True si el resultado comparte algún token significativo con la query.
+ * «Cuenca, Zona Centro» vs «Centro, Málaga» → false (solo comparten «centro», débil).
+ * «Cuenca» vs «Cuenca, provincia de Cuenca» → true.
+ */
+export function sharesSignificantToken(query: string, result: string): boolean {
+  const tokens = significantTokens(query)
+  if (tokens.length === 0) return false
+  const blob = normalizeGeoText(result)
+  if (!blob) return false
+  return tokens.some((t) => blob.includes(t))
+}
+
+/** Barrio suelto: no se geocodifica como ancla independiente. */
+export function isWeakRegionHint(region: string | null | undefined): boolean {
+  const t = region?.trim()
+  if (!t) return true
+  return significantTokens(t).length === 0
+}
+
+/**
+ * Queries a probar, de más específica a más corta, omitiendo hints débiles.
+ * «Cuenca, Zona Centro» → «Cuenca, Zona Centro», «Cuenca».
+ */
+export function regionAnchorQueryLadder(text: string): string[] {
+  const trimmed = text.trim()
+  if (!trimmed) return []
+  const out: string[] = []
+  const add = (q: string) => {
+    const s = q.trim()
+    if (!s || isWeakRegionHint(s)) return
+    const key = normalizeGeoText(s)
+    if (!key || out.some((x) => normalizeGeoText(x) === key)) return
+    out.push(s)
+  }
+  add(trimmed)
+  const first = trimmed.split(",")[0]?.trim()
+  if (first) add(first)
+  const tokens = significantTokens(trimmed)
+  if (tokens.length) add(tokens.join(" "))
+  return out
+}
+
+function candidateNameBlob(candidate: GeocodeCandidate): string {
+  return normalizeGeoText(`${candidate.text ?? ""} ${candidate.placeName ?? ""}`)
+}
+
+/**
+ * Un `address`/`street` solo es el sitio si todos los tokens significativos
+ * de la query aparecen en su nombre. «El Gallo Gastrobar» vs «Calle Cuenca» → false;
+ * «Casas Colgadas» vs «Calle Casas Colgadas» → true.
+ */
+export function candidateNameMatchesQuery(
+  candidate: GeocodeCandidate,
+  query: string,
+): boolean {
+  const q = query.trim()
+  if (!q) return false
+  const blob = candidateNameBlob(candidate)
+  if (!blob) return false
+  const tokens = significantTokens(q)
+  if (tokens.length === 0) return blob.includes(normalizeGeoText(q))
+  return tokens.every((t) => blob.includes(t))
+}
+
+function isStreetLike(featureType: string): boolean {
+  return STREET_LIKE_TYPES.has(featureType)
 }
 
 export function maxDistanceMetersForAnchorType(featureType: string): number | null {
@@ -103,14 +227,20 @@ export function candidatePassesAnchor(
 /**
  * Entre los que pasan el filtro, el más específico (poi > address > … > country).
  * Empates conservan el orden de Mapbox.
+ * Un `address`/`street` sin coincidencia de nombre con `query` no cuenta.
  */
 export function pickFirstValidCandidate(
   candidates: GeocodeCandidate[],
   anchor: RegionAnchor | null,
+  query?: string | null,
 ): GeocodeCandidate | null {
-  const passing = anchor
+  const passing = (anchor
     ? candidates.filter((c) => candidatePassesAnchor(c, anchor))
     : candidates
+  ).filter((c) => {
+    if (!isStreetLike(c.featureType)) return true
+    return query ? candidateNameMatchesQuery(c, query) : false
+  })
   if (passing.length === 0) return null
   let best = passing[0]!
   let bestRank = typeSpecificity(best.featureType)
@@ -128,22 +258,21 @@ export function pickFirstValidCandidate(
 export function pickGeocodeOutcome(
   candidates: GeocodeCandidate[],
   anchor: RegionAnchor | null,
+  query?: string | null,
 ): PlaceGeocodeOutcome {
-  const hit = pickFirstValidCandidate(candidates, anchor)
+  if (!anchor) return { precision: "unlocated" }
+  const hit = pickFirstValidCandidate(candidates, anchor, query)
   if (hit) {
     if (COARSE_TYPES.has(hit.featureType)) {
       return {
         precision: "approximate",
         coord: hit.coord,
-        anchorLabel: candidateAnchorLabel(hit, anchor?.label),
+        anchorLabel: candidateAnchorLabel(hit, anchor.label),
       }
     }
     return { precision: "exact", coord: hit.coord }
   }
-  if (anchor) {
-    return { precision: "approximate", coord: anchor.coord, anchorLabel: anchor.label }
-  }
-  return { precision: "unlocated" }
+  return { precision: "approximate", coord: anchor.coord, anchorLabel: anchor.label }
 }
 
 /** Radio de reparto visual: ~30 m · n (n = tamaño del grupo). */

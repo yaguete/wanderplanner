@@ -35,7 +35,7 @@ import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
-import { countriesPlainList } from "@/lib/countries"
+import { mapCountryCodes, mapDestinationHint } from "@/lib/map-destination"
 import { dateISOForDayIndex, formatDayDate, formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
 import { ITEM_DOT_COLORS, transportIconForItem } from "@/lib/item-styles"
@@ -203,6 +203,14 @@ export default function ItineraryPanel({
     [trip],
   )
   const tripSources = useStableList(getTripSources(tripId))
+  const mapDestHint = useMemo(
+    () => (trip ? mapDestinationHint(trip, tripSources) : null),
+    [trip, tripSources],
+  )
+  const mapCountries = useMemo(
+    () => (trip ? mapCountryCodes(trip, tripSources) : []),
+    [trip, tripSources],
+  )
   // Fallback de la `region` por ítem: si el ítem no trae una pista propia, se usa el `area` del artículo.
   const sourceAreaById = useMemo(() => {
     const m = new Map<string, string | null>()
@@ -826,8 +834,8 @@ export default function ItineraryPanel({
                   focusDayNumber == null ? null : `Día ${focusDayNumber}`
                 }
                 onMapModeChange={handleMapModeChange}
-                countryCodes={trip.countries}
-                destination={trip.countries.length ? countriesPlainList(trip.countries) : trip.name}
+                countryCodes={mapCountries}
+                destination={mapDestHint ?? ""}
                 onPersistItemCoords={(itemId, coords, region) => {
                   setDayItemCoords(tripId, itemId, coords, region)
                 }}
@@ -906,10 +914,8 @@ export default function ItineraryPanel({
         days={trip.days}
         initialDayId={manualDialogDayId}
         initialType={manualDialogInitialType}
-        countryCodes={trip.countries}
-        destinationHint={
-          trip.countries.length ? countriesPlainList(trip.countries) : trip.name
-        }
+        countryCodes={mapCountries}
+        destinationHint={mapDestHint}
         onSubmit={(item, dayId) => {
           addItemToDay(tripId, dayId, item)
         }}
