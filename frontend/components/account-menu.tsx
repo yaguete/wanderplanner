@@ -35,7 +35,7 @@ export function useAccountIdentity(): {
 export function AccountAvatar({ className }: { className?: string }) {
   const { initials, avatarUrl } = useAccountIdentity()
   return (
-    <Avatar className={cn("size-7 shrink-0", className)}>
+    <Avatar className={cn("size-7 shrink-0 border border-foreground/20", className)}>
       {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
       <AvatarFallback className="bg-secondary text-[10px] font-medium text-secondary-foreground">
         {initials}
