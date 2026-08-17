@@ -1,14 +1,15 @@
+import { Fragment } from "react"
 import { BrandMark } from "@/components/brand-mark"
 import {
-  PARTNER_BANNER_ARIA_LABEL,
   PARTNER_BANNER_CHIP_KICKER,
-  PARTNER_BANNER_EMPHASIS,
-  PARTNER_BANNER_LINE_1,
-  PARTNER_BANNER_LINE_2_PREFIX,
+  PARTNER_BANNER_DEFAULT_EMPHASIS,
+  PARTNER_BANNER_DEFAULT_TEXT,
   PARTNER_BUTTON_ARIA_LABEL,
   PARTNER_BUTTON_KICKER,
+  bannerAriaLabel,
   partnerBannerPreviewStyles,
   partnerButtonPreviewStyles,
+  splitBannerCopy,
   type PartnerButtonVariant,
   type PartnerEmbedKind,
 } from "@/lib/partner-button"
@@ -16,7 +17,7 @@ import {
 function Wordmark({ size }: { size: "cta" | "chip" }) {
   return (
     <span style={{ fontSize: size === "cta" ? "18px" : "16px", letterSpacing: "-0.02em" }}>
-      <span className="font-bold">Wander</span>
+      <strong className="font-bold text-[inherit]">Wander</strong>
       <span className="font-light">Planner</span>
     </span>
   )
@@ -31,22 +32,40 @@ function CtaInner({ variant }: { variant: PartnerButtonVariant }) {
       </span>
       <span style={styles.copy}>
         <span style={styles.kicker}>{PARTNER_BUTTON_KICKER}</span>
+        <br />
         <Wordmark size="cta" />
       </span>
     </>
   )
 }
 
-function BannerInner({ variant }: { variant: PartnerButtonVariant }) {
+function BannerInner({
+  variant,
+  text,
+  emphasis,
+}: {
+  variant: PartnerButtonVariant
+  text: string
+  emphasis: string
+}) {
   const styles = partnerBannerPreviewStyles(variant)
   return (
     <>
       <span style={styles.copy}>
-        <span>{PARTNER_BANNER_LINE_1}</span>
-        <span>
-          {PARTNER_BANNER_LINE_2_PREFIX}
-          <span className="font-bold">{PARTNER_BANNER_EMPHASIS}</span>?
-        </span>
+        {splitBannerCopy(text, emphasis).map((runs, line) => (
+          <Fragment key={line}>
+            {line > 0 ? <br /> : null}
+            {runs.map((run, i) =>
+              run.strong ? (
+                <strong key={i} className="font-bold text-[inherit]">
+                  {run.text}
+                </strong>
+              ) : (
+                <Fragment key={i}>{run.text}</Fragment>
+              ),
+            )}
+          </Fragment>
+        ))}
       </span>
       <span style={styles.chip}>
         <span style={{ display: "inline-flex", flexShrink: 0, lineHeight: 0 }}>
@@ -54,6 +73,7 @@ function BannerInner({ variant }: { variant: PartnerButtonVariant }) {
         </span>
         <span style={styles.chipCopy}>
           <span style={styles.chipKicker}>{PARTNER_BANNER_CHIP_KICKER}</span>
+          <br />
           <Wordmark size="chip" />
         </span>
       </span>
@@ -67,20 +87,25 @@ export function PartnerButtonPreview({
   variant = "color",
   kind = "cta",
   mode = "link",
+  text = PARTNER_BANNER_DEFAULT_TEXT,
+  emphasis = PARTNER_BANNER_DEFAULT_EMPHASIS,
 }: {
   href?: string
   variant?: PartnerButtonVariant
   kind?: PartnerEmbedKind
   mode?: "link" | "mock"
+  /** Solo banner: espejo de los mismos campos de `buildEmbedSnippet`. */
+  text?: string
+  emphasis?: string
 }) {
   const isBanner = kind === "banner"
   const styles = isBanner
     ? partnerBannerPreviewStyles(variant)
     : partnerButtonPreviewStyles(variant)
   const className = variant === "color" ? "hover:!bg-white" : undefined
-  const label = isBanner ? PARTNER_BANNER_ARIA_LABEL : PARTNER_BUTTON_ARIA_LABEL
+  const label = isBanner ? bannerAriaLabel(text) : PARTNER_BUTTON_ARIA_LABEL
   const inner = isBanner ? (
-    <BannerInner variant={variant} />
+    <BannerInner variant={variant} text={text} emphasis={emphasis} />
   ) : (
     <CtaInner variant={variant} />
   )

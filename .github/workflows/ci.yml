@@ -44,6 +44,7 @@ jobs:
       - run: npm run test:booking-search
       - run: npm run test:flight-search
       - run: npm run test:partner-trip
+      - run: npm run test:partner-button
       - run: npm run test:trip-source-suggestions
       - run: npm run test:cookie-consent
       - run: npm run test:guest-trip-claim

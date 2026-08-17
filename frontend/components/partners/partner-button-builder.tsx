@@ -9,7 +9,11 @@ import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { isTurnstileEnabled, Turnstile } from "@/components/auth/turnstile"
 import { PartnerButtonPreview } from "@/components/partners/partner-button-preview"
+import { Textarea } from "@/components/ui/textarea"
 import {
+  PARTNER_BANNER_DEFAULT_EMPHASIS,
+  PARTNER_BANNER_DEFAULT_TEXT,
+  PARTNER_BANNER_MAX_LENGTH,
   buildEmbedSnippet,
   buildStartUrl,
   cleanSourceUrl,
@@ -122,6 +126,8 @@ export function PartnerButtonBuilder() {
   const [allowSkip, setAllowSkip] = useState(false)
   const [buttonVariant, setButtonVariant] = useState<PartnerButtonVariant>("color")
   const [embedKind, setEmbedKind] = useState<PartnerEmbedKind>("cta")
+  const [bannerText, setBannerText] = useState(PARTNER_BANNER_DEFAULT_TEXT)
+  const [bannerEmphasis, setBannerEmphasis] = useState(PARTNER_BANNER_DEFAULT_EMPHASIS)
 
   const captchaEnabled = isTurnstileEnabled()
   const cleanedUrl = useMemo(() => cleanSourceUrl(sourceUrl), [sourceUrl])
@@ -216,11 +222,14 @@ export function PartnerButtonBuilder() {
   }
 
   const summaryTitle = generated?.prewarm ? prewarmTitle(generated.prewarm) : null
+  const isBanner = embedKind === "banner"
   const snippet = generated
     ? buildEmbedSnippet({
         href: generated.startUrl,
         variant: buttonVariant,
         kind: embedKind,
+        text: bannerText,
+        emphasis: bannerEmphasis,
       })
     : ""
 
@@ -312,6 +321,44 @@ export function PartnerButtonBuilder() {
                 </Button>
               </div>
             </div>
+            {isBanner ? (
+              <div className="mb-1 flex flex-col gap-3 rounded-md border border-white/10 bg-white/5 p-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="partner-banner-text" className="text-white">
+                    Texto del banner
+                  </Label>
+                  <Textarea
+                    id="partner-banner-text"
+                    rows={2}
+                    maxLength={PARTNER_BANNER_MAX_LENGTH}
+                    value={bannerText}
+                    onChange={(e) => setBannerText(e.target.value)}
+                    className={cn(fieldClass, "min-h-[64px] resize-none")}
+                  />
+                  <p className="text-xs text-white/50">
+                    Cada salto de línea es un salto en el banner. El botón de WanderPlanner
+                    no se toca.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="partner-banner-emphasis" className="text-white">
+                    En negrita <span className="font-normal text-white/50">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="partner-banner-emphasis"
+                    value={bannerEmphasis}
+                    placeholder="Sin negrita"
+                    maxLength={PARTNER_BANNER_MAX_LENGTH}
+                    onChange={(e) => setBannerEmphasis(e.target.value)}
+                    className={fieldClass}
+                  />
+                  <p className="text-xs text-white/50">
+                    Tiene que aparecer tal cual en el texto de arriba; si no, no se resalta
+                    nada.
+                  </p>
+                </div>
+              </div>
+            ) : null}
             <pre
               key={`${embedKind}-${buttonVariant}`}
               id="partner-snippet"
@@ -327,13 +374,20 @@ export function PartnerButtonBuilder() {
               href={generated.startUrl}
               variant={buttonVariant}
               kind={embedKind}
+              text={bannerText}
+              emphasis={bannerEmphasis}
             />
           </div>
 
           <p className="flex items-start gap-2 text-xs text-white/60">
             <Check className="mt-0.5 size-3.5 shrink-0 text-white" aria-hidden />
-            Pega el snippet en un bloque HTML de tu post. El {embedKind === "banner" ? "banner" : "botón"} abre
-            WanderPlanner en una pestaña nueva.
+            <span>
+              Pega el snippet en un bloque{" "}
+              <span className="text-white">HTML personalizado</span> (WordPress) o en el widget{" "}
+              <span className="text-white">HTML</span> (Elementor). En el editor visual no:
+              ahí WordPress reescribe el código y el {isBanner ? "banner" : "botón"} sale
+              descuadrado. Abre WanderPlanner en una pestaña nueva.
+            </span>
           </p>
 
           <Button
