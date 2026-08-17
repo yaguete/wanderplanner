@@ -135,10 +135,12 @@ export default function PrivacidadPage() {
 
       <LegalSection id="derechos" title="Tus derechos">
         <p>
-          Puedes pedirnos acceder a tus datos, corregirlos, borrarlos, limitarlos,
+          Puedes pedirnos acceder a tus datos, corregirlos, limitarlos,
           llevártelos u oponerte a que los tratemos, y retirar cuando quieras un
           consentimiento que hayas dado. Escríbenos a <LegalMail /> desde el correo de tu
-          cuenta y contestaremos en menos de 30 días.
+          cuenta y contestaremos en menos de 30 días. Para borrar la cuenta —perfil,
+          viajes, fuentes que añadiste y conversaciones— ve a Configuración; no hace
+          falta escribirnos.
         </p>
         <p>
           Si crees que no lo hemos hecho bien, puedes reclamar ante la{" "}

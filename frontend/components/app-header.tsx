@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
-import { LogOut, PanelLeftClose, PanelLeftOpen, Settings, UserPlus } from "lucide-react"
+import { LogOut, PanelLeftClose, PanelLeftOpen, Settings, User, UserPlus } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -90,7 +90,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
         // que se queda pegado arriba. El alto sale de `--wp-header-height`,
         // que es de donde cuelgan las cabeceras de panel.
         "max-md:sticky max-md:top-0 max-md:z-30",
-        // Detalle del viaje: el panel es blanco; listado e inicio/perfil comparten el canvas.
+        // Detalle del viaje: el panel es blanco; listado, perfil y configuración comparten el canvas.
         isMobile && onTripDetail && "bg-background",
         // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
         isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
@@ -161,10 +161,16 @@ export function AppHeader({ leading }: AppHeaderProps) {
               Guardar mi viaje
             </DropdownMenuItem>
           ) : (
-            <DropdownMenuItem onSelect={() => router.push("/account")}>
-              <Settings className="h-4 w-4" />
-              Ajustes
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem onSelect={() => router.push("/account")}>
+                <User className="h-4 w-4" />
+                Perfil
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => router.push("/account/settings")}>
+                <Settings className="h-4 w-4" />
+                Configuración
+              </DropdownMenuItem>
+            </>
           )}
           <DropdownMenuItem onSelect={() => void handleSignOut()}>
             <LogOut className="h-4 w-4" />

@@ -74,6 +74,17 @@ interface AuthContextValue {
   refreshGuestStatus: () => Promise<boolean>
   signOut: () => Promise<void>
   updateProfile: (data: ProfileInput) => Promise<AuthResult>
+  /**
+   * Cambia la contraseña. `current: null` = alta (llegó por enlace de correo
+   * y nunca puso una); si hay `current`, se verifica con `signInWithPassword`.
+   */
+  updatePassword: (data: {
+    current: string | null
+    next: string
+    captchaToken?: string
+  }) => Promise<AuthResult>
+  /** Borra `auth.users` vía RPC; limpia la sesión en local. No navega. */
+  deleteAccount: () => Promise<AuthResult>
 }
 
 /** Email pendiente de confirmar tras `updateUser({ email })` (campo `new_email` o `email`). */
@@ -89,6 +100,25 @@ function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message
   return "Algo ha fallado. Inténtalo de nuevo."
 }
+
+function isMissingRpc(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  if (error.code === "PGRST202") return true
+  return /could not find the function/i.test(error.message ?? "")
+}
+
+function passwordChangeError(error: { message?: string; code?: string } | null): string {
+  const msg = error?.message ?? ""
+  if (/invalid login credentials/i.test(msg) || error?.code === "invalid_credentials") {
+    return "La contraseña actual no es correcta."
+  }
+  if (/captcha/i.test(msg)) return "Confirma que no eres un robot."
+  return msg || "No hemos podido cambiar la contraseña."
+}
+
+const DELETE_MISSING_RPC_ERROR =
+  "El borrado de cuenta no está disponible todavía. Inténtalo de nuevo en unos minutos."
+const DELETE_ACCOUNT_ERROR = "No hemos podido borrar la cuenta. Inténtalo de nuevo."
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const configured = isSupabaseConfigured()
@@ -432,6 +462,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [persistProfile, user],
   )
 
+  const updatePassword = useCallback<AuthContextValue["updatePassword"]>(
+    async ({ current, next, captchaToken }) => {
+      if (!configured) return { ok: false, error: "Supabase no está configurado." }
+      if (!user) return { ok: false, error: "No hay sesión." }
+      try {
+        const supabase = createClient()
+        if (current !== null) {
+          const email = user.email?.trim()
+          if (!email) return { ok: false, error: "No hay email en esta cuenta." }
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password: current,
+            options: captchaToken ? { captchaToken } : undefined,
+          })
+          if (signInError) return { ok: false, error: passwordChangeError(signInError) }
+        }
+        const { error } = await supabase.auth.updateUser({ password: next })
+        if (error) return { ok: false, error: passwordChangeError(error) }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: errorMessage(e) }
+      }
+    },
+    [configured, user],
+  )
+
+  const deleteAccount = useCallback<AuthContextValue["deleteAccount"]>(async () => {
+    if (!configured) return { ok: false, error: "Supabase no está configurado." }
+    if (!user) return { ok: false, error: "No hay sesión." }
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.rpc("delete_own_account")
+      if (error) {
+        return {
+          ok: false,
+          error: isMissingRpc(error) ? DELETE_MISSING_RPC_ERROR : DELETE_ACCOUNT_ERROR,
+        }
+      }
+      await supabase.auth.signOut({ scope: "local" })
+      clearActiveConversationPointers()
+      clearStash()
+      setProfile(null)
+      setFavoriteReferences([])
+      loadedProfileFor.current = null
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: errorMessage(e) }
+    }
+  }, [configured, user])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -449,6 +529,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshGuestStatus,
       signOut,
       updateProfile,
+      updatePassword,
+      deleteAccount,
     }),
     [
       user,
@@ -465,6 +547,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshGuestStatus,
       signOut,
       updateProfile,
+      updatePassword,
+      deleteAccount,
     ],
   )
 

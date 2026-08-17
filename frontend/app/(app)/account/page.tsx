@@ -14,7 +14,7 @@ import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
 
 export default function AccountPage() {
   const router = useRouter()
-  const { user, profile, favoriteReferences, isLoading, updateProfile } = useAuth()
+  const { profile, favoriteReferences, isLoading, updateProfile } = useAuth()
   const goHome = () => router.push("/trips")
 
   const [name, setName] = useState("")
@@ -74,11 +74,6 @@ export default function AccountPage() {
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="name">Nombre</Label>
                 <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" value={user?.email ?? ""} disabled readOnly />
               </div>
 
               <TravelerProfileFields
