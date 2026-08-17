@@ -80,7 +80,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
   }
 
   const showPanelToggles = !isMobile && chrome !== null
-  const onTripsHome = pathname === "/trips"
+  const onTripDetail = /^\/trips\/[^/]+/.test(pathname)
 
   return (
     <header
@@ -90,8 +90,8 @@ export function AppHeader({ leading }: AppHeaderProps) {
         // que se queda pegado arriba. El alto sale de `--wp-header-height`,
         // que es de donde cuelgan las cabeceras de panel.
         "max-md:sticky max-md:top-0 max-md:z-30",
-        // Detalle del viaje: el panel es blanco; el listado de inicio comparte el canvas.
-        isMobile && !onTripsHome && "bg-background",
+        // Detalle del viaje: el panel es blanco; listado e inicio/perfil comparten el canvas.
+        isMobile && onTripDetail && "bg-background",
         // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
         isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
         showPanelToggles ? "relative" : undefined,

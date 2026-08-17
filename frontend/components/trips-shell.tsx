@@ -32,7 +32,7 @@ function TripsChrome({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Shell cliente de `/trips`: providers + cromo. El layout es Server Component por el `noindex`. */
+/** Shell cliente de `/trips` y `/account`: providers + cromo. El layout es Server Component por el `noindex`. */
 export function TripsShell({ children }: { children: React.ReactNode }) {
   return (
     <TripProvider>

@@ -54,7 +54,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     Dockerfile
     agents/
   frontend/
-    app/                   # App Router: /, /login, /signup, /partners, /account, /start, /trips, /legal…
+    app/                   # App Router: /, /login, /signup, /partners, /start, /legal…; (app)/ → /trips y /account
       robots.ts            # Allow /; Disallow /trips y /account; NO /start
       sitemap.ts           # /, /partners y /legal/* (indexables)
       opengraph-image.tsx  # OG 1200×630 (next/og + brandSvgMarkup)
@@ -64,7 +64,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     components/            # UI + auth/ + partners/ + landing/ + legal/ + tareas + tramos + mapa + nav móvil
       brand-mark.tsx       # isotipo ardilla, BrandLockup, brandSvgMarkup
       landing/             # home pública + /partners en negativo
-      trips-shell.tsx      # providers + cromo de /trips (el layout es Server Component)
+      trips-shell.tsx      # providers + cromo de /trips y /account (el layout es Server Component)
     lib/
       auth-context.tsx     # AuthProvider / useAuth (incl. invitados anónimos)
       trip-context.tsx     # Mutaciones síncronas; sync vía trips-repo
@@ -113,11 +113,12 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), tres zooms de valor (`ValueProps`: fuentes / plan / oficiales), footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en el footer (`/partners`), no en el hero.
 - **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Copy real, indexables, en `sitemap.ts`. Cromo de la landing de viajeros ([`legal/layout.tsx`](frontend/app/legal/layout.tsx)); `/legal` redirige al aviso. Identidad y proveedores de IA en [`lib/legal.ts`](frontend/lib/legal.ts).
-- **`/login`**, **`/signup`**, **`/auth/callback`**, **`/account`** — Auth y perfil de viajero (tipos + referencias favoritas). El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero).
+- **`/login`**, **`/signup`**, **`/auth/callback`** — Auth. El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero).
+- **`/account`** — Perfil de viajero (tipos + referencias favoritas). Vive en el mismo shell que `/trips` (header + sidebar + canvas); el grupo `(app)` no cambia la URL.
 - **`/partners`** — Landing de marketing en negativo ([`app/partners/page.tsx`](frontend/app/partners/page.tsx) + [`components/landing/partners/`](frontend/components/landing/partners/)): misma arquitectura que `/` (hero + 3 zooms + CTA + footer) sobre tinta `hsl(20 8% 11%)`. El generador del botón vive en el hero (`id="empezar"`) y dispara `POST /partners/prewarm`. Indexable. Slugs reservados: `landing`, `wp-landing`, `start`, `admin`. **No** usa `AuthShell`.
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos y de los chips del hero: sesión anónima + viaje borrador + fuente precargada. Reusa el borrador vacío del usuario si existe (`reuseOrInsertDraftTrip`) para no multiplicar viajes. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado; los chips usan `ref=wp-landing` (reservado, no es un partner). **Rastreable + `noindex, follow`**: Google tiene que leer el meta; no va en `Disallow`.
 - **Layout raíz** — Inter, `AuthProvider`, `CookieBanner`, `AnalyticsGate` (Vercel Analytics solo con consentimiento). **Sin** `TripProvider`. Metadata (`metadataBase`, OG, Twitter) en [`app/layout.tsx`](frontend/app/layout.tsx).
-- **Segmento `trips`** — [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx) es Server Component (`robots: noindex, nofollow`). Los providers viven en [`trips-shell.tsx`](frontend/components/trips-shell.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable, main sobre canvas gris). Único sitio de `useTrips()`.
+- **Shell de app (`/trips` + `/account`)** — [`app/(app)/layout.tsx`](frontend/app/(app)/layout.tsx) es Server Component (`robots: noindex, nofollow`). El grupo `(app)` no cambia las URLs. Los providers viven en [`trips-shell.tsx`](frontend/components/trips-shell.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable, main sobre canvas gris). Único sitio de `useTrips()`.
 - **`/trips`** — Listado Activos/Archivados; empty/loading con spinner mientras `isLoading`.
 - **`/trips/[tripId]`** — Desktop: tres paneles alícuota (Fuentes · Viaje · Asistente) con toggles en el header (`wp-trip-panels`); título del viaje en el header. **Móvil: nav inferior de tres secciones** ([`trip-mobile-nav.tsx`](frontend/components/trip-mobile-nav.tsx): Fuentes · Mi viaje · Asistente), con cabecera que se colapsa al hacer scroll ([`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts)) y ajuste al teclado virtual ([`use-virtual-keyboard.ts`](frontend/hooks/use-virtual-keyboard.ts)). Las secciones no se apilan en `absolute inset-0`: la activa va en flujo (la inactiva, `display:none`) porque el scroller es el documento, y su posición la guarda `sectionScrollRef`.
 
@@ -243,7 +244,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Reglas que no se rompen
 
-- ❌ **No uses `useTrips()`** fuera del segmento `/trips`. El `TripProvider` está en [`trips-shell.tsx`](frontend/components/trips-shell.tsx), montado solo desde [`app/trips/layout.tsx`](frontend/app/trips/layout.tsx).
+- ❌ **No uses `useTrips()`** fuera del shell de [`trips-shell.tsx`](frontend/components/trips-shell.tsx). El `TripProvider` se monta desde [`app/(app)/layout.tsx`](frontend/app/(app)/layout.tsx) (`/trips` y `/account`).
 - ❌ **No pongas `/start` en `Disallow` de `robots.txt`.** Es el CTA de los blogs: tiene que ser rastreable para que Google lea el `noindex, follow`. `/trips` y `/account` sí van en `Disallow`. `/` y `/partners` se indexan. `Disallow` + `noindex` sobre la misma URL se anulan.
 - ❌ **No amplíes `ItemType` / `BasicCategory`** sin alinear [`item-styles.ts`](frontend/lib/item-styles.ts).
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
