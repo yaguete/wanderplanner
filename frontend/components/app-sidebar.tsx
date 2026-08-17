@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Compass, Map, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react"
+import { Compass, Map, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -60,42 +60,6 @@ function NewTripButton({
       <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>Nuevo viaje</span>
     </button>
-  )
-}
-
-function SidebarCollapseControl() {
-  const { toggleSidebar, sidebarCollapsed, autoCollapsed } = useTripChrome()
-  const rail = useSidebarRail()
-  const blocked = autoCollapsed && !sidebarCollapsed
-
-  const button = (
-    <button
-      type="button"
-      onClick={toggleSidebar}
-      disabled={blocked}
-      className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors",
-        "hover:bg-sidebar-accent hover:text-foreground disabled:cursor-default disabled:opacity-40",
-        "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
-      aria-label={rail ? "Expandir barra lateral" : "Colapsar barra lateral"}
-      aria-expanded={!rail}
-    >
-      {rail ? (
-        <PanelLeftOpen className="h-4 w-4" aria-hidden />
-      ) : (
-        <PanelLeftClose className="h-4 w-4" aria-hidden />
-      )}
-    </button>
-  )
-
-  if (!blocked) return button
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side="right">Espacio insuficiente para expandir</TooltipContent>
-    </Tooltip>
   )
 }
 
@@ -299,15 +263,6 @@ export function AppSidebar({
           </div>
         </div>
       ) : null}
-
-      <div
-        className={cn(
-          "flex shrink-0 pb-2 pt-1",
-          rail ? "w-full justify-center px-0" : "justify-end px-2",
-        )}
-      >
-        <SidebarCollapseControl />
-      </div>
 
       <NewTripDialog
         open={newTripOpen}
