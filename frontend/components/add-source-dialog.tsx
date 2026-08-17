@@ -1,7 +1,8 @@
 "use client"
 
 /**
- * Flujo «Añadir fuente»: URL + sugerencias del destino del viaje.
+ * Flujo «Añadir fuente»: URL + buscador de destino (si el viaje aún no tiene)
+ * o sugerencias «Sugeridas para …» cuando ya conocemos el destino.
  * La extracción vive en trip-context (`startSourceExtraction`); el progreso/error
  * se muestran como chip pendiente en InspirationPanel.
  */
@@ -19,12 +20,19 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DestinationSearchField } from "@/components/destination-search-field"
 import { SourceSuggestList } from "@/components/source-suggest-list"
 import { useTripSourceSuggestions } from "@/hooks/use-trip-source-suggestions"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import type { ItineraryProgressStage } from "@/lib/api"
 import { isSourceSuggestEnabled, type SourceSuggestHit } from "@/lib/source-suggest"
-import { TRIP_SOURCE_SUGGEST_MOBILE_MAX } from "@/lib/trip-source-suggestions"
+import {
+  fetchTripSourceSuggestions,
+  filterUnusedHits,
+  foldSuggestText,
+  sanitizeSuggestQuery,
+  TRIP_SOURCE_SUGGEST_MOBILE_MAX,
+} from "@/lib/trip-source-suggestions"
 import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
 import type { Source, Trip } from "@/types/itinerary"
 
@@ -120,6 +128,118 @@ type AddSourceFlowProps = {
   guardBeforeSubmit?: () => boolean
 } & AddSourceSuggestContext
 
+function pickSuggestHit(hit: SourceSuggestHit, onPick: (url: string) => void) {
+  track("trip_source_suggest_click", { origin: hit.origin, instant: hit.instant })
+  onPick(hit.url)
+}
+
+/** Viaje sin destino conocido: mismo buscador que la landing, con cuota `scope=trip`. */
+function AddSourceDestinationSearch({
+  pendingUrls = [],
+  onPick,
+}: {
+  pendingUrls?: string[]
+  onPick: (url: string) => void
+}) {
+  const id = useId()
+  const [value, setValue] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [hits, setHits] = useState<SourceSuggestHit[] | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const shownKey = useRef<string | null>(null)
+
+  useEffect(() => {
+    return () => abortRef.current?.abort()
+  }, [])
+
+  const visible = filterUnusedHits(hits ?? [], pendingUrls)
+
+  useEffect(() => {
+    if (!hits || hits.length === 0) return
+    const shown = filterUnusedHits(hits, pendingUrls)
+    if (shown.length === 0) return
+    const key = `${shown[0]!.url}:${shown.length}`
+    if (shownKey.current === key) return
+    shownKey.current = key
+    track("trip_source_suggest_shown", { origin: shown[0]!.origin, n: shown.length })
+  }, [hits, pendingUrls])
+
+  const runSearch = () => {
+    const query = sanitizeSuggestQuery(value)
+    if (!query) {
+      setError("Escribe al menos 3 letras del destino.")
+      return
+    }
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    setLoading(true)
+    setError(null)
+    track("trip_source_dest_search")
+    void fetchTripSourceSuggestions(query, foldSuggestText(query), { signal: controller.signal })
+      .then((results) => {
+        if (controller.signal.aborted) return
+        if (results) {
+          setHits(results)
+          return
+        }
+        setHits([])
+        setError("No hemos podido buscar artículos. Inténtalo de nuevo.")
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return
+        setHits([])
+        setError("No hemos podido buscar artículos. Inténtalo de nuevo.")
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+  }
+
+  const onChange = (next: string) => {
+    setValue(next)
+    if (error) setError(null)
+    if (next.trim() !== "") return
+    abortRef.current?.abort()
+    setHits(null)
+    setLoading(false)
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <p className="shrink-0 text-xs font-medium text-muted-foreground">Busca un destino</p>
+      <div className="shrink-0 pt-2">
+        <DestinationSearchField
+          id={`${id}-dest`}
+          value={value}
+          loading={loading}
+          onChange={onChange}
+          onSubmit={runSearch}
+        />
+        {error ? (
+          <p className="mt-2 text-xs text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pt-3">
+        {loading && hits == null ? (
+          <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
+        ) : null}
+        {hits && visible.length === 0 && !error && !loading ? (
+          <p className="px-1 text-sm text-muted-foreground">
+            No hemos encontrado artículos para ese destino. Prueba con otro nombre o pega una URL.
+          </p>
+        ) : null}
+        {visible.length > 0 ? (
+          <SourceSuggestList hits={visible} onSelect={(hit) => pickSuggestHit(hit, onPick)} compactSubtitle />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function AddSourceSuggestions({
   trip,
   sources = [],
@@ -129,38 +249,38 @@ function AddSourceSuggestions({
   isMobile = false,
   onPick,
 }: AddSourceSuggestContext & { onPick: (url: string) => void }) {
-  const enabled =
+  const suggestOn =
     Boolean(trip) &&
     !atSourceCap &&
     loadingPendingCount === 0 &&
     isSourceSuggestEnabled()
+  const hasSources = sources.length > 0
 
   const { query, hits, fetched, loading, refresh } = useTripSourceSuggestions({
     trip,
     sources,
     pendingUrls,
-    enabled,
+    // El nombre del viaje no cuenta como destino: sin fuentes, buscador.
+    enabled: suggestOn && hasSources,
   })
 
   const shownKey = useRef<string | null>(null)
   useEffect(() => {
-    if (!query || hits.length === 0) return
+    if (!hasSources || !query || hits.length === 0) return
     const key = `${query}:${hits.length}:${hits[0]?.origin ?? ""}`
     if (shownKey.current === key) return
     shownKey.current = key
     track("trip_source_suggest_shown", { origin: hits[0]!.origin, n: hits.length })
-  }, [query, hits])
+  }, [hasSources, query, hits])
 
-  if (!enabled || !query) return null
+  if (!suggestOn) return null
+  if (!hasSources || !query) {
+    return <AddSourceDestinationSearch pendingUrls={pendingUrls} onPick={onPick} />
+  }
 
   const visible = isMobile ? hits.slice(0, TRIP_SOURCE_SUGGEST_MOBILE_MAX) : hits
   const showEmpty = fetched && !loading && visible.length === 0
   if (!loading && !fetched) return null
-
-  const handleSelect = (hit: SourceSuggestHit) => {
-    track("trip_source_suggest_click", { origin: hit.origin, instant: hit.instant })
-    onPick(hit.url)
-  }
 
   const handleMore = () => {
     track("trip_source_suggest_more")
@@ -177,7 +297,11 @@ function AddSourceSuggestions({
           <p className="px-1 py-2 text-sm text-muted-foreground">Buscando artículos…</p>
         ) : null}
         {visible.length > 0 ? (
-          <SourceSuggestList hits={visible} onSelect={handleSelect} compactSubtitle />
+          <SourceSuggestList
+            hits={visible}
+            onSelect={(hit) => pickSuggestHit(hit, onPick)}
+            compactSubtitle
+          />
         ) : null}
         {showEmpty ? (
           <div className="space-y-2">
@@ -199,7 +323,7 @@ function AddSourceSuggestions({
   )
 }
 
-/** Formulario de URL: cabecera + campo fijos; solo scrollean las sugerencias. */
+/** Cabecera + URL fijos; el buscador de destino es un form hermano (no anidar). */
 export function AddSourceFlow({
   initialUrl,
   onSubmit,
@@ -241,21 +365,22 @@ export function AddSourceFlow({
   }
 
   const urlId = `${id}-url`
+  const urlFormId = `${id}-url-form`
   const canSubmit = url.trim().length > 0
 
   return (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 space-y-4 px-6 pt-6">
         <DialogHeader className="space-y-1.5 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
             Añadir fuente
           </DialogTitle>
           <DialogDescription>
-            Pega la URL de un artículo de viajes o elige una sugerencia. Destilaremos la ruta
-            para consolidarla en tu viaje.
+            Pega la URL de un artículo de viajes o busca un destino. Destilaremos la ruta para
+            consolidarla en tu viaje.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
+        <form id={urlFormId} onSubmit={handleSubmit} className="space-y-2">
           <Label htmlFor={urlId}>URL del artículo</Label>
           <Input
             id={urlId}
@@ -273,7 +398,7 @@ export function AddSourceFlow({
               {error}
             </p>
           ) : null}
-        </div>
+        </form>
       </div>
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-4 pt-4">
         <AddSourceSuggestions
@@ -290,11 +415,11 @@ export function AddSourceFlow({
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={!canSubmit}>
+        <Button type="submit" form={urlFormId} disabled={!canSubmit}>
           Añadir
         </Button>
       </DialogFooter>
-    </form>
+    </div>
   )
 }
 

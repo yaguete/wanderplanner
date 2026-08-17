@@ -950,7 +950,7 @@ export default function InspirationPanel({
               <EmptyState
                 icon={Plus}
                 title="Añade tu primera fuente"
-                description="Pega la URL de un artículo de viajes. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
+                description="Pega la URL de un artículo de viajes o busca un destino. Destilaremos la ruta para que puedas consolidarla en Mi viaje."
                 actionLabel="Añadir fuente"
                 onAction={handlePlusClick}
               />

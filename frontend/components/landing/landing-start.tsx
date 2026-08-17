@@ -7,9 +7,10 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { track } from "@vercel/analytics"
-import { ArrowRight, Loader2 } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { SignupForm } from "@/components/auth/signup-form"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { DestinationSearchField } from "@/components/destination-search-field"
 import { SourceSuggestList } from "@/components/source-suggest-list"
 import { cleanSourceUrl } from "@/lib/partner-button"
 import { LANDING_REF } from "@/lib/partner-trip"
@@ -118,8 +119,18 @@ export function LandingStart() {
     [],
   )
 
-  const onDestSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const onDestChange = (next: string) => {
+    setDestValue(next)
+    if (destError) setDestError(null)
+    if (next.trim() !== "") return
+    abortRef.current?.abort()
+    setDestResults(null)
+    setDestLoading(false)
+    setNeedCaptcha(false)
+    setCaptchaToken(null)
+  }
+
+  const onDestSubmit = () => {
     const query = destValue.trim()
     if (query.length < 3) {
       setDestError("Escribe al menos 3 letras del destino.")
@@ -256,39 +267,14 @@ export function LandingStart() {
             aria-labelledby={`${baseId}-tab-destination`}
             hidden={tab !== "destination"}
           >
-            <form onSubmit={onDestSubmit} className="landing-start-field">
-              <label htmlFor={`${baseId}-dest`} className="sr-only">
-                Destino
-              </label>
-              <input
-                ref={destInputRef}
-                id={`${baseId}-dest`}
-                type="search"
-                enterKeyHint="search"
-                placeholder="Japón, Vietnam, Islandia…"
-                value={destValue}
-                onChange={(e) => {
-                  const next = e.target.value
-                  setDestValue(next)
-                  if (destError) setDestError(null)
-                  if (next.trim() !== "") return
-                  // Sin query: cierra el panel (no hay búsqueda que mostrar).
-                  abortRef.current?.abort()
-                  setDestResults(null)
-                  setDestLoading(false)
-                  setNeedCaptcha(false)
-                  setCaptchaToken(null)
-                }}
-                className="landing-start-input"
-              />
-              <button type="submit" className="landing-start-go" aria-label="Buscar artículos">
-                {destLoading ? (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                ) : (
-                  <ArrowRight className="size-4" aria-hidden />
-                )}
-              </button>
-            </form>
+            <DestinationSearchField
+              id={`${baseId}-dest`}
+              inputRef={destInputRef}
+              value={destValue}
+              loading={destLoading}
+              onChange={onDestChange}
+              onSubmit={onDestSubmit}
+            />
             {showDestOverlay ? (
               <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-background p-3 text-left shadow-lg">
                 {destError ? <p className="px-1 py-2 text-sm text-destructive">{destError}</p> : null}
