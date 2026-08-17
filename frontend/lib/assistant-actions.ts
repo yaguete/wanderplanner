@@ -3,6 +3,7 @@
  * El modelo emite ids del briefing; aquí se traduce a mutaciones de `trip-context`.
  */
 import type {
+  ItemType,
   RouteMode,
   Source,
   SourceRouteHint,
@@ -19,6 +20,7 @@ import {
   userBasicItemFromSource,
   userDayItemFromSource,
 } from "@/lib/item-provenance"
+import { buildAssistantBookingSearchUrl } from "@/lib/booking-search"
 import { buildTripTasks, taskKeyForItem } from "@/lib/trip-tasks"
 import type { MoveParams } from "@/lib/itinerary-dnd"
 
@@ -352,6 +354,36 @@ export function parseTaskCategory(raw: string | null | undefined): TripTaskCateg
   return TASK_CATEGORIES.includes(value as TripTaskCategory)
     ? (value as TripTaskCategory)
     : "other"
+}
+
+const ITEM_TYPES: readonly ItemType[] = ["transport", "stay", "food", "activity"]
+
+export function buildAssistantDayItem(input: {
+  type: string
+  name: string
+  detail?: string | null
+  region?: string | null
+}): UserDayItem {
+  const type: ItemType = ITEM_TYPES.includes(input.type as ItemType)
+    ? (input.type as ItemType)
+    : "activity"
+  const name = input.name.trim()
+  const region = input.region?.trim() || null
+  const item: UserDayItem = {
+    id: crypto.randomUUID(),
+    sourceItemId: `assistant-${crypto.randomUUID()}`,
+    sourceId: ASSISTANT_SOURCE_ID,
+    type,
+    name,
+    detail: input.detail ?? null,
+    sourceAuthor: "Asistente",
+    region,
+  }
+  if (type === "stay") {
+    const href = buildAssistantBookingSearchUrl({ name, region })
+    if (href) item.affiliateUrl = href
+  }
+  return item
 }
 
 export function buildAssistantTransportStub(input: {

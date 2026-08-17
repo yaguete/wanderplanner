@@ -32,7 +32,7 @@ import { EmptyState } from "@/components/empty-state"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CountryTasksSection } from "@/components/country-tasks-section"
 import { FlightSearchLink } from "@/components/flight-search-link"
-import { bookingStayHref } from "@/lib/booking-dates"
+import { stayReserveHref } from "@/lib/booking-search"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
@@ -586,6 +586,18 @@ function TaskRow({
         })
       : null
 
+  const reserveHref =
+    stayReserveHref({
+      type: task.sourceKind,
+      name: task.title,
+      sourceId: task.sourceId,
+      affiliateUrl: task.affiliateUrl,
+      startDate,
+      dayIndexes: task.dayIndexes,
+      currency,
+      numTravelers: trip.numTravelers,
+    }) ?? task.affiliateUrl
+
   return (
     <div className={cn("flex flex-col gap-2 pb-3", compactTop ? "pt-1" : "pt-3")}>
       <div className="flex items-start gap-2.5">
@@ -599,15 +611,9 @@ function TaskRow({
             >
               {taskActionTitle(task)}
             </p>
-            {task.affiliateUrl ? (
+            {reserveHref ? (
               <a
-                href={
-                  bookingStayHref({
-                    href: task.affiliateUrl,
-                    startDate,
-                    dayIndexes: task.dayIndexes,
-                  }) ?? task.affiliateUrl
-                }
+                href={reserveHref}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium"

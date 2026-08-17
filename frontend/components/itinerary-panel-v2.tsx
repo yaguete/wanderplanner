@@ -53,7 +53,8 @@ import {
 } from "@/lib/trip-tasks"
 import type { ItemType, RouteLeg, Trip, TripTaskCategory, TripTaskState, UserDay, UserDayItem } from "@/types/itinerary"
 import { flightSearchHrefForItem } from "@/lib/flight-search"
-import { bookingStayHref, stayDayIndexesForItem } from "@/lib/booking-dates"
+import { stayDayIndexesForItem } from "@/lib/booking-dates"
+import { stayReserveHref } from "@/lib/booking-search"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
@@ -193,8 +194,9 @@ export default function ItineraryPanel({
       startDate: trip?.startDate ?? null,
       numDays: trip?.numDays ?? null,
       numTravelers: trip?.numTravelers ?? null,
+      currency: trip?.currency ?? "EUR",
     }),
-    [trip?.startDate, trip?.numDays, trip?.numTravelers],
+    [trip?.startDate, trip?.numDays, trip?.numTravelers, trip?.currency],
   )
   const itemCount = useMemo(
     () => (trip ? trip.days.reduce((sum, d) => sum + d.items.length, 0) : 0),
@@ -984,7 +986,7 @@ function DayItineraryTimeline({
   items: UserDayItem[]
   dayIndex: number
   days: UserDay[]
-  flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers">
+  flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers" | "currency">
   resolveRegion: (item: UserDayItem) => string | null
   onRemoveItem: (itemId: string) => void
   taskStates: Record<string, TripTaskState>
@@ -1106,10 +1108,16 @@ function DayItineraryTimeline({
                 regionLabel={resolveRegion(item)}
                 href={
                   item.type === "stay"
-                    ? bookingStayHref({
-                        href: item.affiliateUrl,
+                    ? stayReserveHref({
+                        type: item.type,
+                        name: item.name,
+                        region: item.region,
+                        sourceId: item.sourceId,
+                        affiliateUrl: item.affiliateUrl,
                         startDate: flightSearchTrip.startDate,
                         dayIndexes: stayDayIndexesForItem(days, item),
+                        currency: flightSearchTrip.currency,
+                        numTravelers: flightSearchTrip.numTravelers,
                       })
                     : item.affiliateUrl
                 }
@@ -1275,7 +1283,7 @@ const DaySection = memo(function DaySection({
   dayId: string
   dayIndex: number
   days: UserDay[]
-  flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers">
+  flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers" | "currency">
   dayDescription: string
   dayDateLabel: string | null
   summarySignature: string | null

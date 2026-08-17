@@ -52,10 +52,11 @@ import { useAuth } from "@/lib/auth-context"
 import { loadActiveConversationId } from "@/lib/db/assistant-repo"
 import { useTrips } from "@/lib/trip-context"
 import { cn } from "@/lib/utils"
-import type { ItemType, UserDayItem } from "@/types/itinerary"
+import type { UserDayItem } from "@/types/itinerary"
 import type { MoveParams } from "@/lib/itinerary-dnd"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
 import {
+  buildAssistantDayItem,
   buildAssistantTransportStub,
   inverseMoveParams,
   isAssistantActionStale,
@@ -67,7 +68,6 @@ import {
   resolveSetTaskCost,
   resolveSwapItems,
 } from "@/lib/assistant-actions"
-import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { AiTransferGate } from "@/components/ai-transfer-gate"
 import {
   fetchAiTransferConsent,
@@ -937,22 +937,16 @@ export function AssistantPanelLayer({
           failAction(messageId, action.id, "Ese día ya no está en el viaje")
           return
         }
-        const itemType = (["transport", "stay", "food", "activity"] as ItemType[]).includes(
-          action.type,
+        addItemToDay(
+          tripId,
+          action.day_id,
+          buildAssistantDayItem({
+            type: action.type,
+            name: action.name,
+            detail: action.detail,
+            region: action.region,
+          }),
         )
-          ? action.type
-          : "activity"
-        const item: UserDayItem = {
-          id: crypto.randomUUID(),
-          sourceItemId: `assistant-${crypto.randomUUID()}`,
-          sourceId: ASSISTANT_SOURCE_ID,
-          type: itemType,
-          name: action.name,
-          detail: action.detail ?? null,
-          sourceAuthor: "Asistente",
-          region: action.region ?? null,
-        }
-        addItemToDay(tripId, action.day_id, item)
         setActionStatus(messageId, action.id, "accepted")
       } finally {
         setActionBusyId(null)

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import type { Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import {
   applyMoveToDays,
+  buildAssistantDayItem,
   isAssistantActionStale,
   locateDayItem,
   resolveConsolidateSourceItem,
@@ -11,6 +12,8 @@ import {
   resolveSwapItems,
   snapshotMoveProposal,
 } from "./assistant-actions"
+import { ASSISTANT_SOURCE_ID } from "./item-provenance"
+import { BOOKING_AFFILIATE_AID } from "./booking-search"
 
 function item(
   id: string,
@@ -384,6 +387,31 @@ const days: UserDay[] = daysOf(
     }),
     true,
   )
+}
+
+{
+  const stay = buildAssistantDayItem({
+    type: "stay",
+    name: "Hotel Goldener Adler",
+    region: "Innsbruck",
+  })
+  assert.equal(stay.sourceId, ASSISTANT_SOURCE_ID)
+  assert.equal(stay.type, "stay")
+  assert.equal(stay.sourceAuthor, "Asistente")
+  const stayHref = stay.affiliateUrl
+  assert.ok(stayHref)
+  assert.equal(new URL(stayHref).searchParams.get("aid"), BOOKING_AFFILIATE_AID)
+  assert.equal(new URL(stayHref).searchParams.get("checkin"), null)
+
+  const activity = buildAssistantDayItem({
+    type: "activity",
+    name: "Mirador",
+    region: "Hallstatt",
+  })
+  assert.equal(activity.affiliateUrl, undefined)
+
+  const fallback = buildAssistantDayItem({ type: "nope", name: "X" })
+  assert.equal(fallback.type, "activity")
 }
 
 console.log("assistant-actions: ok")

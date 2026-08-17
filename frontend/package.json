@@ -27,6 +27,7 @@
     "test:mapbox-permanent": "tsx lib/mapbox-permanent.test.ts",
     "test:airports": "tsx lib/airports.test.ts",
     "test:booking-dates": "tsx lib/booking-dates.test.ts",
+    "test:booking-search": "tsx lib/booking-search.test.ts",
     "test:flight-search": "tsx lib/flight-search.test.ts",
     "test:partner-trip": "tsx lib/partner-trip.test.ts",
     "test:trip-source-suggestions": "tsx lib/trip-source-suggestions.test.ts",
