@@ -11,7 +11,7 @@
  *
  * Si el invitado ya envió email/contraseña pero aún no ha confirmado el correo, la modal
  * muestra el estado «pendiente de confirmación» en lugar de pedir el formulario otra vez.
- * Mientras sigue siendo invitado, la modal reaparece sola cada 5 minutos (si no hay otra
+ * Mientras sigue siendo invitado, la modal reaparece sola cada 3 minutos (si no hay otra
  * abierta) para incentivar el registro.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
@@ -58,9 +58,9 @@ const COPY: Record<GateReason, { title: string; description: string }> = {
       "Combina varios artículos en un mismo itinerario y no pierdas lo que ya has consolidado.",
   },
   home: {
-    title: "Crea tu cuenta para acceder a tus viajes",
+    title: "Crea tu cuenta para guardar tu viaje",
     description:
-      "Guarda lo que has planificado y recupéralo cuando quieras, aquí o en el móvil.",
+      "Añade más fuentes, guarda lo que has planificado y recupéralo cuando quieras, aquí o en el móvil.",
   },
   "source-limit": {
     title: "Crea tu cuenta para combinar más fuentes",
@@ -74,7 +74,7 @@ const COPY: Record<GateReason, { title: string; description: string }> = {
   },
 }
 
-const GUEST_SIGNUP_NUDGE_MS = 5 * 60 * 1000
+const GUEST_SIGNUP_NUDGE_MS = 3 * 60 * 1000
 
 type GateValue = {
   /** `true` si la acción puede continuar; `false` si se ha abierto la modal de registro. */
