@@ -204,30 +204,6 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     router.refresh()
   }
 
-  const handleMagicLink = async () => {
-    if (!name.trim()) {
-      setError("Escribe tu nombre.")
-      return
-    }
-    if (!email.trim()) {
-      setError("Escribe tu email para recibir el enlace.")
-      return
-    }
-    setError(null)
-    setSubmitting(true)
-    // Misma sesión anónima: updateUser({ email }) envía la confirmación sin crear otro user.
-    const result = await linkGuestEmail(email.trim(), name.trim() || null)
-    setSubmitting(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setPendingConfirm(true)
-    setNotice(
-      "Te hemos enviado un enlace de confirmación. Al abrirlo, este viaje queda ligado a tu email.",
-    )
-  }
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -270,6 +246,24 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     resetGateState()
     router.refresh()
     if (goHome) router.push("/trips")
+  }
+
+  const goForgotPassword = async () => {
+    setError(null)
+    setNotice(null)
+    if (extractionLoading) {
+      setError("Espera a que termine de leer el artículo.")
+      return
+    }
+    setSubmitting(true)
+    const flushed = await flushPendingSync()
+    setSubmitting(false)
+    if (!flushed) {
+      setError("No hemos podido guardar los últimos cambios. Inténtalo de nuevo.")
+      return
+    }
+    keepClaimRef.current = true
+    router.push("/forgot-password")
   }
 
   const handleAlreadyConfirmed = async () => {
@@ -385,6 +379,14 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
+                  <button
+                    type="button"
+                    className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    disabled={submitting}
+                    onClick={() => void goForgotPassword()}
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
                 </div>
 
                 {captchaEnabled ? (
@@ -476,15 +478,6 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
 
                 <Button type="submit" className="h-11" disabled={submitting}>
                   {submitting ? "Guardando…" : "Crear cuenta y guardar mi viaje"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-10"
-                  onClick={() => void handleMagicLink()}
-                  disabled={submitting}
-                >
-                  Prefiero un enlace por email
                 </Button>
                 <Button
                   type="button"

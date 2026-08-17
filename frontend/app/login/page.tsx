@@ -15,13 +15,12 @@ import { clearStash, prepareGuestTripClaim } from "@/lib/guest-trip-claim"
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { signIn, sendMagicLink, isGuest, user } = useAuth()
+  const { signIn, isGuest, user } = useAuth()
   const next = searchParams.get("next") || "/trips"
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
@@ -36,11 +35,6 @@ function LoginForm() {
    * `/login` vive fuera de `/trips`: no hay `useTrips()` ni flush. El
    * TripProvider ya hace flush al desmontar, fire-and-forget (~1 s de riesgo).
    * El camino bueno es la modal de RegistrationGate.
-   *
-   * `sendMagicLink` usa `signInWithOtp` con `shouldCreateUser` por defecto
-   * true: un email nuevo crea cuenta y el viaje aterriza ahí (alta, no
-   * conversión in-place). Si el enlace se abre en otro dispositivo no hay
-   * stash y no hay claim.
    */
   const prepareIfGuest = async (): Promise<boolean> => {
     if (!isGuest) return true
@@ -59,7 +53,6 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setNotice(null)
     if (captchaEnabled && !captchaToken) {
       setError("Confirma que no eres un robot.")
       return
@@ -80,35 +73,6 @@ function LoginForm() {
     }
     router.push(next)
     router.refresh()
-  }
-
-  const handleMagicLink = async () => {
-    if (!email.trim()) {
-      setError("Escribe tu email para recibir el enlace.")
-      return
-    }
-    setError(null)
-    setNotice(null)
-    if (captchaEnabled && !captchaToken) {
-      setError("Confirma que no eres un robot.")
-      return
-    }
-    setSubmitting(true)
-    const ready = await prepareIfGuest()
-    if (!ready) {
-      setSubmitting(false)
-      return
-    }
-    const result = await sendMagicLink(email.trim(), captchaToken ?? undefined)
-    setSubmitting(false)
-    if (!result.ok) {
-      clearStash()
-      resetCaptcha()
-      setError(result.error)
-      return
-    }
-    if (captchaEnabled) resetCaptcha()
-    setNotice("Te hemos enviado un enlace de acceso. Revisa tu correo.")
   }
 
   return (
@@ -152,12 +116,17 @@ function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+          <Link
+            href="/forgot-password"
+            className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
         </div>
 
         {captchaEnabled ? <Turnstile key={captchaKey} onToken={setCaptchaToken} /> : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {notice ? <p className="text-sm text-muted-foreground">{notice}</p> : null}
 
         <Button
           type="submit"
@@ -165,15 +134,6 @@ function LoginForm() {
           disabled={submitting || (captchaEnabled && !captchaToken)}
         >
           {submitting ? "Entrando…" : isGuest ? "Entrar y guardar mi viaje" : "Entrar"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-10"
-          onClick={handleMagicLink}
-          disabled={submitting || (captchaEnabled && !captchaToken)}
-        >
-          Enviarme un enlace de acceso
         </Button>
       </form>
     </AuthShell>

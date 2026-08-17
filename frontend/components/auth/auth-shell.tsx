@@ -2,7 +2,7 @@ import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 import { cn } from "@/lib/utils"
 
-/** Marco común de /login y /signup. */
+/** Marco común de /login, /signup, /forgot-password y /reset-password. */
 export function AuthShell({
   title,
   subtitle,

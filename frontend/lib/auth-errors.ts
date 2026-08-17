@@ -60,6 +60,13 @@ export function authErrorMessage(error: unknown): string {
   if (code === "weak_password" || /password should be at least|password is too weak/.test(blob)) {
     return "La contraseña debe tener al menos 6 caracteres."
   }
+  // Tope de 60 s entre recuperaciones al mismo email (GoTrue 429).
+  if (
+    code === "over_request_rate_limit" ||
+    /for security purposes|only request this after|60 seconds/.test(blob)
+  ) {
+    return "Espera un minuto antes de pedir otro."
+  }
   if (code === "over_email_send_rate_limit" || /rate limit/.test(blob)) {
     return "Hemos enviado demasiados correos. Espera un momento."
   }

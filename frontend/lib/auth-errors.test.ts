@@ -40,6 +40,20 @@ assert.equal(
   authErrorMessage({ message: "Password should be at least 6 characters" }),
   "La contraseña debe tener al menos 6 caracteres.",
 )
+assert.equal(
+  authErrorMessage({
+    message: "For security purposes, you can only request this after 60 seconds.",
+  }),
+  "Espera un minuto antes de pedir otro.",
+)
+assert.equal(
+  authErrorMessage({ code: "over_request_rate_limit" }),
+  "Espera un minuto antes de pedir otro.",
+)
+assert.equal(
+  authErrorMessage({ code: "over_email_send_rate_limit", message: "email rate limit exceeded" }),
+  "Hemos enviado demasiados correos. Espera un momento.",
+)
 assert.equal(authErrorMessage({ message: "captcha verification failed" }), "Confirma que no eres un robot.")
 
 assert.equal(authErrorMessage(null), AUTH_ERROR_FALLBACK)

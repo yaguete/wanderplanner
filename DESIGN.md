@@ -93,10 +93,10 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Cero JS de landing salvo el morph del logo (`LandingLockup`) y los chips de arranque (`LandingStart`). En `/partners`, además el generador del botón.
 
 ### Superficies de cuenta
-- `/login` y `/signup` comparten cromo propio, sin sidebar: marca arriba, una columna centrada (`max-w-md`) y **el mismo fondo que la landing `/`**: canvas cálido + `.landing-grid-texture` + velo de marca al 8%. Antes había aquí un radial `hsl(221 83% 53%)` — blue-600, prohibido más abajo — que además enfriaba el embudo justo al salir de `/`. `/account` (perfil) y `/account/settings` (email, contraseña, borrar cuenta) viven en el shell de `/trips` (header + sidebar + canvas). `/partners` ya no usa `AuthShell`.
+- `/login`, `/signup`, `/forgot-password` y `/reset-password` comparten cromo propio, sin sidebar: marca arriba, una columna centrada (`max-w-md`) y **el mismo fondo que la landing `/`**: canvas cálido + `.landing-grid-texture` + velo de marca al 8%. Antes había aquí un radial `hsl(221 83% 53%)` — blue-600, prohibido más abajo — que además enfriaba el embudo justo al salir de `/`. `/account` (perfil) y `/account/settings` (email, contraseña, borrar cuenta) viven en el shell de `/trips` (header + sidebar + canvas). `/partners` ya no usa `AuthShell`.
 - Avatar de la cabecera: menú (nombre, email, Perfil, Configuración, cerrar sesión) en desktop y móvil.
 - Invitados (sesión anónima): el avatar muestra «Estás probando sin cuenta» y ofrecen guardar el viaje en lugar de Perfil / Configuración.
-- `RegistrationGate`: modal breve (nombre, email, contraseña, o enlace de confirmación vía `updateUser` sobre la misma sesión anónima) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio.
+- `RegistrationGate`: modal breve (nombre, email, contraseña dos veces) con copy propio según el motivo — segunda fuente, nuevo viaje o ir a inicio. Recuperación de contraseña en `/forgot-password` → `/reset-password`.
 
 ## 5) Qué no hacer
 

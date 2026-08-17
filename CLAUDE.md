@@ -54,7 +54,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     Dockerfile
     agents/
   frontend/
-    app/                   # App Router: /, /login, /signup, /partners, /start, /legal…; (app)/ → /trips y /account
+    app/                   # App Router: /, /login, /signup, /forgot-password, /reset-password, /partners, /start, /legal…; (app)/ → /trips y /account
       robots.ts            # Allow /; Disallow /trips y /account; NO /start
       sitemap.ts           # /, /partners y /legal/* (indexables)
       opengraph-image.tsx  # OG 1200×630 (next/og + brandSvgMarkup)
@@ -114,9 +114,9 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - **`/`** — Landing ([`app/page.tsx`](frontend/app/page.tsx) + [`components/landing/`](frontend/components/landing/)): hero (h1 + cápsula `LandingStart`: pegar URL / buscar destino / crear cuenta), tres zooms de valor (`ValueProps`: fuentes / plan / oficiales), footer. Server Components salvo `LandingLockup` y `LandingStart`. Indexable. El CTA de blogueros vive en el footer (`/partners`), no en el hero.
 - **`/legal/aviso-legal`**, **`/legal/privacidad`**, **`/legal/cookies`** — Copy real, indexables, en `sitemap.ts`. Cromo de la landing de viajeros ([`legal/layout.tsx`](frontend/app/legal/layout.tsx)); `/legal` redirige al aviso. Identidad y proveedores de IA en [`lib/legal.ts`](frontend/lib/legal.ts).
-- **`/login`**, **`/signup`**, **`/auth/callback`** — Auth. El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero).
+- **`/login`**, **`/signup`**, **`/forgot-password`**, **`/reset-password`**, **`/auth/callback`** — Auth. El formulario de `/signup` está extraído en [`signup-form.tsx`](frontend/components/auth/signup-form.tsx) (variante compacta en el hero). Recuperación: `resetPasswordForEmail` → callback → `/reset-password`. El alta es nombre + email + contraseña dos veces.
 - **`/account`** — Perfil de viajero (tipos + referencias favoritas). Vive en el mismo shell que `/trips` (header + sidebar + canvas); el grupo `(app)` no cambia la URL.
-- **`/account/settings`** — Configuración de cuenta (email de solo lectura, cambio/alta de contraseña, borrar cuenta). Mismo shell. Invitado que entre a mano → `/trips`.
+- **`/account/settings`** — Configuración de cuenta (email de solo lectura, cambio de contraseña, borrar cuenta). Mismo shell. Invitado que entre a mano → `/trips`.
 - **`/partners`** — Landing de marketing en negativo ([`app/partners/page.tsx`](frontend/app/partners/page.tsx) + [`components/landing/partners/`](frontend/components/landing/partners/)): misma arquitectura que `/` (hero + 3 zooms + CTA + footer) sobre tinta `hsl(20 8% 11%)`. El generador del botón vive en el hero (`id="empezar"`) y dispara `POST /partners/prewarm`. Indexable. Slugs reservados: `landing`, `wp-landing`, `start`, `admin`. **No** usa `AuthShell`.
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos y de los chips del hero: sesión anónima + viaje borrador + fuente precargada. Reusa el borrador vacío del usuario si existe (`reuseOrInsertDraftTrip`) para no multiplicar viajes. `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado; los chips usan `ref=wp-landing` (reservado, no es un partner). **Rastreable + `noindex, follow`**: Google tiene que leer el meta; no va en `Disallow`.
 - **Layout raíz** — Inter, `AuthProvider`, `CookieBanner`, `AnalyticsGate` (Vercel Analytics solo con consentimiento). **Sin** `TripProvider`. Metadata (`metadataBase`, OG, Twitter) en [`app/layout.tsx`](frontend/app/layout.tsx).
@@ -136,7 +136,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - Sesión vía Supabase Auth. Middleware exige sesión (registrada **o anónima**) en `/trips` y `/account`.
 - **Invitado:** `signInAnonymously` (hay que activar Anonymous Sign-Ins en el dashboard). Mismo `user_id` que al registrarse.
-- **`RegistrationGate`:** con `user.is_anonymous`, bloquea segunda fuente / nuevo viaje / ir a inicio. Registro con `updateUser` (email+password) o enlace por email (`linkGuestEmail` → `updateUser({ email })`). **«Ya tengo cuenta»** prepara un claim (`prepare_guest_trip_claim`) y, tras `signIn` a la cuenta existente, `claim_guest_trips` reasigna `trips` / `sources` / `assistant_conversations`. El mismo stash cubre `/login` si el invitado llega ahí. **No** usar `signInWithOtp` para *convertir* al invitado (crearía otro usuario); en `/login` sí se usa para entrar en otra cuenta.
+- **`RegistrationGate`:** con `user.is_anonymous`, bloquea segunda fuente / nuevo viaje / ir a inicio. Registro con `upgradeGuest` (nombre + email + contraseña dos veces). `linkGuestEmail` solo reenvía la confirmación si el proyecto exige confirmar el correo. **«Ya tengo cuenta»** prepara un claim (`prepare_guest_trip_claim`) y, tras `signIn` a la cuenta existente, `claim_guest_trips` reasigna `trips` / `sources` / `assistant_conversations`. El mismo stash cubre `/login` y `/forgot-password` si el invitado llega ahí.
 - Perfil: `profiles` + `favorite_references`; se inyecta en el briefing del asistente y en `preferred_domains` de Tavily.
 - **Borrar cuenta:** `delete_own_account()` (RPC `security definer`) borra `auth.users`; el resto del usuario cae por `ON DELETE CASCADE`. Se conservan las cachés globales (`article_extractions`, thumbs, covers, trámites). `usage_events` queda huérfano a propósito. El cliente no puede borrar `auth.users` con la anon key. Invitados: no; siguen el cleanup anónimo.
 
@@ -186,7 +186,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/lib/partner-button.ts`](frontend/lib/partner-button.ts) / [`partners-api.ts`](frontend/lib/partners-api.ts) — kit `/partners`: URL limpia, snippet HTML, prewarm SSE.
 - [`frontend/components/partners/partner-button-builder.tsx`](frontend/components/partners/partner-button-builder.tsx).
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
-- [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously, updatePassword, deleteAccount.
+- [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously, requestPasswordReset, updatePassword, deleteAccount.
 - [`frontend/lib/guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) — stash + RPC para llevar el viaje del invitado a una cuenta existente.
 - [`frontend/lib/account-security.ts`](frontend/lib/account-security.ts) — confirmación de borrado (`displayNameFor`) y validación de contraseña.
 - [`frontend/components/auth/registration-gate.tsx`](frontend/components/auth/registration-gate.tsx).
@@ -254,7 +254,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
 - ❌ **No mutes a mano** `trip.days[…].items` → solo `moveItemBetweenDays`.
 - ❌ **No expongas `SUPABASE_SERVICE_ROLE_KEY`** al frontend.
-- ❌ **No uses `signInWithOtp` para convertir invitados** → `upgradeGuest` / `linkGuestEmail`. Entrar en una cuenta ya existente desde invitado va por `prepare_guest_trip_claim` / `claim_guest_trips`.
+- ❌ **No hay OTP ni magic link en el producto; no lo reintroduzcas** — ni para convertir invitados ni para entrar. La recuperación es `resetPasswordForEmail` → `/reset-password`. Entrar en una cuenta ya existente desde invitado va por `prepare_guest_trip_claim` / `claim_guest_trips`.
 - ❌ **No reasignes `user_id` desde el cliente** → RLS lo bloquea. El único camino es [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) + [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql).
 - ❌ **No pongas `force row level security` en `trips` / `sources` / `assistant_conversations`** sin revisar esas funciones: el `security definer` deja de funcionar en silencio.
 - ❌ **No pidas portada Unsplash en `createTrip`** → `applyCoverFromSource`.

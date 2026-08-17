@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -34,7 +35,6 @@ export default function AccountSettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("")
   const [nextPassword, setNextPassword] = useState("")
   const [repeatPassword, setRepeatPassword] = useState("")
-  const [requiresCurrent, setRequiresCurrent] = useState(true)
   const [savingPassword, setSavingPassword] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
@@ -44,7 +44,7 @@ export default function AccountSettingsPage() {
   const [deleteTyped, setDeleteTyped] = useState("")
   const [deleting, setDeleting] = useState(false)
 
-  const captchaEnabled = requiresCurrent && isTurnstileEnabled()
+  const captchaEnabled = isTurnstileEnabled()
   const confirmationName = confirmationNameFor(user, profile)
   const deleteMatches = matchesAccountConfirmation(deleteTyped, confirmationName)
 
@@ -63,7 +63,7 @@ export default function AccountSettingsPage() {
       current: currentPassword,
       next: nextPassword,
       repeat: repeatPassword,
-      requiresCurrent,
+      requiresCurrent: true,
     })
     if (validation) {
       toast.error(validation)
@@ -75,7 +75,7 @@ export default function AccountSettingsPage() {
     }
     setSavingPassword(true)
     const result = await updatePassword({
-      current: requiresCurrent ? currentPassword : null,
+      current: currentPassword,
       next: nextPassword,
       captchaToken: captchaToken ?? undefined,
     })
@@ -89,7 +89,7 @@ export default function AccountSettingsPage() {
     setNextPassword("")
     setRepeatPassword("")
     if (captchaEnabled) resetCaptcha()
-    toast.success(requiresCurrent ? "Contraseña actualizada" : "Contraseña establecida")
+    toast.success("Contraseña actualizada")
   }
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -143,23 +143,25 @@ export default function AccountSettingsPage() {
               <section>
                 <h2 className="text-base font-medium text-foreground">Contraseña</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {requiresCurrent
-                    ? "Para cambiarla, confirma la actual y escribe la nueva dos veces."
-                    : "Establece una contraseña para esta cuenta. No hace falta la actual."}
+                  Para cambiarla, confirma la actual y escribe la nueva dos veces.
                 </p>
                 <form onSubmit={handlePasswordSubmit} className="mt-4 flex flex-col gap-4">
-                  {requiresCurrent ? (
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="current-password">Contraseña actual</Label>
-                      <Input
-                        id="current-password"
-                        type="password"
-                        autoComplete="current-password"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                      />
-                    </div>
-                  ) : null}
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="current-password">Contraseña actual</Label>
+                    <Input
+                      id="current-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                    />
+                    <Link
+                      href="/forgot-password"
+                      className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      ¿No la recuerdas?
+                    </Link>
+                  </div>
 
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="new-password">Nueva contraseña</Label>
@@ -194,28 +196,6 @@ export default function AccountSettingsPage() {
                     />
                   ) : null}
 
-                  {requiresCurrent ? (
-                    <button
-                      type="button"
-                      className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                      onClick={() => {
-                        setRequiresCurrent(false)
-                        setCurrentPassword("")
-                        resetCaptcha()
-                      }}
-                    >
-                      Entré con un enlace por email y nunca puse contraseña
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                      onClick={() => setRequiresCurrent(true)}
-                    >
-                      Ya tengo contraseña
-                    </button>
-                  )}
-
                   <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <button
                       type="button"
@@ -244,11 +224,7 @@ export default function AccountSettingsPage() {
                         className="h-11 w-full sm:w-auto sm:px-6"
                         disabled={savingPassword || (captchaEnabled && !captchaToken)}
                       >
-                        {savingPassword
-                          ? "Guardando…"
-                          : requiresCurrent
-                            ? "Cambiar contraseña"
-                            : "Establecer contraseña"}
+                        {savingPassword ? "Guardando…" : "Cambiar contraseña"}
                       </Button>
                     </div>
                   </div>

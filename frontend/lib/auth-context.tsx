@@ -62,10 +62,10 @@ interface AuthContextValue {
   signInAnonymously: (
     options?: { referrer?: string | null; captchaToken?: string },
   ) => Promise<AuthResult>
-  sendMagicLink: (email: string, captchaToken?: string) => Promise<AuthResult>
+  requestPasswordReset: (email: string, captchaToken?: string) => Promise<AuthResult>
   /**
-   * Invitado → cuenta real por email: `updateUser({ email })` sobre el mismo `user_id`
-   * (envía confirmación). No usar `signInWithOtp` aquí: crearía otro usuario y perdería el viaje.
+   * Reenvía la confirmación de email sobre la misma sesión anónima (`updateUser({ email })`).
+   * No es un alta: la contraseña ya está puesta vía `upgradeGuest`.
    */
   linkGuestEmail: (email: string, displayName?: string | null) => Promise<AuthResult>
   /**
@@ -76,8 +76,8 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   updateProfile: (data: ProfileInput) => Promise<AuthResult>
   /**
-   * Cambia la contraseña. `current: null` = alta (llegó por enlace de correo
-   * y nunca puso una); si hay `current`, se verifica con `signInWithPassword`.
+   * Cambia la contraseña. `current: null` = sesión de recuperación (`/reset-password`);
+   * si hay `current`, se verifica con `signInWithPassword`.
    */
   updatePassword: (data: {
     current: string | null
@@ -332,20 +332,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [configured],
   )
 
-  const sendMagicLink = useCallback<AuthContextValue["sendMagicLink"]>(
+  const requestPasswordReset = useCallback<AuthContextValue["requestPasswordReset"]>(
     async (email, captchaToken) => {
       if (!configured) return { ok: false, error: "Supabase no está configurado." }
       try {
         const supabase = createClient()
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: {
-            ...(captchaToken ? { captchaToken } : {}),
-            emailRedirectTo:
-              typeof window !== "undefined"
-                ? `${window.location.origin}/auth/callback`
-                : undefined,
-          },
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/auth/callback?next=/reset-password`
+              : undefined,
+          ...(captchaToken ? { captchaToken } : {}),
         })
         if (error) return { ok: false, error: authErrorMessage(error) }
         return { ok: true }
@@ -530,7 +527,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       upgradeGuest,
       signInAnonymously,
-      sendMagicLink,
+      requestPasswordReset,
       linkGuestEmail,
       refreshGuestStatus,
       signOut,
@@ -548,7 +545,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       upgradeGuest,
       signInAnonymously,
-      sendMagicLink,
+      requestPasswordReset,
       linkGuestEmail,
       refreshGuestStatus,
       signOut,
