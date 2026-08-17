@@ -1,7 +1,8 @@
 """
 GET /cover?q=<zona> — portada Unsplash con caché global en `destination_covers`.
 
-No desplegar a producción sin T1.2 (metering). Cinturón mínimo: longitud de q + MAX_PHOTO_LOOKUPS_DAY.
+Cinturón global durable: MAX_PHOTO_LOOKUPS_DAY vía usage_events.kind=photo_paid (compartido con /thumb).
+Sin cuota por usuario: Unsplash no llama a enforce_usage.
 
 Términos Unsplash: al servir una foto por primera vez (cache miss que encuentra resultado) se
 dispara `download_location`. La respuesta incluye `author_name` / `author_url` para que la UI
@@ -137,7 +138,7 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
         if not api_key:
             _log_cover(cache_hit=False, query=query)
             return _empty_cover()
-        if not allow_paid_lookup():
+        if not await allow_paid_lookup():
             _log_cover(cache_hit=False, capped=True, query=query)
             return _empty_cover()
 
@@ -281,7 +282,8 @@ async def get_cover(q: str = Query(""), _user=Depends(require_user)):
     """
     Portada Unsplash por zona. 200 {"url", "author_name", "author_url"} (nulls si no hay foto).
 
-    La UI debe mostrar atribución cuando haya author_*. No desplegar a producción sin T1.2.
+    La UI debe mostrar atribución cuando haya author_*. Sin cuota por usuario
+    (Unsplash no llama a enforce_usage); el cinturón global es MAX_PHOTO_LOOKUPS_DAY.
     """
     query = normalize_query(q)
     if not query:

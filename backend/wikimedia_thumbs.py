@@ -2,7 +2,7 @@
 Miniaturas vía es.wikipedia + Wikimedia Commons.
 
 Dos llamadas: búsqueda con coordenadas y pageimage, luego imageinfo en Commons.
-Sin API key. No cuenta contra photo_lookup ni MAX_PHOTO_LOOKUPS_DAY.
+Sin API key. No cuenta contra photo_lookup ni MAX_PHOTO_LOOKUPS_DAY / photo_paid.
 
 User-Agent identificable (política de Wikimedia).
 """

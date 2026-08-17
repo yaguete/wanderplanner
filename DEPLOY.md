@@ -67,7 +67,7 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com/) → API keys | Extracción `/itinerary` (Claude Haiku) |
 | `DEEPSEEK_API_KEY` | [platform.deepseek.com](https://platform.deepseek.com/) | Asistente `/assistant/chat` |
 | `TAVILY_API_KEY` | [tavily.com](https://tavily.com/) → dashboard | Búsqueda web del asistente |
-| `GOOGLE_PLACES_API_KEY` | Google Cloud → APIs & Services → Places API (New) | Miniaturas `/thumb` (stay/food y fallback). Acepta también alias `GOOGLE_MAPS_API_KEY`. Las actividades van primero a Wikimedia Commons (sin clave) |
+| `GOOGLE_PLACES_API_KEY` | Google Cloud → APIs & Services → Places API (New) | Miniaturas `/thumb` (stay/food/transport, Básicos y fallback de Commons). Acepta también alias `GOOGLE_MAPS_API_KEY`. `kind=activity` (todo lo que no es stay/food/transport) va primero a Wikimedia Commons (sin clave) |
 | `UNSPLASH_ACCESS_KEY` | [unsplash.com/oauth/applications](https://unsplash.com/oauth/applications) | Portadas `/cover` (solo backend; **nunca** `NEXT_PUBLIC_*`) |
 | `SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Mismo proyecto que el front |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` | **Solo backend.** Cachés `article_extractions` / `place_thumbs` / `destination_covers` / `country_task_suggestions` y `usage_events` |
@@ -83,7 +83,7 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `ASSISTANT_MODEL` | `deepseek-v4-flash` |
 | `ITINERARY_MAX_OUTPUT_TOKENS` | `32000` (tope 64000) |
 | `EXTRACTION_CACHE_TTL_DAYS` | `30` |
-| `MAX_PHOTO_LOOKUPS_DAY` | `2000` (cinturón global de misses `/thumb`+`/cover`) |
+| `MAX_PHOTO_LOOKUPS_DAY` | `2000` (cinturón global durable de misses de pago `/thumb` Places + `/cover` Unsplash, vía `usage_events.kind=photo_paid`; Wikimedia no cuenta. Fail-closed si no se puede leer la DB) |
 | `PARTNER_PREWARM_MAX_IP_DAY` | `10` (tope por IP del prewarm; memoria de proceso) |
 | `PARTNER_PREWARM_MAX_DAY` | `200` (cap global durable vía `usage_events.kind=partner_prewarm`) |
 | `SOURCE_SUGGEST_ENABLED` | `true` (kill switch de `GET /sources/suggest`) |
@@ -138,6 +138,7 @@ Configurar en Vercel → Project → Settings → Environment Variables. Todas s
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API → URL | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API → `anon` `public` | Pública; RLS protege datos. **Nunca** la `service_role` |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | [account.mapbox.com](https://account.mapbox.com/) → Access tokens | Token `pk.…` **restringido por URL** a `wanderplanner.ai` (y previews si hace falta) |
+| `NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING` | — | Default **on** (cualquier valor salvo `false`/`0`/`off`). Kill switch del endpoint `mapbox.places-permanent` al confirmar un lugar. Es **licencia, no ahorro**: el `permanent=true` sobre `mapbox.places` nunca facturó; apagarlo vuelve a persistir el dataset temporal. No ponerlo a `false` en producción |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile → site key | Clave pública del widget, visible en el navegador. Se usa en `/start`, `/login`, `/signup`, `/partners` y los chips del hero; autoriza sus hostnames en Cloudflare. En Supabase Auth **y** en Fly (`TURNSTILE_SECRET_KEY`) se configura la **secret key asociada**, nunca esta site key |
 | `NEXT_PUBLIC_APP_ORIGIN` | Dominio canónico del front | Opcional. Override de `SITE_URL` (`https://wanderplanner.ai`) para el snippet de `/partners`. Si falta, el kit usa `SITE_URL`; **nunca** `window.location.origin` (local y Preview incrustarían un host que el lector no puede abrir) |
 | `NEXT_PUBLIC_SOURCE_SUGGEST_ENABLED` | Kill switch del chip «Busca un destino» | Default `true`. `false` oculta la pestaña 2 |
@@ -203,6 +204,9 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   13. `20260808210000_country_task_suggestions.sql`
   14. `20260808220000_trip_origin.sql`
   15. `20260816120000_ai_transfer_consent.sql`
+  16. `20260816180000_guest_trip_claim.sql`
+  17. `20260817000000_place_thumbs_wikimedia.sql`
+  18. `20260817120000_photo_paid_usage.sql` (antes del backend que escribe `photo_paid`; si no, el tope global lee 0)
 
 ```bash
 # Con CLI vinculada al proyecto:

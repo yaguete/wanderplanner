@@ -30,6 +30,8 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260808220000_trip_origin.sql
 #   migrations/20260816120000_ai_transfer_consent.sql
 #   migrations/20260816180000_guest_trip_claim.sql
+#   migrations/20260817000000_place_thumbs_wikimedia.sql
+#   migrations/20260817120000_photo_paid_usage.sql
 
 # Opción B: NO disponible hoy. `supabase db push` no funciona en este proyecto:
 # no hay supabase/config.toml, el CLI no está vinculado y el remoto no tiene
@@ -64,6 +66,8 @@ select public.claim_guest_trips('<token>');
 -- Segundo canje del mismo token → {"status":"invalid"}
 -- Canje desde sesión anónima → {"status":"caller_anonymous"}
 ```
+
+**Miniaturas Wikimedia + tope durable de fotos:** `20260817000000_place_thumbs_wikimedia.sql` (columnas `provider`/`attribution` en `place_thumbs`) y `20260817120000_photo_paid_usage.sql` (`usage_events.kind=photo_paid`, user_id null, índice `(kind, created_at)`). La segunda **antes** de desplegar el backend que escribe `photo_paid`: si no, el INSERT choca con el check y el tope lee 0 (fail-open). También relaja `usage_events_user_id_required` para kinds sin usuario (`partner_prewarm`, `landing_source_search`, `photo_paid`).
 
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 

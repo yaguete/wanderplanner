@@ -1,5 +1,5 @@
 /**
- * Miniaturas de ítems vía GET /thumb (Commons para actividades, Places de cola).
+ * Miniaturas de ítems vía GET /thumb (Commons para `kind=activity`, Places de cola).
  * Caché en memoria + sessionStorage; cola de concurrencia.
  */
 import { authHeaders } from "@/lib/api-auth"

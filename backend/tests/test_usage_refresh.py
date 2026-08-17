@@ -62,3 +62,30 @@ async def test_record_system_revalidation_without_user(monkeypatch):
     with patch("usage.httpx.AsyncClient", FakeClient):
         await record_event(None, "system_revalidation", cost_hint=42)
     assert FakeClient.last == {"kind": "system_revalidation", "cost_hint": 42}
+
+
+@pytest.mark.asyncio
+async def test_record_photo_paid_without_user(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://sb.example")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+
+    class FakeResponse:
+        status_code = 201
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            FakeClient.last = json
+            return FakeResponse()
+
+    with patch("usage.httpx.AsyncClient", FakeClient):
+        await record_event(None, "photo_paid", cost_hint=1)
+    assert FakeClient.last == {"kind": "photo_paid", "cost_hint": 1}

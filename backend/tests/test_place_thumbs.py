@@ -79,7 +79,7 @@ def _stack(
     stack.enter_context(patch("place_thumbs.lookup_wikimedia_thumb", new=wiki_lookup))
     upsert = AsyncMock()
     stack.enter_context(patch("place_thumbs._upsert_row", new=upsert))
-    stack.enter_context(patch("place_thumbs.allow_paid_lookup", return_value=paid))
+    stack.enter_context(patch("place_thumbs.allow_paid_lookup", new=AsyncMock(return_value=paid)))
     enforce = stack.enter_context(
         patch(
             "place_thumbs.enforce_usage",
@@ -228,3 +228,99 @@ async def test_wiki_exception_does_not_propagate():
 
     assert result["provider"] == "places"
     search.assert_awaited()
+
+
+LEGACY_PLACES_ROW = {
+    "miss": False,
+    "photo_uri": "https://lh3.googleusercontent.com/stale",
+    "photo_uri_expires_at": "2020-01-01T00:00:00+00:00",
+    "photo_name": "places/abc/photos/xyz",
+    "provider": None,
+}
+
+
+@pytest.mark.asyncio
+async def test_activity_expired_places_upgrades_to_commons():
+    get_media = AsyncMock(return_value="https://lh3.googleusercontent.com/fresh")
+    wiki = AsyncMock(return_value=WIKI)
+    stack, _, upsert, _ = _stack(
+        row=STALE_ROW,
+        media_uri=None,
+        get_media=get_media,
+        wiki=wiki,
+    )
+    with stack:
+        result = await _resolve_thumb("hallstatt austria", _user(), kind="activity", name="Hallstatt")
+
+    assert result == _payload(WIKI.url, "wikimedia", WIKI.attribution())
+    get_media.assert_not_awaited()
+    wiki.assert_awaited()
+    rows = [c.args[3] for c in upsert.await_args_list if c.args and len(c.args) >= 4]
+    assert any(r.get("provider") == "wikimedia" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_legacy_null_provider_upgrades_to_commons():
+    get_media = AsyncMock(return_value="https://lh3.googleusercontent.com/fresh")
+    wiki = AsyncMock(return_value=WIKI)
+    stack, _, _, _ = _stack(
+        row=LEGACY_PLACES_ROW,
+        media_uri=None,
+        get_media=get_media,
+        wiki=wiki,
+    )
+    with stack:
+        result = await _resolve_thumb("hallstatt austria", _user(), kind="activity", name="Hallstatt")
+
+    assert result["provider"] == "wikimedia"
+    get_media.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stay_expired_places_skips_wiki_and_refreshes():
+    wiki = AsyncMock(return_value=WIKI)
+    stack, _, _, _ = _stack(
+        row=STALE_ROW,
+        media_uri="https://lh3.googleusercontent.com/fresh",
+        wiki=wiki,
+    )
+    with stack:
+        result = await _resolve_thumb("gasthof", _user(), kind="stay", name="Gasthof")
+
+    assert result == _payload("https://lh3.googleusercontent.com/fresh", "places")
+    wiki.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_activity_wiki_miss_capped_still_serves_stale():
+    wiki = AsyncMock(return_value=None)
+    get_media = AsyncMock(return_value="https://lh3.googleusercontent.com/fresh")
+    stack, _, _, _ = _stack(
+        row=STALE_ROW,
+        media_uri=None,
+        paid=False,
+        get_media=get_media,
+        wiki=wiki,
+    )
+    with stack:
+        result = await _resolve_thumb("mondsee", _user(), kind="activity", name="Mondsee")
+
+    assert result == _payload("https://lh3.googleusercontent.com/stale", "places")
+    wiki.assert_awaited()
+    get_media.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_single_flight_key_includes_kind():
+    captured: dict[str, str] = {}
+
+    async def fake_sf(key, factory):
+        captured["key"] = key
+        return _payload(None)
+
+    from place_thumbs import get_thumb
+
+    with patch("place_thumbs.single_flight", new=fake_sf):
+        await get_thumb(q="Hallstatt Austria", kind="activity", n="Hallstatt", user=_user())
+
+    assert captured["key"] == "thumb:activity:hallstatt austria"

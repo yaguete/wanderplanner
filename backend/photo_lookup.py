@@ -1,17 +1,20 @@
 """
 Utilidades compartidas para GET /thumb y GET /cover: normalización de query, tope diario
-de cache misses y single-flight por consulta.
+de cache misses (Places + Unsplash) y single-flight por consulta.
 
-No desplegar a producción sin T1.2 (metering de uso). Este módulo solo ofrece un cinturón
-mínimo (longitud de q + tope diario en memoria) mientras tanto.
+El tope `MAX_PHOTO_LOOKUPS_DAY` es durable vía `usage_events.kind=photo_paid` (sobrevive
+a cold starts de Fly). Wikimedia no cuenta.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-from datetime import date
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, TypeVar
+
+from usage import count_kind_events_strict, record_event
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,7 @@ QUERY_MAX_LEN = 200
 MISS_TTL_DAYS = 30
 # Conservador: Places documenta photoUri como short-lived (docs julio 2026).
 PHOTO_URI_TTL_SECONDS = 45 * 60
+PHOTO_PAID_MEMO_SEC = 60
 
 T = TypeVar("T")
 
@@ -26,8 +30,9 @@ _locks: dict[str, asyncio.Lock] = {}
 _locks_guard = asyncio.Lock()
 _inflight: dict[str, asyncio.Future[Any]] = {}
 
-_day: date | None = None
-_lookups_today = 0
+_memo_lock = asyncio.Lock()
+_memo_count: int | None = None
+_memo_at: float | None = None
 
 
 def normalize_query(q: str | None) -> str | None:
@@ -46,23 +51,55 @@ def _max_lookups_day() -> int:
     return 2000
 
 
-def allow_paid_lookup() -> bool:
-    """Incrementa y comprueba el tope diario global de cache misses (en memoria)."""
-    global _day, _lookups_today
-    today = date.today()
-    if _day != today:
-        _day = today
-        _lookups_today = 0
+def reset_paid_lookup_memo_for_tests() -> None:
+    """Vacía el memo en proceso del tope photo_paid."""
+    global _memo_count, _memo_at
+    _memo_count = None
+    _memo_at = None
+
+
+async def allow_paid_lookup() -> bool:
+    """
+    Tope global durable de cache misses de /thumb (Places) y /cover (Unsplash).
+
+    Lee `usage_events.kind=photo_paid` (fail-closed) y memoíza el recuento ~60 s,
+    incrementando en memoria entre refrescos. Al permitir, escribe un evento.
+    Wikimedia no pasa por aquí.
+    """
+    global _memo_count, _memo_at
     limit = _max_lookups_day()
     if limit == 0:
         return False
-    if _lookups_today >= limit:
-        logger.warning(
-            "MAX_PHOTO_LOOKUPS_DAY (%s) alcanzado; devolviendo null sin llamar al proveedor",
-            limit,
+
+    async with _memo_lock:
+        now = time.monotonic()
+        stale = (
+            _memo_count is None
+            or _memo_at is None
+            or (now - _memo_at) >= PHOTO_PAID_MEMO_SEC
         )
-        return False
-    _lookups_today += 1
+        if stale:
+            since = datetime.now(timezone.utc) - timedelta(days=1)
+            try:
+                used = await count_kind_events_strict("photo_paid", since=since)
+            except Exception:
+                used = None
+            if used is None:
+                logger.warning(
+                    "MAX_PHOTO_LOOKUPS_DAY: no se pudo leer usage_events; cortando",
+                )
+                return False
+            _memo_count = used
+            _memo_at = now
+        if _memo_count >= limit:
+            logger.warning(
+                "MAX_PHOTO_LOOKUPS_DAY (%s) alcanzado; devolviendo null sin llamar al proveedor",
+                limit,
+            )
+            return False
+        _memo_count += 1
+
+    await record_event(None, "photo_paid", cost_hint=1)
     return True
 
 

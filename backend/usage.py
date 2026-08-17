@@ -13,6 +13,7 @@ Kinds:
   - partner_prewarm: pre-síntesis desde /partners (user_id null; cap global durable)
   - landing_source_search: Tavily de GET /sources/suggest (landing; user_id null; cap global durable)
   - trip_source_search: Tavily de GET /sources/suggest desde Añadir fuente (user_id opcional; cap propio)
+  - photo_paid: cache miss de pago de /thumb (Places) y /cover (Unsplash); user_id null; cap global durable
 """
 from __future__ import annotations
 
@@ -44,9 +45,16 @@ Kind = Literal[
     "transport_hub",
     "landing_source_search",
     "trip_source_search",
+    "photo_paid",
 ]
 _USERLESS_KINDS = frozenset(
-    {"system_revalidation", "partner_prewarm", "landing_source_search", "trip_source_search"}
+    {
+        "system_revalidation",
+        "partner_prewarm",
+        "landing_source_search",
+        "trip_source_search",
+        "photo_paid",
+    }
 )
 LimitKind = Literal["guest", "daily", "monthly"]
 
@@ -151,13 +159,21 @@ def _guest_max(kind: str) -> int:
     return _env_int(_GUEST_ENV.get(kind, ""), _GUEST_DEFAULTS.get(kind, 0))
 
 
-def _parse_count(r: httpx.Response) -> int:
+def _parse_count_strict(r: httpx.Response) -> int | None:
+    """Total de `Prefer: count=exact`. None si el header no trae un entero."""
     cr = r.headers.get("content-range") or ""
     # content-range: 0-0/123  o  */0
     if "/" in cr:
         total = cr.rsplit("/", 1)[-1].strip()
         if total.isdigit():
             return int(total)
+    return None
+
+
+def _parse_count(r: httpx.Response) -> int:
+    n = _parse_count_strict(r)
+    if n is not None:
+        return n
     rows = r.json()
     return len(rows) if isinstance(rows, list) else 0
 
@@ -200,15 +216,22 @@ async def count_events(
         return 0
 
 
-async def count_kind_events(
+async def count_kind_events_strict(
     kind: Kind,
     *,
     since: datetime | None = None,
-) -> int:
-    """Cuenta eventos de un kind (cualquier user_id, incl. null) desde `since`."""
+) -> int | None:
+    """
+    Cuenta eventos de un kind (cualquier user_id, incl. null) desde `since`.
+
+    Distingue «cero eventos» de «no lo sé»: None si falta config, el GET falla
+    o PostgREST no manda un `content-range` parseable. Los topes de factura
+    (fotos) deben tratar None como cortar; Tavily sigue usando el wrapper
+    fail-open `count_kind_events`.
+    """
     cfg = _config()
     if not cfg:
-        return 0
+        return None
     base, key = cfg
     params: dict[str, str] = {
         "kind": f"eq.{kind}",
@@ -230,10 +253,20 @@ async def count_kind_events(
                 },
             )
             if r.status_code not in (200, 206):
-                return 0
-            return _parse_count(r)
+                return None
+            return _parse_count_strict(r)
     except Exception:
-        return 0
+        return None
+
+
+async def count_kind_events(
+    kind: Kind,
+    *,
+    since: datetime | None = None,
+) -> int:
+    """Cuenta eventos de un kind. Fail-open: 0 si no se puede leer."""
+    n = await count_kind_events_strict(kind, since=since)
+    return 0 if n is None else n
 
 
 async def record_event(
