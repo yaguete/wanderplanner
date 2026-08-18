@@ -1,12 +1,11 @@
 "use client"
 
-import { track } from "@vercel/analytics"
 import { ExternalLink } from "lucide-react"
 import {
   FLIGHT_SEARCH_AFFILIATE_ID,
-  FLIGHT_SEARCH_PROVIDER,
   type FlightSearchHit,
 } from "@/lib/flight-search"
+import { outbound } from "@/lib/funnel-analytics"
 import { cn } from "@/lib/utils"
 
 export function FlightSearchLink({
@@ -35,9 +34,10 @@ export function FlightSearchLink({
         className,
       )}
       onClick={() => {
-        track("flight_search_click", {
-          provider: FLIGHT_SEARCH_PROVIDER.id,
-          roundTrip: search.roundTrip,
+        outbound(search.href, {
+          surface: "flight_search",
+          // Hop Impact propio; el badge UI es otro flag (`FLIGHT_SEARCH_AFFILIATE_ID`).
+          affiliate: "own",
         })
       }}
     >

@@ -14,7 +14,8 @@
  * 6. Sin fechas: calendar-month-view (day-view exige outboundDate).
  *
  * El wrap Impact es siempre. FLIGHT_SEARCH_AFFILIATE_ID vacío = no cobramos
- * comisión; el badge «afiliado» no se enciende.
+ * comisión; el badge «afiliado» no se enciende. El contador `outbound_click`
+ * sí marca `affiliate=own` (el hop es nuestro, como el Booking del asistente).
  *
  * Cambiar de buscador = otro `build` en FLIGHT_SEARCH_PROVIDER.
  */

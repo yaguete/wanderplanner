@@ -1127,6 +1127,8 @@ function DayItineraryTimeline({
                       })
                     : item.affiliateUrl
                 }
+                outboundSurface="route_card"
+                outboundAffiliate={item.affiliateUrl ? "partner" : "auto"}
                 flightSearch={
                   item.route
                     ? flightSearchHrefForItem({

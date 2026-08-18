@@ -47,12 +47,15 @@ jobs:
       - run: npm run test:partner-button
       - run: npm run test:trip-source-suggestions
       - run: npm run test:cookie-consent
+      - run: npm run test:funnel-analytics
       - run: npm run test:guest-trip-claim
       - run: npm run test:start-session
       - run: npm run test:account-security
       - run: npm run test:auth-errors
       - run: npm run test:itinerary-calendar
       - run: npm run test:itinerary-dnd
+      - run: npm run test:route-legs
+      - run: npm run test:transport-routes
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
       # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
       # degradados a warning en eslint.config.mjs y no bloquean.

@@ -36,6 +36,7 @@ import {
   prepareGuestTripClaim,
 } from "@/lib/guest-trip-claim"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
+import { postSlugFromSourceUrl, recordAccountCreated } from "@/lib/funnel-analytics"
 
 export type GateReason =
   | "new-trip"
@@ -92,7 +93,7 @@ function pendingEmailOf(user: User | null | undefined): string | null {
 export function RegistrationGateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, isGuest, upgradeGuest, linkGuestEmail, refreshGuestStatus, signIn } = useAuth()
-  const { flushPendingSync, pendingSources } = useTrips()
+  const { flushPendingSync, pendingSources, trips, getTripSources } = useTrips()
   const [reason, setReason] = useState<GateReason | null>(null)
   const [mode, setMode] = useState<GateMode>("signup")
   const [pendingConfirm, setPendingConfirm] = useState(false)
@@ -191,6 +192,12 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
       setError(result.error)
       return
     }
+    const trip = trips.find((t) => t.referrer) ?? trips[0]
+    const firstUrl = trip ? getTripSources(trip.id)[0]?.url : undefined
+    recordAccountCreated({
+      ref: trip?.referrer ?? undefined,
+      postSlug: firstUrl ? postSlugFromSourceUrl(firstUrl) ?? undefined : undefined,
+    })
     // Con confirmación de email activada, sigue siendo invitado hasta confirmar.
     // Mostramos el estado pendiente en lugar de cerrar en silencio.
     const stillGuest = await refreshGuestStatus()

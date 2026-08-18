@@ -33,6 +33,7 @@ import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CountryTasksSection } from "@/components/country-tasks-section"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { stayReserveHref } from "@/lib/booking-search"
+import { outbound } from "@/lib/funnel-analytics"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
@@ -617,6 +618,12 @@ function TaskRow({
                 target="_blank"
                 rel="noreferrer noopener"
                 className="wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium"
+                onClick={() =>
+                  outbound(reserveHref, {
+                    surface: "task_row",
+                    affiliate: task.affiliateUrl ? "partner" : "auto",
+                  })
+                }
               >
                 {task.category === "basic" || task.origin === "basic" ? "Contratar" : "Reservar"}
                 <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />

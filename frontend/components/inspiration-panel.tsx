@@ -982,6 +982,8 @@ export default function InspirationPanel({
                       }
                       isAdded={addedItemIds.has(basic.id)}
                       href={basic.affiliateUrl}
+                      outboundSurface="inspiration"
+                      outboundAffiliate="partner"
                       onAdd={() => handleAddBasic(basic)}
                     />
                   ))

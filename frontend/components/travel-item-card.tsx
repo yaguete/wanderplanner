@@ -5,6 +5,7 @@ import { Check, ExternalLink, Pencil, Plus, Search, X, type LucideIcon } from "l
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { FlightSearchLink } from "@/components/flight-search-link"
+import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
 import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { FlightSearchHit } from "@/lib/flight-search"
@@ -90,6 +91,8 @@ type PlannedCardProps = {
   /** T4B.3b: enlace Skyscanner prerellenado. Fuera del `<a>` de affiliateUrl. */
   flightSearch?: FlightSearchHit | null
   className?: string
+  outboundSurface?: OutboundSurface
+  outboundAffiliate?: OutboundAffiliate | "auto"
 }
 
 type BasicSourceCardProps = {
@@ -102,6 +105,8 @@ type BasicSourceCardProps = {
   href?: string | null
   onAdd: () => void
   className?: string
+  outboundSurface?: OutboundSurface
+  outboundAffiliate?: OutboundAffiliate | "auto"
 }
 
 type BasicPlannedCardProps = {
@@ -114,6 +119,8 @@ type BasicPlannedCardProps = {
   href?: string | null
   onRemove: () => void
   className?: string
+  outboundSurface?: OutboundSurface
+  outboundAffiliate?: OutboundAffiliate | "auto"
 }
 
 export type TravelItemCardProps =
@@ -121,6 +128,15 @@ export type TravelItemCardProps =
   | PlannedCardProps
   | BasicSourceCardProps
   | BasicPlannedCardProps
+
+function trackCardOutbound(
+  href: string | null | undefined,
+  surface?: OutboundSurface,
+  affiliate?: OutboundAffiliate | "auto",
+) {
+  if (!href || !surface) return
+  outbound(href, { surface, affiliate: affiliate ?? "auto" })
+}
 
 export function TravelItemCard(props: TravelItemCardProps) {
   if (props.variant === "source") {
@@ -222,6 +238,9 @@ export function TravelItemCard(props: TravelItemCardProps) {
             target="_blank"
             rel="noreferrer noopener"
             className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() =>
+              trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+            }
           >
             {main}
           </a>
@@ -282,6 +301,9 @@ export function TravelItemCard(props: TravelItemCardProps) {
               target="_blank"
               rel="noreferrer noopener"
               className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() =>
+                trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+              }
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground" aria-hidden>
                 <Icon className="h-4 w-4" />
@@ -384,6 +406,9 @@ export function TravelItemCard(props: TravelItemCardProps) {
             rel="noreferrer noopener"
             draggable={false}
             className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() =>
+              trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+            }
           >
             {icon}
             {titleAndMeta}

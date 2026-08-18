@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { outbound } from "@/lib/funnel-analytics"
 import { cn } from "@/lib/utils"
 
 function isHttpUrl(href: string | undefined): href is string {
@@ -54,6 +55,7 @@ export function AssistantMarkdown({
                 target="_blank"
                 rel="noreferrer noopener"
                 className="wp-ext-link break-all font-medium underline underline-offset-2"
+                onClick={() => outbound(href, { surface: "assistant", affiliate: "auto" })}
               >
                 {children}
               </a>

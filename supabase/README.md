@@ -101,4 +101,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ…
 ## Opcional
 
 - **Bot protection / Turnstile** en Auth Settings si rellenas `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
-- **pg_cron**: las migraciones de cleanup intentan programar `cleanup_anonymous_users()` (04:00 UTC), `cleanup_usage_events()` (04:15 UTC) y `cleanup_guest_trip_claims()` (04:20 UTC). Si la extensión no está disponible, invócalas a mano. **Producción (T7.3):** programar las tres junto al backup semanal.
+- **pg_cron**: las migraciones de cleanup intentan programar `cleanup_anonymous_users()` (04:00 UTC), `cleanup_usage_events()` (04:15 UTC), `cleanup_guest_trip_claims()` (04:20 UTC) y `cleanup_funnel_events()` (04:30 UTC). Si la extensión no está disponible, invócalas a mano. En producción (comprobado 18 ago 2026) las tres primeras corren; la del embudo entra con su migración.

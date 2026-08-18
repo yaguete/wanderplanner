@@ -35,6 +35,10 @@ import {
   isDefinitivelyDeadAnonymousSession,
   type StartDecision,
 } from "@/lib/start-session"
+import {
+  recordStartOpenedOnce,
+  startOpenedGuard,
+} from "@/lib/funnel-analytics"
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) return error.message
@@ -219,6 +223,20 @@ function StartFlow() {
       )
     }
   }, [applyDecision, captchaToken, referrer, signInAnonymously, sourceKey])
+
+  useEffect(() => {
+    // Independiente de Turnstile: este es el denominador del embudo.
+    // Si se cuelga de `start()` (que espera el captcha) el evento deja de medir el abandono.
+    if (
+      !startOpenedGuard({
+        authLoading: isLoading,
+        supabaseConfigured: isSupabaseConfigured(),
+      })
+    ) {
+      return
+    }
+    recordStartOpenedOnce({ ref: referrer, sourceUrl })
+  }, [isLoading, referrer, sourceUrl])
 
   useEffect(() => {
     if (isLoading || !isSupabaseConfigured() || needsCaptcha) return

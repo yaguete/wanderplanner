@@ -16,6 +16,7 @@ import { TravelerProfileFields } from "@/components/auth/traveler-profile-fields
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
+import { recordAccountCreated } from "@/lib/funnel-analytics"
 import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
 import { cn } from "@/lib/utils"
 
@@ -92,7 +93,8 @@ export function SignupForm({
       travelerNotes: travelerNotes.trim() || null,
       favoriteReferences: references,
     }
-    const result = isGuest
+    const convertingGuest = isGuest
+    const result = convertingGuest
       ? await upgradeGuest(payload)
       : await signUp({ ...payload, captchaToken: captchaToken ?? undefined })
     setSubmitting(false)
@@ -102,6 +104,7 @@ export function SignupForm({
       setError(result.error)
       return
     }
+    if (convertingGuest) recordAccountCreated()
     setNotice(
       "Cuenta creada. Te hemos enviado un correo para confirmar tu email, revisa tu bandeja de entrada.",
     )

@@ -57,6 +57,11 @@ const DATA_ROWS: readonly (readonly string[])[] = [
     "Saber qué funciona en la web. Solo si nos das permiso.",
     "Consentimiento",
   ],
+  [
+    "Desde qué artículo llegas y si pulsas un enlace de reserva",
+    "Contar el botón de los blogs: qué post lo abrió, si creas cuenta y si sales a reservar. Sin tu correo y sin la dirección completa del artículo.",
+    "Interés legítimo",
+  ],
 ]
 
 export default function PrivacidadPage() {
@@ -79,6 +84,12 @@ export default function PrivacidadPage() {
         <p>
           La dirección IP la usamos en el momento y no la guardamos en ninguna tabla. Puede
           quedar, como en cualquier web, en los registros de los servidores que nos alojan.
+        </p>
+        <p>
+          Del botón de los blogs guardamos un contador: qué pasó (abrir el enlace, crear
+          cuenta, pulsar una reserva), el slug del bloguero y el identificador público del
+          artículo —el último trozo de su dirección, no la URL entera—. No va unido a tu
+          cuenta ni a tu correo. Esas filas se borran a los 90 días.
         </p>
         <p>WanderPlanner no está pensado para menores de 14 años.</p>
       </LegalSection>
@@ -129,7 +140,8 @@ export default function PrivacidadPage() {
         <p>
           Cuando extraemos un artículo guardamos una copia asociada a su dirección web, no
           a ti, para no volver a pedírsela al blog. Esa copia no es un dato tuyo y no
-          desaparece al borrar tu cuenta.
+          desaparece al borrar tu cuenta. Los contadores del botón de los blogs se
+          borran a los 90 días.
         </p>
       </LegalSection>
 
