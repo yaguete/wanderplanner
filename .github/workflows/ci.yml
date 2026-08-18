@@ -48,6 +48,7 @@ jobs:
       - run: npm run test:trip-source-suggestions
       - run: npm run test:cookie-consent
       - run: npm run test:guest-trip-claim
+      - run: npm run test:start-session
       - run: npm run test:account-security
       - run: npm run test:auth-errors
       - run: npm run test:itinerary-calendar

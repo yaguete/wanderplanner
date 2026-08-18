@@ -33,7 +33,7 @@ import { clearActiveConversationPointers } from "@/lib/db/assistant-repo"
 import { AUTH_EMAIL_EXISTS, AUTH_ERROR_FALLBACK, authErrorMessage, isDuplicateSignUp } from "@/lib/auth-errors"
 import { clearStash } from "@/lib/guest-trip-claim"
 
-export type AuthResult = { ok: true; signedIn?: boolean } | { ok: false; error: string }
+export type AuthResult = { ok: true; signedIn?: boolean; userId?: string } | { ok: false; error: string }
 
 type ProfileInput = {
   displayName: string | null
@@ -317,14 +317,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!configured) return { ok: false, error: "Supabase no está configurado." }
       try {
         const supabase = createClient()
-        const { error } = await supabase.auth.signInAnonymously({
+        const { data, error } = await supabase.auth.signInAnonymously({
           options: {
             ...(options?.referrer ? { data: { signup_referrer: options.referrer } } : {}),
             ...(options?.captchaToken ? { captchaToken: options.captchaToken } : {}),
           },
         })
         if (error) return { ok: false, error: authErrorMessage(error) }
-        return { ok: true }
+        clearStash()
+        return { ok: true, userId: data.user?.id }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
       }
@@ -446,6 +447,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!configured) return
     const supabase = createClient()
     await supabase.auth.signOut()
+    clearStash()
     clearActiveConversationPointers()
     setProfile(null)
     setFavoriteReferences([])

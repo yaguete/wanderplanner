@@ -1,9 +1,10 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
@@ -24,6 +25,9 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
+  const [guestTripName, setGuestTripName] = useState<string | null>(null)
+  const [guestTripCount, setGuestTripCount] = useState(0)
+  const [addGuestTrip, setAddGuestTrip] = useState(true)
   const captchaEnabled = isTurnstileEnabled()
 
   const resetCaptcha = () => {
@@ -31,18 +35,49 @@ function LoginForm() {
     setCaptchaKey((key) => key + 1)
   }
 
-  /**
-   * `/login` vive fuera de `/trips`: no hay `useTrips()` ni flush. El
-   * TripProvider ya hace flush al desmontar, fire-and-forget (~1 s de riesgo).
-   * El camino bueno es la modal de RegistrationGate.
-   */
+  useEffect(() => {
+    if (!isGuest || !user?.id) return
+    const supabase = createClient()
+    let active = true
+    void (async () => {
+      const { data, error: loadError } = await supabase
+        .from("trips")
+        .select("id, name")
+        .eq("user_id", user.id)
+        .eq("archived", false)
+        .order("updated_at", { ascending: false })
+        .limit(2)
+      if (!active) return
+      if (loadError || !data?.length) {
+        setGuestTripName(null)
+        setGuestTripCount(0)
+        return
+      }
+      const name = typeof data[0]?.name === "string" ? data[0].name.trim() : ""
+      setGuestTripName(name || null)
+      setGuestTripCount(data.length)
+    })()
+    return () => {
+      active = false
+    }
+  }, [isGuest, user?.id])
+
+  const hasGuestTrip = isGuest && guestTripCount > 0
+  const willClaim = hasGuestTrip && addGuestTrip
+
   const prepareIfGuest = async (): Promise<boolean> => {
     if (!isGuest) return true
+    const supabase = createClient()
     if (!user?.id) {
       setError("No hay sesión de invitado.")
       return false
     }
-    const prepared = await prepareGuestTripClaim(createClient(), user.id)
+    if (!hasGuestTrip || !addGuestTrip) {
+      await supabase.auth.signOut({ scope: "local" })
+      clearStash()
+      return true
+    }
+    const prepared = await prepareGuestTripClaim(supabase, user.id)
     if (!prepared.ok) {
       setError(prepared.error)
       return false
@@ -75,11 +110,15 @@ function LoginForm() {
     router.refresh()
   }
 
+  const claimLabel = guestTripName
+    ? `Añadir «${guestTripName}» a esta cuenta`
+    : "Añadir el viaje que estabas viendo a esta cuenta"
+
   return (
     <AuthShell
       title="Entra en tu cuenta"
       subtitle={
-        isGuest
+        willClaim
           ? "Tu viaje actual se añadirá a esta cuenta."
           : "Sigue planificando donde lo dejaste."
       }
@@ -124,6 +163,17 @@ function LoginForm() {
           </Link>
         </div>
 
+        {hasGuestTrip ? (
+          <label className="flex items-start gap-2.5 text-left text-sm leading-snug">
+            <Checkbox
+              checked={addGuestTrip}
+              onCheckedChange={(value) => setAddGuestTrip(value === true)}
+              className="mt-0.5"
+            />
+            <span>{claimLabel}</span>
+          </label>
+        ) : null}
+
         {captchaEnabled ? <Turnstile key={captchaKey} onToken={setCaptchaToken} /> : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -133,7 +183,7 @@ function LoginForm() {
           className="mt-1 h-11"
           disabled={submitting || (captchaEnabled && !captchaToken)}
         >
-          {submitting ? "Entrando…" : isGuest ? "Entrar y guardar mi viaje" : "Entrar"}
+          {submitting ? "Entrando…" : willClaim ? "Entrar y guardar mi viaje" : "Entrar"}
         </Button>
       </form>
     </AuthShell>

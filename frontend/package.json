@@ -31,6 +31,7 @@
     "test:booking-dates": "tsx lib/booking-dates.test.ts",
     "test:booking-search": "tsx lib/booking-search.test.ts",
     "test:flight-search": "tsx lib/flight-search.test.ts",
+    "test:start-session": "tsx lib/start-session.test.ts",
     "test:partner-trip": "tsx lib/partner-trip.test.ts",
     "test:partner-button": "tsx lib/partner-button.test.ts",
     "test:trip-source-suggestions": "tsx lib/trip-source-suggestions.test.ts",

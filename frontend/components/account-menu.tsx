@@ -14,8 +14,20 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/lib/auth-context"
+import { useTrips } from "@/lib/trip-context"
 import { displayNameFor, initialsFor } from "@/lib/user-display"
 import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { buttonVariants } from "@/components/ui/button"
 
 export function useAccountIdentity(): {
   name: string
@@ -65,11 +77,15 @@ export function AccountMenu({
   const router = useRouter()
   const { name, email, isGuest } = useAccountIdentity()
   const { signOut } = useAuth()
+  const { trips } = useTrips()
   const [internalOpen, setInternalOpen] = useState(false)
   const [tooltipLocked, setTooltipLocked] = useState(false)
+  const [discardOpen, setDiscardOpen] = useState(false)
   const isControlled = open !== undefined
   const menuOpen = isControlled ? open : internalOpen
   const trackOpen = isControlled || Boolean(tooltip)
+  const guestTripName =
+    trips.find((t) => !t.archived)?.name?.trim() || "tu viaje"
 
   const handleOpenChange = (next: boolean) => {
     if (!isControlled) setInternalOpen(next)
@@ -86,6 +102,7 @@ export function AccountMenu({
   const trigger = <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
 
   return (
+    <>
     <DropdownMenu
       open={trackOpen ? menuOpen : undefined}
       onOpenChange={trackOpen ? handleOpenChange : onOpenChange}
@@ -134,12 +151,50 @@ export function AccountMenu({
             </DropdownMenuItem>
           </>
         )}
-        <DropdownMenuItem onSelect={() => void handleSignOut()}>
+        <DropdownMenuItem
+          onSelect={
+            isGuest
+              ? (event) => {
+                  event.preventDefault()
+                  setDiscardOpen(true)
+                }
+              : () => void handleSignOut()
+          }
+        >
           <LogOut className="h-4 w-4" />
-          Cerrar sesión
+          {isGuest ? "Salir y descartar el viaje" : "Cerrar sesión"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    {isGuest ? (
+      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Salir y perder el viaje?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Si sales, perderás «{guestTripName}»: no tiene cuenta a la que volver. ¿Seguro?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Seguir aquí</AlertDialogCancel>
+            <button
+              type="button"
+              className={buttonVariants({ variant: "outline" })}
+              onClick={() => {
+                setDiscardOpen(false)
+                router.push("/signup")
+              }}
+            >
+              Crear cuenta
+            </button>
+            <AlertDialogAction onClick={() => void handleSignOut()}>
+              Salir y descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    ) : null}
+    </>
   )
 }
 

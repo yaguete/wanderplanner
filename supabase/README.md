@@ -33,6 +33,8 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260817000000_place_thumbs_wikimedia.sql
 #   migrations/20260817120000_photo_paid_usage.sql
 #   migrations/20260817190000_delete_own_account.sql
+#   migrations/20260818120000_trip_seed_source_key.sql
+#   migrations/20260818130000_cleanup_anonymous_users_v2.sql
 
 # Opción B: NO disponible hoy. `supabase db push` no funciona en este proyecto:
 # no hay supabase/config.toml, el CLI no está vinculado y el remoto no tiene
@@ -81,6 +83,11 @@ select public.delete_own_account();
 -- article_extractions y el resto de cachés globales no se tocan.
 select count(*) from public.trips where user_id = '<uuid>';
 ```
+
+**`/start` sin clonar + cleanup de invitados v2:** aplicar **antes** de mergear el front, en este orden:
+
+1. `20260818120000_trip_seed_source_key.sql` — columna `trips.seed_source_key` (no está en `TRIP_COLUMNS`; un front viejo la ignora). Verificar columna e índice. Un front nuevo contra base vieja **rompe `/start`** (PostgREST 400 al pedir la columna), no `/trips`.
+2. `20260818130000_cleanup_anonymous_users_v2.sql` — `drop function` de la firma `(interval)` y función nueva `(interval, interval, integer)`. Comprobar que no hay ambigüedad: `select public.cleanup_anonymous_users(interval '999 years', interval '999 years');` debe devolver `0`. Dry-run de candidatos antes de dejar el cron activo (anónimos vacíos a 30 días, con viajes a 7 días de inactividad; no toca upgrades a medias ni claims vivos).
 
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 

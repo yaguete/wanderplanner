@@ -24,6 +24,10 @@ import { sanitizeUserDays } from "@/lib/route-legs"
 import { isReusableDraftTrip, mergeDraftReferrer } from "@/lib/partner-trip"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
+import {
+  toStartCandidate,
+  type StartCandidateTrip,
+} from "@/lib/start-session"
 
 /**
  * Lectura defensiva de `trips.origin`. Cualquier forma inválida (incluido
@@ -127,8 +131,54 @@ type SourceRow = {
 
 const TRIP_COLUMNS =
   "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
+/**
+ * Columnas de `/start`. Incluye `seed_source_key`, que NO va en `TRIP_COLUMNS` ni
+ * en `tripToRow`: el upsert del syncer la pisaría con null.
+ */
+const START_CANDIDATE_COLUMNS =
+  "id, name, archived, referrer, seed_source_key, source_ids, start_date, days, basics, tasks, extra_tasks, expectations, num_travelers"
 /** Sin `article_html`: puede ser enorme y solo hace falta al abrir la Crónica. */
 const SOURCE_COLUMNS = "id, url, author, title, area, total_days, og_image, items, basics"
+
+type StartTripRow = {
+  id: string
+  name: string
+  archived: boolean
+  referrer: string | null
+  seed_source_key: string | null
+  source_ids: string[] | null
+  start_date: string | null
+  days: UserDay[] | null
+  basics: UserBasicItem[] | null
+  tasks: Record<string, TripTaskState> | null
+  extra_tasks: ExtraTask[] | null
+  expectations: string | null
+  num_travelers: number | null
+}
+
+export type LoadedStartTrip = StartCandidateTrip & { sourceIds: string[] }
+
+function startRowToLoaded(row: StartTripRow): LoadedStartTrip {
+  const sourceIds = row.source_ids ?? []
+  return {
+    ...toStartCandidate({
+      id: row.id,
+      name: row.name,
+      archived: Boolean(row.archived),
+      referrer: row.referrer,
+      seedSourceKey: row.seed_source_key,
+      sourceIds,
+      startDate: row.start_date,
+      days: row.days ?? [],
+      basics: row.basics ?? [],
+      extraTasks: row.extra_tasks ?? [],
+      tasks: row.tasks ?? {},
+      expectations: row.expectations,
+      numTravelers: row.num_travelers,
+    }),
+    sourceIds,
+  }
+}
 
 // ── Mapeo fila ↔ dominio ──────────────────────────────────────────────────────
 
@@ -256,9 +306,37 @@ export async function loadTripsState(
   }
 }
 
+export type DraftTripInput = {
+  name: string
+  referrer: string | null
+  numDays?: number | null
+  /** `sourceMatchKey` del artículo del CTA; solo `/start` lo escribe. */
+  seedSourceKey?: string | null
+}
+
 /**
- * Viaje vacío del usuario reutilizable por `/start` (sin fuentes, sin fechas, un día en blanco).
- * `select` acotado: no carga el histórico entero.
+ * Viajes activos del usuario para decidir `/start` (tope 50: el `seed_source_key`
+ * se compara en JS). No usa `TRIP_COLUMNS`.
+ */
+export async function loadStartCandidates(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<LoadedStartTrip[]> {
+  const { data, error } = await supabase
+    .from("trips")
+    .select(START_CANDIDATE_COLUMNS)
+    .eq("user_id", userId)
+    .eq("archived", false)
+    .order("created_at", { ascending: false })
+    .limit(50)
+
+  if (error) throw error
+  return ((data ?? []) as StartTripRow[]).map(startRowToLoaded)
+}
+
+/**
+ * Viaje vacío de `/start` (sin fuentes, sin fechas, un día en blanco, con `referrer`).
+ * No reusa borradores creados a mano (`referrer` null).
  */
 export async function findReusableDraftTrip(
   supabase: SupabaseClient,
@@ -270,26 +348,28 @@ export async function findReusableDraftTrip(
     .eq("user_id", userId)
     .eq("archived", false)
     .is("start_date", null)
+    .not("referrer", "is", null)
     .order("created_at", { ascending: false })
     .limit(20)
 
   if (error) throw error
   for (const row of (data ?? []) as TripRow[]) {
-    const trip = rowToTrip(row)
-    if (isReusableDraftTrip(trip)) {
-      return { id: trip.id, referrer: trip.referrer ?? null }
+    const parsed = rowToTrip(row)
+    if (parsed.referrer && isReusableDraftTrip(parsed)) {
+      return { id: parsed.id, referrer: parsed.referrer }
     }
   }
   return null
 }
 
 /**
- * Reusa el borrador vacío si existe; si no, inserta. Evita viajes huérfanos al repetir `/start`.
+ * Reusa el borrador vacío de `/start` si existe; si no, inserta.
+ * Nunca secuestra un «Nuevo viaje» a mano (`referrer` null).
  */
 export async function reuseOrInsertDraftTrip(
   supabase: SupabaseClient,
   userId: string,
-  data: { name: string; referrer: string | null; numDays?: number | null },
+  data: DraftTripInput,
 ): Promise<string> {
   const existing = await findReusableDraftTrip(supabase, userId)
   if (!existing) {
@@ -304,6 +384,7 @@ export async function reuseOrInsertDraftTrip(
     name: data.name,
     referrer: mergeDraftReferrer(existing.referrer, data.referrer),
   }
+  if (data.seedSourceKey) patch.seed_source_key = data.seedSourceKey
   if (forcedDays != null) {
     const startDate = tomorrowISO()
     patch.num_days = forcedDays
@@ -329,7 +410,7 @@ export async function reuseOrInsertDraftTrip(
 export async function insertDraftTrip(
   supabase: SupabaseClient,
   userId: string,
-  data: { name: string; referrer: string | null; numDays?: number | null },
+  data: DraftTripInput,
 ): Promise<string> {
   const id = crypto.randomUUID()
   const forcedDays =
@@ -363,9 +444,31 @@ export async function insertDraftTrip(
     origin: null,
     source_ids: [],
     referrer: data.referrer,
+    seed_source_key: data.seedSourceKey || null,
   })
   if (error) throw error
   return id
+}
+
+/**
+ * Poda el hueco del invitado: borra exactamente los ids leídos (nunca un `neq`).
+ * `sources` no cae en cascada desde `trips`; las conversaciones sí.
+ */
+export async function deleteGuestSlotTrips(
+  supabase: SupabaseClient,
+  trips: LoadedStartTrip[],
+  tripIds: string[],
+): Promise<void> {
+  if (tripIds.length === 0) return
+  const idSet = new Set(tripIds)
+  const sourceIds = [
+    ...new Set(trips.filter((t) => idSet.has(t.id)).flatMap((t) => t.sourceIds)),
+  ]
+  const { error: tripError } = await supabase.from("trips").delete().in("id", tripIds)
+  if (tripError) throw tripError
+  if (sourceIds.length === 0) return
+  const { error: sourceError } = await supabase.from("sources").delete().in("id", sourceIds)
+  if (sourceError) throw sourceError
 }
 
 /** HTML del artículo bajo demanda (al abrir la pestaña Crónica). */

@@ -2,6 +2,7 @@ import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 import { CookieSettingsButton } from "@/components/cookie-settings-button"
 import { cn } from "@/lib/utils"
+import { LandingFooterAuthLinks } from "./landing-nav"
 import type { LandingTone } from "./landing-tone"
 
 export function LandingFooter({
@@ -39,9 +40,7 @@ export function LandingFooter({
           <div>
             <p className="text-sm font-semibold">Producto</p>
             <nav className="mt-4 flex flex-col gap-2.5" aria-label="Producto">
-              <Link href="/login" className={cn("text-sm", muted)}>
-                Entrar
-              </Link>
+              <LandingFooterAuthLinks mutedClass={muted} />
               <Link href="/signup" className={cn("text-sm", muted)}>
                 Crear cuenta
               </Link>

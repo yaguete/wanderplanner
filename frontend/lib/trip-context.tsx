@@ -383,12 +383,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
     let active = true
     let completed = false
+    let claimedIds: string[] | null = null
     void (async () => {
       try {
         // Redeem ANTES del primer load: si hay stash, el snapshot ya incluye
         // el viaje del invitado. Sin stash es un getItem de localStorage.
         if (claimAttemptedFor.current !== userId) {
-          await redeemGuestTripClaim(supabase, userId)
+          claimedIds = await redeemGuestTripClaim(supabase, userId)
           claimAttemptedFor.current = userId
         }
         if (!active) return
@@ -400,6 +401,16 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         setRehydrated(true)
         hydratedFor.current = userId
         completed = true
+        if (claimedIds && claimedIds.length > 0) {
+          const names = claimedIds
+            .map((id) => snapshot.trips.find((t) => t.id === id)?.name?.trim())
+            .filter((n): n is string => Boolean(n))
+          if (names.length === 1) {
+            toast.success(`Hemos añadido «${names[0]}» a tu cuenta`)
+          } else {
+            toast.success(`Hemos añadido ${claimedIds.length} viajes a tu cuenta`)
+          }
+        }
       } catch {
         if (active) toast.error("No hemos podido cargar tus viajes.")
       } finally {
