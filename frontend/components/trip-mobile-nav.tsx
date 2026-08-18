@@ -1,5 +1,6 @@
 "use client"
 
+import type { CSSProperties } from "react"
 import Link from "next/link"
 import { Compass, Newspaper, Route, Sparkles } from "lucide-react"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
@@ -19,8 +20,12 @@ export const TRIP_MOBILE_NAV_CLEARANCE = "var(--wp-nav-clearance)" as const
 /** Clase Tailwind para padding-bottom de listas / composers en móvil. */
 export const tripMobileNavClearanceClass = "max-md:pb-[var(--wp-nav-clearance)]"
 
+const TAB_FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+
 const TAB_ITEM_CLASS =
-  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-[color,background-color,min-height,width,padding,border-radius,gap] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+  "relative z-10 flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-[color,min-height,width,padding,border-radius,gap] duration-200 ease-out " +
+  TAB_FOCUS
 
 const TABS: {
   id: TripMobileSection
@@ -56,62 +61,73 @@ function NavTabs({
   compact = false,
 }: Pick<TripMobileNavProps, "active" | "onChange" | "compact">) {
   const { requireAccount } = useRegistrationGate()
+  const tabIndex = TABS.findIndex((t) => t.id === active)
+  const pillIndex = tabIndex >= 0 ? 1 + tabIndex : null
 
   const itemClass = compact
-    ? "flex size-9 items-center justify-center rounded-full p-0 text-[10.5px] font-medium leading-none transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    ? cn(
+        "relative z-10 flex size-9 items-center justify-center rounded-full p-0 text-[10.5px] font-medium leading-none transition-colors duration-200 ease-out",
+        TAB_FOCUS,
+      )
     : TAB_ITEM_CLASS
 
   return (
-    <div
-      className={cn(
-        "grid grid-cols-4",
-        compact ? "w-max gap-0 p-0.5" : "gap-0.5 p-1",
-      )}
-    >
-      <Link
-        href="/trips"
-        aria-label="Inicio"
-        onClick={(e) => {
-          if (!requireAccount("home")) e.preventDefault()
-        }}
-        className={cn(itemClass, "text-muted-foreground")}
+    <div className={cn(compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
+      <div
+        className={cn("relative grid grid-cols-4", compact && "w-max")}
+        style={
+          pillIndex != null
+            ? ({ "--wp-nav-index": pillIndex } as CSSProperties)
+            : undefined
+        }
       >
-        <Compass
-          className={cn(
-            "shrink-0 transition-[width,height] duration-200",
-            compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
-          )}
-          aria-hidden
-        />
-        {compact ? null : <span>Inicio</span>}
-      </Link>
+        {pillIndex != null ? <div aria-hidden className="wp-nav-pill" /> : null}
 
-      {TABS.map(({ id, label, icon: Icon }) => {
-        const selected = active === id
-        return (
-          <button
-            key={id}
-            type="button"
-            aria-label={label}
-            aria-current={selected ? "page" : undefined}
-            onClick={() => onChange(id)}
+        <Link
+          href="/trips"
+          aria-label="Inicio"
+          onClick={(e) => {
+            if (!requireAccount("home")) e.preventDefault()
+          }}
+          className={cn(itemClass, "wp-glass-muted")}
+        >
+          <Compass
             className={cn(
-              itemClass,
-              selected ? "bg-muted text-primary" : "text-muted-foreground",
+              "shrink-0 transition-[width,height] duration-200",
+              compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
             )}
-          >
-            <Icon
+            aria-hidden
+          />
+          {compact ? null : <span>Inicio</span>}
+        </Link>
+
+        {TABS.map(({ id, label, icon: Icon }) => {
+          const selected = active === id
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              aria-current={selected ? "page" : undefined}
+              onClick={() => onChange(id)}
               className={cn(
-                "shrink-0 transition-[width,height] duration-200",
-                compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
-                selected && "stroke-[2.25]",
+                itemClass,
+                selected ? "font-semibold text-primary" : "wp-glass-muted",
               )}
-              aria-hidden
-            />
-            {compact ? null : <span>{label}</span>}
-          </button>
-        )
-      })}
+            >
+              <Icon
+                className={cn(
+                  "shrink-0 transition-[width,height] duration-200",
+                  compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
+                  selected && "stroke-[2.25]",
+                )}
+                aria-hidden
+              />
+              {compact ? null : <span>{label}</span>}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -143,8 +159,10 @@ export function TripMobileNav({
         // Overlay: sin fondo propio; los toques fuera de la tarjeta atraviesan al contenido.
         // `fixed`, no `absolute`: el documento es el scroller en móvil, así que
         // "abajo" tiene que ser el borde del viewport, no el final del documento.
+        // El cristal va en el <div> hijo: Safari 26 muestrea este <nav> para
+        // teñir su barra inferior y un fondo aquí se filtraría al chrome nativo.
         "pointer-events-none fixed inset-x-0 bottom-0 z-40",
-        "px-3 pt-2 pb-[var(--wp-nav-gap)]",
+        "px-4 pt-2 pb-[var(--wp-nav-gap)]",
         "transition-[opacity,transform] duration-200 ease-out",
         isHidden && "translate-y-[120%] opacity-0",
         className,
@@ -152,12 +170,11 @@ export function TripMobileNav({
     >
       <div
         className={cn(
-          // Opaco: si no, el blur deja ver el panel de debajo y el `bg-muted`
-          // del tab activo parece otro gris según Fuentes / Mi viaje / Asistente.
-          "pointer-events-auto overflow-hidden border border-border/60 bg-background",
-          "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
-          "transition-[border-radius,width,margin] duration-200 ease-out",
-          compact ? "mx-auto w-max rounded-full" : "w-full rounded-2xl",
+          // Tab activo: cápsula `.wp-nav-pill` opaca (0.92), no `bg-muted`,
+          // para que el blur no se tiña con Fuentes / Mi viaje / Asistente.
+          "wp-glass pointer-events-auto overflow-hidden rounded-full",
+          "transition-[width,margin] duration-200 ease-out",
+          compact ? "mx-auto w-max" : "w-full",
           isHidden && "pointer-events-none",
         )}
       >

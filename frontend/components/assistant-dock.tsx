@@ -1171,14 +1171,8 @@ export function AssistantPanelLayer({
 
       {/* Historial (móvil): sin composer, el nav mantiene su propia tarjeta flotante. */}
       {showHistory && isSection && bottomNav ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pt-2 pb-[var(--wp-nav-gap)]">
-          <div
-            className={cn(
-              "pointer-events-auto rounded-2xl",
-              "border border-border/60 bg-background",
-              "shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
-            )}
-          >
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pt-2 pb-[var(--wp-nav-gap)]">
+          <div className="wp-glass pointer-events-auto rounded-full">
             {bottomNav}
           </div>
         </div>
@@ -1253,7 +1247,8 @@ export function AssistantPanelLayer({
           <div
             ref={composerRef}
             className={cn(
-              "pointer-events-none absolute inset-x-0 z-20 px-3 pt-3 transition-[bottom] duration-200 ease-out",
+              "pointer-events-none absolute inset-x-0 z-20 pt-3 transition-[bottom] duration-200 ease-out",
+              isSection ? "px-4" : "px-3",
               // Móvil + teclado: pegado al teclado. Sin teclado: alineado con el dock flotante.
               isSection && keyboardOpen
                 ? "pb-2"
@@ -1289,10 +1284,10 @@ export function AssistantPanelLayer({
             ) : null}
             <div
               className={cn(
-                "pointer-events-auto overflow-hidden rounded-2xl border border-border/60",
+                "pointer-events-auto overflow-hidden rounded-2xl",
                 isPanel
-                  ? "bg-background"
-                  : "bg-background shadow-[0_10px_40px_-12px_rgba(0,0,0,0.28)]",
+                  ? "border border-border/60 bg-background"
+                  : "wp-glass",
               )}
             >
               {aiConsent === true ? (
@@ -1321,7 +1316,9 @@ export function AssistantPanelLayer({
 
               {/* Nav incrustado: composer + pestañas como un único elemento flotante. */}
               {isSection && bottomNav && !keyboardOpen ? (
-                <div className="border-t border-border/50">{bottomNav}</div>
+                <div className="border-t border-[hsl(var(--wp-glass-rim)/0.35)]">
+                  {bottomNav}
+                </div>
               ) : null}
             </div>
           </div>
