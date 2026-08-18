@@ -103,7 +103,7 @@ export function SignupForm({
       return
     }
     setNotice(
-      "Cuenta creada. Si te pedimos confirmar el email, revisa tu correo antes de entrar.",
+      "Cuenta creada. Te hemos enviado un correo para confirmar tu email, revisa tu bandeja de entrada.",
     )
     if (result.signedIn === false) return
     router.push(next)
@@ -238,7 +238,7 @@ export function SignupForm({
       ) : null}
 
       {error ? <p className="text-left text-sm text-destructive">{error}</p> : null}
-      {notice ? <p className="text-left text-sm text-muted-foreground">{notice}</p> : null}
+      {notice ? <p className="text-left text-sm text-emerald-700">{notice}</p> : null}
 
       <Button
         type="submit"
