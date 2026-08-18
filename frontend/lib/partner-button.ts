@@ -239,6 +239,16 @@ function escapeHtml(raw: string): string {
 }
 
 /**
+ * El `&` del query string tiene que ir como `&amp;` en el atributo: si queda crudo,
+ * un editor visual (o un preview antes de que WordPress pase kses) puede tragar
+ * `target=` / `rel=` dentro de `?ref=` y el viaje nace con referrer
+ * `lacosmopolilla target=`.
+ */
+function escapeHref(raw: string): string {
+  return raw.replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+}
+
+/**
  * Un `<br>` en vez de dos `span` apilados con flex: el salto de línea tiene que
  * sobrevivir a que el editor borre los `style` de los `span` anidados (si no, sale
  * «ayudapara» pegado). Misma razón para `<strong>` en el énfasis.
@@ -371,7 +381,7 @@ export function buildEmbedSnippet({
   /** Solo banner: fragmento en negrita (vacío = sin negrita). */
   emphasis?: string
 }): string {
-  const safeHref = href.replace(/"/g, "&quot;")
+  const safeHref = escapeHref(href)
   return kind === "banner"
     ? buildBannerSnippet(safeHref, variant, text, emphasis)
     : buildCtaSnippet(safeHref, variant)

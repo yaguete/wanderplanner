@@ -20,7 +20,7 @@ import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { reuseOrInsertDraftTrip } from "@/lib/db/trips-repo"
-import { draftTripNameFor, parseDaysParam, stashPendingSource } from "@/lib/partner-trip"
+import { draftTripNameFor, parseDaysParam, parseRefParam, stashPendingSource } from "@/lib/partner-trip"
 
 function errorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) return error.message
@@ -41,7 +41,7 @@ function StartFlow() {
   const { user, isLoading, signInAnonymously } = useAuth()
 
   const sourceUrl = searchParams.get("source")?.trim() || ""
-  const referrer = searchParams.get("ref")?.trim() || null
+  const referrer = parseRefParam(searchParams.get("ref"))
   const forcedDays = parseDaysParam(searchParams.get("days"))
   const isValidSource = /^https?:\/\//i.test(sourceUrl)
 

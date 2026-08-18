@@ -89,7 +89,9 @@ for (const [kind, variant] of COMBOS) {
   )
 
   // El <a> abre la pestaña nueva y lleva la clase que engancha el <style>.
-  assert.ok(snippet.includes(`href="${HREF}"`), `${where}: href`)
+  // `&` del query → `&amp;` en el atributo, o un editor se come target/rel dentro de ?ref=.
+  assert.ok(snippet.includes(`href="${HREF.replaceAll("&", "&amp;")}"`), `${where}: href`)
+  assert.ok(!snippet.includes("&ref="), `${where}: & crudo delante de ref`)
   assert.ok(snippet.includes('target="_blank"'), `${where}: target`)
   assert.ok(snippet.includes('rel="noopener noreferrer"'), `${where}: rel`)
   assert.ok(/<a [^>]*class="wp-wanderplanner-/.test(snippet), `${where}: clase del <a>`)

@@ -88,6 +88,23 @@ export function draftTripNameFor(sourceUrl: string): string {
 }
 
 /**
+ * `&ref=` del CTA. Solo el primer token `[a-z0-9-]+`.
+ *
+ * Si un editor se come la comilla del `href`, el valor llega como
+ * `lacosmopolilla target=` o `lacosmopolilla rel=`; no lo persistimos tal cual.
+ */
+export function parseRefParam(raw: string | null): string | null {
+  if (raw == null) return null
+  const first = raw.trim().split(/[\s"'<>]/)[0] ?? ""
+  const slug = first
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+  return slug || null
+}
+
+/**
  * `&days=N` del CTA: entero 1..MAX_AUTO_DAYS; cualquier otra cosa se descarta en silencio.
  */
 export function parseDaysParam(raw: string | null): number | null {

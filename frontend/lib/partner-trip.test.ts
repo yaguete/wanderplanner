@@ -5,6 +5,7 @@ import {
   isReusableDraftTrip,
   mergeDraftReferrer,
   parseDaysParam,
+  parseRefParam,
 } from "./partner-trip"
 import type { Trip } from "@/types/itinerary"
 
@@ -72,5 +73,14 @@ assert.equal(mergeDraftReferrer(null, null), null)
 
 assert.equal(parseDaysParam("7"), 7)
 assert.equal(parseDaysParam("0"), null)
+
+assert.equal(parseRefParam("lacosmopolilla"), "lacosmopolilla")
+assert.equal(parseRefParam("lacosmopolilla target="), "lacosmopolilla")
+assert.equal(parseRefParam("lacosmopolilla rel="), "lacosmopolilla")
+assert.equal(parseRefParam('lacosmopolilla" target="_blank'), "lacosmopolilla")
+assert.equal(parseRefParam("  wp-landing  "), "wp-landing")
+assert.equal(parseRefParam("???"), null)
+assert.equal(parseRefParam("  "), null)
+assert.equal(parseRefParam(null), null)
 
 console.log("partner-trip: ok")
