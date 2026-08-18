@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import {
   CONSENT_CHANGED_EVENT,
   isAnalyticsAllowed,
@@ -19,5 +20,10 @@ export function AnalyticsGate() {
   }, [])
 
   if (!allowed) return null
-  return <Analytics />
+  return (
+    <>
+      <Analytics />
+      <SpeedInsights />
+    </>
+  )
 }

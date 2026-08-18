@@ -53,9 +53,9 @@ export default function CookiesPage() {
 
       <LegalSection id="medicion" title="Medición de visitas">
         <p>
-          Es lo único para lo que te pedimos permiso. Usamos Vercel Web Analytics, que
-          cuenta páginas vistas y poco más, y que no usa cookies. Hasta que aceptas no
-          cargamos nada suyo.
+          Es lo único para lo que te pedimos permiso. Usamos Vercel Web Analytics (páginas
+          vistas) y Vercel Speed Insights (si la página carga rápido). Ninguno de los dos
+          usa cookies. Hasta que aceptas no cargamos nada suyo.
         </p>
       </LegalSection>
 

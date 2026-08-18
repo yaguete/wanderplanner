@@ -53,7 +53,7 @@ const DATA_ROWS: readonly (readonly string[])[] = [
     "Interés legítimo",
   ],
   [
-    "Páginas que visitas",
+    "Páginas que visitas y cómo cargan",
     "Saber qué funciona en la web. Solo si nos das permiso.",
     "Consentimiento",
   ],
