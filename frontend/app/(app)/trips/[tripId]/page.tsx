@@ -5,15 +5,18 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useTrips } from "@/lib/trip-context"
 import { useAuth } from "@/lib/auth-context"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useStableList } from "@/hooks/use-stable-list"
 import { cn } from "@/lib/utils"
 import { draftTripNameFor, takePendingSource } from "@/lib/partner-trip"
 import { formatGuideLabel } from "@/lib/itinerary-utils"
+import { confidentTripDestinationLabel } from "@/lib/assistant-suggestions"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
 import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { Spinner } from "@/components/ui/spinner"
+import { TripPanelsEmpty } from "@/components/trip-panel-toggles"
 import {
   useTripChrome,
   type TripDesktopPanel,
@@ -36,13 +39,11 @@ function readPanels(): TripPanelState {
     const raw = localStorage.getItem(PANELS_KEY)
     if (!raw) return DEFAULT_PANELS
     const parsed = JSON.parse(raw) as Partial<TripPanelState>
-    const next: TripPanelState = {
+    return {
       sources: parsed.sources !== false,
       plan: parsed.plan !== false,
       assistant: Boolean(parsed.assistant),
     }
-    if (!next.sources && !next.plan && !next.assistant) return DEFAULT_PANELS
-    return next
   } catch {
     return DEFAULT_PANELS
   }
@@ -91,6 +92,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
+  const tripSources = useStableList(getTripSources(tripId))
+  const emptyDestination = useMemo(
+    () => (trip ? confidentTripDestinationLabel(trip, tripSources) : null),
+    [trip, tripSources],
+  )
   const querySource = searchParams.get("source")?.trim() || null
   const [stashedSource, setStashedSource] = useState<string | null>(null)
   const autoSourceRequested = useRef<string | null>(null)
@@ -235,16 +241,13 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   }, [panels, isMobile, setAutoCollapsed])
 
   const togglePanel = useCallback((panel: TripDesktopPanel) => {
-    setPanels((prev) => {
-      const turningOff = prev[panel]
-      if (turningOff && panelCount(prev) <= 1) return prev
-      return { ...prev, [panel]: !prev[panel] }
-    })
+    setPanels((prev) => ({ ...prev, [panel]: !prev[panel] }))
   }, [])
 
-  /** Publica toggles en el header del shell (solo desktop). */
+  /** Publica toggles en el header del shell (solo desktop). En canvas vacío
+   *  no: las tres tarjetas del empty state ya abren cada panel. */
   useEffect(() => {
-    if (isMobile || !trip) {
+    if (isMobile || !trip || !panelsHydrated || panelCount(panels) === 0) {
       setChrome(null)
       return
     }
@@ -253,7 +256,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       onTogglePanel: togglePanel,
     })
     return () => setChrome(null)
-  }, [isMobile, trip, panels, togglePanel, setChrome])
+  }, [isMobile, trip, panels, panelsHydrated, togglePanel, setChrome])
 
   const openAddSource = useCallback(
     (open: boolean) => {
@@ -271,11 +274,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const openEditTrip = useCallback(() => setEditTripOpen(true), [])
 
   const handleAssistantOpenChange = useCallback((open: boolean) => {
-    setPanels((prev) => {
-      if (open) return { ...prev, assistant: true }
-      if (panelCount(prev) <= 1) return prev
-      return { ...prev, assistant: false }
-    })
+    setPanels((prev) => ({ ...prev, assistant: open }))
   }, [])
 
   const sourcesNode = useMemo(
@@ -428,6 +427,10 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             !panelsHydrated && "invisible",
           )}
         >
+          {panelCount(panels) === 0 ? (
+            <TripPanelsEmpty onSelect={togglePanel} destination={emptyDestination} />
+          ) : null}
+
           <DesktopPanelSlot active={panels.sources} label="Fuentes" padStart={false}>
             {sourcesNode}
           </DesktopPanelSlot>

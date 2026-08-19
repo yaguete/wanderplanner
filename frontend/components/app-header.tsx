@@ -78,7 +78,6 @@ export function AppHeader({ leading }: AppHeaderProps) {
         isMobile && onTripDetail && "bg-background",
         // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
         isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
-        showPanelToggles ? "relative" : undefined,
       )}
     >
       {leading}
@@ -109,11 +108,11 @@ export function AppHeader({ leading }: AppHeaderProps) {
       </div>
 
       {showPanelToggles && chrome ? (
-        <div className="pointer-events-none absolute inset-x-0 flex justify-center">
-          <div className="pointer-events-auto">
-            <TripPanelToggles panels={chrome.panels} onToggle={chrome.onTogglePanel} />
-          </div>
-        </div>
+        <TripPanelToggles
+          className="shrink-0"
+          panels={chrome.panels}
+          onToggle={chrome.onTogglePanel}
+        />
       ) : null}
 
       <div className="flex-1" />

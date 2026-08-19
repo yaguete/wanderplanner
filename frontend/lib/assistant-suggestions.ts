@@ -18,6 +18,69 @@ function joinEs(names: string[]): string {
   return `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}`
 }
 
+function areaHead(area: string): string | null {
+  const head = area.split(",")[0]!.trim()
+  if (head.length < 2 || head.length > 40) return null
+  return head
+}
+
+/** «austria» → «Austria»; respeta mayúsculas ya presentes («La Alpujarra»). */
+function displayDest(label: string): string {
+  if (label === label.toLowerCase()) {
+    return label.charAt(0).toUpperCase() + label.slice(1)
+  }
+  return label
+}
+
+function uniqueAreaHeads(sources: Pick<Source, "area">[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const s of sources) {
+    const raw = s.area?.trim()
+    if (!raw) continue
+    const head = areaHead(raw)
+    if (!head) continue
+    const key = head.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(head)
+  }
+  return out
+}
+
+function countryNamesFor(
+  trip: Pick<Trip, "name" | "countries" | "days">,
+  sources: Pick<Source, "area" | "items">[],
+): string[] {
+  const codes = resolveTripCountryCodes(trip, sources)
+  if (codes.length < 1 || codes.length > 2) return []
+  return codes
+    .map((c) => getCountryByCode(c)?.name)
+    .filter((n): n is string => Boolean(n))
+}
+
+/**
+ * Destino para copy de UI cuando hay que estar seguros (p. ej. el canvas vacío).
+ * Prioriza el área de la fuente (ciudad/región) sobre el país; no usa el nombre
+ * del viaje salvo que resuelva a 1–2 países. `null` si no hay pista clara.
+ */
+export function confidentTripDestinationLabel(
+  trip: Pick<Trip, "name" | "countries" | "days">,
+  sources: Pick<Source, "area" | "items">[] = [],
+): string | null {
+  const countryNames = countryNamesFor(trip, sources)
+  const countryKeys = new Set(countryNames.map((n) => n.toLowerCase()))
+  const heads = uniqueAreaHeads(sources).filter(
+    (head) => !countryKeys.has(head.toLowerCase()),
+  )
+
+  if (heads.length === 1) return displayDest(heads[0]!)
+  if (heads.length === 2) return joinEs(heads.map(displayDest))
+
+  if (countryNames.length) return joinEs(countryNames)
+  return null
+}
+
 /** Etiqueta corta del destino para meter en preguntas (sin emoji). */
 export function tripDestinationLabel(
   trip: Pick<Trip, "name" | "countries" | "days">,

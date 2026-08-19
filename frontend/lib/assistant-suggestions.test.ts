@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import type { Source, Trip } from "@/types/itinerary"
 import {
   buildAssistantSuggestions,
+  confidentTripDestinationLabel,
   tripDestinationLabel,
 } from "./assistant-suggestions"
 
@@ -44,6 +45,67 @@ function source(overrides: Partial<Source> = {}): Source {
     ogImage: null,
     ...overrides,
   }
+}
+
+{
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje", countries: [] }), []),
+    null,
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Safari" }), []),
+    null,
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje desde elpais.com" }), []),
+    null,
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Uganda" }), []),
+    "Uganda",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje", countries: ["AT"] }), []),
+    "Austria",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Safari", countries: ["UG", "KE"] }), []),
+    "Uganda y Kenia",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Europa" }), [
+      source({ area: "austria" }),
+    ]),
+    "Austria",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje" }), [
+      source({ area: "Vienna, Austria" }),
+    ]),
+    "Vienna",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje" }), [
+      source({ area: "Vienna, Austria" }),
+      source({ id: "src-2", area: "Austria" }),
+    ]),
+    "Vienna",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje" }), [
+      source({ area: "Vienna, Austria" }),
+      source({ id: "src-2", area: "Salzburg, Austria" }),
+    ]),
+    "Vienna y Salzburg",
+  )
+  assert.equal(
+    confidentTripDestinationLabel(baseTrip({ name: "Viaje", countries: ["AT"] }), [
+      source({ area: "Vienna, Austria" }),
+      source({ id: "src-2", area: "Salzburg, Austria" }),
+      source({ id: "src-3", area: "Innsbruck, Austria" }),
+    ]),
+    "Austria",
+  )
 }
 
 {
