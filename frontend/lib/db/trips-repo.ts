@@ -248,7 +248,11 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
 }
 
 function rowToSource(row: SourceRow): Source {
-  const reconciled = reconcileExtractedSource(row.items ?? [], row.basics ?? [])
+  const reconciled = reconcileExtractedSource(
+    row.items ?? [],
+    row.basics ?? [],
+    row.article_html,
+  )
   return {
     id: row.id,
     url: row.url,

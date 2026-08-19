@@ -31,7 +31,13 @@ import type {
   TransportRoute,
 } from "@/types/itinerary"
 import { fetchItinerary, ApiLimitError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
-import { authorFromUrl, buildSource, formatGuideLabel } from "@/lib/itinerary-utils"
+import {
+  applyArticleHtmlToSource,
+  authorFromUrl,
+  buildSource,
+  formatGuideLabel,
+  hydrateAffiliateUrlsFromSources,
+} from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { redeemGuestTripClaim } from "@/lib/guest-trip-claim"
@@ -637,10 +643,21 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       if (!html) return
       const current = sourcesRef.current.find((s) => s.id === sourceId)
       if (!current) return
-      const next: Source = { ...current, articleHtml: html }
-      // Ya está persistido: evita que el diffing lo reescriba en el siguiente upsert.
-      syncerRef.current?.acknowledgeSource(next)
+      const next = applyArticleHtmlToSource(current, html)
+      const itemsChanged =
+        next.items !== current.items || next.basics !== current.basics
+      // HTML ya está en Postgres; si solo llega el artículo, no reescribir la fila.
+      // Si pegamos enlaces de reserva en ítems, sí hay que persistirlos.
+      if (!itemsChanged) syncerRef.current?.acknowledgeSource(next)
       setSources((prev) => prev.map((s) => (s.id === sourceId ? next : s)))
+      if (itemsChanged) {
+        setTrips((prev) =>
+          hydrateAffiliateUrlsFromSources(
+            prev,
+            sourcesRef.current.map((s) => (s.id === sourceId ? next : s)),
+          ),
+        )
+      }
     } catch {
       /* la Crónica muestra su propio estado vacío */
     } finally {
@@ -672,20 +689,25 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         }),
       )
       const htmlById = new Map(fetched)
-      // El estado se actualiza para no repetir la descarga; el retorno no espera al re-render.
-      setSources((prev) =>
-        prev.map((s) => {
-          const html = htmlById.get(s.id)
-          if (!html) return s
-          const next: Source = { ...s, articleHtml: html }
-          syncerRef.current?.acknowledgeSource(next)
-          return next
-        }),
-      )
-      return tripSources.map((s) => {
+      const previous = sourcesRef.current
+      const nextAll = previous.map((s) => {
         const html = htmlById.get(s.id)
-        return html ? { ...s, articleHtml: html } : s
+        if (!html) return s
+        const next = applyArticleHtmlToSource(s, html)
+        if (next.items === s.items && next.basics === s.basics) {
+          syncerRef.current?.acknowledgeSource(next)
+        }
+        return next
       })
+      const itemsChanged = nextAll.some((s, i) => {
+        const prev = previous[i]
+        return prev != null && (prev.items !== s.items || prev.basics !== s.basics)
+      })
+      setSources(nextAll)
+      if (itemsChanged) {
+        setTrips((prev) => hydrateAffiliateUrlsFromSources(prev, nextAll))
+      }
+      return nextAll.filter((s) => trip.sourceIds.includes(s.id))
     },
     [],
   )

@@ -560,7 +560,6 @@ function TaskRow({
   })
   const meta = formatTaskMeta({
     dayMeta,
-    vendor: task.category === "accommodation" ? null : task.vendor,
     detail: task.detail,
   })
   const showCancellable =

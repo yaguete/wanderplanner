@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import type { Itinerary, Source, SourceBasicItem, SourceItem, Trip } from "@/types/itinerary"
 import { itemTypeIcon, itemTypeLabel } from "./item-styles"
 import {
+  attachExperienceLinksFromHtml,
   dedupeRedundantPlaces,
   dropDuplicateOtherBasics,
   flattenItinerary,
@@ -450,6 +451,46 @@ assert.equal(itemTypeLabel("transport"), "Transporte")
     hydrated!.days[0]!.items[0]!.affiliateUrl,
     "https://www.civitatis.com/osos",
   )
+}
+
+{
+  const html = `
+    <p>Empieza con un <a href="https://www.civitatis.com/es/granada/free-tour-granada/?aid=1006">free tour por Granada</a>.</p>
+    <p>Reserva una <a href="https://www.civitatis.com/es/granada/tour-alhambra-palacios-nazaries/?aid=1006"><strong>visita guiada por la Alhambra y los palacios nazaríes</strong></a>.</p>
+    <p>Ideal el atardecer en San Nicolás.</p>
+    <p>El <a href="https://www.civitatis.com/es/granada/hammam-al-andalus-granada/?aid=1006">Hammam al-Andalus</a>.</p>
+  `
+  const alhambra: SourceItem = {
+    id: "si-alh",
+    type: "activity",
+    name: "Visita guiada por la Alhambra y palacios nazaríes",
+    detail: "Para completar el viaje además de ir de tapas.",
+    dayHint: 1,
+    affiliateUrl: null,
+  }
+  const sunset: SourceItem = {
+    id: "si-nico",
+    type: "activity",
+    name: "Atardecer en San Nicolás",
+    detail: "Ubicado en el Albaycín, ideal antes o después de tapear.",
+    dayHint: 1,
+    affiliateUrl: null,
+  }
+  const stamped = attachExperienceLinksFromHtml(html, [alhambra, sunset])
+  assert.equal(
+    stamped.find((i) => i.id === "si-alh")?.affiliateUrl,
+    "https://www.civitatis.com/es/granada/tour-alhambra-palacios-nazaries/?aid=1006",
+  )
+  assert.equal(itemTypeLabel("activity", stamped.find((i) => i.id === "si-alh")), "Actividad")
+  assert.equal(stamped.find((i) => i.id === "si-nico")?.affiliateUrl, null)
+  assert.equal(itemTypeLabel("activity", stamped.find((i) => i.id === "si-nico")), "Lugar")
+  const freeTour = stamped.find((i) => /free tour/i.test(i.name))
+  assert.ok(freeTour)
+  assert.equal(
+    freeTour?.affiliateUrl,
+    "https://www.civitatis.com/es/granada/free-tour-granada/?aid=1006",
+  )
+  assert.equal(itemTypeLabel("activity", freeTour), "Actividad")
 }
 
 console.log("itinerary-utils flatten/dedupe/label: ok")

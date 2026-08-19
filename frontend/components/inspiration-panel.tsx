@@ -306,11 +306,12 @@ export default function InspirationPanel({
     el?.scrollIntoView({ block: "nearest", inline: "nearest" })
   }, [activeSourceId, tripPendings.length, sources.length])
 
-  // El HTML del artículo no viene en la carga inicial: se pide al abrir la Crónica.
+  // El HTML no viene en la carga inicial. Se pide al abrir la fuente: Crónica
+  // lo pinta, y Ruta/Descuentos pegan los enlaces de reserva (Civitatis…).
   useEffect(() => {
-    if (sourceTab !== "source" || !currentSource || currentSource.articleHtml) return
+    if (!currentSource || currentSource.articleHtml) return
     void ensureArticleHtml(currentSource.id)
-  }, [sourceTab, currentSource, ensureArticleHtml])
+  }, [currentSource, ensureArticleHtml])
 
   const addedItemIds = useMemo(
     () =>

@@ -123,7 +123,9 @@ export function isTripEssentialsTool(input: {
 
 function looksLikeBookableExperienceName(name: string): boolean {
   const n = normalizeName(name)
-  return /\b(excursion|crucero|avistamiento|flightseeing|freetour|free tour|tour guiado)\b/.test(n)
+  return /\b(excursion|crucero|avistamiento|flightseeing|freetour|free tour|tour guiado|visita guiada)\b/.test(
+    n,
+  )
 }
 
 function shouldLiftOtherBasic(basic: SourceBasicItem): boolean {
@@ -395,12 +397,140 @@ export function dedupeRedundantPlaces(items: SourceItem[]): SourceItem[] {
   })
 }
 
+const GENERIC_LINK_LABEL =
+  /^(este enlace|este link|aqui|pincha aqui|haz clic|reserva|reservar|mas info|ver mas|click|enlace)$/i
+
+function stripTags(html: string): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function compactName(name: string): string {
+  return stripLeadingArticles(name)
+    .replace(PRODUCT_WRAPPER, "")
+    .replace(VISIT_WRAPPER, "")
+    .replace(/\b(el|la|los|las|de|del|por|al|a|en|y|un|una)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function experienceLabelMatches(a: string, b: string): boolean {
+  if (namesLooselyMatch(a, b)) return true
+  const ca = compactName(a)
+  const cb = compactName(b)
+  if (!ca || !cb) return false
+  if (ca === cb) return true
+  const shorter = ca.length <= cb.length ? ca : cb
+  const longer = ca.length <= cb.length ? cb : ca
+  return shorter.length >= 12 && longer.includes(shorter)
+}
+
+/** Enlaces Civitatis / GetYourGuide / … en HTML o markdown del artículo. */
+export function extractExperienceLinks(
+  content: string,
+): { label: string; href: string }[] {
+  const found: { label: string; href: string }[] = []
+  const seen = new Set<string>()
+  const push = (label: string, href: string) => {
+    if (!isExperienceAffiliateUrl(href)) return
+    const url = normalizeAffiliateUrl(href) ?? href.trim()
+    if (!url || seen.has(url)) return
+    seen.add(url)
+    found.push({ label: stripTags(label) || "enlace", href: href.trim() })
+  }
+  const htmlRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  for (const match of content.matchAll(htmlRe)) {
+    push(match[2] ?? "", match[1] ?? "")
+  }
+  const mdRe = /\[([^\]]+)\]\((https?:[^)\s]+)\)/g
+  for (const match of content.matchAll(mdRe)) {
+    push(match[1] ?? "", match[2] ?? "")
+  }
+  return found
+}
+
+/**
+ * Pega `affiliateUrl` de tours del artículo en el ítem homónimo, o crea el
+ * ítem si Claude lo dejó como lugar / no lo emitió. No hace falta redestilar.
+ */
+export function attachExperienceLinksFromHtml(
+  html: string,
+  items: SourceItem[],
+): SourceItem[] {
+  const links = extractExperienceLinks(html)
+  if (links.length === 0) return items
+
+  const next = items.map((item) => ({ ...item }))
+  const itemUrls = new Set<string>()
+  for (const item of next) {
+    const url = normalizeAffiliateUrl(item.affiliateUrl)
+    if (url) itemUrls.add(url)
+  }
+
+  let changed = false
+  for (const link of links) {
+    const urlKey = normalizeAffiliateUrl(link.href)
+    if (urlKey && itemUrls.has(urlKey)) continue
+
+    const aff = sourceAffiliate(link.href)
+    const match = next.find(
+      (item) => item.type === "activity" && experienceLabelMatches(item.name, link.label),
+    )
+    if (match) {
+      if (!match.affiliateUrl?.trim()) {
+        match.affiliateUrl = aff.affiliateUrl
+        match.vendor = match.vendor || aff.vendor
+        changed = true
+      }
+      if (urlKey) itemUrls.add(urlKey)
+      continue
+    }
+
+    if (GENERIC_LINK_LABEL.test(normalizeName(link.label))) continue
+
+    next.push({
+      id: uid(),
+      type: "activity",
+      name: link.label,
+      detail: null,
+      dayHint: null,
+      region: null,
+      thumbUrl: null,
+      affiliateUrl: aff.affiliateUrl,
+      vendor: aff.vendor,
+    })
+    if (urlKey) itemUrls.add(urlKey)
+    changed = true
+  }
+  return changed ? next : items
+}
+
 export function reconcileExtractedSource(
   items: SourceItem[],
   basics: SourceBasicItem[],
+  html?: string | null,
 ): { items: SourceItem[]; basics: SourceBasicItem[] } {
   const lifted = liftOtherBasicsToActivities(items, basics)
-  return { items: dedupeRedundantPlaces(lifted.items), basics: lifted.basics }
+  const linked = html?.trim()
+    ? attachExperienceLinksFromHtml(html, lifted.items)
+    : lifted.items
+  return {
+    items: dedupeRedundantPlaces(linked),
+    basics: dropDuplicateOtherBasics(linked, lifted.basics),
+  }
+}
+
+export function applyArticleHtmlToSource(source: Source, html: string): Source {
+  if (!html.trim()) return source.articleHtml === html ? source : { ...source, articleHtml: html }
+  const reconciled = reconcileExtractedSource(source.items, source.basics, html)
+  const itemsSame = reconciled.items === source.items
+  const basicsSame = reconciled.basics === source.basics
+  if (itemsSame && basicsSame && source.articleHtml === html) return source
+  return {
+    ...source,
+    articleHtml: html,
+    items: reconciled.items,
+    basics: reconciled.basics,
+  }
 }
 
 /**
@@ -630,6 +760,7 @@ export function buildSource(
   const reconciled = reconcileExtractedSource(
     flattenItinerary(itinerary),
     flattenBasics(itinerary),
+    itinerary.article_html,
   )
 
   return {
