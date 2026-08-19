@@ -118,9 +118,14 @@ function legActionTitle(mode: RouteMode | null | undefined, dest: string): strin
   }
 }
 
-/** Título de fila como acción («Reservar Full Moon Budapest»). Extras: texto del usuario. */
+/** Título de fila como acción («Reservar Full Moon Budapest»). Extras: texto del usuario.
+ * Las activities (lugar o tour) no llevan verbo: el enlace a la derecha ya lo dice.
+ */
 export function taskActionTitle(
-  task: Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route" | "roundtripFlight">,
+  task: Pick<
+    DerivedTripTask,
+    "origin" | "sourceKind" | "title" | "route" | "roundtripFlight" | "affiliateUrl"
+  >,
 ): string {
   if (task.origin === "extra") return task.title
 
@@ -137,6 +142,7 @@ export function taskActionTitle(
 
   const kind = task.sourceKind
   if (isItemType(kind)) {
+    if (kind === "activity") return task.title
     return `${ITEM_VERBS[kind]} ${task.title}`
   }
   if (task.origin === "basic" && isBasicCategory(kind)) {

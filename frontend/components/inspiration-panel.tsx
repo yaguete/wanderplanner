@@ -41,7 +41,7 @@ import { useStableList } from "@/hooks/use-stable-list"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ApiLimitError } from "@/lib/api"
-import { ITEM_LABELS } from "@/lib/item-styles"
+import { itemTypeLabel } from "@/lib/item-styles"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
 import { canAddSource } from "@/lib/trip-sources"
@@ -61,7 +61,7 @@ function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
   if (item.detail?.toLowerCase().includes(needle)) return true
   if (item.region?.toLowerCase().includes(needle)) return true
   if (item.vendor?.toLowerCase().includes(needle)) return true
-  if (ITEM_LABELS[item.type].toLowerCase().includes(needle)) return true
+  if (itemTypeLabel(item.type, item).toLowerCase().includes(needle)) return true
   if (item.dayHint != null) {
     const day = String(item.dayHint)
     if (day === needle || day.startsWith(needle)) return true
@@ -1093,6 +1093,7 @@ export default function InspirationPanel({
           tripStartDate={trip.startDate ?? null}
           itemName={picking.kind === "item" ? picking.item.name : undefined}
           itemType={picking.kind === "item" ? picking.item.type : undefined}
+          itemAffiliateUrl={picking.kind === "item" ? picking.item.affiliateUrl : undefined}
           description={
             picking.kind === "day"
               ? `Elige en qué día de tu viaje quieres colocar todos los ítems del día ${picking.day} de la ruta de ${
@@ -1592,13 +1593,16 @@ function ItemRow({
       title={item.name}
       detail={item.detail}
       type={item.type}
-      typeLabel={sourceTypeLabel}
+      typeLabel={sourceTypeLabel ?? itemTypeLabel(item.type, item)}
       isAdded={isAdded}
       addedLabel={
         addedDayNumbers.length
           ? formatAddedDaysCompact(addedDayNumbers, tripStartDate)
           : undefined
       }
+      href={item.affiliateUrl}
+      outboundSurface="inspiration"
+      outboundAffiliate={item.affiliateUrl ? "partner" : "auto"}
       thumbnail={
         <InspirationThumbnail
           kind="item"

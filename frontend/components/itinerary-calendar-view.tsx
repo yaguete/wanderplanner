@@ -27,7 +27,7 @@ import {
   type CalendarDensity,
   type CalendarScale,
 } from "@/lib/itinerary-calendar"
-import { ITEM_DOT_COLORS, ITEM_LABELS } from "@/lib/item-styles"
+import { ITEM_DOT_COLORS, itemTypeLabel } from "@/lib/item-styles"
 import { formatDayDate, toISODate } from "@/lib/trip-dates"
 import { cn } from "@/lib/utils"
 import type { UserDay, UserDayItem } from "@/types/itinerary"
@@ -712,7 +712,7 @@ function ItemBadge({
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs text-xs">
         <p className="m-0 text-[10px] text-muted-foreground">
-          {ITEM_LABELS[item.type]}
+          {itemTypeLabel(item.type, item)}
         </p>
         <p className="m-0 font-medium">{item.name}</p>
       </TooltipContent>
@@ -746,7 +746,7 @@ function DayOverflow({
           {hiddenItems.map((item) => (
             <li key={item.id}>
               <p className="m-0 text-[10px] text-muted-foreground">
-                {ITEM_LABELS[item.type]}
+                {itemTypeLabel(item.type, item)}
               </p>
               <p className="m-0 font-medium">{item.name}</p>
             </li>
@@ -797,7 +797,7 @@ function DayPopover({
                 />
                 <span className="min-w-0 text-xs leading-snug">
                   <span className="text-[10px] text-muted-foreground">
-                    {ITEM_LABELS[item.type]}
+                    {itemTypeLabel(item.type, item)}
                   </span>
                   <span className="block text-foreground">{item.name}</span>
                 </span>

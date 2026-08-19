@@ -9,6 +9,7 @@ import {
   Shield,
   Ship,
   Sparkles,
+  Ticket,
   Train,
   UtensilsCrossed,
   Wifi,
@@ -55,11 +56,36 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   activity: "Actividad",
 }
 
+/**
+ * Etiqueta visible de un ítem. Una activity sin enlace de reserva es un «Lugar».
+ * `ITEM_LABELS` sigue siendo el diccionario del tipo (selector de alta, etc.).
+ */
+export function itemTypeLabel(
+  type: ItemType,
+  opts?: { affiliateUrl?: string | null },
+): string {
+  if (type === "activity" && !opts?.affiliateUrl?.trim()) return "Lugar"
+  return ITEM_LABELS[type]
+}
+
 export const ITEM_TYPE_ICONS: Record<ItemType, LucideIcon> = {
   transport: Car,
   stay: Home,
   food: UtensilsCrossed,
   activity: MapPin,
+}
+
+/**
+ * Icono visible de un ítem. Una activity con enlace de reserva es una
+ * «Actividad» (`Ticket`, mismo pictograma que la pestaña); sin enlace es un
+ * «Lugar» (`MapPin`). El selector de alta sigue usando `ITEM_TYPE_ICONS`.
+ */
+export function itemTypeIcon(
+  type: ItemType,
+  opts?: { affiliateUrl?: string | null },
+): LucideIcon {
+  if (type === "activity" && opts?.affiliateUrl?.trim()) return Ticket
+  return ITEM_TYPE_ICONS[type]
 }
 
 export type TransportModeVisualKey = RouteMode | "undecided"

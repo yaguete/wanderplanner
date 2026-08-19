@@ -3,8 +3,9 @@
  * Aquí vive el mapeo de `affiliate_url` (backend) a `affiliateUrl` (front) y `mapBasicCategory` (snake → camel).
  * No cambies `dayHint` sin entender `source_structured_by_days` y el panel de inspiración.
  */
-import type { BasicCategory, Itinerary, Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
+import type { BasicCategory, Itinerary, Source, SourceBasicItem, SourceItem, Trip } from "@/types/itinerary"
 import { sourceRouteHintFromTransport } from "@/lib/transport-routes"
+import { normalizeName } from "@/lib/trip-tasks"
 
 let _counter = 0
 function uid(): string {
@@ -26,6 +27,419 @@ function vendorFromUrl(href: string | null | undefined): string | null {
   } catch {
     return null
   }
+}
+
+function sourceAffiliate(href: string | null | undefined): {
+  affiliateUrl: string | null
+  vendor: string | null
+} {
+  const url = href?.trim() ? href.trim() : null
+  return { affiliateUrl: url, vendor: url ? vendorFromUrl(url) : null }
+}
+
+/**
+ * Compara afiliados para dedupe: trim, host en minúsculas, sin barra final.
+ * No toca querystring (los parámetros de afiliado viven ahí).
+ */
+export function normalizeAffiliateUrl(href: string | null | undefined): string | null {
+  const raw = href?.trim()
+  if (!raw) return null
+  try {
+    const u = new URL(raw)
+    const host = u.hostname.toLowerCase()
+    const path = u.pathname.replace(/\/+$/, "")
+    return `${u.protocol}//${host}${path}${u.search}`
+  } catch {
+    return raw.replace(/\/+$/, "").toLowerCase()
+  }
+}
+
+/** Marketplaces de experiencias: el enlace es un tour, no un básico. */
+const EXPERIENCE_BRANDS = new Set([
+  "civitatis",
+  "getyourguide",
+  "viator",
+  "guruwalk",
+  "freetour",
+  "freetours",
+  "klook",
+  "musement",
+  "tiqets",
+  "headout",
+  "withlocals",
+])
+
+/** Buscadores / taquillas: se quedan en Descuentos (como Skyscanner u ÖBB). */
+const TRIP_TOOL_BRANDS = new Set([
+  "omio",
+  "goeuro",
+  "skyscanner",
+  "kayak",
+  "trainline",
+  "thetrainline",
+  "rome2rio",
+  "kiwi",
+  "momondo",
+  "cheapflights",
+])
+
+function hostnameLabels(href: string | null | undefined): string[] {
+  if (!href?.trim()) return []
+  try {
+    return new URL(href.trim()).hostname
+      .toLowerCase()
+      .replace(/^www\./, "")
+      .split(".")
+      .filter((part) => part.length > 1)
+  } catch {
+    return []
+  }
+}
+
+function brandInLabels(labels: string[], brands: Set<string>): boolean {
+  return labels.some((label) => brands.has(label))
+}
+
+export function isExperienceAffiliateUrl(href: string | null | undefined): boolean {
+  return brandInLabels(hostnameLabels(href), EXPERIENCE_BRANDS)
+}
+
+export function isTripEssentialsTool(input: {
+  name?: string | null
+  vendor?: string | null
+  affiliateUrl?: string | null
+}): boolean {
+  if (brandInLabels(hostnameLabels(input.affiliateUrl), TRIP_TOOL_BRANDS)) return true
+  const blob = normalizeName(`${input.name ?? ""} ${input.vendor ?? ""}`)
+  if (/\b(omio|goeuro|skyscanner|kayak|trainline|rome2rio|kiwi|momondo)\b/.test(blob)) {
+    return true
+  }
+  const looksLikeSearch = /\b(busqueda|buscador|comparador)\b/.test(blob)
+  const looksLikeTransport = /\b(transporte|tren|trenes|vuelo|vuelos|billete|billetes|horario|horarios)\b/.test(
+    blob,
+  )
+  return looksLikeSearch && looksLikeTransport
+}
+
+function looksLikeBookableExperienceName(name: string): boolean {
+  const n = normalizeName(name)
+  return /\b(excursion|crucero|avistamiento|flightseeing|freetour|free tour|tour guiado)\b/.test(n)
+}
+
+function shouldLiftOtherBasic(basic: SourceBasicItem): boolean {
+  const href = basic.affiliateUrl?.trim()
+  if (basic.category !== "other" || !href) return false
+  if (isTripEssentialsTool(basic)) return false
+  if (isExperienceAffiliateUrl(href)) return true
+  return looksLikeBookableExperienceName(basic.name)
+}
+
+/**
+ * Si un básico `other` comparte URL con un ítem de ruta, es un tour duplicado:
+ * se queda en el ítem (card clicable) y cae de Descuentos.
+ * insurance / sim / car_rental / flight nunca se tocan; si el modelo no
+ * casó el link con la activity, el básico sobrevive.
+ */
+export function dropDuplicateOtherBasics(
+  items: Pick<SourceItem, "affiliateUrl">[],
+  basics: SourceBasicItem[],
+): SourceBasicItem[] {
+  const itemUrls = new Set<string>()
+  for (const item of items) {
+    const url = normalizeAffiliateUrl(item.affiliateUrl)
+    if (url) itemUrls.add(url)
+  }
+  if (itemUrls.size === 0) return basics
+  return basics.filter((basic) => {
+    if (basic.category !== "other") return true
+    const url = normalizeAffiliateUrl(basic.affiliateUrl)
+    if (!url) return true
+    return !itemUrls.has(url)
+  })
+}
+
+const ARTICLE_PREFIX = /^(la|el|los|las|un|una) /
+/** Visitar / caminar / trekking en un sitio: no es un producto distinto. */
+const VISIT_WRAPPER =
+  /^(trekking|senderismo|hiking|hike|caminata|paseo|visita|exploracion|recorrido|ascenso|ascension|walk)( de| del| por| al| a| en| to)? /
+/** Producto comercial (crucero, tour…): sí es otra cosa que el POI. */
+const PRODUCT_WRAPPER =
+  /^(excursion|crucero|tour|paseo|visita|exploracion|recorrido)( de| del| por| al| a| en)? /
+
+function stripLeadingArticles(name: string): string {
+  return normalizeName(name).replace(ARTICLE_PREFIX, "").trim()
+}
+
+/** Quita el envoltorio comercial («excursión», «crucero por»…) para casar con el POI. */
+export function foldActivityName(name: string): string {
+  return stripLeadingArticles(name).replace(PRODUCT_WRAPPER, "").trim()
+}
+
+/** Quita «trekking al», «visita a»… para ver si dos lugares son el mismo sitio. */
+function foldVisitWrapper(name: string): string {
+  return stripLeadingArticles(name).replace(VISIT_WRAPPER, "").trim()
+}
+
+function isBareToponym(name: string): boolean {
+  return foldVisitWrapper(name) === stripLeadingArticles(name)
+}
+
+function namesLooselyMatch(a: string, b: string): boolean {
+  const fa = foldActivityName(a)
+  const fb = foldActivityName(b)
+  if (!fa || !fb) return false
+  if (fa === fb) return true
+  const shorter = fa.length <= fb.length ? fa : fb
+  const longer = fa.length <= fb.length ? fb : fa
+  return shorter.length >= 8 && longer.includes(shorter)
+}
+
+function findMatchingActivity(items: SourceItem[], name: string): SourceItem | null {
+  const matches = items.filter((item) => item.type === "activity" && namesLooselyMatch(item.name, name))
+  if (matches.length === 0) return null
+  const withoutUrl = matches.find((item) => !item.affiliateUrl?.trim())
+  return withoutUrl ?? matches[0] ?? null
+}
+
+/**
+ * Un básico `other` que es un tour (Civitatis, GetYourGuide, crucero…) sube a Ruta.
+ * Buscadores y taquillas (Omio, Skyscanner, ÖBB…) se quedan en Descuentos.
+ * 1. Devuelve a básicos las activities que son herramientas de viaje (payload viejo).
+ * 2. Si un ítem ya lleva esa URL → solo cae el básico.
+ * 3. Si hay una activity homónima sin enlace → le copia el href.
+ * 4. Si no hay pareja → crea la activity (id estable `si-from-{basic.id}`).
+ */
+export function liftOtherBasicsToActivities(
+  items: SourceItem[],
+  basics: SourceBasicItem[],
+): { items: SourceItem[]; basics: SourceBasicItem[] } {
+  const nextItems: SourceItem[] = []
+  const kept: SourceBasicItem[] = [...basics]
+
+  for (const item of items) {
+    if (item.type === "activity" && isTripEssentialsTool(item)) {
+      const existing = kept.some(
+        (basic) =>
+          normalizeAffiliateUrl(basic.affiliateUrl) &&
+          normalizeAffiliateUrl(basic.affiliateUrl) === normalizeAffiliateUrl(item.affiliateUrl),
+      )
+      if (!existing) {
+        const restoredId = item.id.startsWith("si-from-")
+          ? item.id.slice("si-from-".length)
+          : `sb-from-${item.id}`
+        kept.push({
+          id: restoredId,
+          category: "other",
+          name: item.name,
+          detail: item.detail,
+          vendor: item.vendor ?? null,
+          affiliateUrl: item.affiliateUrl ?? null,
+          thumbUrl: item.thumbUrl ?? null,
+        })
+      }
+      continue
+    }
+    nextItems.push({ ...item })
+  }
+
+  const itemUrls = new Set<string>()
+  for (const item of nextItems) {
+    const url = normalizeAffiliateUrl(item.affiliateUrl)
+    if (url) itemUrls.add(url)
+  }
+
+  const remaining: SourceBasicItem[] = []
+  for (const basic of kept) {
+    const href = basic.affiliateUrl?.trim() || null
+    if (!shouldLiftOtherBasic(basic) || !href) {
+      remaining.push(basic)
+      continue
+    }
+
+    const urlKey = normalizeAffiliateUrl(href)
+    if (urlKey && itemUrls.has(urlKey)) continue
+
+    const match = findMatchingActivity(nextItems, basic.name)
+    const aff = sourceAffiliate(href)
+    if (match) {
+      if (!match.affiliateUrl?.trim()) {
+        match.affiliateUrl = aff.affiliateUrl
+        match.vendor = match.vendor || aff.vendor
+        if (!match.detail?.trim() && basic.detail) match.detail = basic.detail
+      }
+      if (urlKey) itemUrls.add(urlKey)
+      continue
+    }
+
+    nextItems.push({
+      id: `si-from-${basic.id}`,
+      type: "activity",
+      name: basic.name,
+      detail: basic.detail,
+      dayHint: null,
+      region: null,
+      thumbUrl: basic.thumbUrl ?? null,
+      affiliateUrl: aff.affiliateUrl,
+      vendor: basic.vendor?.trim() || aff.vendor,
+    })
+    if (urlKey) itemUrls.add(urlKey)
+  }
+
+  return { items: nextItems, basics: remaining }
+}
+
+function isPlaceItem(item: SourceItem): boolean {
+  return item.type === "activity" && !item.affiliateUrl?.trim()
+}
+
+function preferPlace(a: SourceItem, b: SourceItem): SourceItem {
+  const aBare = isBareToponym(a.name)
+  const bBare = isBareToponym(b.name)
+  if (aBare !== bBare) return aBare ? a : b
+  if (a.name.length !== b.name.length) return a.name.length < b.name.length ? a : b
+  return a
+}
+
+function mergePlaceFields(keeper: SourceItem, dropped: SourceItem[]): SourceItem {
+  const next = { ...keeper }
+  for (const other of dropped) {
+    if ((other.detail?.trim().length ?? 0) > (next.detail?.trim().length ?? 0)) {
+      next.detail = other.detail
+    }
+    if (!next.thumbUrl && other.thumbUrl) next.thumbUrl = other.thumbUrl
+    if (!next.region && other.region) next.region = other.region
+  }
+  return next
+}
+
+function visitNamesMatch(a: string, b: string): boolean {
+  const fa = foldVisitWrapper(a)
+  const fb = foldVisitWrapper(b)
+  if (!fa || !fb || fa !== fb) return false
+  return fa.length >= 8
+}
+
+/**
+ * Colapsa «Exit Glacier» + «Trekking al Exit Glacier» en un solo lugar
+ * (mismo día, ambos sin enlace). No toca tours con `affiliateUrl` ni
+ * productos tipo crucero/tour: esos sí son otra cosa que el POI.
+ */
+export function dedupeRedundantPlaces(items: SourceItem[]): SourceItem[] {
+  const places: { item: SourceItem; index: number }[] = []
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item && isPlaceItem(item)) places.push({ item, index: i })
+  }
+  if (places.length < 2) return items
+
+  const byDay = new Map<string, typeof places>()
+  for (const place of places) {
+    const key = place.item.dayHint == null ? "null" : String(place.item.dayHint)
+    const group = byDay.get(key)
+    if (group) group.push(place)
+    else byDay.set(key, [place])
+  }
+
+  const drop = new Set<number>()
+  const replace = new Map<number, SourceItem>()
+
+  for (const group of byDay.values()) {
+    const n = group.length
+    if (n < 2) continue
+    const parent = group.map((_, i) => i)
+    const find = (i: number): number => {
+      let r = i
+      while (parent[r] !== r) r = parent[r]!
+      let c = i
+      while (c !== r) {
+        const next = parent[c]!
+        parent[c] = r
+        c = next
+      }
+      return r
+    }
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (!visitNamesMatch(group[i]!.item.name, group[j]!.item.name)) continue
+        const pa = find(i)
+        const pb = find(j)
+        if (pa !== pb) parent[pa] = pb
+      }
+    }
+    const clusters = new Map<number, number[]>()
+    for (let i = 0; i < n; i++) {
+      const root = find(i)
+      const members = clusters.get(root)
+      if (members) members.push(i)
+      else clusters.set(root, [i])
+    }
+    for (const members of clusters.values()) {
+      if (members.length < 2) continue
+      const cluster = members.map((i) => group[i]!)
+      let keeper = cluster[0]!.item
+      for (const { item } of cluster.slice(1)) keeper = preferPlace(keeper, item)
+      const dropped = cluster.map((c) => c.item).filter((item) => item !== keeper)
+      const merged = mergePlaceFields(keeper, dropped)
+      const firstSlot = Math.min(...cluster.map((c) => c.index))
+      replace.set(firstSlot, merged)
+      for (const { index } of cluster) {
+        if (index !== firstSlot) drop.add(index)
+      }
+    }
+  }
+
+  if (drop.size === 0) return items
+  return items.flatMap((item, i) => {
+    if (drop.has(i)) return []
+    return [replace.get(i) ?? item]
+  })
+}
+
+export function reconcileExtractedSource(
+  items: SourceItem[],
+  basics: SourceBasicItem[],
+): { items: SourceItem[]; basics: SourceBasicItem[] } {
+  const lifted = liftOtherBasicsToActivities(items, basics)
+  return { items: dedupeRedundantPlaces(lifted.items), basics: lifted.basics }
+}
+
+/**
+ * Copia `affiliateUrl` de la fuente (ya lifted) a ítems de día que se
+ * consolidaron antes, para que un tour añadido como «Lugar» pase a Actividad.
+ */
+export function hydrateAffiliateUrlsFromSources(trips: Trip[], sources: Source[]): Trip[] {
+  const hrefBySourceItemId = new Map<string, string>()
+  for (const source of sources) {
+    for (const item of source.items) {
+      const href = item.affiliateUrl?.trim()
+      if (href) hrefBySourceItemId.set(item.id, href)
+    }
+  }
+  if (hrefBySourceItemId.size === 0) return trips
+
+  let changed = false
+  const next = trips.map((trip) => {
+    let tripChanged = false
+    const days = trip.days.map((day) => {
+      let dayChanged = false
+      const items = day.items.map((item) => {
+        if (item.affiliateUrl?.trim()) return item
+        const href = item.sourceItemId
+          ? hrefBySourceItemId.get(item.sourceItemId)
+          : undefined
+        if (!href) return item
+        dayChanged = true
+        return { ...item, affiliateUrl: href }
+      })
+      if (!dayChanged) return day
+      tripChanged = true
+      return { ...day, items }
+    })
+    if (!tripChanged) return trip
+    changed = true
+    return { ...trip, days }
+  })
+  return changed ? next : trips
 }
 
 // El JSON del backend usa snake_case; en `SourceBasicItem` la categoría es camelCase.
@@ -73,8 +487,7 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
 
     for (const a of day.accommodations ?? []) {
       // `affiliate_url` se copia a `affiliateUrl` (camel) para clics de reserva en el front.
-      const href = a.affiliate_url ?? null
-      const vendor = href ? vendorFromUrl(href) : null
+      const aff = sourceAffiliate(a.affiliate_url)
       items.push({
         id: uid(),
         type: "stay",
@@ -83,8 +496,8 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
         dayHint,
         region: a.region ?? null,
         thumbUrl: a.thumb_url ?? null,
-        affiliateUrl: href,
-        vendor,
+        affiliateUrl: aff.affiliateUrl,
+        vendor: aff.vendor,
       })
     }
 
@@ -101,6 +514,7 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
     }
 
     for (const act of day.activities ?? []) {
+      const aff = sourceAffiliate(act.affiliate_url)
       items.push({
         id: uid(),
         type: "activity",
@@ -109,9 +523,12 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
         dayHint,
         region: act.region ?? null,
         thumbUrl: act.thumb_url ?? null,
+        affiliateUrl: aff.affiliateUrl,
+        vendor: aff.vendor,
       })
       for (const sub of act.sub_activities ?? []) {
         // Si la sub-actividad no trae `region`, hereda la de su actividad padre (más concreta que el `area` del artículo).
+        const subAff = sourceAffiliate(sub.affiliate_url)
         items.push({
           id: uid(),
           type: "activity",
@@ -120,6 +537,8 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
           dayHint,
           region: sub.region ?? act.region ?? null,
           thumbUrl: sub.thumb_url ?? null,
+          affiliateUrl: subAff.affiliateUrl,
+          vendor: subAff.vendor,
         })
       }
     }
@@ -208,6 +627,10 @@ export function buildSource(
   const guideLabel =
     area && totalDays ? `${area} — ${totalDays} días` : area || "Fuente"
   const ogTitle = itinerary.og_title?.trim() || null
+  const reconciled = reconcileExtractedSource(
+    flattenItinerary(itinerary),
+    flattenBasics(itinerary),
+  )
 
   return {
     id: crypto.randomUUID(),
@@ -217,8 +640,8 @@ export function buildSource(
     // `area` = destino del artículo; usado como fallback de geocoding cuando un ítem no trae `region`.
     area,
     totalDays,
-    items: flattenItinerary(itinerary),
-    basics: flattenBasics(itinerary),
+    items: reconciled.items,
+    basics: reconciled.basics,
     articleHtml: itinerary.article_html ?? "",
     ogImage: itinerary.og_image ?? null,
   }

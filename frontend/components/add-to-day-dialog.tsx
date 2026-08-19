@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { getDayUserDescription } from "@/lib/day-heading"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
-import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
+import { itemTypeIcon, itemTypeLabel } from "@/lib/item-styles"
 import type { ItemType, UserDay } from "@/types/itinerary"
 
 /** A partir de aquí la lista se vuelve incómoda sin buscador. */
@@ -39,6 +39,7 @@ export type AddToDayDialogProps = {
   tripStartDate?: string | null
   itemName?: string
   itemType?: ItemType
+  itemAffiliateUrl?: string | null
   /** Sustituye el copy por defecto («colocar este alojamiento», etc.). */
   description?: string
   /** Números de día (1-based) donde ya está este ítem (o todos, en lote). */
@@ -55,6 +56,7 @@ export function AddToDayDialog({
   tripStartDate = null,
   itemName,
   itemType,
+  itemAffiliateUrl,
   description,
   addedDayNumbers = [],
   onSelect,
@@ -91,7 +93,9 @@ export function AddToDayDialog({
       )
     : rows
 
-  const TypeIcon = itemType ? ITEM_TYPE_ICONS[itemType] : null
+  const TypeIcon = itemType
+    ? itemTypeIcon(itemType, { affiliateUrl: itemAffiliateUrl })
+    : null
   const showSearch = days.length >= SEARCH_FROM_DAYS
   const showItemPreview = !!itemName && !!itemType && TypeIcon
   const descriptionText =
@@ -137,7 +141,7 @@ export function AddToDayDialog({
                 {itemName}
               </p>
               <p className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
-                {itemType ? ITEM_LABELS[itemType] : null}
+                {itemType ? itemTypeLabel(itemType, { affiliateUrl: itemAffiliateUrl }) : null}
               </p>
             </div>
           </div>

@@ -625,7 +625,11 @@ function TaskRow({
                   })
                 }
               >
-                {task.category === "basic" || task.origin === "basic" ? "Contratar" : "Reservar"}
+                {task.category === "basic" || task.origin === "basic"
+                  ? "Contratar"
+                  : task.category === "activity"
+                    ? "Comprar o reservar"
+                    : "Reservar"}
                 <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
               </a>
             ) : null}

@@ -21,6 +21,7 @@ import {
   normalizeName,
   pruneTaskStates,
   resolveTaskStatus,
+  taskBucket,
   taskKeyForBasic,
   taskKeyForItem,
   withPrunedTasks,
@@ -393,6 +394,22 @@ assert.equal(isBookableTransportMode(null), false)
     },
   })
   assert.equal(buildTripTasks(carIncluded).find((t) => t.id === carKey)!.bucket, "main")
+
+  const tourItem = dayItem({
+    id: "act-tour",
+    type: "activity",
+    name: "Avistamiento de osos grizzly",
+    affiliateUrl: "https://aff.example/osos",
+  })
+  const tourKey = taskKeyForItem(tourItem)
+  const tourTrip = makeTrip({
+    days: [{ id: "day-1", label: "", items: [tourItem] }],
+    basics: [],
+  })
+  assert.equal(buildTripTasks(tourTrip).find((t) => t.id === tourKey)!.bucket, "main")
+  assert.equal(taskBucket("activity", null, "dayItem"), "triage")
+  assert.equal(taskBucket("activity", null, "dayItem", { hasAffiliate: true }), "main")
+  assert.equal(taskBucket("food", null, "dayItem", { hasAffiliate: true }), "triage")
 
   const undecidedLeg = dayItem({
     id: "leg-out-undecided",

@@ -11,7 +11,10 @@ import type { DerivedTripTask } from "./trip-tasks"
 function task(
   partial: Partial<DerivedTripTask> &
     Pick<DerivedTripTask, "origin" | "sourceKind" | "title">,
-): Pick<DerivedTripTask, "origin" | "sourceKind" | "title" | "route" | "roundtripFlight"> {
+): Pick<
+  DerivedTripTask,
+  "origin" | "sourceKind" | "title" | "route" | "roundtripFlight" | "affiliateUrl"
+> {
   return partial
 }
 
@@ -128,8 +131,19 @@ assert.equal(
   "Comprar los vuelos Barcelona ⇄ Viena",
 )
 assert.equal(
-  taskActionTitle(task({ origin: "dayItem", sourceKind: "activity", title: "trekking" })),
-  "Reservar trekking",
+  taskActionTitle(task({ origin: "dayItem", sourceKind: "activity", title: "Cascada de Juneau" })),
+  "Cascada de Juneau",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "activity",
+      title: "Avistamiento de osos grizzly",
+      affiliateUrl: "https://www.civitatis.com/x",
+    }),
+  ),
+  "Avistamiento de osos grizzly",
 )
 assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "food", title: "Borkonyha" })),

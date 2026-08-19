@@ -38,7 +38,7 @@ import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { mapCountryCodes, mapDestinationHint } from "@/lib/map-destination"
 import { dateISOForDayIndex, formatDayDate, formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
-import { ITEM_DOT_COLORS, transportIconForItem } from "@/lib/item-styles"
+import { ITEM_DOT_COLORS, itemTypeLabel, transportIconForItem } from "@/lib/item-styles"
 import { TASK_STATUS_LABELS } from "@/lib/task-labels"
 import { dayItemsSignature, generateDaySummary } from "@/lib/day-summary"
 import { ApiLimitError } from "@/lib/api"
@@ -1057,7 +1057,10 @@ function DayItineraryTimeline({
           const taskKey = taskKeyForItem(item)
           const state = taskStates[taskKey] ?? null
           const status = resolveTaskStatus(state)
-          const bucket = taskBucket(categoryFromItemType(item.type), state, "dayItem")
+          const bucket = taskBucket(categoryFromItemType(item.type), state, "dayItem", {
+            routeMode: item.route?.mode,
+            hasAffiliate: Boolean(item.affiliateUrl?.trim()),
+          })
           const titleAdornment =
             bucket === "triage" || bucket === "dismissed" ? null : (
               <RouteTaskIndicator bucket={bucket} status={status} />
@@ -1112,6 +1115,7 @@ function DayItineraryTimeline({
                 sourceAuthor={item.sourceAuthor}
                 detail={item.detail}
                 regionLabel={resolveRegion(item)}
+                typeLabel={itemTypeLabel(item.type, item)}
                 href={
                   item.type === "stay"
                     ? stayReserveHref({

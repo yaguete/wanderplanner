@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ITEM_LABELS } from "@/lib/item-styles"
+import { itemTypeLabel } from "@/lib/item-styles"
 import { isRouteLegItem } from "@/lib/route-legs"
 import { cn } from "@/lib/utils"
 import type { UserDay, UserDayItem } from "@/types/itinerary"
@@ -40,7 +40,7 @@ function dayNumbers(days: UserDay[], dayIds: string[]): number[] {
 }
 
 function itemLine(item: UserDayItem): string {
-  return `${item.name} (${ITEM_LABELS[item.type].toLowerCase()})`
+  return `${item.name} (${itemTypeLabel(item.type, item).toLowerCase()})`
 }
 
 function copyFor(action: DayDestructiveAction, days: UserDay[]): {

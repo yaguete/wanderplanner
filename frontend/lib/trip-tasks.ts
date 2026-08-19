@@ -244,13 +244,15 @@ export function isTaskManaged(state: TripTaskState | null): boolean {
  * Bucket de accionabilidad. T4.2 solo pinta; no decide pertenencia.
  * Extras no pasan por triaje (nunca `"triage"`), pero `notNeeded` → `"dismissed"`.
  * Transporte sin billete (coche / other / sin medio) entra en triaje si no se ha tocado.
+ * Activity con enlace de reserva se comporta como un stay → `main`.
  */
 export function taskBucket(
   category: TripTaskCategory,
   state: TripTaskState | null,
   origin: DerivedTaskOrigin,
-  routeMode?: RouteMode | null,
+  opts?: { routeMode?: RouteMode | null; hasAffiliate?: boolean },
 ): TaskBucket {
+  const routeMode = opts?.routeMode
   if (state?.status === "notNeeded") return "dismissed"
   if (origin === "extra") return "main"
   if (
@@ -261,7 +263,10 @@ export function taskBucket(
   ) {
     return "triage"
   }
-  if (needsTriage(category) && state === null) return "triage"
+  if (needsTriage(category) && state === null) {
+    if (category === "activity" && opts?.hasAffiliate) return "main"
+    return "triage"
+  }
   return "main"
 }
 
@@ -363,7 +368,10 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
       sourceKind: g.type,
       title: g.title,
       state,
-      bucket: taskBucket(g.category, state, origin, g.route?.mode),
+      bucket: taskBucket(g.category, state, origin, {
+        routeMode: g.route?.mode,
+        hasAffiliate: Boolean(g.affiliateUrl),
+      }),
       itemIds: g.itemIds,
       dayIndexes: g.dayIndexes,
       occurrences: g.itemIds.length,

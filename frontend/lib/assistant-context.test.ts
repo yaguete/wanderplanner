@@ -150,7 +150,7 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   assert.match(md, /### Día 1 — id=`day-4` — Salzburgo/)
   assert.match(
     md,
-    /- id=`item-mirabell` \[Actividad\] \*\*Palacio de Mirabell\*\* · Salzburgo — Jardines/,
+    /- id=`item-mirabell` \[Lugar\] \*\*Palacio de Mirabell\*\* · Salzburgo — Jardines/,
   )
   assert.match(md, /## Tareas del viaje/)
   assert.match(md, /ref=`activity:palacio de mirabell`/)

@@ -24,6 +24,7 @@ import { sanitizeUserDays } from "@/lib/route-legs"
 import { isReusableDraftTrip, mergeDraftReferrer } from "@/lib/partner-trip"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
+import { reconcileExtractedSource, hydrateAffiliateUrlsFromSources } from "@/lib/itinerary-utils"
 import {
   toStartCandidate,
   type StartCandidateTrip,
@@ -247,6 +248,7 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
 }
 
 function rowToSource(row: SourceRow): Source {
+  const reconciled = reconcileExtractedSource(row.items ?? [], row.basics ?? [])
   return {
     id: row.id,
     url: row.url,
@@ -254,8 +256,8 @@ function rowToSource(row: SourceRow): Source {
     title: row.title,
     area: row.area,
     totalDays: row.total_days ?? null,
-    items: row.items ?? [],
-    basics: row.basics ?? [],
+    items: reconciled.items,
+    basics: reconciled.basics,
     articleHtml: row.article_html ?? "",
     ogImage: row.og_image,
   }
@@ -300,9 +302,11 @@ export async function loadTripsState(
   if (tripsResult.error) throw tripsResult.error
   if (sourcesResult.error) throw sourcesResult.error
 
+  const trips = ((tripsResult.data ?? []) as unknown as TripRow[]).map(rowToTrip)
+  const sources = ((sourcesResult.data ?? []) as unknown as SourceRow[]).map(rowToSource)
   return {
-    trips: ((tripsResult.data ?? []) as unknown as TripRow[]).map(rowToTrip),
-    sources: ((sourcesResult.data ?? []) as unknown as SourceRow[]).map(rowToSource),
+    trips: hydrateAffiliateUrlsFromSources(trips, sources),
+    sources,
   }
 }
 

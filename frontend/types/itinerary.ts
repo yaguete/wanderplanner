@@ -26,6 +26,8 @@ export interface Activity {
   notes: string | null
   region?: RegionHint
   thumb_url?: string | null
+  /** URL de afiliado u oferta (tours, cruceros, flightseeing). */
+  affiliate_url?: string | null
   sub_activities?: Activity[]
 }
 

@@ -2,7 +2,7 @@
  * Briefing markdown del viaje para el asistente (enviado en cada POST /assistant/chat).
  */
 import type { Source, Trip } from "@/types/itinerary"
-import { BASIC_LABELS, ITEM_LABELS } from "@/lib/item-styles"
+import { BASIC_LABELS, itemTypeLabel } from "@/lib/item-styles"
 import { itemProvenanceLabel } from "@/lib/item-provenance"
 import { countriesPlainList } from "@/lib/countries"
 import { travelerTypeLabels } from "@/lib/traveler-profile"
@@ -126,7 +126,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
       lines.push("- (sin ítems)")
     } else {
       for (const item of day.items) {
-        const typeLabel = ITEM_LABELS[item.type] ?? item.type
+        const typeLabel = itemTypeLabel(item.type, item)
         const region = item.region ? ` · ${item.region}` : ""
         const detail = item.detail ? ` — ${item.detail}` : ""
         lines.push(
@@ -191,7 +191,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
       lines.push("(ninguno)")
     } else {
       for (const it of src.items) {
-        const typeLabel = ITEM_LABELS[it.type] ?? it.type
+        const typeLabel = itemTypeLabel(it.type, it)
         const day = it.dayHint != null ? ` · día hint ${it.dayHint}` : ""
         const region = it.region ? ` · ${it.region}` : ""
         lines.push(

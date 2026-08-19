@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
-import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
+import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, itemTypeIcon } from "@/lib/item-styles"
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { FlightSearchHit } from "@/lib/flight-search"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
@@ -51,10 +51,14 @@ type SourceCardProps = {
   isAdded?: boolean
   addedLabel?: string
   action: ReactNode
-  /** Desktop: toda la card (salvo miniatura, lupita y acción) abre el selector de día. */
+  /** Desktop: toda la card (salvo miniatura, lupita, enlace y acción) abre el selector de día. */
   onSelect?: () => void
   /** Busca el nombre en la Crónica de la fuente. */
   onFindInSource?: () => void
+  /** Enlace de afiliado (tours/alojamientos); icono junto a la lupa, no convierte la card en `<a>`. */
+  href?: string | null
+  outboundSurface?: OutboundSurface
+  outboundAffiliate?: OutboundAffiliate | "auto"
   className?: string
 }
 
@@ -67,6 +71,8 @@ type PlannedCardProps = {
   detail?: string | null
   regionLabel?: string | null
   href?: string | null
+  /** Override del badge (p. ej. «Lugar» vs «Actividad»). */
+  typeLabel?: string
   onRemove: () => void
   /** Editar tramo de ida/vuelta o traslado (T4B.3). */
   onEdit?: () => void
@@ -168,6 +174,22 @@ export function TravelItemCard(props: TravelItemCardProps) {
             <p className="min-w-0 flex-1 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
               {props.title}
             </p>
+            {props.href ? (
+              <a
+                href={props.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+                }}
+                className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Abrir enlace de «${props.title}»`}
+                title="Abrir enlace"
+              >
+                <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </a>
+            ) : null}
             {props.onFindInSource ? (
               <button
                 type="button"
@@ -337,8 +359,12 @@ export function TravelItemCard(props: TravelItemCardProps) {
 
   // planned
   const colors = ITEM_COLORS[props.type]
-  const TypeIcon = props.transportIcon ?? ITEM_TYPE_ICONS[props.type]
-  const typeLabel = ITEM_LABELS[props.type]
+  const TypeIcon =
+    props.transportIcon ??
+    itemTypeIcon(props.type, {
+      affiliateUrl: props.type === "activity" ? props.href : undefined,
+    })
+  const typeLabel = props.typeLabel ?? ITEM_LABELS[props.type]
   const iconA11y = props.transportIconLabel ?? typeLabel
   const region = props.regionLabel?.trim() ? props.regionLabel.trim() : null
   const routeSummary = props.routeSummary?.trim() ? props.routeSummary.trim() : null

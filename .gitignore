@@ -9,6 +9,7 @@ __pycache__/
 .env.local
 .env*.local
 .DS_Store
+.tmp/
 backend/data/country_briefs/*.txt
 backend/data/country_briefs/index.json
 backend/data/travel_briefs/*.txt
