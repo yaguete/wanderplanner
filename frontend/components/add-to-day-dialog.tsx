@@ -6,7 +6,7 @@
  * alcanzable: scroll propio + filtro cuando hay muchos días.
  */
 import { useEffect, useMemo, useState } from "react"
-import { Check, Plus, Search } from "lucide-react"
+import { Car, Check, Home, MapPin, Plus, Search, Ticket, UtensilsCrossed } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   Dialog,
@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { getDayUserDescription } from "@/lib/day-heading"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
-import { itemTypeIcon, itemTypeLabel } from "@/lib/item-styles"
+import { itemTypeLabel } from "@/lib/item-styles"
 import type { ItemType, UserDay } from "@/types/itinerary"
 
 /** A partir de aquí la lista se vuelve incómoda sin buscador. */
@@ -93,11 +93,8 @@ export function AddToDayDialog({
       )
     : rows
 
-  const TypeIcon = itemType
-    ? itemTypeIcon(itemType, { affiliateUrl: itemAffiliateUrl })
-    : null
   const showSearch = days.length >= SEARCH_FROM_DAYS
-  const showItemPreview = !!itemName && !!itemType && TypeIcon
+  const showItemPreview = !!itemName && !!itemType
   const descriptionText =
     description ??
     (itemType
@@ -134,7 +131,19 @@ export function AddToDayDialog({
               className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground"
               aria-hidden
             >
-              <TypeIcon className="h-4 w-4" />
+              {itemType === "activity" ? (
+                itemAffiliateUrl?.trim() ? (
+                  <Ticket className="h-4 w-4" />
+                ) : (
+                  <MapPin className="h-4 w-4" />
+                )
+              ) : itemType === "transport" ? (
+                <Car className="h-4 w-4" />
+              ) : itemType === "stay" ? (
+                <Home className="h-4 w-4" />
+              ) : itemType === "food" ? (
+                <UtensilsCrossed className="h-4 w-4" />
+              ) : null}
             </span>
             <div className="min-w-0">
               <p className="line-clamp-1 text-sm font-semibold leading-snug text-foreground">

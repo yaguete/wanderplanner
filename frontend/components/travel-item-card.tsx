@@ -1,12 +1,12 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { Check, ExternalLink, Pencil, Plus, Search, X, type LucideIcon } from "lucide-react"
+import { createElement, type ReactNode } from "react"
+import { Car, Check, ExternalLink, Home, MapPin, Pencil, Plus, Search, Ticket, UtensilsCrossed, X, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
-import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS, itemTypeIcon } from "@/lib/item-styles"
+import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS } from "@/lib/item-styles"
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { FlightSearchHit } from "@/lib/flight-search"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
@@ -359,11 +359,6 @@ export function TravelItemCard(props: TravelItemCardProps) {
 
   // planned
   const colors = ITEM_COLORS[props.type]
-  const TypeIcon =
-    props.transportIcon ??
-    itemTypeIcon(props.type, {
-      affiliateUrl: props.type === "activity" ? props.href : undefined,
-    })
   const typeLabel = props.typeLabel ?? ITEM_LABELS[props.type]
   const iconA11y = props.transportIconLabel ?? typeLabel
   const region = props.regionLabel?.trim() ? props.regionLabel.trim() : null
@@ -377,7 +372,24 @@ export function TravelItemCard(props: TravelItemCardProps) {
       className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted"
       aria-label={iconA11y}
     >
-      <TypeIcon className={cn("h-4 w-4", colors.text)} aria-hidden />
+      {props.transportIcon ? (
+        createElement(props.transportIcon, {
+          className: cn("h-4 w-4", colors.text),
+          "aria-hidden": true,
+        })
+      ) : props.type === "activity" ? (
+        props.href?.trim() ? (
+          <Ticket className={cn("h-4 w-4", colors.text)} aria-hidden />
+        ) : (
+          <MapPin className={cn("h-4 w-4", colors.text)} aria-hidden />
+        )
+      ) : props.type === "transport" ? (
+        <Car className={cn("h-4 w-4", colors.text)} aria-hidden />
+      ) : props.type === "stay" ? (
+        <Home className={cn("h-4 w-4", colors.text)} aria-hidden />
+      ) : props.type === "food" ? (
+        <UtensilsCrossed className={cn("h-4 w-4", colors.text)} aria-hidden />
+      ) : null}
     </span>
   )
   const titleAndMeta = (
