@@ -35,6 +35,8 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 #   migrations/20260817190000_delete_own_account.sql
 #   migrations/20260818120000_trip_seed_source_key.sql
 #   migrations/20260818130000_cleanup_anonymous_users_v2.sql
+#   migrations/20260818200000_funnel_events.sql
+#   migrations/20260819120000_maps_link_pins.sql
 
 # Opción B: NO disponible hoy. `supabase db push` no funciona en este proyecto:
 # no hay supabase/config.toml, el CLI no está vinculado y el remoto no tiene
@@ -89,6 +91,8 @@ select count(*) from public.trips where user_id = '<uuid>';
 1. `20260818120000_trip_seed_source_key.sql` — columna `trips.seed_source_key` (no está en `TRIP_COLUMNS`; un front viejo la ignora). Verificar columna e índice. Un front nuevo contra base vieja **rompe `/start`** (PostgREST 400 al pedir la columna), no `/trips`.
 2. `20260818130000_cleanup_anonymous_users_v2.sql` — `drop function` de la firma `(interval)` y función nueva `(interval, interval, integer)`. Comprobar que no hay ambigüedad: `select public.cleanup_anonymous_users(interval '999 years', interval '999 years');` debe devolver `0`. Dry-run de candidatos antes de dejar el cron activo (anónimos vacíos a 30 días, con viajes a 7 días de inactividad; no toca upgrades a medias ni claims vivos).
 
+**Pines de Google Maps en el artículo:** `20260819120000_maps_link_pins.sql` crea `maps_link_pins` (caché global service_role de `{lng,lat}` extraídos de short links) y añade `usage_events.kind=maps_resolve`. Aplicar **antes** de desplegar el backend con `POST /maps/resolve`. No toca `TRIP_COLUMNS`: un front nuevo contra base vieja no tumba `/trips`; el resolve degrada a geocoding Mapbox. Verificar: `select count(*) from public.maps_link_pins;` como `anon` debe fallar; con service_role, 0.
+
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 
 ```
@@ -96,7 +100,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://….supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ…
 ```
 
-5. **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (cachés `article_extractions`, `place_thumbs`, `destination_covers`, `country_task_suggestions`, contadores `usage_events`) y, en producción, `REQUIRE_AUTH=true` + `SUPABASE_JWT_SECRET` (JWT Secret en Settings → API) o confiar en el JWKS del proyecto. Claves de imágenes solo en backend: `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`.
+5. **Backend** (`backend/.env`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (cachés `article_extractions`, `place_thumbs`, `destination_covers`, `country_task_suggestions`, `maps_link_pins`, contadores `usage_events`) y, en producción, `REQUIRE_AUTH=true` + `SUPABASE_JWT_SECRET` (JWT Secret en Settings → API) o confiar en el JWKS del proyecto. Claves de imágenes solo en backend: `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`.
 
 ## Opcional
 

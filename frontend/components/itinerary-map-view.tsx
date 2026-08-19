@@ -37,6 +37,7 @@ import {
 } from "@/lib/map-geocode-state"
 import {
   candidatePassesAnchor,
+  mapsPinPassesAnchor,
   offsetStackedApproximate,
   pickGeocodeOutcome,
   type RegionAnchor,
@@ -649,9 +650,12 @@ export function ItineraryMapView({
             Number.isFinite(saved.lng) &&
             Number.isFinite(saved.lat)
           ) {
-            const fix: PlaceFix = { coord: { lng: saved.lng, lat: saved.lat }, precision: "exact" }
-            coordCacheRef.current.set(p.id, fix)
-            return fix
+            const pin = { lng: saved.lng, lat: saved.lat }
+            if (!destAnchor || mapsPinPassesAnchor(pin, destAnchor)) {
+              const fix: PlaceFix = { coord: pin, precision: "exact" }
+              coordCacheRef.current.set(p.id, fix)
+              return fix
+            }
           }
           const cached = coordCacheRef.current.get(p.id)
           if (cached) return cached

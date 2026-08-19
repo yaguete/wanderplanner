@@ -14,6 +14,7 @@ Kinds:
   - landing_source_search: Tavily de GET /sources/suggest (landing; user_id null; cap global durable)
   - trip_source_search: Tavily de GET /sources/suggest desde Añadir fuente (user_id opcional; cap propio)
   - photo_paid: cache miss de pago de /thumb (Places) y /cover (Unsplash); user_id null; cap global durable
+  - maps_resolve: unfurl de short links de Maps (POST /maps/resolve); no cuenta un hit de caché
 """
 from __future__ import annotations
 
@@ -46,6 +47,7 @@ Kind = Literal[
     "landing_source_search",
     "trip_source_search",
     "photo_paid",
+    "maps_resolve",
 ]
 _USERLESS_KINDS = frozenset(
     {
@@ -66,6 +68,7 @@ _GUEST_DEFAULTS: dict[str, int] = {
     "country_tasks": 5,
     "place_suggest": 40,
     "transport_hub": 20,
+    "maps_resolve": 40,
 }
 _GUEST_ENV: dict[str, str] = {
     "extraction": "GUEST_MAX_EXTRACTIONS",
@@ -75,6 +78,7 @@ _GUEST_ENV: dict[str, str] = {
     "country_tasks": "GUEST_MAX_COUNTRY_TASKS",
     "place_suggest": "GUEST_MAX_PLACE_SUGGESTS",
     "transport_hub": "GUEST_MAX_TRANSPORT_HUBS",
+    "maps_resolve": "GUEST_MAX_MAPS_RESOLVES",
 }
 
 _MESSAGES: dict[tuple[str, LimitKind], str] = {
@@ -128,6 +132,12 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("transport_hub", "daily"): (
         "Has alcanzado el límite diario de búsquedas de aeropuertos/estaciones."
+    ),
+    ("maps_resolve", "guest"): (
+        "Has agotado las resoluciones de mapas de invitado. Crea una cuenta para continuar."
+    ),
+    ("maps_resolve", "daily"): (
+        "Has alcanzado el límite diario de resoluciones de mapas. Vuelve mañana."
     ),
 }
 
@@ -394,6 +404,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "transport_hub":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_TRANSPORT_HUBS_DAY", 80):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "maps_resolve":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_MAPS_RESOLVES_DAY", 200):
             _raise_limit(user, kind, "daily")
         return
 

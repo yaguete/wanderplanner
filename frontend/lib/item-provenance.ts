@@ -31,6 +31,7 @@ export function userDayItemFromSource(item: SourceItem, source: Source): UserDay
     detail: item.detail,
     sourceAuthor: source.author,
     region: item.region ?? source.area ?? null,
+    coords: item.coords ?? null,
     affiliateUrl: item.affiliateUrl ?? null,
     vendor: item.vendor ?? null,
     sourceRouteHint: item.sourceRouteHint,

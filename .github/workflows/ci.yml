@@ -54,6 +54,7 @@ jobs:
       - run: npm run test:auth-errors
       - run: npm run test:itinerary-calendar
       - run: npm run test:itinerary-utils
+      - run: npm run test:maps-links
       - run: npm run test:itinerary-dnd
       - run: npm run test:route-legs
       - run: npm run test:transport-routes

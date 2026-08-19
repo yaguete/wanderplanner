@@ -1,14 +1,19 @@
 import assert from "node:assert/strict"
 import type { Itinerary, Source, SourceBasicItem, SourceItem, Trip } from "@/types/itinerary"
 import { itemTypeIcon, itemTypeLabel } from "./item-styles"
+import { userDayItemFromSource } from "./item-provenance"
 import {
   attachExperienceLinksFromHtml,
+  attachMapsPinsFromHtml,
+  collectShortMapsUrls,
   dedupeRedundantPlaces,
   dropDuplicateOtherBasics,
   flattenItinerary,
   hydrateAffiliateUrlsFromSources,
+  hydrateCoordsFromSources,
   liftOtherBasicsToActivities,
   normalizeAffiliateUrl,
+  reconcileExtractedSource,
 } from "./itinerary-utils"
 
 function itinerary(overrides: Partial<Itinerary> = {}): Itinerary {
@@ -491,6 +496,171 @@ assert.equal(itemTypeLabel("transport"), "Transporte")
     "https://www.civitatis.com/es/granada/free-tour-granada/?aid=1006",
   )
   assert.equal(itemTypeLabel("activity", freeTour), "Actividad")
+}
+
+{
+  const pasterzeHref =
+    "https://www.google.com/maps/place/Pasterze/@47.0877936,12.7136183,14z/data=!8m2!3d47.0893217!4d12.7128768"
+  const html = `
+    <p>El <a href="${pasterzeHref}">Glaciar Pasterze</a> es el más largo de Austria.</p>
+    <p>Reserva un <a href="https://www.civitatis.com/es/austria/tour">tour</a>.</p>
+  `
+  const glacier: SourceItem = {
+    id: "si-past",
+    type: "activity",
+    name: "Glaciar Pasterze",
+    detail: null,
+    dayHint: 2,
+    affiliateUrl: null,
+  }
+  const austria = {
+    coord: { lng: 14.55, lat: 47.52 },
+    featureType: "country" as const,
+    label: "Austria",
+  }
+  const stamped = attachMapsPinsFromHtml(html, [glacier], undefined, austria)
+  assert.equal(stamped.length, 1)
+  assert.equal(stamped[0]!.affiliateUrl, null)
+  assert.equal(stamped[0]!.coords?.lat, 47.0893217)
+  assert.equal(stamped[0]!.coords?.lng, 12.7128768)
+
+  const baliHref =
+    "https://www.google.com/maps/place/Bali/@-8.4095,115.1889,10z/data=!8m2!3d-8.4095!4d115.1889"
+  const baliHtml = `<p><a href="${baliHref}">Glaciar Pasterze</a></p>`
+  const rejected = attachMapsPinsFromHtml(baliHtml, [glacier], undefined, austria)
+  assert.equal(rejected[0]!.coords, undefined)
+
+  const kept = attachMapsPinsFromHtml(
+    html,
+    [{ ...glacier, coords: { lng: 1, lat: 2 } }],
+    undefined,
+    austria,
+  )
+  assert.equal(kept[0]!.coords?.lng, 1)
+  assert.equal(kept[0]!.coords?.lat, 2)
+
+  const shorts = collectShortMapsUrls(
+    `<a href="https://maps.app.goo.gl/6odjmewhn9iZtAZF9">Glaciar Pasterze</a>`,
+  )
+  assert.deepEqual(shorts, ["https://maps.app.goo.gl/6odjmewhn9iZtAZF9"])
+
+  const resolved = attachMapsPinsFromHtml(
+    `<a href="https://maps.app.goo.gl/6odjmewhn9iZtAZF9">Glaciar Pasterze</a>`,
+    [glacier],
+    new Map([["https://maps.app.goo.gl/6odjmewhn9iZtAZF9", { lng: 12.71, lat: 47.09 }]]),
+    austria,
+  )
+  assert.equal(resolved[0]!.coords?.lat, 47.09)
+
+  const reconciled = reconcileExtractedSource([glacier], [], html)
+  const glacierOut = reconciled.items.find((i) => i.name === "Glaciar Pasterze")
+  assert.ok(glacierOut)
+  assert.equal(glacierOut!.coords?.lat, 47.0893217)
+  assert.equal(glacierOut!.affiliateUrl, null)
+  assert.equal(
+    reconciled.items.some((i) => i.affiliateUrl?.includes("civitatis")),
+    true,
+  )
+
+  const mapsOnly = reconcileExtractedSource(
+    [],
+    [],
+    `<p><a href="${pasterzeHref}">Glaciar Pasterze</a></p>`,
+  )
+  assert.equal(mapsOnly.items.length, 0)
+}
+
+{
+  const alaska = {
+    coord: { lng: -152.4, lat: 64.2 },
+    featureType: "region" as const,
+    label: "Alaska",
+  }
+  const html = `
+    <p><a href="https://maps.app.goo.gl/H9JzXfm4hbES92jp9">155 W 104th Ave</a></p>
+    <p><a href="https://maps.app.goo.gl/T1aZG6r1jvukYsbm8">Lake Skilak Campground</a></p>
+    <p><a href="https://maps.app.goo.gl/C4s86nB6p4xPqsPTA">Captain Pattie´s Fish House</a></p>
+    <p><a href="https://maps.app.goo.gl/6mhNwhZh9iZD3rLy6">Exit Glacier</a></p>
+  `
+  const items: SourceItem[] = [
+    { id: "si-park", type: "stay", name: "Parking en zona comercial (155 W 104th Ave)", detail: null, dayHint: 1 },
+    { id: "si-skilak", type: "stay", name: "Lake Skilak Campground", detail: null, dayHint: 2 },
+    { id: "si-pattie", type: "food", name: "Captain Pattie's Fish House", detail: null, dayHint: 3 },
+    { id: "si-exit", type: "activity", name: "Trekking al Exit Glacier", detail: null, dayHint: 5 },
+  ]
+  const resolved = new Map([
+    ["https://maps.app.goo.gl/H9JzXfm4hbES92jp9", { lng: -149.86, lat: 61.13 }],
+    ["https://maps.app.goo.gl/T1aZG6r1jvukYsbm8", { lng: -150.35, lat: 60.43 }],
+    ["https://maps.app.goo.gl/C4s86nB6p4xPqsPTA", { lng: -151.42, lat: 59.64 }],
+    ["https://maps.app.goo.gl/6mhNwhZh9iZD3rLy6", { lng: -149.631, lat: 60.172 }],
+  ])
+  const stamped = attachMapsPinsFromHtml(html, items, resolved, alaska)
+  assert.equal(stamped.find((i) => i.id === "si-park")?.coords?.lat, 61.13)
+  assert.equal(stamped.find((i) => i.id === "si-skilak")?.coords?.lat, 60.43)
+  assert.equal(stamped.find((i) => i.id === "si-pattie")?.coords?.lat, 59.64)
+  assert.equal(stamped.find((i) => i.id === "si-exit")?.coords?.lat, 60.172)
+}
+
+{
+  const trip = {
+    id: "t1",
+    days: [
+      {
+        id: "d1",
+        label: "",
+        items: [
+          {
+            id: "ud-1",
+            sourceItemId: "si-past",
+            sourceId: "src-1",
+            type: "activity",
+            name: "Glaciar Pasterze",
+            detail: null,
+            sourceAuthor: "blog",
+            coords: null,
+          },
+          {
+            id: "ud-2",
+            sourceItemId: "si-user",
+            sourceId: "src-1",
+            type: "activity",
+            name: "Ajustado",
+            detail: null,
+            sourceAuthor: "blog",
+            coords: { lng: 1, lat: 2 },
+          },
+        ],
+      },
+    ],
+  } as unknown as Trip
+  const source = {
+    id: "src-1",
+    items: [
+      {
+        id: "si-past",
+        type: "activity",
+        name: "Glaciar Pasterze",
+        detail: null,
+        dayHint: 2,
+        coords: { lng: 12.71, lat: 47.09 },
+      },
+      {
+        id: "si-user",
+        type: "activity",
+        name: "Ajustado",
+        detail: null,
+        dayHint: 2,
+        coords: { lng: 9, lat: 9 },
+      },
+    ],
+    basics: [],
+  } as unknown as Source
+  const [hydrated] = hydrateCoordsFromSources([trip], [source])
+  assert.equal(hydrated!.days[0]!.items[0]!.coords?.lat, 47.09)
+  assert.equal(hydrated!.days[0]!.items[1]!.coords?.lng, 1)
+
+  const copied = userDayItemFromSource(source.items[0] as SourceItem, source)
+  assert.equal(copied.coords?.lat, 47.09)
 }
 
 console.log("itinerary-utils flatten/dedupe/label: ok")

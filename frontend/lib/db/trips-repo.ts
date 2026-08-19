@@ -24,7 +24,7 @@ import { sanitizeUserDays } from "@/lib/route-legs"
 import { isReusableDraftTrip, mergeDraftReferrer } from "@/lib/partner-trip"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
-import { reconcileExtractedSource, hydrateAffiliateUrlsFromSources } from "@/lib/itinerary-utils"
+import { reconcileExtractedSource, hydrateAffiliateUrlsFromSources, hydrateCoordsFromSources } from "@/lib/itinerary-utils"
 import {
   toStartCandidate,
   type StartCandidateTrip,
@@ -309,7 +309,7 @@ export async function loadTripsState(
   const trips = ((tripsResult.data ?? []) as unknown as TripRow[]).map(rowToTrip)
   const sources = ((sourcesResult.data ?? []) as unknown as SourceRow[]).map(rowToSource)
   return {
-    trips: hydrateAffiliateUrlsFromSources(trips, sources),
+    trips: hydrateCoordsFromSources(hydrateAffiliateUrlsFromSources(trips, sources), sources),
     sources,
   }
 }

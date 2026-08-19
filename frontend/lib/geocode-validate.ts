@@ -225,6 +225,25 @@ export function candidatePassesAnchor(
 }
 
 /**
+ * Radios para pines GPS del artículo. Más holgados que Search Box: un viaje
+ * de 20 días en Alaska (`region`) no cabe en 150 km, y un `poi` falla el
+ * filtro `country` de `candidatePassesAnchor`. Bali sigue fuera.
+ */
+const MAPS_PIN_RADIUS_M: Record<string, number> = {
+  locality: 80_000,
+  neighborhood: 80_000,
+  place: 250_000,
+  district: 800_000,
+  region: 2_500_000,
+  country: 8_000_000,
+}
+
+export function mapsPinPassesAnchor(coord: LngLat, anchor: RegionAnchor): boolean {
+  const maxM = MAPS_PIN_RADIUS_M[anchor.featureType] ?? MAPS_PIN_RADIUS_M.place!
+  return haversineMeters(coord, anchor.coord) <= maxM
+}
+
+/**
  * Entre los que pasan el filtro, el más específico (poi > address > … > country).
  * Empates conservan el orden de Mapbox.
  * Un `address`/`street` sin coincidencia de nombre con `query` no cuenta.

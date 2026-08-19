@@ -5,6 +5,7 @@ import {
   candidatePassesAnchor,
   featureTypeFromMapboxId,
   isWeakRegionHint,
+  mapsPinPassesAnchor,
   maxDistanceMetersForAnchorType,
   offsetStackedApproximate,
   pickFirstValidCandidate,
@@ -211,5 +212,29 @@ const singles = offsetStackedApproximate([
   { id: "solo", coord: { lng: 1, lat: 2 }, precision: "approximate" },
 ])
 assert.equal(singles.size, 0)
+
+const austria: RegionAnchor = {
+  coord: { lng: 14.55, lat: 47.52 },
+  featureType: "country",
+  label: "Austria",
+}
+const pasterze = { lng: 12.7128768, lat: 47.0893217 }
+const bali = { lng: 115.1889, lat: -8.4095 }
+assert.equal(mapsPinPassesAnchor(pasterze, austria), true)
+assert.equal(mapsPinPassesAnchor(bali, austria), false)
+assert.equal(candidatePassesAnchor({ coord: pasterze, featureType: "poi" }, austria), false)
+assert.equal(mapsPinPassesAnchor(pasterze, granada), false)
+
+const alaska: RegionAnchor = {
+  coord: { lng: -152.4, lat: 64.2 },
+  featureType: "region",
+  label: "Alaska",
+}
+const sewardExit = { lng: -149.631, lat: 60.172 }
+const fairbanks = { lng: -147.716, lat: 64.838 }
+assert.equal(mapsPinPassesAnchor(sewardExit, alaska), true)
+assert.equal(mapsPinPassesAnchor(fairbanks, alaska), true)
+assert.equal(mapsPinPassesAnchor(bali, alaska), false)
+assert.equal(candidatePassesAnchor({ coord: sewardExit, featureType: "poi" }, alaska), false)
 
 console.log("geocode-validate: ok")

@@ -252,6 +252,11 @@ export interface SourceItem {
   thumbUrl?: string | null
   /** Transporte: from/to/mode de la extracción, antes de que el usuario confirme `route`. */
   sourceRouteHint?: SourceRouteHint
+  /**
+   * Pin extraído de un enlace de Google Maps del artículo (`attachMapsPinsFromHtml`).
+   * Objeto `{ lng, lat }`. Solo se rellena si el ítem no tenía coords.
+   */
+  coords?: { lng: number; lat: number } | null
 }
 
 export interface UserDay {

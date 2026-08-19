@@ -31,12 +31,17 @@ import type {
   TransportRoute,
 } from "@/types/itinerary"
 import { fetchItinerary, ApiLimitError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
+import { resolveMapsLinks } from "@/lib/maps-api"
+import { canonicalizeMapsUrl } from "@/lib/maps-links"
 import {
   applyArticleHtmlToSource,
+  applyResolvedMapsPins,
   authorFromUrl,
   buildSource,
+  collectShortMapsUrls,
   formatGuideLabel,
   hydrateAffiliateUrlsFromSources,
+  hydrateCoordsFromSources,
 } from "@/lib/itinerary-utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
@@ -315,6 +320,22 @@ interface TripContextValue {
 
 const TripContext = createContext<TripContextValue | null>(null)
 
+function hydrateDayItems(trips: Trip[], sources: Source[]): Trip[] {
+  return hydrateCoordsFromSources(hydrateAffiliateUrlsFromSources(trips, sources), sources)
+}
+
+function mapsPinsFromResolve(
+  pins: { url: string; lng: number; lat: number }[],
+): Map<string, { lng: number; lat: number }> {
+  const resolved = new Map<string, { lng: number; lat: number }>()
+  for (const p of pins) {
+    const coord = { lng: p.lng, lat: p.lat }
+    resolved.set(p.url, coord)
+    resolved.set(canonicalizeMapsUrl(p.url), coord)
+  }
+  return resolved
+}
+
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: authLoading } = useAuth()
   const [trips, setTrips] = useState<Trip[]>([])
@@ -333,6 +354,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const abortByPendingIdRef = useRef(new Map<string, AbortController>())
   const extractionSeqRef = useRef(0)
   const coverBackfillAttempted = useRef(new Set<string>())
+  const mapsResolveInFlight = useRef(new Set<string>())
   const syncerRef = useRef<TripsSyncer | null>(null)
   const hydratedFor = useRef<string | null>(null)
   const claimAttemptedFor = useRef<string | null>(null)
@@ -465,6 +487,42 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setTrips((prev) =>
       prev.map((t) => (t.id === tripId ? { ...t, coverUrl: url } : t)),
     )
+  }, [])
+
+  const scheduleMapsPinResolve = useCallback((source: Source) => {
+    const urls = collectShortMapsUrls(source.articleHtml)
+    if (urls.length === 0) return
+    const needsPin = source.items.some((item) => {
+      if (item.type !== "stay" && item.type !== "food" && item.type !== "activity") {
+        return false
+      }
+      const c = item.coords
+      return !(c && Number.isFinite(c.lng) && Number.isFinite(c.lat))
+    })
+    if (!needsPin) return
+    if (mapsResolveInFlight.current.has(source.id)) return
+    mapsResolveInFlight.current.add(source.id)
+    void (async () => {
+      try {
+        const pins = await resolveMapsLinks(urls)
+        if (pins.length === 0) return
+        const current = sourcesRef.current.find((s) => s.id === source.id)
+        if (!current) return
+        const next = applyResolvedMapsPins(current, mapsPinsFromResolve(pins))
+        if (next === current) return
+        setSources((prev) => prev.map((s) => (s.id === source.id ? next : s)))
+        setTrips((prev) =>
+          hydrateDayItems(
+            prev,
+            sourcesRef.current.map((s) => (s.id === source.id ? next : s)),
+          ),
+        )
+      } catch {
+        /* fail-open: el mapa sigue geocodificando por nombre */
+      } finally {
+        mapsResolveInFlight.current.delete(source.id)
+      }
+    })()
   }, [])
 
   // Backfill: viajes con fuentes y sin coverUrl (mocks / datos previos al cambio).
@@ -652,18 +710,19 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       setSources((prev) => prev.map((s) => (s.id === sourceId ? next : s)))
       if (itemsChanged) {
         setTrips((prev) =>
-          hydrateAffiliateUrlsFromSources(
+          hydrateDayItems(
             prev,
             sourcesRef.current.map((s) => (s.id === sourceId ? next : s)),
           ),
         )
       }
+      scheduleMapsPinResolve(next)
     } catch {
       /* la Crónica muestra su propio estado vacío */
     } finally {
       setLoadingArticleIds((prev) => prev.filter((id) => id !== sourceId))
     }
-  }, [])
+  }, [scheduleMapsPinResolve])
 
   const isArticleHtmlLoading = useCallback(
     (sourceId: string) => loadingArticleIds.includes(sourceId),
@@ -676,7 +735,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       if (!trip) return []
       const tripSources = sourcesRef.current.filter((s) => trip.sourceIds.includes(s.id))
       const missing = tripSources.filter((s) => !s.articleHtml)
-      if (missing.length === 0 || !isSupabaseConfigured()) return tripSources
+      if (missing.length === 0 || !isSupabaseConfigured()) {
+        if (missing.length === 0) {
+          for (const s of tripSources) scheduleMapsPinResolve(s)
+        }
+        return tripSources
+      }
 
       const supabase = createClient()
       const fetched = await Promise.all(
@@ -705,11 +769,14 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       })
       setSources(nextAll)
       if (itemsChanged) {
-        setTrips((prev) => hydrateAffiliateUrlsFromSources(prev, nextAll))
+        setTrips((prev) => hydrateDayItems(prev, nextAll))
+      }
+      for (const s of nextAll) {
+        if (trip.sourceIds.includes(s.id)) scheduleMapsPinResolve(s)
       }
       return nextAll.filter((s) => trip.sourceIds.includes(s.id))
     },
-    [],
+    [scheduleMapsPinResolve],
   )
 
   const getTrip = useCallback((tripId: string) => {
@@ -785,9 +852,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       if (wasEmpty) {
         void applyCoverFromSource(tripId, source)
       }
+      scheduleMapsPinResolve(source)
       return true
     },
-    [applyCoverFromSource],
+    [applyCoverFromSource, scheduleMapsPinResolve],
   )
 
   const runPendingExtraction = useCallback(
@@ -991,8 +1059,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           (t) => t.sourceIds[0] === sourceId,
         )
 
-        setTrips((prev) =>
-          prev.map((t) => ({
+        setTrips((prev) => {
+          const remapped = prev.map((t) => ({
             ...t,
             days: t.days.map((d) => ({
               ...d,
@@ -1007,8 +1075,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
               const nextId = basicIdByKey.get(`${b.category}:${normalizeName(b.name)}`)
               return nextId ? { ...b, sourceBasicItemId: nextId } : b
             }),
-          })),
-        )
+          }))
+          return hydrateDayItems(
+            remapped,
+            sourcesRef.current.map((s) => (s.id === sourceId ? newSource : s)),
+          )
+        })
         setSources((prev) => prev.map((s) => (s.id === sourceId ? newSource : s)))
 
         if (isFirstOfSomeTrip) {
@@ -1018,11 +1090,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             }
           }
         }
+        scheduleMapsPinResolve(newSource)
       } finally {
         setIsRefetchingSource(false)
       }
     },
-    [applyCoverFromSource],
+    [applyCoverFromSource, scheduleMapsPinResolve],
   )
   const addDay = useCallback((tripId: string) => {
     setTrips((prev) =>

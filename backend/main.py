@@ -18,6 +18,9 @@ de dominios conocidos → Tavily abierto (kill switch SOURCE_SUGGEST_WEB_ENABLED
 POST /funnel (público, tope IP): contadores del CTA de blogs (`start_opened`,
 `outbound_click`, `account_created`). Siempre 204; sin IP ni user_id.
 
+POST /maps/resolve: despliega short links de Google Maps del artículo (allowlist
+de hosts, caché `maps_link_pins`). Kill switch MAPS_LINK_RESOLVE_ENABLED.
+
 Caché global stale-while-revalidate (`article_extractions`):
   - fresh → payload al instante
   - stale → payload al instante + revalidación en fondo
@@ -69,6 +72,7 @@ from extraction_cache import (  # noqa: E402
     touch_validation,
 )
 from funnel import router as funnel_router  # noqa: E402
+from maps_resolve import router as maps_resolve_router  # noqa: E402
 from obs import log_kv  # noqa: E402
 from partners import (  # noqa: E402
     TurnstileUnavailable,
@@ -115,6 +119,7 @@ app.include_router(country_tasks_router)
 app.include_router(place_search_router)
 app.include_router(source_suggest_router)
 app.include_router(funnel_router)
+app.include_router(maps_resolve_router)
 
 
 # Salida: itinerarios largos (p. ej. muchas franjas/ítems) superan 8K tokens de JSON; Haiku 4.5 admite ~64K.

@@ -6,6 +6,8 @@
 import type { BasicCategory, Itinerary, Source, SourceBasicItem, SourceItem, Trip } from "@/types/itinerary"
 import { sourceRouteHintFromTransport } from "@/lib/transport-routes"
 import { normalizeName } from "@/lib/trip-tasks"
+import { canonicalizeMapsUrl, isMapsUrl, isShortMapsUrl, parseMapsCoords } from "@/lib/maps-links"
+import { mapsPinPassesAnchor, type LngLat, type RegionAnchor } from "@/lib/geocode-validate"
 
 let _counter = 0
 function uid(): string {
@@ -186,9 +188,13 @@ function isBareToponym(name: string): boolean {
   return foldVisitWrapper(name) === stripLeadingArticles(name)
 }
 
+function foldQuotes(name: string): string {
+  return name.replace(/['’`´]/g, "")
+}
+
 function namesLooselyMatch(a: string, b: string): boolean {
-  const fa = foldActivityName(a)
-  const fb = foldActivityName(b)
+  const fa = foldQuotes(foldActivityName(a))
+  const fb = foldQuotes(foldActivityName(b))
   if (!fa || !fb) return false
   if (fa === fb) return true
   const shorter = fa.length <= fb.length ? fa : fb
@@ -310,6 +316,7 @@ function mergePlaceFields(keeper: SourceItem, dropped: SourceItem[]): SourceItem
     }
     if (!next.thumbUrl && other.thumbUrl) next.thumbUrl = other.thumbUrl
     if (!next.region && other.region) next.region = other.region
+    if (!next.coords && other.coords) next.coords = other.coords
   }
   return next
 }
@@ -405,7 +412,7 @@ function stripTags(html: string): string {
 }
 
 function compactName(name: string): string {
-  return stripLeadingArticles(name)
+  return foldQuotes(stripLeadingArticles(name))
     .replace(PRODUCT_WRAPPER, "")
     .replace(VISIT_WRAPPER, "")
     .replace(/\b(el|la|los|las|de|del|por|al|a|en|y|un|una)\b/g, " ")
@@ -424,18 +431,16 @@ function experienceLabelMatches(a: string, b: string): boolean {
   return shorter.length >= 12 && longer.includes(shorter)
 }
 
-/** Enlaces Civitatis / GetYourGuide / … en HTML o markdown del artículo. */
-export function extractExperienceLinks(
+/** Enlaces `<a href>` y markdown `[label](url)` del artículo, filtrados por `accept`. */
+export function extractLinks(
   content: string,
+  accept: (href: string) => boolean,
 ): { label: string; href: string }[] {
   const found: { label: string; href: string }[] = []
-  const seen = new Set<string>()
   const push = (label: string, href: string) => {
-    if (!isExperienceAffiliateUrl(href)) return
-    const url = normalizeAffiliateUrl(href) ?? href.trim()
-    if (!url || seen.has(url)) return
-    seen.add(url)
-    found.push({ label: stripTags(label) || "enlace", href: href.trim() })
+    const trimmed = href.trim()
+    if (!trimmed || !accept(trimmed)) return
+    found.push({ label: stripTags(label) || "enlace", href: trimmed })
   }
   const htmlRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
   for (const match of content.matchAll(htmlRe)) {
@@ -444,6 +449,21 @@ export function extractExperienceLinks(
   const mdRe = /\[([^\]]+)\]\((https?:[^)\s]+)\)/g
   for (const match of content.matchAll(mdRe)) {
     push(match[1] ?? "", match[2] ?? "")
+  }
+  return found
+}
+
+/** Enlaces Civitatis / GetYourGuide / … en HTML o markdown del artículo. */
+export function extractExperienceLinks(
+  content: string,
+): { label: string; href: string }[] {
+  const found: { label: string; href: string }[] = []
+  const seen = new Set<string>()
+  for (const link of extractLinks(content, isExperienceAffiliateUrl)) {
+    const url = normalizeAffiliateUrl(link.href) ?? link.href.trim()
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    found.push(link)
   }
   return found
 }
@@ -504,15 +524,94 @@ export function attachExperienceLinksFromHtml(
   return changed ? next : items
 }
 
+export type MapsPinResolved = ReadonlyMap<string, LngLat>
+
+function coordFromMapsLink(href: string, resolved?: MapsPinResolved): LngLat | null {
+  const parsed = parseMapsCoords(href)
+  if (parsed) return parsed
+  if (!resolved) return null
+  const direct = resolved.get(href) ?? resolved.get(canonicalizeMapsUrl(href))
+  return direct ?? null
+}
+
+function isMappableSourceItem(item: SourceItem): boolean {
+  return item.type === "stay" || item.type === "food" || item.type === "activity"
+}
+
+/**
+ * Pega `coords` de enlaces de Google Maps del artículo en el ítem homónimo.
+ * Solo rellena si el ítem no tiene coords; nunca crea ítems nuevos.
+ * `resolved` cubre short links (`maps.app.goo.gl`) ya desplegados en el backend.
+ * Si hay `anchor`, descarta pines fuera del destino (no romper el encuadre).
+ */
+export function attachMapsPinsFromHtml(
+  html: string,
+  items: SourceItem[],
+  resolved?: MapsPinResolved,
+  anchor?: RegionAnchor | null,
+): SourceItem[] {
+  if (!html.trim()) return items
+  const links = extractLinks(html, isMapsUrl)
+  if (links.length === 0) return items
+
+  const next = items.map((item) => ({ ...item }))
+  let changed = false
+  for (const link of links) {
+    const coord = coordFromMapsLink(link.href, resolved)
+    if (!coord) continue
+    if (anchor && !mapsPinPassesAnchor(coord, anchor)) continue
+    for (const item of next) {
+      if (!isMappableSourceItem(item)) continue
+      if (item.coords && Number.isFinite(item.coords.lng) && Number.isFinite(item.coords.lat)) {
+        continue
+      }
+      if (!experienceLabelMatches(item.name, link.label)) continue
+      item.coords = coord
+      changed = true
+    }
+  }
+  return changed ? next : items
+}
+
+/** Reaplica pines de Maps ya resueltos sobre una fuente con `articleHtml`. */
+export function applyResolvedMapsPins(
+  source: Source,
+  resolved: MapsPinResolved,
+): Source {
+  if (!source.articleHtml.trim() || resolved.size === 0) return source
+  const items = attachMapsPinsFromHtml(source.articleHtml, source.items, resolved)
+  if (items === source.items) return source
+  return { ...source, items }
+}
+
+/** Short links del HTML que aún no tienen coords parseables en el href. */
+export function collectShortMapsUrls(html: string): string[] {
+  if (!html.trim()) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const { href } of extractLinks(html, isMapsUrl)) {
+    if (!isShortMapsUrl(href)) continue
+    const key = canonicalizeMapsUrl(href)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(href)
+  }
+  return out
+}
+
 export function reconcileExtractedSource(
   items: SourceItem[],
   basics: SourceBasicItem[],
   html?: string | null,
+  resolved?: MapsPinResolved,
 ): { items: SourceItem[]; basics: SourceBasicItem[] } {
   const lifted = liftOtherBasicsToActivities(items, basics)
-  const linked = html?.trim()
+  let linked = html?.trim()
     ? attachExperienceLinksFromHtml(html, lifted.items)
     : lifted.items
+  if (html?.trim()) {
+    linked = attachMapsPinsFromHtml(html, linked, resolved)
+  }
   return {
     items: dedupeRedundantPlaces(linked),
     basics: dropDuplicateOtherBasics(linked, lifted.basics),
@@ -560,6 +659,57 @@ export function hydrateAffiliateUrlsFromSources(trips: Trip[], sources: Source[]
         if (!href) return item
         dayChanged = true
         return { ...item, affiliateUrl: href }
+      })
+      if (!dayChanged) return day
+      tripChanged = true
+      return { ...day, items }
+    })
+    if (!tripChanged) return trip
+    changed = true
+    return { ...trip, days }
+  })
+  return changed ? next : trips
+}
+
+function isFiniteCoord(coords: { lng: number; lat: number } | null | undefined): coords is {
+  lng: number
+  lat: number
+} {
+  return (
+    coords != null &&
+    typeof coords.lng === "number" &&
+    typeof coords.lat === "number" &&
+    Number.isFinite(coords.lng) &&
+    Number.isFinite(coords.lat)
+  )
+}
+
+/**
+ * Copia `coords` de la fuente (ya reconciliada) a ítems de día que se
+ * consolidaron antes, sin pisar un «Ajustar ubicación» del usuario.
+ */
+export function hydrateCoordsFromSources(trips: Trip[], sources: Source[]): Trip[] {
+  const coordsBySourceItemId = new Map<string, { lng: number; lat: number }>()
+  for (const source of sources) {
+    for (const item of source.items) {
+      if (isFiniteCoord(item.coords)) coordsBySourceItemId.set(item.id, item.coords)
+    }
+  }
+  if (coordsBySourceItemId.size === 0) return trips
+
+  let changed = false
+  const next = trips.map((trip) => {
+    let tripChanged = false
+    const days = trip.days.map((day) => {
+      let dayChanged = false
+      const items = day.items.map((item) => {
+        if (isFiniteCoord(item.coords)) return item
+        const coords = item.sourceItemId
+          ? coordsBySourceItemId.get(item.sourceItemId)
+          : undefined
+        if (!coords) return item
+        dayChanged = true
+        return { ...item, coords }
       })
       if (!dayChanged) return day
       tripChanged = true
