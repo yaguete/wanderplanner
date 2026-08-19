@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 const TOC = [
   { id: "titular", label: "Titular" },
   { id: "servicio", label: "Qué es WanderPlanner" },
-  { id: "contenido-terceros", label: "Artículos de otros" },
+  { id: "contenido-terceros", label: "Artículos y publicaciones" },
   { id: "inteligencia-artificial", label: "Inteligencia artificial" },
   { id: "enlaces-comerciales", label: "Enlaces que salen del sitio" },
   { id: "uso", label: "Uso del servicio" },
@@ -64,15 +64,15 @@ export default function AvisoLegalPage() {
         </p>
       </LegalSection>
 
-      <LegalSection id="contenido-terceros" title="Artículos de otros">
+      <LegalSection id="contenido-terceros" title="Artículos y publicaciones de otros">
         <p>
-          Los artículos que procesamos son de sus autores. Los leemos porque tú pegas la
-          URL o porque el propio autor nos lo pide desde su blog, conservamos siempre la
-          atribución y enlazamos al original.
+          Los artículos y publicaciones que procesamos son de sus autores. Los leemos porque tú
+          pegas la URL o porque el propio autor nos lo pide desde su blog, conservamos siempre
+          la atribución y enlazamos al original.
         </p>
         <p>
-          Si eres el autor y quieres que retiremos un artículo, escríbenos a <LegalMail />{" "}
-          con la dirección. Lo hacemos en un plazo máximo de 72 horas laborables.
+          Si eres el autor y quieres que retiremos un artículo o una publicación, escríbenos a{" "}
+          <LegalMail /> con la dirección. Lo hacemos en un plazo máximo de 72 horas laborables.
         </p>
       </LegalSection>
 

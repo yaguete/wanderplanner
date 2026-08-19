@@ -9,6 +9,8 @@
  * Espejo de backend/inspirational_source.py: si cambias una, cambia la otra.
  */
 
+import { isInstagramMediaUrl } from "@/lib/instagram-url"
+
 const INSTITUTIONAL_HOST_SUFFIXES = [
   ".gob.es",
   ".gob.mx",
@@ -273,6 +275,7 @@ export function isInspirationalSourceUrl(url: string): boolean {
   const parsed = parseHttpUrl(url)
   if (!parsed) return false
   if (isInstitutionalHost(parsed.host)) return false
+  if (isInstagramMediaUrl(url)) return true
   if (isReferenceHost(parsed.host) || isReferencePath(parsed.path)) return false
   return looksLikeArticlePath(parsed.path)
 }

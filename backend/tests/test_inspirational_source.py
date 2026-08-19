@@ -29,11 +29,24 @@ NOISE = (
     "not-a-url",
     "ftp://lacosmopolilla.com/ruta-islandia-en-10-dias/",
     "https://lacosmopolilla.com/",
+    "https://www.instagram.com/lacosmopolilla",
+    "https://www.instagram.com/stories/lacosmopolilla/123",
+    "https://www.instagram.com/explore/tags/cornwall",
+)
+
+IG_POSTS = (
+    "https://www.instagram.com/p/DblDYKZjOhx/",
+    "https://www.instagram.com/reel/DbYAsLVM7Yd/",
+    "https://www.instagram.com/reels/DbYAsLVM7Yd/",
+    "https://www.instagram.com/lacosmopolilla/p/DblDYKZjOhx/",
+    "https://www.instagram.com/lacosmopolilla/reel/DbYAsLVM7Yd/",
 )
 
 
 def test_articles_are_inspirational():
     for url in ARTICLES:
+        assert is_inspirational_source_url(url), url
+    for url in IG_POSTS:
         assert is_inspirational_source_url(url), url
 
 

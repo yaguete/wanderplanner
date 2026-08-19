@@ -81,7 +81,15 @@ export function draftTripNameFor(sourceUrl: string): string {
   if (!raw) return "Mi viaje"
   try {
     const host = new URL(raw).hostname.replace(/^www\./i, "")
-    return host ? `Viaje desde ${host}` : "Mi viaje"
+    if (!host) return "Mi viaje"
+    if (
+      host === "instagram.com" ||
+      host.endsWith(".instagram.com") ||
+      host === "instagr.am"
+    ) {
+      return "Viaje nuevo"
+    }
+    return `Viaje desde ${host}`
   } catch {
     return "Mi viaje"
   }

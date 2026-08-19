@@ -191,6 +191,22 @@ assert.equal(
   "https://blog.com/Post?id=3",
 )
 assert.equal(cleanSourceUrl("  "), "")
+assert.equal(
+  cleanSourceUrl(
+    "https://www.instagram.com/p/DblDYKZjOhx/?utm_source=ig_web_copy_link&igsi=MzRlODBiNWFlZA==",
+  ),
+  "https://www.instagram.com/p/DblDYKZjOhx",
+)
+assert.equal(
+  cleanSourceUrl(
+    "https://www.instagram.com/reel/DbYAsLVM7Yd/?utm_source=ig_web_copy_link&igsh=abc&img_index=1&igshid=legacy",
+  ),
+  "https://www.instagram.com/p/DbYAsLVM7Yd",
+)
+assert.equal(
+  cleanSourceUrl("https://www.instagram.com/lacosmopolilla/p/DblDYKZjOhx/?igsi=x"),
+  "https://www.instagram.com/p/DblDYKZjOhx",
+)
 assert.equal(normalizeRefSlug("  La Cosmopolilla!! "), "la-cosmopolilla")
 assert.equal(
   buildStartUrl({ origin: "https://wanderplanner.ai/", sourceUrl: "https://b.com/x", ref: "b", days: 7 }),

@@ -70,7 +70,7 @@ export interface BasicItem {
 
 export interface Itinerary {
   destination: string
-  total_days: number
+  total_days: number | null
   source_structured_by_days: boolean
   days: ItineraryDay[]
   general_tips: string | null
@@ -79,6 +79,8 @@ export interface Itinerary {
   og_image?: string | null
   /** Título del artículo (og:title / <title>); lo inyecta el fetch, no el LLM. */
   og_title?: string | null
+  /** Username del autor (Instagram); lo inyecta el fetch, no el LLM. */
+  author?: string | null
   article_html?: string
 }
 

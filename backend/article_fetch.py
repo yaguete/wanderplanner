@@ -71,6 +71,10 @@ _TRACKING_PARAMS = {
     "mc_cid",
     "mc_eid",
     "ref",
+    "igsh",
+    "igsi",
+    "img_index",
+    "igshid",
 }
 
 _USER_AGENT = (
@@ -130,6 +134,12 @@ def normalize_article_url(raw: str) -> str:
     raw = (raw or "").strip()
     if not raw:
         return ""
+    # Import local para no crear un ciclo con instagram.py (que importa content_hash).
+    from instagram_url import canonical_instagram_url
+
+    ig = canonical_instagram_url(raw)
+    if ig:
+        return ig
     parsed = urlparse(raw)
     if not parsed.scheme or not parsed.netloc:
         return raw.rstrip("#").rstrip("/")

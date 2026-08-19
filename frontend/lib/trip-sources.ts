@@ -1,6 +1,10 @@
 import { cleanSourceUrl } from "@/lib/partner-button"
 
-/** Tope de fuentes por viaje (UX; las cuotas de extraction ya cubren el coste). */
+/**
+ * Tope de fuentes por viaje (UX; las cuotas de extraction ya cubren el coste).
+ * Un post de Instagram cuenta igual que un artículo: el patrón de pegar varios
+ * reels no debe dejar el viaje sin hueco para una crónica con enlaces y días.
+ */
 export const MAX_SOURCES_PER_TRIP = 5
 
 /**

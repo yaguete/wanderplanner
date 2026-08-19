@@ -40,6 +40,15 @@ no("https://www.tripadvisor.es/Attraction_Review-g190454-d195147")
 no("not-a-url")
 no("ftp://lacosmopolilla.com/ruta-islandia-en-10-dias/")
 
+yes("https://www.instagram.com/p/DblDYKZjOhx/")
+yes("https://www.instagram.com/reel/DbYAsLVM7Yd/")
+yes("https://www.instagram.com/reels/DbYAsLVM7Yd/")
+yes("https://www.instagram.com/lacosmopolilla/p/DblDYKZjOhx/")
+yes("https://www.instagram.com/lacosmopolilla/reel/DbYAsLVM7Yd/")
+no("https://www.instagram.com/lacosmopolilla")
+no("https://www.instagram.com/stories/lacosmopolilla/123")
+no("https://www.instagram.com/explore/tags/cornwall")
+
 assert.equal(
   isInspirationalSourceUrl("https://lacosmopolilla.com/"),
   false,

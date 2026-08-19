@@ -13,6 +13,7 @@ import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { DestinationSearchField } from "@/components/destination-search-field"
 import { SourceSuggestList } from "@/components/source-suggest-list"
 import { cleanSourceUrl } from "@/lib/partner-button"
+import { unsupportedSourceUrlMessage } from "@/lib/instagram-url"
 import { LANDING_REF } from "@/lib/partner-trip"
 import {
   isSourceSuggestEnabled,
@@ -77,7 +78,12 @@ export function LandingStart() {
     event.preventDefault()
     const cleaned = cleanSourceUrl(urlValue)
     if (!/^https?:\/\//i.test(cleaned)) {
-      setUrlError("Introduce la URL completa del artículo (https://…).")
+      setUrlError("Introduce la URL completa del artículo o del post (https://…).")
+      return
+    }
+    const blocked = unsupportedSourceUrlMessage(cleaned)
+    if (blocked) {
+      setUrlError(blocked)
       return
     }
     setUrlError(null)
@@ -229,7 +235,7 @@ export function LandingStart() {
           <form method="GET" action="/start" onSubmit={onUrlSubmit} className="landing-start-field">
             <input type="hidden" name="ref" value={LANDING_REF} />
             <label htmlFor={`${baseId}-source`} className="sr-only">
-              URL del artículo
+              URL del artículo o del post
             </label>
             <input
               ref={urlInputRef}
@@ -239,7 +245,7 @@ export function LandingStart() {
               inputMode="url"
               autoComplete="url"
               required
-              placeholder="Pega la URL del artículo"
+              placeholder="Pega la URL del artículo o del post"
               value={urlValue}
               onChange={(e) => {
                 setUrlValue(e.target.value)
@@ -247,7 +253,7 @@ export function LandingStart() {
               }}
               className="landing-start-input"
             />
-            <button type="submit" className="landing-start-go" aria-label="Empezar con este artículo">
+            <button type="submit" className="landing-start-go" aria-label="Empezar con esta fuente">
               <ArrowRight className="size-4" aria-hidden />
             </button>
           </form>
@@ -255,8 +261,7 @@ export function LandingStart() {
             <p className="mt-2 text-left text-sm text-destructive">{urlError}</p>
           ) : null}
           <p className="mt-2.5 text-pretty text-xs leading-5 text-foreground/50">
-            Por ahora, un artículo de blog o revista de viaje. Pronto también Instagram, TikTok y
-            YouTube.
+            Un artículo de blog o un post de Instagram. Pronto también TikTok y YouTube.
           </p>
         </div>
 

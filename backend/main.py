@@ -4,9 +4,9 @@ con `agents/itinerary_builder.md` y devuelve JSON enriquecido con `article_html`
 Cualquier cambio de esquema JSON del modelo debe alinearse con `frontend/types/itinerary` y con `itinerary-utils`.
 
 POST /itinerary responde como SSE (`text/event-stream`), no como un único JSON HTTP:
-  - event: progress  data: {"stage":"fetching"|"extracting"}  — heartbeat ~cada 10 s
+  - event: progress  data: {"stage":"fetching"|"extracting"|"resolving"}  — heartbeat ~cada 10 s
   - event: result    data: <mismo objeto itinerario que antes>  — payload final sin wrapper
-  - event: error     data: {"detail":"..."}  — fallo tras abrir el stream
+  - event: error     data: {"detail":"..."} o {"detail":{"message","permanent","destination?"}}
 Auth vía Depends sigue devolviendo HTTP 401/403 antes del body.
 
 POST /partners/prewarm (público, Turnstile + límites): misma forma SSE, pero `result`
@@ -72,6 +72,14 @@ from extraction_cache import (  # noqa: E402
     touch_validation,
 )
 from funnel import router as funnel_router  # noqa: E402
+from instagram import (  # noqa: E402
+    INSTAGRAM_PROMPT_PATH,
+    InstagramError,
+    InstagramMedia,
+    coerce_instagram_itinerary,
+    fetch_instagram,
+)
+from instagram_url import is_instagram_media_url  # noqa: E402
 from maps_resolve import router as maps_resolve_router  # noqa: E402
 from obs import log_kv  # noqa: E402
 from partners import (  # noqa: E402
@@ -130,12 +138,17 @@ def _itinerary_max_output_tokens() -> int:
     return 32000
 
 
-def call_claude(article_text: str) -> tuple[dict, int | None, int | None]:
+def call_claude(
+    article_text: str,
+    *,
+    prompt_path: Path | None = None,
+) -> tuple[dict, int | None, int | None]:
     """Sync: Anthropic SDK exige `messages.stream` si `max_tokens` implica >10 min (p. ej. 32K).
 
     Returns (itinerary, input_tokens, output_tokens).
     """
-    prompt = PROMPT_PATH.read_text(encoding="utf-8").replace("{article_content}", article_text)
+    path = prompt_path or PROMPT_PATH
+    prompt = path.read_text(encoding="utf-8").replace("{article_content}", article_text)
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     with client.messages.stream(
@@ -149,13 +162,36 @@ def call_claude(article_text: str) -> tuple[dict, int | None, int | None]:
     ).strip()
     # A veces el modelo devuelve bloque ```json ...```; se quita el fence antes de `json.loads`.
     if raw.startswith("```"):
-        raw = raw.split("```")[1]
+        parts = raw.split("```")
+        raw = parts[1] if len(parts) > 1 else ""
         if raw.startswith("json"):
             raw = raw[4:]
+        raw = raw.strip()
     usage = final.usage
     input_tokens = getattr(usage, "input_tokens", None) if usage is not None else None
     output_tokens = getattr(usage, "output_tokens", None) if usage is not None else None
-    return json.loads(raw.strip()), input_tokens, output_tokens
+    if not raw:
+        log_kv(
+            logger,
+            event="extraction_claude_empty",
+            stop_reason=getattr(final, "stop_reason", None),
+            blocks=len(final.content or []),
+        )
+        raise ValueError(
+            "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
+        )
+    try:
+        return json.loads(raw), input_tokens, output_tokens
+    except json.JSONDecodeError as exc:
+        log_kv(
+            logger,
+            event="extraction_claude_invalid_json",
+            error=type(exc).__name__,
+            raw_len=len(raw),
+        )
+        raise ValueError(
+            "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
+        ) from exc
 
 
 HEARTBEAT_INTERVAL_S = 10.0
@@ -237,6 +273,8 @@ def _log_extraction(
     items: int | None = None,
     error_type: str | None = None,
     freshness: str | None = None,
+    source_kind: str | None = None,
+    structured: bool | None = None,
 ) -> None:
     fields: dict[str, Any] = {
         "event": "extraction",
@@ -253,6 +291,12 @@ def _log_extraction(
         fields["error_type"] = error_type
     if freshness is not None:
         fields["freshness"] = freshness
+    if source_kind is not None:
+        fields["source_kind"] = source_kind
+        if source_kind == "instagram" and fetch_ms is not None:
+            fields["provider_ms"] = fetch_ms
+    if structured is not None:
+        fields["structured"] = structured
     log_kv(logger, **fields)
 
 
@@ -289,9 +333,13 @@ async def _await_with_heartbeats(
         raise
 
 
-def _call_claude_timed(plain_text: str) -> tuple[dict, int | None, int | None, int]:
+def _call_claude_timed(
+    plain_text: str,
+    *,
+    prompt_path: Path | None = None,
+) -> tuple[dict, int | None, int | None, int]:
     t0 = time.perf_counter()
-    itinerary, input_tokens, output_tokens = call_claude(plain_text)
+    itinerary, input_tokens, output_tokens = call_claude(plain_text, prompt_path=prompt_path)
     claude_ms = int((time.perf_counter() - t0) * 1000)
     return itinerary, input_tokens, output_tokens, claude_ms
 
@@ -363,6 +411,68 @@ class Distilled:
     claude_ms: int | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    source_kind: str = "article"
+    structured: bool | None = None
+    provider_charged: bool = False
+
+
+def _instagram_prompt() -> Path:
+    return Path(INSTAGRAM_PROMPT_PATH)
+
+
+async def _fetch_source(
+    url: str,
+    entry: CacheEntry | None,
+) -> tuple[ArticleFetchResult, InstagramMedia | None]:
+    if is_instagram_media_url(url):
+        return await fetch_instagram(url)
+    fetched = await fetch_article(
+        url,
+        etag=entry.etag if entry else None,
+        last_modified=entry.last_modified if entry else None,
+    )
+    return fetched, None
+
+
+def _apply_fetch_to_itinerary(
+    itinerary: dict,
+    fetched: ArticleFetchResult,
+    media: InstagramMedia | None,
+) -> dict:
+    if media is not None:
+        itinerary = coerce_instagram_itinerary(itinerary, media.caption)
+        itinerary["author"] = media.owner_username
+        itinerary["og_image"] = None
+        itinerary.pop("og_title", None)
+    else:
+        itinerary["og_image"] = fetched.og_image
+        if fetched.og_title:
+            itinerary["og_title"] = fetched.og_title
+    itinerary["article_html"] = fetched.cleaned_html
+    _strip_thumb_urls(itinerary)
+    return itinerary
+
+
+def _instagram_error_detail(err: InstagramError) -> dict[str, Any]:
+    detail: dict[str, Any] = {
+        "message": err.user_message,
+        "permanent": err.permanent,
+    }
+    if err.destination:
+        detail["destination"] = err.destination
+    return detail
+
+
+async def _enforce_instagram_provider(user: AuthUser | None) -> None:
+    if user is None or user.is_anonymous:
+        return
+    await enforce_usage(user, "extraction_instagram")
+
+
+async def _record_instagram_provider(user: AuthUser | None) -> None:
+    if user is None or user.is_anonymous:
+        return
+    await record_event(user.id, "extraction_instagram")
 
 
 async def _distill_article(
@@ -375,32 +485,50 @@ async def _distill_article(
     Fetch + (Claude si hace falta) + store. El record_event de extraction vive
     aquí (solo el ganador del single_flight lo ejecuta).
     """
+    ig = is_instagram_media_url(url)
+    if ig:
+        await _enforce_instagram_provider(usage_user)
     t0 = time.perf_counter()
-    fetched = await fetch_article(
-        url,
-        etag=entry.etag if entry else None,
-        last_modified=entry.last_modified if entry else None,
-    )
+    fetched, media = await _fetch_source(url, entry)
     fetch_ms = int((time.perf_counter() - t0) * 1000)
+    provider_charged = False
+    if ig:
+        await _record_instagram_provider(usage_user)
+        provider_charged = True
+    kind = "instagram" if ig else "article"
+    structured = (
+        bool((entry.payload if entry else {}).get("source_structured_by_days"))
+        if entry
+        else None
+    )
 
     if fetched.not_modified and entry is not None:
         await _touch_from_fetch(url, entry, fetched)
         payload = dict(entry.payload)
         _strip_thumb_urls(payload)
-        return Distilled(payload=payload, claude_called=False, fetch_ms=fetch_ms)
+        return Distilled(
+            payload=payload,
+            claude_called=False,
+            fetch_ms=fetch_ms,
+            source_kind=kind,
+            structured=payload.get("source_structured_by_days")
+            if isinstance(payload.get("source_structured_by_days"), bool)
+            else structured,
+            provider_charged=provider_charged,
+        )
 
     if entry is not None and not fetched.not_modified and _content_unchanged(
         entry, fetched
     ):
         await _touch_from_fetch(url, entry, fetched)
         payload = dict(entry.payload)
-        # Actualizar HTML/og por si el envoltorio cambió sin cambiar el texto útil.
         if fetched.cleaned_html:
             payload["article_html"] = fetched.cleaned_html
-        if fetched.og_image:
-            payload["og_image"] = fetched.og_image
-        if fetched.og_title:
-            payload["og_title"] = fetched.og_title
+        if media is None:
+            if fetched.og_image:
+                payload["og_image"] = fetched.og_image
+            if fetched.og_title:
+                payload["og_title"] = fetched.og_title
         _strip_thumb_urls(payload)
         await store_extraction(
             url,
@@ -412,18 +540,23 @@ async def _distill_article(
             content_version=CONTENT_VERSION,
             cache_url=entry.url,
         )
-        return Distilled(payload=payload, claude_called=False, fetch_ms=fetch_ms)
+        return Distilled(
+            payload=payload,
+            claude_called=False,
+            fetch_ms=fetch_ms,
+            source_kind=kind,
+            structured=payload.get("source_structured_by_days")
+            if isinstance(payload.get("source_structured_by_days"), bool)
+            else structured,
+            provider_charged=provider_charged,
+        )
 
-    t1 = time.perf_counter()
-    itinerary, input_tokens, output_tokens = await asyncio.to_thread(
-        call_claude, fetched.plain_text
+    itinerary, input_tokens, output_tokens, claude_ms = await asyncio.to_thread(
+        _call_claude_timed,
+        fetched.plain_text,
+        prompt_path=_instagram_prompt() if ig else None,
     )
-    claude_ms = int((time.perf_counter() - t1) * 1000)
-    itinerary["og_image"] = fetched.og_image
-    if fetched.og_title:
-        itinerary["og_title"] = fetched.og_title
-    itinerary["article_html"] = fetched.cleaned_html
-    _strip_thumb_urls(itinerary)
+    itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media)
     await _store_from_fetch(
         url,
         itinerary,
@@ -439,6 +572,11 @@ async def _distill_article(
         claude_ms=claude_ms,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        source_kind=kind,
+        structured=bool(itinerary.get("source_structured_by_days"))
+        if isinstance(itinerary.get("source_structured_by_days"), bool)
+        else None,
+        provider_charged=provider_charged,
     )
 
 
@@ -451,43 +589,21 @@ async def _distill_sync(
     """Fetch + Claude + store. Single-flight por URL canónica."""
 
     async def _run() -> dict:
-        fetched = await fetch_article(
-            url,
-            etag=entry.etag if entry else None,
-            last_modified=entry.last_modified if entry else None,
-        )
-        if fetched.not_modified and entry is not None:
-            await _touch_from_fetch(url, entry, fetched)
-            payload = dict(entry.payload)
-            _strip_thumb_urls(payload)
-            return payload
-
-        itinerary, input_tokens, output_tokens = await asyncio.to_thread(
-            call_claude, fetched.plain_text
-        )
-        itinerary["og_image"] = fetched.og_image
-        if fetched.og_title:
-            itinerary["og_title"] = fetched.og_title
-        itinerary["article_html"] = fetched.cleaned_html
-        _strip_thumb_urls(itinerary)
-        await _store_from_fetch(
-            url,
-            itinerary,
-            fetched,
-            cache_url=entry.url if entry else None,
-        )
-        if user is not None:
-            await record_event(user.id, "extraction", cost_hint=output_tokens)
+        distilled = await _distill_article(url, entry, usage_user=user)
         _log_extraction(
             url=url,
             outcome="ok",
-            cache_hit=False,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            items=_count_items(itinerary),
+            cache_hit=not distilled.claude_called,
+            fetch_ms=distilled.fetch_ms,
+            claude_ms=distilled.claude_ms,
+            input_tokens=distilled.input_tokens,
+            output_tokens=distilled.output_tokens,
+            items=_count_items(distilled.payload),
             freshness="miss" if entry is None else entry.freshness,
+            source_kind=distilled.source_kind,
+            structured=distilled.structured,
         )
-        return itinerary
+        return distilled.payload
 
     return await single_flight(_flight_key(url), _run)
 
@@ -497,11 +613,7 @@ async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
 
     async def _run() -> None:
         try:
-            fetched = await fetch_article(
-                url,
-                etag=entry.etag,
-                last_modified=entry.last_modified,
-            )
+            fetched, media = await _fetch_source(url, entry)
             if fetched.not_modified:
                 await _touch_from_fetch(url, entry, fetched)
                 log_kv(
@@ -554,13 +666,11 @@ async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
                 return
 
             itinerary, _in, output_tokens = await asyncio.to_thread(
-                call_claude, fetched.plain_text
+                call_claude,
+                fetched.plain_text,
+                prompt_path=_instagram_prompt() if media is not None else None,
             )
-            itinerary["og_image"] = fetched.og_image
-            if fetched.og_title:
-                itinerary["og_title"] = fetched.og_title
-            itinerary["article_html"] = fetched.cleaned_html
-            _strip_thumb_urls(itinerary)
+            itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media)
             await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
             await record_event(None, "system_revalidation", cost_hint=output_tokens)
             log_kv(
@@ -591,11 +701,10 @@ async def _validate_sync_for_refresh(
 ) -> dict:
     """Validación síncrona forzada (Recargar): Claude solo si cambió el contenido."""
     t0 = time.perf_counter()
-    fetched = await fetch_article(
-        url,
-        etag=entry.etag,
-        last_modified=entry.last_modified,
-    )
+    ig = is_instagram_media_url(url)
+    if ig:
+        await _enforce_instagram_provider(user)
+    fetched, media = await _fetch_source(url, entry)
     fetch_ms = int((time.perf_counter() - t0) * 1000)
 
     if fetched.not_modified:
@@ -652,17 +761,15 @@ async def _validate_sync_for_refresh(
 
     # Contenido cambió → redestilar (cuenta como extraction, no solo refresh).
     await enforce_usage(user, "extraction")
-    t1 = time.perf_counter()
-    itinerary, input_tokens, output_tokens = await asyncio.to_thread(
-        call_claude, fetched.plain_text
+    itinerary, input_tokens, output_tokens, claude_ms = await asyncio.to_thread(
+        _call_claude_timed,
+        fetched.plain_text,
+        prompt_path=_instagram_prompt() if media is not None else None,
     )
-    claude_ms = int((time.perf_counter() - t1) * 1000)
-    itinerary["og_image"] = fetched.og_image
-    if fetched.og_title:
-        itinerary["og_title"] = fetched.og_title
-    itinerary["article_html"] = fetched.cleaned_html
-    _strip_thumb_urls(itinerary)
+    itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media)
     await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
+    if ig:
+        await _record_instagram_provider(user)
     if user is not None:
         await record_event(user.id, "extraction", cost_hint=output_tokens)
         await record_event(user.id, "refresh")
@@ -694,11 +801,12 @@ async def _stream_itinerary(
     try:
         # ── Refresh forzado ──────────────────────────────────────────────────
         if refresh and entry is not None:
-            yield _sse("progress", {"stage": "fetching"})
+            refresh_stage = "resolving" if is_instagram_media_url(url) else "fetching"
+            yield _sse("progress", {"stage": refresh_stage})
             result: dict | None = None
             async for item in _await_with_heartbeats(
                 _validate_sync_for_refresh(url, entry, user=user),
-                "fetching",
+                refresh_stage,
             ):
                 if _is_sse_chunk(item):
                     yield item  # type: ignore[misc]
@@ -717,12 +825,15 @@ async def _stream_itinerary(
         if entry is not None and entry.freshness in ("fresh", "stale") and not refresh:
             payload = dict(entry.payload)
             _strip_thumb_urls(payload)
+            hit_structured = payload.get("source_structured_by_days")
             _log_extraction(
                 url=url,
                 outcome="ok",
                 cache_hit=True,
                 items=_count_items(payload),
                 freshness=entry.freshness,
+                source_kind="instagram" if is_instagram_media_url(url) else "article",
+                structured=hit_structured if isinstance(hit_structured, bool) else None,
             )
             yield _sse("progress", {"stage": "fetching"})
             yield _sse("result", payload)
@@ -731,7 +842,8 @@ async def _stream_itinerary(
             return
 
         # ── Miss / expired: destilación síncrona con heartbeats ──────────────
-        yield _sse("progress", {"stage": "fetching"})
+        progress_stage = "resolving" if is_instagram_media_url(url) else "fetching"
+        yield _sse("progress", {"stage": progress_stage})
 
         async def _fetch_then_maybe_claude() -> Distilled:
             return await _distill_article(url, entry, usage_user=user)
@@ -740,7 +852,7 @@ async def _stream_itinerary(
         # Single-flight envuelve toda la destilación.
         async for item in _await_with_heartbeats(
             single_flight(_flight_key(url), _fetch_then_maybe_claude),
-            "extracting",
+            progress_stage if progress_stage == "resolving" else "extracting",
         ):
             if _is_sse_chunk(item):
                 # Distinguir etapa: tras el fetch real preferimos "extracting".
@@ -763,8 +875,31 @@ async def _stream_itinerary(
             output_tokens=output_tokens,
             items=_count_items(distilled.payload),
             freshness=entry.freshness if entry else "miss",
+            source_kind=distilled.source_kind,
+            structured=distilled.structured,
         )
         yield _sse("result", distilled.payload)
+    except InstagramError as e:
+        _log_extraction(
+            url=url,
+            outcome="error",
+            cache_hit=False,
+            fetch_ms=fetch_ms,
+            claude_ms=claude_ms,
+            error_type=type(e).__name__,
+            source_kind="instagram",
+        )
+        yield _sse("error", {"detail": _instagram_error_detail(e)})
+    except HTTPException as e:
+        _log_extraction(
+            url=url,
+            outcome="error",
+            cache_hit=False,
+            fetch_ms=fetch_ms,
+            claude_ms=claude_ms,
+            error_type="HTTPException",
+        )
+        yield _sse("error", {"detail": e.detail})
     except httpx.HTTPError as e:
         _log_extraction(
             url=url,
@@ -788,7 +923,12 @@ async def _stream_itinerary(
             output_tokens=output_tokens,
             error_type=type(e).__name__,
         )
-        yield _sse("error", {"detail": f"Claude did not return valid JSON: {e}"})
+        yield _sse(
+            "error",
+            {
+                "detail": "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
+            },
+        )
     except Exception as e:
         _log_extraction(
             url=url,
@@ -827,6 +967,8 @@ async def generate_itinerary(
     # Miss/expired (o refresh sin fila): habrá destilación síncrona → cuota de extraction.
     if entry is None or entry.freshness == "expired":
         await enforce_usage(user, "extraction")
+        if is_instagram_media_url(request.url):
+            await _enforce_instagram_provider(user)
 
     return StreamingResponse(
         _stream_itinerary(
@@ -890,13 +1032,15 @@ async def _stream_prewarm(
                 cache_hit=True,
                 items=_count_items(payload),
                 freshness=entry.freshness,
+                source_kind="instagram" if is_instagram_media_url(url) else "article",
             )
             yield _sse("result", _prewarm_meta(payload, status="cached"))
             if entry.freshness == "stale":
                 _spawn_background(revalidate_in_background(url, entry))
             return
 
-        yield _sse("progress", {"stage": "fetching"})
+        prewarm_stage = "resolving" if is_instagram_media_url(url) else "fetching"
+        yield _sse("progress", {"stage": prewarm_stage})
 
         async def _run() -> Distilled:
             d = await _distill_article(url, entry, usage_user=None)
@@ -907,7 +1051,7 @@ async def _stream_prewarm(
         distilled: Distilled | None = None
         async for item in _await_with_heartbeats(
             single_flight(_flight_key(url), _run),
-            "extracting",
+            prewarm_stage if prewarm_stage == "resolving" else "extracting",
         ):
             if _is_sse_chunk(item):
                 yield item  # type: ignore[misc]
@@ -925,15 +1069,24 @@ async def _stream_prewarm(
             output_tokens=distilled.output_tokens,
             items=_count_items(distilled.payload),
             freshness=entry.freshness if entry else "miss",
+            source_kind=distilled.source_kind,
+            structured=distilled.structured,
         )
         yield _sse(
             "result",
             _prewarm_meta(distilled.payload, status="extracted"),
         )
+    except InstagramError as e:
+        yield _sse("error", {"detail": _instagram_error_detail(e)})
     except httpx.HTTPError as e:
         yield _sse("error", {"detail": f"Error fetching article: {e}"})
     except json.JSONDecodeError as e:
-        yield _sse("error", {"detail": f"Claude did not return valid JSON: {e}"})
+        yield _sse(
+            "error",
+            {
+                "detail": "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
+            },
+        )
     except Exception as e:
         yield _sse("error", {"detail": str(e)})
 

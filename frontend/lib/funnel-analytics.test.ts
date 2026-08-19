@@ -117,6 +117,19 @@ assert.equal(body.post_slug, "que-ver-en-austria-ruta-10-dias")
 assert.equal(body.ref != null, true)
 const serialized = JSON.stringify(body)
 assert.equal(serialized.includes("://"), false)
+
+const igBody = buildFunnelBody("start_opened", {
+  ref: "wp-landing",
+  postSlug: "DblDYKZjOhx",
+  meta: { sourceKind: "instagram" },
+})
+assert.equal(igBody.meta.sourceKind, "instagram")
+const articleBody = buildFunnelBody("start_opened", {
+  ref: "lacosmopolilla",
+  postSlug: "que-ver-en-austria-ruta-10-dias",
+  meta: { sourceKind: "article" },
+})
+assert.equal(articleBody.meta.sourceKind, "article")
 assert.equal(serialized.includes("@"), false)
 
 const dirty = buildFunnelBody("outbound_click", {

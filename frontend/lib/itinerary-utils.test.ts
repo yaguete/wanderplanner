@@ -5,10 +5,13 @@ import { userDayItemFromSource } from "./item-provenance"
 import {
   attachExperienceLinksFromHtml,
   attachMapsPinsFromHtml,
+  authorFromUrl,
+  buildSource,
   collectShortMapsUrls,
   dedupeRedundantPlaces,
   dropDuplicateOtherBasics,
   flattenItinerary,
+  formatGuideLabel,
   hydrateAffiliateUrlsFromSources,
   hydrateCoordsFromSources,
   liftOtherBasicsToActivities,
@@ -661,6 +664,41 @@ assert.equal(itemTypeLabel("transport"), "Transporte")
 
   const copied = userDayItemFromSource(source.items[0] as SourceItem, source)
   assert.equal(copied.coords?.lat, 47.09)
+}
+
+{
+  const ig = itinerary({
+    destination: "Extremadura, España",
+    total_days: null,
+    source_structured_by_days: false,
+    author: "lacosmopolilla",
+    days: [
+      {
+        day: 1,
+        title: "Extremadura, España",
+        accommodations: [],
+        restaurants: [],
+        transport: [],
+        tips: null,
+        activities: [
+          { name: "Costa Dulce", type: "attraction", notes: null, affiliate_url: null },
+          { name: "Termas de Alange", type: "attraction", notes: null, affiliate_url: null },
+        ],
+      },
+    ],
+  })
+  const flat = flattenItinerary(ig)
+  assert.equal(flat.every((i) => i.dayHint == null), true)
+  const source = buildSource("https://www.instagram.com/p/DbYAsLVM7Yd", ig)
+  assert.equal(source.totalDays, null)
+  assert.equal(source.author, "lacosmopolilla")
+  assert.equal(source.title, "Extremadura, España")
+  assert.equal(source.area, "Extremadura, España")
+  assert.equal(formatGuideLabel(source), "Extremadura, España")
+  assert.equal(
+    authorFromUrl("https://www.instagram.com/p/DblDYKZjOhx"),
+    "Instagram",
+  )
 }
 
 console.log("itinerary-utils flatten/dedupe/label: ok")

@@ -25,6 +25,27 @@ def test_normalize_trailing_slash():
     assert normalize_article_url("https://blog.com/") == "https://blog.com"
 
 
+def test_normalize_instagram_copy_link_case_a():
+    raw = (
+        "https://www.instagram.com/p/DblDYKZjOhx/"
+        "?utm_source=ig_web_copy_link&igsi=MzRlODBiNWFlZA=="
+    )
+    assert normalize_article_url(raw) == "https://www.instagram.com/p/DblDYKZjOhx"
+
+
+def test_normalize_instagram_reel_collapses_to_p():
+    raw = (
+        "https://www.instagram.com/reel/DbYAsLVM7Yd/"
+        "?utm_source=ig_web_copy_link&igsh=abc&img_index=1&igshid=legacy"
+    )
+    assert normalize_article_url(raw) == "https://www.instagram.com/p/DbYAsLVM7Yd"
+
+
+def test_normalize_instagram_user_path():
+    raw = "https://www.instagram.com/lacosmopolilla/p/DblDYKZjOhx/?igsi=x"
+    assert normalize_article_url(raw) == "https://www.instagram.com/p/DblDYKZjOhx"
+
+
 def test_content_hash_stable():
     assert content_hash("hola") == content_hash("hola")
     assert content_hash("hola") != content_hash("hola!")

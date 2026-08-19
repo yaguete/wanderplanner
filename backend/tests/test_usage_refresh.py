@@ -89,3 +89,21 @@ async def test_record_photo_paid_without_user(monkeypatch):
     with patch("usage.httpx.AsyncClient", FakeClient):
         await record_event(None, "photo_paid", cost_hint=1)
     assert FakeClient.last == {"kind": "photo_paid", "cost_hint": 1}
+
+
+@pytest.mark.asyncio
+async def test_enforce_instagram_registered_daily(monkeypatch):
+    monkeypatch.setenv("USER_MAX_INSTAGRAM_EXTRACTIONS_DAY", "5")
+    with patch("usage.count_events", new=AsyncMock(return_value=5)):
+        with pytest.raises(HTTPException) as exc:
+            await enforce_usage(_user(anonymous=False), "extraction_instagram")
+    assert exc.value.status_code == 429
+    assert exc.value.detail["limit"] == "daily"
+    assert "Instagram" in exc.value.detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_record_instagram_skips_without_user():
+    with patch("usage.httpx.AsyncClient") as client:
+        await record_event(None, "extraction_instagram")
+    client.assert_not_called()

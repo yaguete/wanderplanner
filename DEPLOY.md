@@ -100,6 +100,12 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `USER_MAX_PHOTO_LOOKUPS_DAY` | `300` |
 | `USER_MAX_COUNTRY_TASKS_DAY` | `30` |
 | `TRAVEL_BRIEF_TTL_DAYS` | `7` (refresco de Recomendaciones MAE en la propia petición) |
+| `INSTAGRAM_PROVIDER` | `off` si no se fija. Local: `oembed` (caption por el oEmbed público de Instagram, sin vendor). Prod: `external` (o `graphql`). **Nunca** caer a `fetch_article` con una URL de post/reel |
+| `INSTAGRAM_PROVIDER_URL` | Endpoint del vendor (solo backend). Obligatorio si `INSTAGRAM_PROVIDER=external` |
+| `INSTAGRAM_PROVIDER_KEY` | Credencial del vendor (`Authorization: Bearer` o `x-api-key`). Secret de Fly, no `NEXT_PUBLIC_*` |
+| `INSTAGRAM_GRAPHQL_DOC_ID` | Solo si `INSTAGRAM_PROVIDER=graphql` |
+| `INSTAGRAM_RESOLVE_TIMEOUT_S` | `20` (clamp 3–60). Presupuesto de latencia del resolver |
+| `USER_MAX_INSTAGRAM_EXTRACTIONS_DAY` | `5` (registrado; tope diario `usage_events.kind=extraction_instagram`). Los invitados no pagan este kind: una acción = `extraction` |
 
 ### Rollback (Fly)
 

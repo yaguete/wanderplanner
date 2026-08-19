@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import {
   LANDING_REF,
+  draftTripNameFor,
   isReservedRefSlug,
   isReusableDraftTrip,
   mergeDraftReferrer,
@@ -82,5 +83,18 @@ assert.equal(parseRefParam("  wp-landing  "), "wp-landing")
 assert.equal(parseRefParam("???"), null)
 assert.equal(parseRefParam("  "), null)
 assert.equal(parseRefParam(null), null)
+
+assert.equal(
+  draftTripNameFor("https://www.instagram.com/p/DblDYKZjOhx/"),
+  "Viaje nuevo",
+)
+assert.equal(
+  draftTripNameFor("https://m.instagram.com/reel/DbYAsLVM7Yd/?igsh=x"),
+  "Viaje nuevo",
+)
+assert.equal(
+  draftTripNameFor("https://lacosmopolilla.com/ruta-cornualles"),
+  "Viaje desde lacosmopolilla.com",
+)
 
 console.log("partner-trip: ok")

@@ -10,6 +10,7 @@
 import { parseRefParam } from "@/lib/partner-trip"
 import { isOwnBookingAffiliateUrl } from "@/lib/booking-search"
 import { FLIGHT_SEARCH_TRACKING_URL } from "@/lib/flight-search"
+import { sourceKindFromUrl } from "@/lib/instagram-url"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -274,7 +275,11 @@ export function recordStartOpenedOnce(input: {
   const key = startOpenedStorageKey(ref, postSlug)
   if (!claimStartOpened(storage, key)) return false
   rememberFunnelAttribution({ ref, postSlug })
-  funnel("start_opened", { ref, postSlug })
+  funnel("start_opened", {
+    ref,
+    postSlug,
+    meta: { sourceKind: sourceKindFromUrl(input.sourceUrl) },
+  })
   return true
 }
 

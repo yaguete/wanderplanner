@@ -15,6 +15,7 @@ Kinds:
   - trip_source_search: Tavily de GET /sources/suggest desde Añadir fuente (user_id opcional; cap propio)
   - photo_paid: cache miss de pago de /thumb (Places) y /cover (Unsplash); user_id null; cap global durable
   - maps_resolve: unfurl de short links de Maps (POST /maps/resolve); no cuenta un hit de caché
+  - extraction_instagram: tope diario de registrados al resolver un post/reel (no invitados)
 """
 from __future__ import annotations
 
@@ -48,6 +49,7 @@ Kind = Literal[
     "trip_source_search",
     "photo_paid",
     "maps_resolve",
+    "extraction_instagram",
 ]
 _USERLESS_KINDS = frozenset(
     {
@@ -138,6 +140,9 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("maps_resolve", "daily"): (
         "Has alcanzado el límite diario de resoluciones de mapas. Vuelve mañana."
+    ),
+    ("extraction_instagram", "daily"): (
+        "Has alcanzado el límite diario de posts de Instagram. Vuelve mañana."
     ),
 }
 
@@ -410,6 +415,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "maps_resolve":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_MAPS_RESOLVES_DAY", 200):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "extraction_instagram":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_INSTAGRAM_EXTRACTIONS_DAY", 5):
             _raise_limit(user, kind, "daily")
         return
 

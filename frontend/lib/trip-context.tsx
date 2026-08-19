@@ -30,7 +30,7 @@ import type {
   RouteLeg,
   TransportRoute,
 } from "@/types/itinerary"
-import { fetchItinerary, ApiLimitError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
+import { fetchItinerary, ApiLimitError, ExtractError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
 import { resolveMapsLinks } from "@/lib/maps-api"
 import { canonicalizeMapsUrl } from "@/lib/maps-links"
 import {
@@ -43,6 +43,7 @@ import {
   hydrateAffiliateUrlsFromSources,
   hydrateCoordsFromSources,
 } from "@/lib/itinerary-utils"
+import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { redeemGuestTripClaim } from "@/lib/guest-trip-claim"
@@ -68,7 +69,7 @@ import {
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { canAddSource } from "@/lib/trip-sources"
 
-export type PendingSourceErrorKind = "guest-limit" | "limit" | "generic"
+export type PendingSourceErrorKind = "guest-limit" | "limit" | "generic" | "permanent"
 
 export type PendingSource = {
   id: string
@@ -78,6 +79,7 @@ export type PendingSource = {
   status: "loading" | "error"
   errorMessage?: string
   errorKind?: PendingSourceErrorKind
+  errorDestination?: string
   stage: ItineraryProgressStage | null
 }
 
@@ -105,6 +107,7 @@ export type SourceExtractionEvent =
       pendingId: string
       errorKind: PendingSourceErrorKind
       message: string
+      destination?: string
       seq: number
       at: number
     }
@@ -870,9 +873,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             ? {
                 ...p,
                 status: "loading",
-                stage: "fetching",
+                stage: isInstagramMediaUrl(url) ? "resolving" : "fetching",
                 errorMessage: undefined,
                 errorKind: undefined,
+                errorDestination: undefined,
               }
             : p,
         ),
@@ -916,9 +920,14 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         let errorKind: PendingSourceErrorKind = "generic"
         let message =
           "No se pudo extraer la fuente. Comprueba la URL y que el backend esté en marcha."
+        let errorDestination: string | undefined
         if (err instanceof ApiLimitError) {
           errorKind = err.limit === "guest" ? "guest-limit" : "limit"
           message = err.message
+        } else if (err instanceof ExtractError) {
+          message = err.message
+          errorDestination = err.destination
+          if (err.permanent) errorKind = "permanent"
         } else if (err instanceof Error && err.message.trim()) {
           message = err.message
         }
@@ -932,6 +941,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
                   stage: null,
                   errorMessage: message,
                   errorKind,
+                  errorDestination,
                 }
               : p,
           ),
@@ -943,6 +953,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           pendingId,
           errorKind,
           message,
+          destination: errorDestination,
           seq,
           at: Date.now(),
         })
@@ -977,7 +988,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         url: url.trim(),
         author: authorFromUrl(url.trim()),
         status: "loading",
-        stage: "fetching",
+        stage: isInstagramMediaUrl(url.trim()) ? "resolving" : "fetching",
       }
       setPendingSources((prev) => [...prev, pending])
       void runPendingExtraction(pendingId, tripId, url.trim())
@@ -1010,6 +1021,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       const existing = pendingSourcesRef.current.find((p) => p.id === pendingId)
       if (!existing) return { ok: false, reason: "trip-not-found" }
       if (existing.status !== "error") return { ok: false, reason: "invalid-state" }
+      if (existing.errorKind === "permanent") return { ok: false, reason: "invalid-state" }
       const trip = tripsRef.current.find((t) => t.id === existing.tripId)
       if (!trip) return { ok: false, reason: "trip-not-found" }
 

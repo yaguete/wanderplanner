@@ -46,6 +46,9 @@ import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
 import { canAddSource } from "@/lib/trip-sources"
 import { prefetchTripSourceSuggestions } from "@/lib/trip-source-suggestions"
+import { extractionToastLabel } from "@/lib/extraction-toast"
+import { groupItemsByDayHint } from "@/lib/source-item-groups"
+import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import {
   clearTextHighlights,
   highlightTextInElement,
@@ -150,7 +153,7 @@ export default function InspirationPanel({
   /** Pendiente de «Añadir al día»: un ítem suelto o todos los de un día de la guía. */
   const [picking, setPicking] = useState<
     | { kind: "item"; item: SourceItem }
-    | { kind: "day"; day: number; items: SourceItem[] }
+    | { kind: "day"; day: number | null; items: SourceItem[] }
     | null
   >(null)
   /** Query compartida Crónica ↔ Ruta (no Desplazamientos/Descuentos). */
@@ -262,17 +265,18 @@ export default function InspirationPanel({
 
     if (lastExtractionEvent.type === "success") {
       const { source, pendingId } = lastExtractionEvent
+      const tab = isInstagramMediaUrl(source.url) ? "itinerary" : "source"
       if (activeSourceIdRef.current === pendingId) {
         setActiveSourceId(source.id)
-        setSourceTab("source")
+        setSourceTab(tab)
       }
-      toast.success(`Fuente añadida · @${source.author}`, {
+      toast.success(extractionToastLabel(source), {
         action: {
           label: "Ver",
           onClick: () => {
             onRevealSources?.()
             setActiveSourceId(source.id)
-            setSourceTab("source")
+            setSourceTab(tab)
           },
         },
       })
@@ -337,46 +341,30 @@ export default function InspirationPanel({
     return map
   }, [trip])
 
-  const groupItemsByDayHint = useMemo(
-    () => (items: SourceItem[]) => {
-      if (!items.length) return []
-      const hasDays = items.some((i) => i.dayHint != null)
-      if (!hasDays) return [{ day: null as number | null, items }]
-
-      const groups: { day: number | null; items: SourceItem[] }[] = []
-      let currentDay: number | null = null
-      let currentGroup: SourceItem[] = []
-
-      for (const item of items) {
-        if (item.dayHint !== currentDay) {
-          if (currentGroup.length) groups.push({ day: currentDay, items: currentGroup })
-          currentDay = item.dayHint
-          currentGroup = [item]
-        } else {
-          currentGroup.push(item)
-        }
-      }
-      if (currentGroup.length) groups.push({ day: currentDay, items: currentGroup })
-      return groups
-    },
-    [],
-  )
-
   const groupedItems = useMemo(() => {
     if (!currentSource) return []
     const items = currentSource.items.filter((i) => i.type !== "transport")
     return groupItemsByDayHint(items)
-  }, [currentSource, groupItemsByDayHint])
+  }, [currentSource])
 
   const groupedTransportItems = useMemo(() => {
     if (!currentSource) return []
     const items = currentSource.items.filter((i) => i.type === "transport")
     return groupItemsByDayHint(items)
-  }, [currentSource, groupItemsByDayHint])
+  }, [currentSource])
 
   useEffect(() => {
     setRefetchError(null)
   }, [activeSourceId])
+
+  useEffect(() => {
+    if (!currentSource || !isInstagramMediaUrl(currentSource.url)) return
+    if (sourceTab === "transport" && groupedTransportItems.length === 0) {
+      setSourceTab("itinerary")
+    } else if (sourceTab === "basics" && currentSource.basics.length === 0) {
+      setSourceTab("itinerary")
+    }
+  }, [currentSource, sourceTab, groupedTransportItems.length])
 
   // Solo al cambiar de fuente — no al cambiar de pestaña (persistencia Crónica ↔ Ruta).
   useEffect(() => {
@@ -556,7 +544,7 @@ export default function InspirationPanel({
     )
   }
 
-  const handleAddAllForSourceDay = (day: number) => {
+  const handleAddAllForSourceDay = (day: number | null) => {
     const group = groupedItems.find((g) => g.day === day)
     if (!group || group.items.length === 0) return
     setPicking({ kind: "day", day, items: group.items })
@@ -597,8 +585,16 @@ export default function InspirationPanel({
   const tabs = [
     { id: "source" as const, label: "Crónica", icon: BookOpen },
     { id: "itinerary" as const, label: "Ruta", icon: MapPin },
-    { id: "transport" as const, label: "Desplazamientos", icon: Car },
-    { id: "basics" as const, label: "Descuentos", icon: Tag },
+    ...(!currentSource ||
+    !isInstagramMediaUrl(currentSource.url) ||
+    groupedTransportItems.length > 0
+      ? [{ id: "transport" as const, label: "Desplazamientos", icon: Car }]
+      : []),
+    ...(!currentSource ||
+    !isInstagramMediaUrl(currentSource.url) ||
+    currentSource.basics.length > 0
+      ? [{ id: "basics" as const, label: "Descuentos", icon: Tag }]
+      : []),
   ]
 
   const rutaItemCount = groupedItems.reduce((n, g) => n + g.items.length, 0)
@@ -936,14 +932,30 @@ export default function InspirationPanel({
                       ? "Crea una cuenta para añadir más fuentes."
                       : activePending.errorMessage
                   }
-                  onRetry={() => {
-                    const result = retryPendingSource(activePending.id)
-                    if (!result.ok && result.reason === "already-loading") {
-                      toast.message("Espera a que termine la fuente en curso")
-                    } else if (!result.ok && result.reason === "max-sources") {
+                  destination={activePending.errorDestination}
+                  usedUrls={[
+                    ...sources.map((s) => s.url),
+                    ...tripPendings.map((p) => p.url),
+                  ]}
+                  onSelectSuggestion={(url) => {
+                    dismissPendingSource(activePending.id)
+                    const result = startSourceExtraction(tripId, url)
+                    if (!result.ok && result.reason === "max-sources") {
                       setMaxSourcesOpen(true)
                     }
                   }}
+                  onRetry={
+                    activePending.errorKind === "permanent"
+                      ? undefined
+                      : () => {
+                          const result = retryPendingSource(activePending.id)
+                          if (!result.ok && result.reason === "already-loading") {
+                            toast.message("Espera a que termine la fuente en curso")
+                          } else if (!result.ok && result.reason === "max-sources") {
+                            setMaxSourcesOpen(true)
+                          }
+                        }
+                  }
                   onDismiss={() => dismissPendingSource(activePending.id)}
                 />
               )
@@ -1097,11 +1109,17 @@ export default function InspirationPanel({
           itemAffiliateUrl={picking.kind === "item" ? picking.item.affiliateUrl : undefined}
           description={
             picking.kind === "day"
-              ? `Elige en qué día de tu viaje quieres colocar todos los ítems del día ${picking.day} de la ruta de ${
-                  currentSource?.author
-                    ? `@${currentSource.author.replace(/^@/, "")}`
-                    : "esta fuente"
-                }.`
+              ? picking.day == null
+                ? `Elige en qué día de tu viaje quieres colocar todos los sitios de ${
+                    currentSource?.author
+                      ? `@${currentSource.author.replace(/^@/, "")}`
+                      : "esta fuente"
+                  }.`
+                : `Elige en qué día de tu viaje quieres colocar todos los ítems del día ${picking.day} de la ruta de ${
+                    currentSource?.author
+                      ? `@${currentSource.author.replace(/^@/, "")}`
+                      : "esta fuente"
+                  }.`
               : undefined
           }
           addedDayNumbers={
@@ -1250,7 +1268,7 @@ function SourceGroupedList({
   /** Lista virtualizada (Ruta). Independiente del buscador: Desplazamientos no virtualiza. */
   virtualized?: boolean
   /** Ruta: añade todos los ítems de ese día de la guía. */
-  onAddAllDay?: (day: number) => void
+  onAddAllDay?: (day: number | null) => void
 }) {
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -1284,7 +1302,7 @@ function SourceGroupedList({
         <div className="panel-column space-y-5">
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
-            {group.day != null ? (
+            {group.items.length > 0 ? (
               <DayGroupHeading day={group.day} onAddAll={onAddAllDay} />
             ) : null}
             {group.items.map((item) => renderItem(item))}
@@ -1318,17 +1336,22 @@ function DayGroupHeading({
   onAddAll,
   compact = false,
 }: {
-  day: number
-  onAddAll?: (day: number) => void
+  day: number | null
+  onAddAll?: (day: number | null) => void
   compact?: boolean
 }) {
   const labelClass =
     "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+  const label = day == null ? "Sitios de esta fuente" : `Día ${day}`
+  const addAllAria =
+    day == null
+      ? "Añadir todos los ítems de esta fuente"
+      : `Añadir todos los ítems del día ${day}`
 
   if (!onAddAll) {
     return (
       <p className={cn("px-0.5", labelClass, compact && "pb-2 pt-0.5")}>
-        Día {day}
+        {label}
       </p>
     )
   }
@@ -1340,12 +1363,12 @@ function DayGroupHeading({
         compact && "pb-2 pt-0.5",
       )}
     >
-      <p className={labelClass}>Día {day}</p>
+      <p className={labelClass}>{label}</p>
       <button
         type="button"
         onClick={() => onAddAll(day)}
         className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
-        aria-label={`Añadir todos los ítems del día ${day}`}
+        aria-label={addAllAria}
       >
         <Plus className="h-3.5 w-3.5 shrink-0" />
         Añadir todo
@@ -1355,7 +1378,7 @@ function DayGroupHeading({
 }
 
 type FlatRow =
-  | { kind: "header"; key: string; day: number }
+  | { kind: "header"; key: string; day: number | null }
   | { kind: "item"; key: string; item: SourceItem; groupGap: boolean }
 
 function flattenSourceGroups(
@@ -1363,9 +1386,11 @@ function flattenSourceGroups(
 ): FlatRow[] {
   const rows: FlatRow[] = []
   groups.forEach((group, gi) => {
-    if (group.day != null) {
-      rows.push({ kind: "header", key: `day-${group.day}-${gi}`, day: group.day })
-    }
+    rows.push({
+      kind: "header",
+      key: `day-${group.day ?? "none"}-${gi}`,
+      day: group.day,
+    })
     group.items.forEach((item, ii) => {
       const isLastInGroup = ii === group.items.length - 1
       const isLastGroup = gi === groups.length - 1
@@ -1384,12 +1409,12 @@ type VirtualSourceRowsProps = {
   groups: { day: number | null; items: SourceItem[] }[]
   renderItem: (item: SourceItem) => ReactNode
   resetKey: string
-  onAddAllDay?: (day: number) => void
+  onAddAllDay?: (day: number | null) => void
 }
 
 type SourceRow = ReturnType<typeof flattenSourceGroups>[number]
 
-function estimateRowSize(row: SourceRow | undefined, onAddAllDay?: (day: number) => void) {
+function estimateRowSize(row: SourceRow | undefined, onAddAllDay?: (day: number | null) => void) {
   if (!row || row.kind === "header") return onAddAllDay ? 40 : 28
   // card ~80px + pb-2; más aire entre grupos (antes space-y-5)
   return row.groupGap ? 108 : 92
@@ -1405,7 +1430,7 @@ function VirtualRowsBody({
   rows: SourceRow[]
   virtualizer: Virtualizer<HTMLDivElement, Element> | Virtualizer<Window, Element>
   renderItem: (item: SourceItem) => ReactNode
-  onAddAllDay?: (day: number) => void
+  onAddAllDay?: (day: number | null) => void
 }) {
   // Con scroller de ventana, `start` viene en coordenadas del documento:
   // `scrollMargin` lo devuelve al origen de la lista (0 en el otro caso).

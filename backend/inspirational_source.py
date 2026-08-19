@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+from instagram_url import is_instagram_media_url
+
 INSTITUTIONAL_HOST_SUFFIXES = (
     ".gob.es",
     ".gob.mx",
@@ -280,6 +282,8 @@ def is_inspirational_source_url(url: str) -> bool:
     host, path = parsed
     if _is_institutional_host(host):
         return False
+    if is_instagram_media_url(url):
+        return True
     if _is_reference_host(host) or _is_reference_path(path):
         return False
     return _looks_like_article_path(path)

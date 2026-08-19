@@ -4,6 +4,7 @@
  */
 
 import { BRAND_INK, brandSvgMarkup } from "@/components/brand-mark"
+import { canonicalInstagramUrl } from "@/lib/instagram-url"
 import { parseDaysParam } from "@/lib/partner-trip"
 
 export type PartnerButtonVariant = "color" | "negative"
@@ -103,6 +104,10 @@ export const TRACKING_PARAMS = new Set([
   "mc_cid",
   "mc_eid",
   "ref",
+  "igsh",
+  "igsi",
+  "img_index",
+  "igshid",
 ])
 
 /**
@@ -112,6 +117,8 @@ export const TRACKING_PARAMS = new Set([
 export function cleanSourceUrl(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) return ""
+  const ig = canonicalInstagramUrl(trimmed)
+  if (ig) return ig
   try {
     const u = new URL(trimmed)
     if (u.protocol !== "http:" && u.protocol !== "https:") return trimmed

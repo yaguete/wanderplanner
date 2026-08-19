@@ -4,6 +4,7 @@
  * No cambies `dayHint` sin entender `source_structured_by_days` y el panel de inspiración.
  */
 import type { BasicCategory, Itinerary, Source, SourceBasicItem, SourceItem, Trip } from "@/types/itinerary"
+import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { sourceRouteHintFromTransport } from "@/lib/transport-routes"
 import { normalizeName } from "@/lib/trip-tasks"
 import { canonicalizeMapsUrl, isMapsUrl, isShortMapsUrl, parseMapsCoords } from "@/lib/maps-links"
@@ -883,6 +884,7 @@ export function sourceArticleHeading(source: Source): string {
 
 /** Autor sintético desde la URL (hostname sin www, primer label). Misma regla que el chip pendiente. */
 export function authorFromUrl(url: string): string {
+  if (isInstagramMediaUrl(url)) return "Instagram"
   try {
     return new URL(url).hostname.replace(/^www\./, "").split(".")[0] || url
   } catch {
@@ -897,16 +899,20 @@ export function buildSource(
   url: string,
   itinerary: Itinerary,
 ): Source {
-  const author = authorFromUrl(url)
+  const injected = itinerary.author?.trim() || null
+  const author = injected || authorFromUrl(url)
 
   const area = itinerary.destination?.trim() ? itinerary.destination.trim() : null
   const totalDays =
-    Number.isFinite(itinerary.total_days) && itinerary.total_days > 0
+    itinerary.total_days != null &&
+    Number.isFinite(itinerary.total_days) &&
+    itinerary.total_days > 0
       ? Math.floor(itinerary.total_days)
       : null
   const guideLabel =
     area && totalDays ? `${area} — ${totalDays} días` : area || "Fuente"
   const ogTitle = itinerary.og_title?.trim() || null
+  const fromUrl = isInstagramMediaUrl(url) ? null : titleFromUrl(url)
   const reconciled = reconcileExtractedSource(
     flattenItinerary(itinerary),
     flattenBasics(itinerary),
@@ -917,7 +923,7 @@ export function buildSource(
     id: crypto.randomUUID(),
     url,
     author,
-    title: ogTitle || titleFromUrl(url) || guideLabel,
+    title: ogTitle || fromUrl || guideLabel,
     // `area` = destino del artículo; usado como fallback de geocoding cuando un ítem no trae `region`.
     area,
     totalDays,

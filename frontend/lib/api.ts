@@ -4,7 +4,7 @@ import { parseSse } from "@/lib/sse"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
-export type ItineraryProgressStage = "fetching" | "extracting"
+export type ItineraryProgressStage = "fetching" | "extracting" | "resolving"
 
 export type UsageLimitKind = "guest" | "daily" | "monthly"
 
@@ -20,6 +20,19 @@ export class ApiLimitError extends Error {
   }
 }
 
+/** Fallo de extracción (SSE o HTTP) con metadatos para la UI. */
+export class ExtractError extends Error {
+  readonly destination?: string
+  readonly permanent: boolean
+
+  constructor(message: string, opts?: { destination?: string; permanent?: boolean }) {
+    super(message)
+    this.name = "ExtractError"
+    this.destination = opts?.destination?.trim() || undefined
+    this.permanent = Boolean(opts?.permanent)
+  }
+}
+
 function isUsageLimitKind(v: unknown): v is UsageLimitKind {
   return v === "guest" || v === "daily" || v === "monthly"
 }
@@ -28,9 +41,15 @@ function isUsageLimitKind(v: unknown): v is UsageLimitKind {
 export function parseApiDetail(
   detail: unknown,
   status?: number,
-): { message: string; limitError?: ApiLimitError } {
+): { message: string; limitError?: ApiLimitError; destination?: string; permanent?: boolean } {
   if (detail != null && typeof detail === "object" && !Array.isArray(detail)) {
-    const obj = detail as { message?: unknown; limit?: unknown; detail?: unknown }
+    const obj = detail as {
+      message?: unknown
+      limit?: unknown
+      detail?: unknown
+      destination?: unknown
+      permanent?: unknown
+    }
     const message =
       typeof obj.message === "string" && obj.message.trim()
         ? obj.message
@@ -39,10 +58,15 @@ export function parseApiDetail(
           : status != null
             ? `Error del servidor: HTTP ${status}`
             : "Error del servidor"
+    const destination =
+      typeof obj.destination === "string" && obj.destination.trim()
+        ? obj.destination.trim()
+        : undefined
+    const permanent = obj.permanent === true
     if (status === 429 && isUsageLimitKind(obj.limit)) {
-      return { message, limitError: new ApiLimitError(message, obj.limit) }
+      return { message, limitError: new ApiLimitError(message, obj.limit), destination, permanent }
     }
-    return { message }
+    return { message, destination, permanent }
   }
   if (Array.isArray(detail)) {
     return {
@@ -55,10 +79,6 @@ export function parseApiDetail(
   return {
     message: status != null ? `Error del servidor: HTTP ${status}` : "Error del servidor",
   }
-}
-
-function parseDetail(detail: unknown, status?: number): string {
-  return parseApiDetail(detail, status).message
 }
 
 export async function fetchItinerary(
@@ -92,9 +112,12 @@ export async function fetchItinerary(
   // El 429 llega como HTTP normal antes del SSE; no leer el stream aún.
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as { detail?: unknown }
-    const { message, limitError } = parseApiDetail(error.detail, response.status)
+    const { message, limitError, destination, permanent } = parseApiDetail(
+      error.detail,
+      response.status,
+    )
     if (limitError) throw limitError
-    throw new Error(message)
+    throw new ExtractError(message, { destination, permanent })
   }
 
   if (!response.body) {
@@ -109,14 +132,18 @@ export async function fetchItinerary(
       }
       if (event === "progress") {
         const stage = (data as { stage?: string })?.stage
-        if (stage === "fetching" || stage === "extracting") {
+        if (stage === "fetching" || stage === "extracting" || stage === "resolving") {
           onProgress?.(stage)
         }
         continue
       }
       if (event === "error") {
         const detail = (data as { detail?: unknown })?.detail
-        throw new Error(parseDetail(detail))
+        const parsed = parseApiDetail(detail)
+        throw new ExtractError(parsed.message, {
+          destination: parsed.destination,
+          permanent: parsed.permanent,
+        })
       }
       if (event === "result") {
         if (data == null || typeof data !== "object" || Array.isArray(data)) {

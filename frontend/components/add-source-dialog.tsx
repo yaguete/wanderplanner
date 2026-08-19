@@ -34,11 +34,12 @@ import {
   TRIP_SOURCE_SUGGEST_MOBILE_MAX,
 } from "@/lib/trip-source-suggestions"
 import { MAX_SOURCES_PER_TRIP } from "@/lib/trip-sources"
+import { unsupportedSourceUrlMessage } from "@/lib/instagram-url"
 import type { Source, Trip } from "@/types/itinerary"
 
 export function validateSourceUrl(raw: string): string | null {
   const trimmed = raw.trim()
-  if (!trimmed) return "Pega la URL del artículo."
+  if (!trimmed) return "Pega la URL del artículo o del post."
   if (!/^https?:\/\//i.test(trimmed)) {
     return "La URL debe empezar por http:// o https://."
   }
@@ -48,7 +49,7 @@ export function validateSourceUrl(raw: string): string | null {
   } catch {
     return "La URL no es válida."
   }
-  return null
+  return unsupportedSourceUrlMessage(trimmed)
 }
 
 export function AddSourceProgress({
@@ -64,7 +65,11 @@ export function AddSourceProgress({
       <div className="space-y-1.5">
         <p className="text-sm font-medium text-foreground">Analizando la fuente…</p>
         <p className="text-xs text-muted-foreground">
-          {stage === "extracting" ? "Destilando la ruta…" : "Leyendo el artículo…"}
+          {stage === "extracting"
+            ? "Destilando la ruta…"
+            : stage === "resolving"
+              ? "Leyendo el post de Instagram…"
+              : "Leyendo el artículo…"}
         </p>
         <p className="max-w-sm text-balance text-xs text-muted-foreground">
           Puede tardar más de 30 segundos si el artículo es largo. Puedes seguir trabajando
@@ -82,11 +87,18 @@ export function AddSourceErrorState({
   message,
   onRetry,
   onDismiss,
+  destination,
+  usedUrls = [],
+  onSelectSuggestion,
 }: {
   message?: string | null
-  onRetry: () => void
+  onRetry?: () => void
   onDismiss: () => void
+  destination?: string | null
+  usedUrls?: string[]
+  onSelectSuggestion?: (url: string) => void
 }) {
+  const dest = destination?.trim() || null
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <AlertCircle className="size-6 text-destructive" aria-hidden />
@@ -98,15 +110,71 @@ export function AddSourceErrorState({
           <p className="max-w-sm text-balance text-xs text-muted-foreground">{message}</p>
         ) : null}
       </div>
+      {dest && onSelectSuggestion ? (
+        <InstagramFallbackSuggestions
+          destination={dest}
+          usedUrls={usedUrls}
+          onSelect={onSelectSuggestion}
+        />
+      ) : null}
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <Button type="button" size="sm" onClick={onRetry}>
-          <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
-          Recargar
-        </Button>
+        {onRetry ? (
+          <Button type="button" size="sm" onClick={onRetry}>
+            <RefreshCw className="mr-1.5 size-3.5" aria-hidden />
+            Recargar
+          </Button>
+        ) : null}
         <Button type="button" variant="outline" size="sm" onClick={onDismiss}>
           Descartar
         </Button>
       </div>
+    </div>
+  )
+}
+
+function InstagramFallbackSuggestions({
+  destination,
+  usedUrls,
+  onSelect,
+}: {
+  destination: string
+  usedUrls: string[]
+  onSelect: (url: string) => void
+}) {
+  const [hits, setHits] = useState<SourceSuggestHit[]>([])
+  const query = sanitizeSuggestQuery(destination)
+  const usedKey = usedUrls.join("\n")
+
+  useEffect(() => {
+    if (!query || !isSourceSuggestEnabled()) return
+    const ac = new AbortController()
+    const urls = usedKey ? usedKey.split("\n") : []
+    void fetchTripSourceSuggestions(query, `ig-fallback:${query.toLowerCase()}`, {
+      signal: ac.signal,
+    })
+      .then((results) => {
+        if (ac.signal.aborted || !results) return
+        setHits(filterUnusedHits(results, urls))
+      })
+      .catch(() => {
+        /* silencioso: el error principal ya está a la vista */
+      })
+    return () => ac.abort()
+  }, [query, usedKey])
+
+  if (!query || hits.length === 0) return null
+
+  return (
+    <div className="w-full max-w-sm space-y-2 text-left">
+      <p className="text-balance text-xs text-muted-foreground">
+        No hemos podido sacar una ruta de este post, pero sobre{" "}
+        <span className="font-medium text-foreground">{destination}</span> tenemos esto
+      </p>
+      <SourceSuggestList
+        hits={hits}
+        compactSubtitle
+        onSelect={(hit) => onSelect(hit.url)}
+      />
     </div>
   )
 }
@@ -376,12 +444,12 @@ export function AddSourceFlow({
             Añadir fuente
           </DialogTitle>
           <DialogDescription>
-            Pega la URL de un artículo de viajes o busca un destino. Destilaremos la ruta para
-            consolidarla en tu viaje.
+            Pega la URL de un artículo de viajes o de un post de Instagram, o busca un destino.
+            Destilaremos la ruta para consolidarla en tu viaje.
           </DialogDescription>
         </DialogHeader>
         <form id={urlFormId} onSubmit={handleSubmit} className="space-y-2">
-          <Label htmlFor={urlId}>URL del artículo</Label>
+          <Label htmlFor={urlId}>URL del artículo o del post</Label>
           <Input
             id={urlId}
             value={url}
@@ -389,7 +457,7 @@ export function AddSourceFlow({
               setUrl(e.target.value)
               if (error) setError(null)
             }}
-            placeholder="https://blog.com/mi-viaje-a..."
+            placeholder="https://… o un post de Instagram"
             autoFocus={!isMobileViewport()}
             aria-invalid={!!error}
           />
