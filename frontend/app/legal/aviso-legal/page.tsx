@@ -73,6 +73,8 @@ export default function AvisoLegalPage() {
         <p>
           Si eres el autor y quieres que retiremos un artículo o una publicación, escríbenos a{" "}
           <LegalMail /> con la dirección. Lo hacemos en un plazo máximo de 72 horas laborables.
+          De una publicación de Instagram conservamos el texto del pie y, si hace falta, la
+          transcripción del texto que aparece en las fotos; las imágenes no se guardan.
         </p>
       </LegalSection>
 

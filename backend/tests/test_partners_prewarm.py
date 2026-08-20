@@ -204,6 +204,20 @@ async def test_prewarm_endpoint_turnstile_invalid():
 
 
 @pytest.mark.asyncio
+async def test_prewarm_rejects_instagram():
+    req = main_mod.PrewarmRequest(
+        url="https://www.instagram.com/p/DblDYKZjOhx/", captcha_token="ok"
+    )
+    http_req = MagicMock()
+    http_req.headers = {}
+    http_req.client = MagicMock(host="1.2.3.4")
+    with pytest.raises(HTTPException) as exc:
+        await main_mod.partners_prewarm(req, http_req)
+    assert exc.value.status_code == 400
+    assert "Instagram" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
 async def test_prewarm_endpoint_fail_closed_without_secret(monkeypatch):
     monkeypatch.setenv("REQUIRE_AUTH", "true")
     monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
@@ -284,7 +298,7 @@ async def test_distill_single_flight_waiter_does_not_double_record():
             content_version=CONTENT_VERSION,
         )
 
-    def fake_claude(_text):
+    def fake_claude(_text, **_kw):
         calls["claude"] += 1
         return ({"destination": "X", "total_days": 1, "days": [], "basics": []}, 1, 2)
 

@@ -23,7 +23,7 @@ export function LandingHero() {
           <span className="text-foreground/45">convertidos en tu itinerario</span>
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-foreground/70 sm:text-xl">
-          WanderPlanner lee a los viajeros/as en los que confías y te ayuda a transformar sus rutas en tu plan de viaje, día a día.
+          WanderPlanner lee a los viajeros/as en los que confías y te ayuda a transformar sus recomendaciones en tu plan de viaje, día a día.
         </p>
         <LandingStart />
       </div>

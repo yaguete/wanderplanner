@@ -49,6 +49,7 @@ import { prefetchTripSourceSuggestions } from "@/lib/trip-source-suggestions"
 import { extractionToastLabel } from "@/lib/extraction-toast"
 import { groupItemsByDayHint } from "@/lib/source-item-groups"
 import { isInstagramMediaUrl } from "@/lib/instagram-url"
+import { InstagramEmbed } from "@/components/instagram-embed"
 import {
   clearTextHighlights,
   highlightTextInElement,
@@ -544,10 +545,12 @@ export default function InspirationPanel({
     )
   }
 
-  const handleAddAllForSourceDay = (day: number | null) => {
-    const group = groupedItems.find((g) => g.day === day)
-    if (!group || group.items.length === 0) return
-    setPicking({ kind: "day", day, items: group.items })
+  const handleAddAllForSourceDay = (group: {
+    day: number | null
+    items: SourceItem[]
+  }) => {
+    if (!group.items.length) return
+    setPicking({ kind: "day", day: group.day, items: group.items })
   }
 
   const handleAddBasic = (basic: SourceBasicItem) => {
@@ -1007,6 +1010,9 @@ export default function InspirationPanel({
               <div className="flex flex-1 flex-col md:min-h-0 md:overflow-hidden">
                 <div className="px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto md:overflow-x-hidden">
                   <div className="panel-column">
+                  {isInstagramMediaUrl(currentSource.url) ? (
+                    <InstagramEmbed url={currentSource.url} />
+                  ) : null}
                   {currentSource.articleHtml ? (
                     <div
                       ref={articleRef}
@@ -1267,8 +1273,8 @@ function SourceGroupedList({
   query?: string
   /** Lista virtualizada (Ruta). Independiente del buscador: Desplazamientos no virtualiza. */
   virtualized?: boolean
-  /** Ruta: añade todos los ítems de ese día de la guía. */
-  onAddAllDay?: (day: number | null) => void
+  /** Ruta: añade todos los ítems de ese grupo de la guía. */
+  onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void
 }) {
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -1302,8 +1308,12 @@ function SourceGroupedList({
         <div className="panel-column space-y-5">
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
-            {group.items.length > 0 ? (
-              <DayGroupHeading day={group.day} onAddAll={onAddAllDay} />
+            {group.items.length > 0 && (onAddAllDay || group.day != null) ? (
+              <DayGroupHeading
+                day={group.day}
+                items={group.items}
+                onAddAll={onAddAllDay}
+              />
             ) : null}
             {group.items.map((item) => renderItem(item))}
           </div>
@@ -1333,11 +1343,13 @@ function SourceGroupedList({
 
 function DayGroupHeading({
   day,
+  items = [],
   onAddAll,
   compact = false,
 }: {
   day: number | null
-  onAddAll?: (day: number | null) => void
+  items?: SourceItem[]
+  onAddAll?: (group: { day: number | null; items: SourceItem[] }) => void
   compact?: boolean
 }) {
   const labelClass =
@@ -1349,6 +1361,7 @@ function DayGroupHeading({
       : `Añadir todos los ítems del día ${day}`
 
   if (!onAddAll) {
+    if (day == null) return null
     return (
       <p className={cn("px-0.5", labelClass, compact && "pb-2 pt-0.5")}>
         {label}
@@ -1366,7 +1379,7 @@ function DayGroupHeading({
       <p className={labelClass}>{label}</p>
       <button
         type="button"
-        onClick={() => onAddAll(day)}
+        onClick={() => onAddAll({ day, items })}
         className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
         aria-label={addAllAria}
       >
@@ -1378,7 +1391,7 @@ function DayGroupHeading({
 }
 
 type FlatRow =
-  | { kind: "header"; key: string; day: number | null }
+  | { kind: "header"; key: string; day: number | null; items: SourceItem[] }
   | { kind: "item"; key: string; item: SourceItem; groupGap: boolean }
 
 function flattenSourceGroups(
@@ -1386,11 +1399,14 @@ function flattenSourceGroups(
 ): FlatRow[] {
   const rows: FlatRow[] = []
   groups.forEach((group, gi) => {
-    rows.push({
-      kind: "header",
-      key: `day-${group.day ?? "none"}-${gi}`,
-      day: group.day,
-    })
+    if (group.items.length > 0) {
+      rows.push({
+        kind: "header",
+        key: `day-${group.day ?? "none"}-${gi}`,
+        day: group.day,
+        items: group.items,
+      })
+    }
     group.items.forEach((item, ii) => {
       const isLastInGroup = ii === group.items.length - 1
       const isLastGroup = gi === groups.length - 1
@@ -1409,12 +1425,15 @@ type VirtualSourceRowsProps = {
   groups: { day: number | null; items: SourceItem[] }[]
   renderItem: (item: SourceItem) => ReactNode
   resetKey: string
-  onAddAllDay?: (day: number | null) => void
+  onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void
 }
 
 type SourceRow = ReturnType<typeof flattenSourceGroups>[number]
 
-function estimateRowSize(row: SourceRow | undefined, onAddAllDay?: (day: number | null) => void) {
+function estimateRowSize(
+  row: SourceRow | undefined,
+  onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void,
+) {
   if (!row || row.kind === "header") return onAddAllDay ? 40 : 28
   // card ~80px + pb-2; más aire entre grupos (antes space-y-5)
   return row.groupGap ? 108 : 92
@@ -1430,7 +1449,7 @@ function VirtualRowsBody({
   rows: SourceRow[]
   virtualizer: Virtualizer<HTMLDivElement, Element> | Virtualizer<Window, Element>
   renderItem: (item: SourceItem) => ReactNode
-  onAddAllDay?: (day: number | null) => void
+  onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void
 }) {
   // Con scroller de ventana, `start` viene en coordenadas del documento:
   // `scrollMargin` lo devuelve al origen de la lista (0 en el otro caso).
@@ -1451,7 +1470,12 @@ function VirtualRowsBody({
               style={{ transform: `translateY(${vRow.start - scrollMargin}px)` }}
             >
               {row.kind === "header" ? (
-                <DayGroupHeading day={row.day} onAddAll={onAddAllDay} compact />
+                <DayGroupHeading
+                  day={row.day}
+                  items={row.items}
+                  onAddAll={onAddAllDay}
+                  compact
+                />
               ) : (
                 <div className={cn("pb-2", row.groupGap && "pb-5")}>
                   {renderItem(row.item)}

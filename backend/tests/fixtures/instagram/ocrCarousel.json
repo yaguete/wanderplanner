@@ -1,0 +1,45 @@
+{
+  "shortcode": "ocrCarousel",
+  "caption": "Guía completa en el link 🔗 #cornwall. Playas, pueblos y una ruta que está en las fotos.",
+  "owner_username": "fixture_user",
+  "owner_full_name": "Fixture",
+  "location_name": "Cornwall",
+  "product_type": "carousel_container",
+  "is_video": false,
+  "display_urls": [
+    "https://scontent.cdninstagram.com/v/t51.2885-15/slide1.jpg",
+    "https://scontent.cdninstagram.com/v/t51.2885-15/slide2.jpg",
+    "https://scontent.cdninstagram.com/v/t51.2885-15/slide3.jpg"
+  ],
+  "edge_sidecar_to_children": {
+    "edges": [
+      {
+        "node": {
+          "display_url": "https://scontent.cdninstagram.com/v/t51.2885-15/slide1.jpg",
+          "display_resources": [
+            {"src": "https://scontent.cdninstagram.com/v/t51.2885-15/slide1_640.jpg", "config_width": 640, "config_height": 800},
+            {"src": "https://scontent.cdninstagram.com/v/t51.2885-15/slide1_750.jpg", "config_width": 750, "config_height": 937},
+            {"src": "https://scontent.cdninstagram.com/v/t51.2885-15/slide1_1080.jpg", "config_width": 1080, "config_height": 1350}
+          ]
+        }
+      },
+      {
+        "node": {
+          "display_url": "https://scontent.cdninstagram.com/v/t51.2885-15/slide2.jpg",
+          "display_resources": [
+            {"src": "https://scontent.cdninstagram.com/v/t51.2885-15/slide2_640.jpg", "config_width": 640, "config_height": 800},
+            {"src": "https://scontent.cdninstagram.com/v/t51.2885-15/slide2_1080.jpg", "config_width": 1080, "config_height": 1350}
+          ]
+        }
+      },
+      {
+        "node": {
+          "display_url": "https://scontent.cdninstagram.com/v/t51.2885-15/slide3.jpg",
+          "display_resources": [
+            {"src": "https://scontent.cdninstagram.com/v/t51.2885-15/slide3_640.jpg", "config_width": 640, "config_height": 800}
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -61,8 +61,8 @@ def test_curated_query_is_destination_only():
 
 def test_rewrite_feed_amp_to_article():
     assert (
-        rewrite_feed_amp_url("https://www.viajeroscallejeros.com/cuenca-en-un-dia/feed")
-        == "https://www.viajeroscallejeros.com/cuenca-en-un-dia"
+        rewrite_feed_amp_url("https://lacosmopolilla.com/cuenca-en-un-dia/feed")
+        == "https://lacosmopolilla.com/cuenca-en-un-dia"
     )
     assert (
         rewrite_feed_amp_url("https://blog.com/ruta-austria/amp/")
@@ -74,16 +74,16 @@ def test_rewrite_feed_amp_to_article():
 def test_tavily_rewrites_feed_instead_of_dropping():
     hit = hit_from_tavily(
         {
-            "url": "https://www.viajeroscallejeros.com/cuenca-en-un-dia/feed",
+            "url": "https://lacosmopolilla.com/cuenca-en-un-dia/feed",
             "title": "Cuenca en un día",
         },
         origin="curated",
         query="cuenca",
     )
     assert hit is not None
-    assert hit.url == "https://www.viajeroscallejeros.com/cuenca-en-un-dia"
+    assert hit.url == "https://lacosmopolilla.com/cuenca-en-un-dia"
     article = hit_from_tavily(
-        {"url": "https://www.viajeroscallejeros.com/cuenca-en-un-dia", "title": "Cuenca en un día"},
+        {"url": "https://lacosmopolilla.com/cuenca-en-un-dia", "title": "Cuenca en un día"},
         origin="curated",
         query="cuenca",
     )
@@ -591,7 +591,7 @@ async def test_endpoint_limit_caps_at_eight(monkeypatch):
     hosts = [
         "lacosmopolilla.com",
         "japonismo.com",
-        "viajeroscallejeros.com",
+        "saltaconmigo.com",
         "losviajesdeclaudia.com",
     ]
     rows = [

@@ -104,10 +104,13 @@ export default function PrivacidadPage() {
           sitios), Wikimedia (fotos de sitios) y Unsplash (portadas).
         </p>
         <p>
-          Para convertir artículos en itinerarios y para el asistente usamos proveedores de
-          inteligencia artificial. <strong className="font-medium text-foreground">No les
-          enviamos tu nombre ni tu correo</strong>: solo el contenido del viaje y lo que le
-          escribes al asistente. Si quieres saber cuáles usamos ahora mismo, pídenoslo en{" "}
+          Para convertir artículos y publicaciones en itinerarios y para el asistente usamos
+          proveedores de inteligencia artificial. <strong className="font-medium text-foreground">No les
+          enviamos tu nombre ni tu correo</strong>: solo el contenido del viaje, lo que le
+          escribes al asistente y, si pegas una publicación de Instagram, el texto y las
+          imágenes públicas de esa publicación. Las fotos no se guardan: se leen para
+          transcribir el texto superpuesto y se descartan. Si quieres saber cuáles usamos
+          ahora mismo, pídenoslo en{" "}
           <LegalMail />.
         </p>
         <p>

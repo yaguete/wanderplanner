@@ -15,7 +15,8 @@ Kinds:
   - trip_source_search: Tavily de GET /sources/suggest desde Añadir fuente (user_id opcional; cap propio)
   - photo_paid: cache miss de pago de /thumb (Places) y /cover (Unsplash); user_id null; cap global durable
   - maps_resolve: unfurl de short links de Maps (POST /maps/resolve); no cuenta un hit de caché
-  - extraction_instagram: tope diario de registrados al resolver un post/reel (no invitados)
+  - extraction_instagram: tope diario de registrados al resolver un post/reel (no invitados).
+    `cost_hint` = tokens visuales del OCR (0 si no hubo visión).
 """
 from __future__ import annotations
 

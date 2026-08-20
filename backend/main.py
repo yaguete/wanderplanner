@@ -74,12 +74,24 @@ from extraction_cache import (  # noqa: E402
 from funnel import router as funnel_router  # noqa: E402
 from instagram import (  # noqa: E402
     INSTAGRAM_PROMPT_PATH,
+    InstagramCaptionTooShort,
     InstagramError,
     InstagramMedia,
+    InstagramText,
+    MIN_CAPTION_LEN,
+    caption_plain_for_length,
     coerce_instagram_itinerary,
+    destination_hint,
     fetch_instagram,
+    instagram_llm_text,
+    remember_permanent_error,
 )
 from instagram_url import is_instagram_media_url  # noqa: E402
+from itinerary_schema import (  # noqa: E402
+    BLOG_ITINERARY_SCHEMA,
+    INSTAGRAM_ITINERARY_SCHEMA,
+    output_config_for,
+)
 from maps_resolve import router as maps_resolve_router  # noqa: E402
 from obs import log_kv  # noqa: E402
 from partners import (  # noqa: E402
@@ -145,28 +157,28 @@ def call_claude(
 ) -> tuple[dict, int | None, int | None]:
     """Sync: Anthropic SDK exige `messages.stream` si `max_tokens` implica >10 min (p. ej. 32K).
 
-    Returns (itinerary, input_tokens, output_tokens).
+    Returns (itinerary, input_tokens, output_tokens). Structured outputs
+    (`output_config.format`) fuerzan JSON válido y `total_days` number|null en IG.
     """
     path = prompt_path or PROMPT_PATH
     prompt = path.read_text(encoding="utf-8").replace("{article_content}", article_text)
+    schema = (
+        INSTAGRAM_ITINERARY_SCHEMA
+        if path == Path(INSTAGRAM_PROMPT_PATH)
+        else BLOG_ITINERARY_SCHEMA
+    )
 
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     with client.messages.stream(
         model="claude-haiku-4-5-20251001",
         max_tokens=_itinerary_max_output_tokens(),
         messages=[{"role": "user", "content": prompt}],
+        extra_body={"output_config": output_config_for(schema)},
     ) as stream:
         final = stream.get_final_message()
     raw = "".join(
         block.text for block in final.content if getattr(block, "type", None) == "text"
     ).strip()
-    # A veces el modelo devuelve bloque ```json ...```; se quita el fence antes de `json.loads`.
-    if raw.startswith("```"):
-        parts = raw.split("```")
-        raw = parts[1] if len(parts) > 1 else ""
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
     usage = final.usage
     input_tokens = getattr(usage, "input_tokens", None) if usage is not None else None
     output_tokens = getattr(usage, "output_tokens", None) if usage is not None else None
@@ -275,6 +287,12 @@ def _log_extraction(
     freshness: str | None = None,
     source_kind: str | None = None,
     structured: bool | None = None,
+    ocr_slides: int | None = None,
+    ocr_visual_tokens: int | None = None,
+    ocr_chars: int | None = None,
+    ocr_ms: int | None = None,
+    ocr_error: str | None = None,
+    ocr_flipped_structured: bool | None = None,
 ) -> None:
     fields: dict[str, Any] = {
         "event": "extraction",
@@ -297,6 +315,18 @@ def _log_extraction(
             fields["provider_ms"] = fetch_ms
     if structured is not None:
         fields["structured"] = structured
+    if ocr_slides is not None:
+        fields["ocr_slides"] = ocr_slides
+    if ocr_visual_tokens is not None:
+        fields["ocr_visual_tokens"] = ocr_visual_tokens
+    if ocr_chars is not None:
+        fields["ocr_chars"] = ocr_chars
+    if ocr_ms is not None:
+        fields["ocr_ms"] = ocr_ms
+    if ocr_error is not None:
+        fields["ocr_error"] = ocr_error
+    if ocr_flipped_structured is not None:
+        fields["ocr_flipped_structured"] = ocr_flipped_structured
     log_kv(logger, **fields)
 
 
@@ -311,7 +341,7 @@ def _is_sse_chunk(item: object) -> bool:
 
 async def _await_with_heartbeats(
     awaitable: Awaitable[T],
-    stage: str,
+    stage: str | list[str],
 ) -> AsyncIterator[str | T]:
     """Yields progress SSE strings every HEARTBEAT_INTERVAL_S until awaitable completes; then yields the result."""
     task = asyncio.ensure_future(awaitable)
@@ -319,7 +349,8 @@ async def _await_with_heartbeats(
         while True:
             done, _ = await asyncio.wait({task}, timeout=HEARTBEAT_INTERVAL_S)
             if not done:
-                yield _sse("progress", {"stage": stage})
+                current = stage[0] if isinstance(stage, list) else stage
+                yield _sse("progress", {"stage": current})
                 continue
             yield task.result()
             return
@@ -414,6 +445,12 @@ class Distilled:
     source_kind: str = "article"
     structured: bool | None = None
     provider_charged: bool = False
+    ocr_slides: int | None = None
+    ocr_visual_tokens: int | None = None
+    ocr_chars: int | None = None
+    ocr_ms: int | None = None
+    ocr_error: str | None = None
+    ocr_flipped_structured: bool | None = None
 
 
 def _instagram_prompt() -> Path:
@@ -423,32 +460,42 @@ def _instagram_prompt() -> Path:
 async def _fetch_source(
     url: str,
     entry: CacheEntry | None,
-) -> tuple[ArticleFetchResult, InstagramMedia | None]:
+    *,
+    allow_ocr: bool = False,
+) -> tuple[ArticleFetchResult, InstagramMedia | None, InstagramText | None]:
     if is_instagram_media_url(url):
-        return await fetch_instagram(url)
+        fetched, media, text = await fetch_instagram(url, allow_ocr=allow_ocr)
+        return fetched, media, text
     fetched = await fetch_article(
         url,
         etag=entry.etag if entry else None,
         last_modified=entry.last_modified if entry else None,
     )
-    return fetched, None
+    return fetched, None, None
 
 
 def _apply_fetch_to_itinerary(
     itinerary: dict,
     fetched: ArticleFetchResult,
     media: InstagramMedia | None,
+    ig_text: InstagramText | None = None,
 ) -> dict:
     if media is not None:
-        itinerary = coerce_instagram_itinerary(itinerary, media.caption)
+        # Nunca coercear con media.caption: el detector tiene que ser el texto fusionado.
+        itinerary = coerce_instagram_itinerary(
+            itinerary, ig_text if ig_text is not None else media.caption
+        )
         itinerary["author"] = media.owner_username
         itinerary["og_image"] = None
         itinerary.pop("og_title", None)
+        itinerary["article_html"] = (
+            ig_text.chronicle_html if ig_text is not None else fetched.cleaned_html
+        )
     else:
         itinerary["og_image"] = fetched.og_image
         if fetched.og_title:
             itinerary["og_title"] = fetched.og_title
-    itinerary["article_html"] = fetched.cleaned_html
+        itinerary["article_html"] = fetched.cleaned_html
     _strip_thumb_urls(itinerary)
     return itinerary
 
@@ -469,10 +516,57 @@ async def _enforce_instagram_provider(user: AuthUser | None) -> None:
     await enforce_usage(user, "extraction_instagram")
 
 
-async def _record_instagram_provider(user: AuthUser | None) -> None:
+async def _record_instagram_provider(
+    user: AuthUser | None,
+    *,
+    cost_hint: int | float | None = None,
+) -> None:
     if user is None or user.is_anonymous:
         return
-    await record_event(user.id, "extraction_instagram")
+    await record_event(user.id, "extraction_instagram", cost_hint=cost_hint)
+
+
+def _ocr_fields(text: InstagramText | None) -> dict[str, Any]:
+    if text is None:
+        return {}
+    return {
+        "ocr_slides": text.ocr_slides,
+        "ocr_visual_tokens": text.ocr_visual_tokens,
+        "ocr_chars": text.ocr_chars,
+        "ocr_ms": text.ocr_ms,
+        "ocr_error": text.ocr_error,
+        "ocr_flipped_structured": text.ocr_flipped_structured,
+    }
+
+
+def _set_progress(stage: list[str] | None, value: str) -> None:
+    if stage is not None:
+        stage[0] = value
+
+
+async def _maybe_upgrade_instagram_text(
+    fetched: ArticleFetchResult,
+    media: InstagramMedia | None,
+    text: InstagramText | None,
+    *,
+    allow_ocr: bool,
+) -> tuple[ArticleFetchResult, InstagramText | None]:
+    """OCR solo si hay que destilar. El hash ya se calculó sin visión."""
+    if media is None or text is None or not allow_ocr:
+        return fetched, text
+    upgraded = await instagram_llm_text(media, allow_ocr=True)
+    fetched.plain_text = upgraded.plain_text
+    fetched.cleaned_html = upgraded.chronicle_html
+    if len(caption_plain_for_length(upgraded.detector_text)) < MIN_CAPTION_LEN:
+        dest = destination_hint(
+            location_name=media.location_name, caption=media.caption
+        )
+        err = InstagramCaptionTooShort(dest)
+        remember_permanent_error(
+            f"https://www.instagram.com/p/{media.shortcode}", err
+        )
+        raise err
+    return fetched, upgraded
 
 
 async def _distill_article(
@@ -480,6 +574,8 @@ async def _distill_article(
     entry: CacheEntry | None,
     *,
     usage_user: AuthUser | None,
+    allow_ocr: bool = False,
+    progress_stage: list[str] | None = None,
 ) -> Distilled:
     """
     Fetch + (Claude si hace falta) + store. El record_event de extraction vive
@@ -489,12 +585,9 @@ async def _distill_article(
     if ig:
         await _enforce_instagram_provider(usage_user)
     t0 = time.perf_counter()
-    fetched, media = await _fetch_source(url, entry)
+    fetched, media, ig_text = await _fetch_source(url, entry, allow_ocr=False)
     fetch_ms = int((time.perf_counter() - t0) * 1000)
-    provider_charged = False
-    if ig:
-        await _record_instagram_provider(usage_user)
-        provider_charged = True
+    _set_progress(progress_stage, "extracting")
     kind = "instagram" if ig else "article"
     structured = (
         bool((entry.payload if entry else {}).get("source_structured_by_days"))
@@ -502,7 +595,15 @@ async def _distill_article(
         else None
     )
 
+    async def _charge(text: InstagramText | None) -> None:
+        if ig:
+            await _record_instagram_provider(
+                usage_user,
+                cost_hint=text.ocr_visual_tokens if text is not None else 0,
+            )
+
     if fetched.not_modified and entry is not None:
+        await _charge(ig_text)
         await _touch_from_fetch(url, entry, fetched)
         payload = dict(entry.payload)
         _strip_thumb_urls(payload)
@@ -514,12 +615,14 @@ async def _distill_article(
             structured=payload.get("source_structured_by_days")
             if isinstance(payload.get("source_structured_by_days"), bool)
             else structured,
-            provider_charged=provider_charged,
+            provider_charged=ig,
+            **_ocr_fields(ig_text),
         )
 
     if entry is not None and not fetched.not_modified and _content_unchanged(
         entry, fetched
     ):
+        await _charge(ig_text)
         await _touch_from_fetch(url, entry, fetched)
         payload = dict(entry.payload)
         if fetched.cleaned_html:
@@ -548,15 +651,21 @@ async def _distill_article(
             structured=payload.get("source_structured_by_days")
             if isinstance(payload.get("source_structured_by_days"), bool)
             else structured,
-            provider_charged=provider_charged,
+            provider_charged=ig,
+            **_ocr_fields(ig_text),
         )
+
+    fetched, ig_text = await _maybe_upgrade_instagram_text(
+        fetched, media, ig_text, allow_ocr=allow_ocr
+    )
+    await _charge(ig_text)
 
     itinerary, input_tokens, output_tokens, claude_ms = await asyncio.to_thread(
         _call_claude_timed,
         fetched.plain_text,
         prompt_path=_instagram_prompt() if ig else None,
     )
-    itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media)
+    itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media, ig_text)
     await _store_from_fetch(
         url,
         itinerary,
@@ -576,7 +685,8 @@ async def _distill_article(
         structured=bool(itinerary.get("source_structured_by_days"))
         if isinstance(itinerary.get("source_structured_by_days"), bool)
         else None,
-        provider_charged=provider_charged,
+        provider_charged=ig,
+        **_ocr_fields(ig_text),
     )
 
 
@@ -589,7 +699,9 @@ async def _distill_sync(
     """Fetch + Claude + store. Single-flight por URL canónica."""
 
     async def _run() -> dict:
-        distilled = await _distill_article(url, entry, usage_user=user)
+        distilled = await _distill_article(
+            url, entry, usage_user=user, allow_ocr=True
+        )
         _log_extraction(
             url=url,
             outcome="ok",
@@ -613,7 +725,7 @@ async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
 
     async def _run() -> None:
         try:
-            fetched, media = await _fetch_source(url, entry)
+            fetched, media, ig_text = await _fetch_source(url, entry, allow_ocr=False)
             if fetched.not_modified:
                 await _touch_from_fetch(url, entry, fetched)
                 log_kv(
@@ -670,7 +782,7 @@ async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
                 fetched.plain_text,
                 prompt_path=_instagram_prompt() if media is not None else None,
             )
-            itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media)
+            itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media, ig_text)
             await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
             await record_event(None, "system_revalidation", cost_hint=output_tokens)
             log_kv(
@@ -698,16 +810,26 @@ async def _validate_sync_for_refresh(
     entry: CacheEntry,
     *,
     user: AuthUser | None,
+    progress_stage: list[str] | None = None,
 ) -> dict:
     """Validación síncrona forzada (Recargar): Claude solo si cambió el contenido."""
     t0 = time.perf_counter()
     ig = is_instagram_media_url(url)
     if ig:
         await _enforce_instagram_provider(user)
-    fetched, media = await _fetch_source(url, entry)
+    fetched, media, ig_text = await _fetch_source(url, entry, allow_ocr=False)
     fetch_ms = int((time.perf_counter() - t0) * 1000)
+    _set_progress(progress_stage, "extracting")
+
+    async def _charge() -> None:
+        if ig:
+            await _record_instagram_provider(
+                user,
+                cost_hint=ig_text.ocr_visual_tokens if ig_text is not None else 0,
+            )
 
     if fetched.not_modified:
+        await _charge()
         await _touch_from_fetch(url, entry, fetched)
         if user is not None:
             await record_event(user.id, "refresh")
@@ -720,6 +842,7 @@ async def _validate_sync_for_refresh(
             fetch_ms=fetch_ms,
             items=_count_items(payload),
             freshness="refresh_not_modified",
+            **_ocr_fields(ig_text),
         )
         return payload
 
@@ -728,6 +851,7 @@ async def _validate_sync_for_refresh(
         and entry.content_version != CONTENT_VERSION
         and _content_unchanged(entry, fetched)
     ):
+        await _charge()
         await touch_validation(
             url,
             etag=fetched.etag or entry.etag,
@@ -744,6 +868,7 @@ async def _validate_sync_for_refresh(
         return payload
 
     if _content_unchanged(entry, fetched):
+        await _charge()
         await _touch_from_fetch(url, entry, fetched)
         if user is not None:
             await record_event(user.id, "refresh")
@@ -756,8 +881,14 @@ async def _validate_sync_for_refresh(
             fetch_ms=fetch_ms,
             items=_count_items(payload),
             freshness="refresh_unchanged",
+            **_ocr_fields(ig_text),
         )
         return payload
+
+    fetched, ig_text = await _maybe_upgrade_instagram_text(
+        fetched, media, ig_text, allow_ocr=True
+    )
+    await _charge()
 
     # Contenido cambió → redestilar (cuenta como extraction, no solo refresh).
     await enforce_usage(user, "extraction")
@@ -766,10 +897,8 @@ async def _validate_sync_for_refresh(
         fetched.plain_text,
         prompt_path=_instagram_prompt() if media is not None else None,
     )
-    itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media)
+    itinerary = _apply_fetch_to_itinerary(itinerary, fetched, media, ig_text)
     await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
-    if ig:
-        await _record_instagram_provider(user)
     if user is not None:
         await record_event(user.id, "extraction", cost_hint=output_tokens)
         await record_event(user.id, "refresh")
@@ -783,6 +912,11 @@ async def _validate_sync_for_refresh(
         output_tokens=output_tokens,
         items=_count_items(itinerary),
         freshness="refresh_changed",
+        source_kind="instagram" if ig else "article",
+        structured=bool(itinerary.get("source_structured_by_days"))
+        if isinstance(itinerary.get("source_structured_by_days"), bool)
+        else None,
+        **_ocr_fields(ig_text),
     )
     return itinerary
 
@@ -801,12 +935,16 @@ async def _stream_itinerary(
     try:
         # ── Refresh forzado ──────────────────────────────────────────────────
         if refresh and entry is not None:
-            refresh_stage = "resolving" if is_instagram_media_url(url) else "fetching"
-            yield _sse("progress", {"stage": refresh_stage})
+            refresh_box = [
+                "resolving" if is_instagram_media_url(url) else "fetching"
+            ]
+            yield _sse("progress", {"stage": refresh_box[0]})
             result: dict | None = None
             async for item in _await_with_heartbeats(
-                _validate_sync_for_refresh(url, entry, user=user),
-                refresh_stage,
+                _validate_sync_for_refresh(
+                    url, entry, user=user, progress_stage=refresh_box
+                ),
+                refresh_box,
             ):
                 if _is_sse_chunk(item):
                     yield item  # type: ignore[misc]
@@ -842,17 +980,25 @@ async def _stream_itinerary(
             return
 
         # ── Miss / expired: destilación síncrona con heartbeats ──────────────
-        progress_stage = "resolving" if is_instagram_media_url(url) else "fetching"
-        yield _sse("progress", {"stage": progress_stage})
+        stage_box = [
+            "resolving" if is_instagram_media_url(url) else "fetching"
+        ]
+        yield _sse("progress", {"stage": stage_box[0]})
 
         async def _fetch_then_maybe_claude() -> Distilled:
-            return await _distill_article(url, entry, usage_user=user)
+            return await _distill_article(
+                url,
+                entry,
+                usage_user=user,
+                allow_ocr=True,
+                progress_stage=stage_box,
+            )
 
         distilled: Distilled | None = None
         # Single-flight envuelve toda la destilación.
         async for item in _await_with_heartbeats(
             single_flight(_flight_key(url), _fetch_then_maybe_claude),
-            progress_stage if progress_stage == "resolving" else "extracting",
+            stage_box,
         ):
             if _is_sse_chunk(item):
                 # Distinguir etapa: tras el fetch real preferimos "extracting".
@@ -877,6 +1023,12 @@ async def _stream_itinerary(
             freshness=entry.freshness if entry else "miss",
             source_kind=distilled.source_kind,
             structured=distilled.structured,
+            ocr_slides=distilled.ocr_slides,
+            ocr_visual_tokens=distilled.ocr_visual_tokens,
+            ocr_chars=distilled.ocr_chars,
+            ocr_ms=distilled.ocr_ms,
+            ocr_error=distilled.ocr_error,
+            ocr_flipped_structured=distilled.ocr_flipped_structured,
         )
         yield _sse("result", distilled.payload)
     except InstagramError as e:
@@ -967,8 +1119,6 @@ async def generate_itinerary(
     # Miss/expired (o refresh sin fila): habrá destilación síncrona → cuota de extraction.
     if entry is None or entry.freshness == "expired":
         await enforce_usage(user, "extraction")
-        if is_instagram_media_url(request.url):
-            await _enforce_instagram_provider(user)
 
     return StreamingResponse(
         _stream_itinerary(
@@ -1110,6 +1260,11 @@ async def partners_prewarm(request: PrewarmRequest, http_request: Request):
     url = (request.url or "").strip()
     if not url.startswith(("http://", "https://")) or len(url) > 2048:
         raise HTTPException(status_code=400, detail="URL inválida")
+    if is_instagram_media_url(url):
+        raise HTTPException(
+            status_code=400,
+            detail="El kit de partners es para artículos de blog. Pega el Instagram en WanderPlanner.",
+        )
     # getaddrinfo es síncrono: fuera del event loop para no congelarlo con DNS lento.
     if not await asyncio.to_thread(is_public_http_url, url):
         raise HTTPException(status_code=400, detail="URL no permitida")

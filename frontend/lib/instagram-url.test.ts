@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import {
   canonicalInstagramUrl,
+  instagramEmbedUrl,
   isInstagramHost,
   isInstagramMediaUrl,
   parseInstagramShortcode,
@@ -23,6 +24,15 @@ assert.equal(
   canonicalInstagramUrl(CASE_B),
   "https://www.instagram.com/p/DbYAsLVM7Yd",
 )
+assert.equal(
+  instagramEmbedUrl(CASE_A),
+  "https://www.instagram.com/p/DblDYKZjOhx/embed/",
+)
+assert.equal(
+  instagramEmbedUrl(CASE_B),
+  "https://www.instagram.com/p/DbYAsLVM7Yd/embed/",
+)
+assert.equal(instagramEmbedUrl("https://www.instagram.com/lacosmopolilla"), null)
 
 assert.equal(
   parseInstagramShortcode("https://instagram.com/p/DblDYKZjOhx/"),

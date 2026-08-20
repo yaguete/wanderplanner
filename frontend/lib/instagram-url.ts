@@ -81,6 +81,16 @@ export function canonicalInstagramUrl(url: string): string | null {
   return `https://www.instagram.com/p/${code}`
 }
 
+/**
+ * Iframe oficial (`/p/{shortcode}/embed`). Instagram sirve el post; no copiamos bytes.
+ * El mismo path vale para un reel: la canónica ya unifica a `/p/`.
+ */
+export function instagramEmbedUrl(url: string): string | null {
+  const code = parseInstagramShortcode(url)
+  if (!code) return null
+  return `https://www.instagram.com/p/${code}/embed/`
+}
+
 /** TikTok / YouTube: copy de «pronto». Perfil/story IG: copy de path. */
 export function unsupportedSourceUrlMessage(url: string): string | null {
   const parsed = parseHttpUrl(url)

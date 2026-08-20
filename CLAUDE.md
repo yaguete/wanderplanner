@@ -35,6 +35,10 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     landing_source_domains.py  # Dominios + URLs semilla de la pestaña destino
     inspirational_source.py    # Espejo Python de inspirational-source.ts
     article_fetch.py       # Descarga + limpieza del artículo; og:image y og:title
+    instagram.py           # Posts/reels: resolver + instagram_llm_text + coerce
+    instagram_ocr.py       # Descarga de slides + Haiku vision (fail-open)
+    instagram_url.py       # Canónica /p/{shortcode}; espejo de instagram-url.ts
+    itinerary_schema.py    # JSON Schema de structured outputs (blog + IG + OCR)
     place_thumbs.py        # GET /thumb (Commons + Places; caché place_thumbs)
     wikimedia_thumbs.py    # es.wikipedia + Commons para actividades
     covers.py              # GET /cover (Unsplash; caché destination_covers)
@@ -202,7 +206,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/lib/route-legs.ts`](frontend/lib/route-legs.ts) / [`transport-routes.ts`](frontend/lib/transport-routes.ts) / [`transport-hubs.ts`](frontend/lib/transport-hubs.ts) — Tramos de ida/vuelta y traslados.
 - [`frontend/lib/mapbox.ts`](frontend/lib/mapbox.ts) / [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts) / [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts) — Búsqueda de lugares, licencia y geometría del mapa.
 - [`frontend/lib/item-provenance.ts`](frontend/lib/item-provenance.ts) — `MANUAL_SOURCE_ID` / `ASSISTANT_SOURCE_ID`; **única** ruta de atribución.
-- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`source_suggest.py`](backend/source_suggest.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`wikimedia_thumbs.py`](backend/wikimedia_thumbs.py), [`covers.py`](backend/covers.py), [`place_search.py`](backend/place_search.py), [`day_summary.py`](backend/day_summary.py), [`usage.py`](backend/usage.py), [`funnel.py`](backend/funnel.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country_tasks.py`](backend/country_tasks.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
+- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`instagram.py`](backend/instagram.py), [`instagram_ocr.py`](backend/instagram_ocr.py), [`source_suggest.py`](backend/source_suggest.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`wikimedia_thumbs.py`](backend/wikimedia_thumbs.py), [`covers.py`](backend/covers.py), [`place_search.py`](backend/place_search.py), [`day_summary.py`](backend/day_summary.py), [`usage.py`](backend/usage.py), [`funnel.py`](backend/funnel.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country_tasks.py`](backend/country_tasks.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
 - Migraciones en [`supabase/migrations/`](supabase/migrations/) (`article_extractions`, `place_thumbs`, `destination_covers`, `country_task_suggestions`: solo service_role).
 
 ## Modelo de datos
@@ -259,6 +263,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No pongas `/start` en `Disallow` de `robots.txt`.** Es el CTA de los blogs: tiene que ser rastreable para que Google lea el `noindex, follow`. `/trips` y `/account` sí van en `Disallow`. `/` y `/partners` se indexan. `Disallow` + `noindex` sobre la misma URL se anulan.
 - ❌ **No amplíes `ItemType` / `BasicCategory`** sin alinear [`item-styles.ts`](frontend/lib/item-styles.ts).
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
+- ❌ **No coercees un itinerario de Instagram con `media.caption`.** El detector es `InstagramText` (`instagram_llm_text`); si vuelves a `media.caption`, la revalidación aplana un Caso A que el OCR había estructurado. El hash es `sha256(IG_PIPELINE_VERSION + caption)` — calculable **sin** OCR. `/partners/prewarm` rechaza URLs de Instagram.
 - ❌ **No mutes a mano** `trip.days[…].items` → solo `moveItemBetweenDays`.
 - ❌ **No expongas `SUPABASE_SERVICE_ROLE_KEY`** al frontend.
 - ❌ **No hay OTP ni magic link en el producto; no lo reintroduzcas** — ni para convertir invitados ni para entrar. La recuperación es `resetPasswordForEmail` → `/reset-password`. Entrar en una cuenta ya existente desde invitado va por `prepare_guest_trip_claim` / `claim_guest_trips`.

@@ -100,12 +100,17 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | `USER_MAX_PHOTO_LOOKUPS_DAY` | `300` |
 | `USER_MAX_COUNTRY_TASKS_DAY` | `30` |
 | `TRAVEL_BRIEF_TTL_DAYS` | `7` (refresco de Recomendaciones MAE en la propia petición) |
-| `INSTAGRAM_PROVIDER` | `off` si no se fija. Local: `oembed` (caption por el oEmbed público de Instagram, sin vendor). Prod: `external` (o `graphql`). **Nunca** caer a `fetch_article` con una URL de post/reel |
+| `INSTAGRAM_PROVIDER` | `off` si no se fija. Local: `oembed` (caption) o `fixture` (JSON local). Prod: `external` (o `graphql`). **Nunca** caer a `fetch_article` con una URL de post/reel |
 | `INSTAGRAM_PROVIDER_URL` | Endpoint del vendor (solo backend). Obligatorio si `INSTAGRAM_PROVIDER=external` |
 | `INSTAGRAM_PROVIDER_KEY` | Credencial del vendor (`Authorization: Bearer` o `x-api-key`). Secret de Fly, no `NEXT_PUBLIC_*` |
 | `INSTAGRAM_GRAPHQL_DOC_ID` | Solo si `INSTAGRAM_PROVIDER=graphql` |
 | `INSTAGRAM_RESOLVE_TIMEOUT_S` | `20` (clamp 3–60). Presupuesto de latencia del resolver |
-| `USER_MAX_INSTAGRAM_EXTRACTIONS_DAY` | `5` (registrado; tope diario `usage_events.kind=extraction_instagram`). Los invitados no pagan este kind: una acción = `extraction` |
+| `INSTAGRAM_OCR_ENABLED` | `true` por defecto. `false` apaga la visión sin redeploy de lógica |
+| `INSTAGRAM_OCR_MIN_WIDTH` | `640` (candidato de CDN más pequeño con ancho ≥ este valor) |
+| `INSTAGRAM_OCR_MAX_SLIDES` | `8` |
+| `INSTAGRAM_OCR_MAX_OUTPUT_TOKENS` | `2000` (techo de coste de la transcripción) |
+| `INSTAGRAM_OCR_MAX_CAPTION_CHARS` | vacío = sin tope. Si se pone (p. ej. `600`), el OCR solo corre en captions más cortos |
+| `USER_MAX_INSTAGRAM_EXTRACTIONS_DAY` | `5` (registrado; tope diario `usage_events.kind=extraction_instagram`). `cost_hint` = tokens visuales del OCR. Los invitados no pagan este kind: una acción = `extraction` |
 
 ### Rollback (Fly)
 

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { track } from "@vercel/analytics"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Globe, Instagram } from "lucide-react"
 import { SignupForm } from "@/components/auth/signup-form"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { DestinationSearchField } from "@/components/destination-search-field"
@@ -237,22 +237,35 @@ export function LandingStart() {
             <label htmlFor={`${baseId}-source`} className="sr-only">
               URL del artículo o del post
             </label>
-            <input
-              ref={urlInputRef}
-              id={`${baseId}-source`}
-              name="source"
-              type="url"
-              inputMode="url"
-              autoComplete="url"
-              required
-              placeholder="Pega la URL del artículo o del post"
-              value={urlValue}
-              onChange={(e) => {
-                setUrlValue(e.target.value)
-                if (urlError) setUrlError(null)
-              }}
-              className="landing-start-input"
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                ref={urlInputRef}
+                id={`${baseId}-source`}
+                name="source"
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                required
+                placeholder=""
+                value={urlValue}
+                onChange={(e) => {
+                  setUrlValue(e.target.value)
+                  if (urlError) setUrlError(null)
+                }}
+                className="landing-start-input w-full"
+              />
+              {!urlValue ? (
+                <span
+                  className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground"
+                  aria-hidden
+                >
+                  <span className="truncate">Pega una dirección web (https://…)</span>
+                  <Globe className="size-3.5 shrink-0 opacity-75" strokeWidth={2} />
+                  <Instagram className="size-3.5 shrink-0 opacity-75" strokeWidth={2} />
+                  
+                </span>
+              ) : null}
+            </div>
             <button type="submit" className="landing-start-go" aria-label="Empezar con esta fuente">
               <ArrowRight className="size-4" aria-hidden />
             </button>
@@ -261,7 +274,7 @@ export function LandingStart() {
             <p className="mt-2 text-left text-sm text-destructive">{urlError}</p>
           ) : null}
           <p className="mt-2.5 text-pretty text-xs leading-5 text-foreground/50">
-            Un artículo de blog o un post de Instagram. Pronto también TikTok y YouTube.
+            Un artículo web o un reel de Instagram. Pronto también TikTok y YouTube.
           </p>
         </div>
 
@@ -288,7 +301,7 @@ export function LandingStart() {
                 ) : null}
                 {destResults && destResults.length === 0 && !destError ? (
                   <p className="px-1 py-2 text-sm text-muted-foreground">
-                    No hemos encontrado artículos para ese destino. Prueba con otro nombre o pega una URL.
+                    No hemos encontrado fuentes para ese destino. Prueba con otro nombre o pega una dirección web.
                   </p>
                 ) : null}
                 {destResults && destResults.length > 0 ? (
