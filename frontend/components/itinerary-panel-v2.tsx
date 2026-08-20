@@ -80,6 +80,7 @@ import {
   collectMapGatewayAnchors,
   collectMapSegments,
   collectTransportDistances,
+  incompleteMapTransports,
   type TransportDistances,
 } from "@/lib/map-route-geometry"
 import {
@@ -451,6 +452,11 @@ export default function ItineraryPanel({
         ? collectTransportDistances(daysForScope(trip.days, focusDayNumber))
         : EMPTY_TRANSPORT_DISTANCES,
     [trip, listMode, focusDayNumber],
+  )
+
+  const mapIncompleteTransports = useMemo(
+    () => (trip && listMode === "map" ? incompleteMapTransports(trip.days) : []),
+    [trip, listMode],
   )
 
   const mapDayOptions = useMemo(() => {
@@ -836,8 +842,15 @@ export default function ItineraryPanel({
                 onMapModeChange={handleMapModeChange}
                 countryCodes={mapCountries}
                 destination={mapDestHint ?? ""}
-                onPersistItemCoords={(itemId, coords, region) => {
-                  setDayItemCoords(tripId, itemId, coords, region)
+                incompleteTransports={mapIncompleteTransports}
+                onFixTransport={(t) => {
+                  const item = trip.days
+                    .find((d) => d.id === t.dayId)
+                    ?.items.find((i) => i.id === t.itemId)
+                  openTransportDialog(t.dayId, item ?? null)
+                }}
+                onPersistItemCoords={(itemId, coords) => {
+                  setDayItemCoords(tripId, itemId, coords)
                 }}
               />
             </div>

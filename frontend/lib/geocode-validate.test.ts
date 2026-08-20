@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { haversineMeters } from "./map-route-geometry"
 import {
+  anchorHitAcceptable,
   candidateNameMatchesQuery,
   candidatePassesAnchor,
   featureTypeFromMapboxId,
@@ -8,10 +9,12 @@ import {
   mapsPinPassesAnchor,
   maxDistanceMetersForAnchorType,
   offsetStackedApproximate,
+  pickBestAnchorHit,
   pickFirstValidCandidate,
   pickGeocodeOutcome,
   regionAnchorQueryLadder,
   sharesSignificantToken,
+  type GeocodeCandidate,
   type RegionAnchor,
 } from "./geocode-validate"
 
@@ -69,9 +72,12 @@ const spain: RegionAnchor = {
   label: "Spain",
 }
 const murciaPoi = { coord: { lng: -1.13, lat: 37.98 }, featureType: "poi" }
-assert.equal(candidatePassesAnchor(murciaPoi, spain), false)
+assert.equal(candidatePassesAnchor(murciaPoi, spain), true)
 const countryOutcome = pickGeocodeOutcome([murciaPoi], spain)
-assert.equal(countryOutcome.precision, "approximate")
+assert.equal(countryOutcome.precision, "exact")
+if (countryOutcome.precision === "exact") {
+  assert.equal(countryOutcome.coord.lat, murciaPoi.coord.lat)
+}
 
 assert.equal(pickGeocodeOutcome([], null).precision, "unlocated")
 assert.equal(
@@ -222,7 +228,7 @@ const pasterze = { lng: 12.7128768, lat: 47.0893217 }
 const bali = { lng: 115.1889, lat: -8.4095 }
 assert.equal(mapsPinPassesAnchor(pasterze, austria), true)
 assert.equal(mapsPinPassesAnchor(bali, austria), false)
-assert.equal(candidatePassesAnchor({ coord: pasterze, featureType: "poi" }, austria), false)
+assert.equal(candidatePassesAnchor({ coord: pasterze, featureType: "poi" }, austria), true)
 assert.equal(mapsPinPassesAnchor(pasterze, granada), false)
 
 const alaska: RegionAnchor = {
@@ -236,5 +242,201 @@ assert.equal(mapsPinPassesAnchor(sewardExit, alaska), true)
 assert.equal(mapsPinPassesAnchor(fairbanks, alaska), true)
 assert.equal(mapsPinPassesAnchor(bali, alaska), false)
 assert.equal(candidatePassesAnchor({ coord: sewardExit, featureType: "poi" }, alaska), false)
+
+function hit(
+  partial: Pick<GeocodeCandidate, "featureType" | "text"> &
+    Partial<GeocodeCandidate> & { lng: number; lat: number },
+): GeocodeCandidate {
+  return {
+    coord: { lng: partial.lng, lat: partial.lat },
+    featureType: partial.featureType,
+    text: partial.text,
+    placeName: partial.placeName,
+  }
+}
+
+const costaOurense = hit({
+  lng: -8.093232,
+  lat: 42.137726,
+  featureType: "locality",
+  text: "Costa",
+  placeName: "Costa, Quintela de Leirado, provincia de Orense",
+})
+assert.equal(anchorHitAcceptable("Costa Vasca", costaOurense), false)
+assert.equal(anchorHitAcceptable("Costa da Morte", costaOurense), false)
+
+assert.equal(
+  anchorHitAcceptable(
+    "Camino de Santiago",
+    hit({
+      lng: -3.8,
+      lat: 43.45,
+      featureType: "locality",
+      text: "Santiago",
+      placeName: "Santiago, Cantabria, España",
+    }),
+  ),
+  false,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "Ribeira Sacra",
+    hit({
+      lng: -8.98,
+      lat: 42.54,
+      featureType: "place",
+      text: "Ribeira",
+      placeName: "Ribeira, A Coruña, España",
+    }),
+  ),
+  false,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "Rías Baixas",
+    hit({ lng: -8.7, lat: 42.2, featureType: "locality", text: "Riás", placeName: "Riás, España" }),
+  ),
+  false,
+)
+
+assert.equal(
+  anchorHitAcceptable(
+    "Costa Brava",
+    hit({
+      lng: 3.13,
+      lat: 41.86,
+      featureType: "place",
+      text: "Costa Brava",
+      placeName: "Costa Brava, Cataluña, España",
+    }),
+  ),
+  true,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "Picos de Europa",
+    hit({
+      lng: -4.85,
+      lat: 43.2,
+      featureType: "region",
+      text: "Picos de Europa",
+      placeName: "Picos de Europa, España",
+    }),
+  ),
+  true,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "Alpujarra de Granada",
+    hit({
+      lng: -3.6,
+      lat: 37.18,
+      featureType: "region",
+      text: "provincia de Granada",
+      placeName: "provincia de Granada, España",
+    }),
+  ),
+  true,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "País Vasco",
+    hit({
+      lng: -2.62,
+      lat: 43.04,
+      featureType: "region",
+      text: "País Vasco",
+      placeName: "País Vasco, España",
+    }),
+  ),
+  true,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "Cuenca",
+    hit({
+      lng: -2.13,
+      lat: 40.07,
+      featureType: "place",
+      text: "Cuenca",
+      placeName: "Cuenca, España",
+    }),
+  ),
+  true,
+)
+assert.equal(
+  anchorHitAcceptable(
+    "Innsbruck",
+    hit({
+      lng: 11.404,
+      lat: 47.27,
+      featureType: "place",
+      text: "Innsbruck",
+      placeName: "Innsbruck, Tirol, Austria",
+    }),
+  ),
+  true,
+)
+
+const costaAnchor: RegionAnchor = {
+  coord: costaOurense.coord,
+  featureType: "locality",
+  label: "Costa",
+}
+const gernikaLumo = hit({
+  lng: -2.6759,
+  lat: 43.3145,
+  featureType: "place",
+  text: "Gernika",
+  placeName: "Gernika-Lumo, Bizkaia, España",
+})
+const gernikaCC = hit({
+  lng: 2.173,
+  lat: 41.385,
+  featureType: "poi",
+  text: "Gernika CC",
+  placeName: "Carrer de Gernika, Barcelona, España",
+})
+const gernikaOut = pickGeocodeOutcome([gernikaCC, gernikaLumo], costaAnchor, "Gernika")
+assert.equal(gernikaOut.precision, "approximate")
+if (gernikaOut.precision === "approximate") {
+  assert.equal(gernikaOut.coord.lat, gernikaLumo.coord.lat)
+  assert.equal(gernikaOut.coord.lng, gernikaLumo.coord.lng)
+  assert.equal(gernikaOut.anchorLabel, "Gernika")
+}
+
+const gernikaPoi = hit({
+  lng: -2.6759,
+  lat: 43.3145,
+  featureType: "poi",
+  text: "Gernika",
+  placeName: "Gernika-Lumo, Bizkaia, España",
+})
+const gernikaCountry = pickGeocodeOutcome([gernikaPoi], spain, "Gernika")
+assert.equal(gernikaCountry.precision, "exact")
+if (gernikaCountry.precision === "exact") {
+  assert.equal(gernikaCountry.coord.lng, gernikaPoi.coord.lng)
+}
+
+{
+  const grenadaCountry = hit({
+    lng: -61.679,
+    lat: 12.116,
+    featureType: "country",
+    text: "Granada",
+    placeName: "Granada",
+  })
+  const granadaSpain = hit({
+    lng: -3.598,
+    lat: 37.177,
+    featureType: "place",
+    text: "Granada",
+    placeName: "Granada, España",
+  })
+  const picked = pickBestAnchorHit([grenadaCountry, granadaSpain], "Granada")
+  assert.equal(picked, granadaSpain)
+  const onlyIsland = pickBestAnchorHit([grenadaCountry], "Granada")
+  assert.equal(onlyIsland, grenadaCountry)
+}
 
 console.log("geocode-validate: ok")

@@ -20,15 +20,16 @@ import {
 } from "@/lib/place-search-guardrails"
 import {
   featureTypeFromMapboxId,
+  pickBestAnchorHit,
   regionAnchorQueryLadder,
-  sharesSignificantToken,
   type GeocodeCandidate,
   type RegionAnchor,
 } from "@/lib/geocode-validate"
+import { placeSearchBias } from "@/lib/place-search-bias"
 
-const CACHE_VERSION = 5
-const CACHE_PREFIX = "wp-mapbox-geo-v5"
-const LEGACY_GEO_CACHE_KEY = "wp-mapbox-geo-v4"
+const CACHE_VERSION = 7
+const CACHE_PREFIX = "wp-mapbox-geo-v7"
+const LEGACY_GEO_CACHE_KEYS = ["wp-mapbox-geo-v4", "wp-mapbox-geo-v5", "wp-mapbox-geo-v6"]
 const TTL_MS = 30 * 24 * 60 * 60 * 1000
 const REGION_ANCHOR_TYPES = "place,locality,district,region,country"
 
@@ -84,7 +85,7 @@ function clearLegacyGeoLocalStorage(): void {
   clearedLegacyGeoCache = true
   if (typeof window === "undefined") return
   try {
-    localStorage.removeItem(LEGACY_GEO_CACHE_KEY)
+    for (const key of LEGACY_GEO_CACHE_KEYS) localStorage.removeItem(key)
   } catch {
     // ignore
   }
@@ -353,6 +354,8 @@ export type GeocodeSuggestion = {
   center: LngLat
   /** ISO 3166-1 alpha-2 si Mapbox lo aporta; null si no. */
   countryCode: string | null
+  /** Search Box `poi_category_ids` (estable frente al idioma). Ausente en v5. */
+  poiCategoryIds?: string[] | null
 }
 
 type SearchBoxForwardHit = {
@@ -362,6 +365,7 @@ type SearchBoxForwardHit = {
   coord: LngLat
   featureType: string
   countryCode: string | null
+  poiCategoryIds: string[] | null
 }
 
 type SearchBoxForwardFeature = {
@@ -374,6 +378,7 @@ type SearchBoxForwardFeature = {
     place_formatted?: string
     feature_type?: string
     poi_category?: string[]
+    poi_category_ids?: string[]
     coordinates?: { longitude?: number; latitude?: number }
     context?: { country?: { country_code?: string; name?: string } }
   }
@@ -449,6 +454,9 @@ async function searchBoxForward(
         coord,
         featureType: f.properties?.feature_type?.trim() || "unknown",
         countryCode: countryCodeFromSearchBox(f),
+        poiCategoryIds: Array.isArray(f.properties?.poi_category_ids)
+          ? f.properties.poi_category_ids.filter((id) => typeof id === "string" && id.trim())
+          : null,
       })
     }
     return out
@@ -523,10 +531,15 @@ export async function suggestPlaces(
   if (!isPlaceSearchEnabled()) return []
   if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return []
   const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
-  const proximity = options?.proximity ?? null
+  const bias = placeSearchBias(text, {
+    proximity: options?.proximity,
+    countryCodes: options?.countryCodes,
+  })
+  const proximity = bias.proximity
+  const countryCodes = bias.countryCodes.length ? bias.countryCodes : undefined
   const fromBox = await searchBoxForward(text.trim(), {
     proximity,
-    countryCodes: options?.countryCodes,
+    countryCodes,
     limit,
     signal: options?.signal,
   })
@@ -537,11 +550,12 @@ export async function suggestPlaces(
       text: f.text,
       center: f.coord,
       countryCode: f.countryCode,
+      poiCategoryIds: f.poiCategoryIds,
     }))
   }
   return suggestPlacesGeocodingV5(text.trim(), {
     proximity,
-    countryCodes: options?.countryCodes,
+    countryCodes,
     limit,
     signal: options?.signal,
   })
@@ -760,18 +774,26 @@ export async function geocodeRegionAnchor(
     options?.countryCodes && options.countryCodes.length
       ? countryParamsKey(options.countryCodes)
       : "none"
-  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}|t5`)
+  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}|t7`)
   const mem = getAnchorFromMemory(key) ?? readAnchorCache(key)
   if (mem) return mem
 
   for (const q of ladder) {
     const hits = await geocodeAnchorHits(q, options?.countryCodes)
-    const hit = hits.find((h) => sharesSignificantToken(q, `${h.label} ${h.placeName}`))
+    const hit = pickBestAnchorHit(
+      hits.map((h) => ({
+        coord: h.coord,
+        featureType: h.featureType,
+        text: h.label,
+        placeName: h.placeName,
+      })),
+      q,
+    )
     if (!hit) continue
     const value: RegionAnchor = {
       coord: hit.coord,
       featureType: hit.featureType,
-      label: hit.label,
+      label: hit.text?.trim() || hit.placeName?.trim() || q,
     }
     setAnchorMemory(key, value)
     writeLocalCache(key, value.coord.lng, value.coord.lat, {

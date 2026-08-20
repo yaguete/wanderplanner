@@ -423,6 +423,38 @@ function hasFiniteCoords(
   )
 }
 
+export type IncompleteMapTransport = {
+  itemId: string
+  dayId: string
+  dayNumber: number
+  name: string
+}
+
+/** Transportes que no se pueden dibujar porque faltan origen y/o destino geocodificados. */
+export function incompleteMapTransports(days: UserDay[]): IncompleteMapTransport[] {
+  const out: IncompleteMapTransport[] = []
+  days.forEach((day, dayIndex) => {
+    for (const item of day.items) {
+      if (item.type !== "transport") continue
+      const route = item.route
+      if (
+        route &&
+        hasFiniteCoords(route.from?.coords) &&
+        hasFiniteCoords(route.to?.coords)
+      ) {
+        continue
+      }
+      out.push({
+        itemId: item.id,
+        dayId: day.id,
+        dayNumber: dayIndex + 1,
+        name: item.name,
+      })
+    }
+  })
+  return out
+}
+
 /**
  * Construye la ruta de lugares consecutivos.
  * Puntos sin coords se saltan (aparecen en `skipped`) y se unen los vecinos.

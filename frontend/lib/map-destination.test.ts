@@ -104,6 +104,21 @@ function source(overrides: Partial<Source> = {}): Source {
 }
 
 {
+  // «Granada» no es el país GD; sin countries explícitos no se añade nada.
+  const granada = source({ area: "Granada" })
+  assert.equal(mapDestinationHint(baseTrip(), [granada]), "Granada")
+  assert.deepEqual(mapCountryCodes(baseTrip(), [granada]), [])
+  assert.equal(
+    mapDestinationHint(baseTrip({ countries: ["ES"] }), [granada]),
+    "Granada, España",
+  )
+  assert.equal(
+    mapDestinationHint(baseTrip(), [source({ area: "Granada, España" })]),
+    "Granada, España",
+  )
+}
+
+{
   assert.equal(isIndependentRegionHint("Zona Centro"), false)
   assert.equal(isIndependentRegionHint("Centro"), false)
   assert.equal(isIndependentRegionHint("Casco Antiguo"), false)

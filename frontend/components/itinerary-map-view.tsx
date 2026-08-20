@@ -11,7 +11,7 @@ import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import { ChevronDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { collectCountryCodesFromHint } from "@/lib/countries"
+import { collectCountryCodesFromHint, getCountryByCode } from "@/lib/countries"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,8 +36,6 @@ import {
   type GeocodeState,
 } from "@/lib/map-geocode-state"
 import {
-  candidatePassesAnchor,
-  mapsPinPassesAnchor,
   offsetStackedApproximate,
   pickGeocodeOutcome,
   type RegionAnchor,
@@ -56,6 +54,7 @@ import {
   summarizeUndrawnTransports,
   type ItineraryMapSegment,
   type ItineraryPlace,
+  type IncompleteMapTransport,
   type PlacesRouteLeg,
   type TransportDistances,
 } from "@/lib/map-route-geometry"
@@ -420,6 +419,13 @@ function pinCoord(r: GeocodeResolved): LngLat {
   return r.displayCoord ?? r.coord
 }
 
+function mappableItemType(
+  t: ItineraryMapPoint["type"] | undefined,
+): "stay" | "activity" | "food" | null {
+  if (t === "stay" || t === "activity" || t === "food") return t
+  return null
+}
+
 export function ItineraryMapView({
   places,
   hubs = [],
@@ -432,6 +438,8 @@ export function ItineraryMapView({
   focusDayLabel = null,
   onMapModeChange,
   onPersistItemCoords,
+  incompleteTransports = [],
+  onFixTransport,
 }: {
   /** Lugares del recorrido: stay / food / activity (sin hubs). Viaje entero. */
   places: ItineraryMapPoint[]
@@ -448,18 +456,24 @@ export function ItineraryMapView({
   /** Etiqueta corta para el overlay vacío, p. ej. "Día 5". */
   focusDayLabel?: string | null
   onMapModeChange?: (next: MapViewMode) => void
-  /** Guarda coords en el ítem (salida de «Ajustar ubicación»). */
-  onPersistItemCoords?: (
-    itemId: string,
-    coords: LngLat,
-    region: string,
-  ) => void
+  /** Guarda coords en el ítem (salida de «Ajustar ubicación»). No pisa `region`. */
+  onPersistItemCoords?: (itemId: string, coords: LngLat) => void
+  incompleteTransports?: IncompleteMapTransport[]
+  onFixTransport?: (item: IncompleteMapTransport) => void
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null)
   const markersByIdRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
   const popupDataByIdRef = useRef<
-    Map<string, { name: string; label: string; adjustable?: boolean }>
+    Map<
+      string,
+      {
+        name: string
+        label: string
+        adjustable?: boolean
+        itemType?: "stay" | "activity" | "food"
+      }
+    >
   >(new Map())
   const hoverPopupRef = useRef<mapboxgl.Popup | null>(null)
   const hoverOpenIdRef = useRef<string | null>(null)
@@ -467,12 +481,18 @@ export function ItineraryMapView({
   /** Elemento al que están los listeners del bocadillo. `remove()` lo destruye. */
   const popupChromeElRef = useRef<HTMLElement | null>(null)
   const adjustingSetterRef = useRef<
-    (next: { id: string; name: string; proximity: [number, number] } | null) => void
+    (
+      next: {
+        id: string
+        name: string
+        itemType: "stay" | "activity" | "food"
+      } | null,
+    ) => void
   >(() => {})
   const [adjusting, setAdjusting] = useState<{
     id: string
     name: string
-    proximity: [number, number]
+    itemType: "stay" | "activity" | "food"
   } | null>(null)
   adjustingSetterRef.current = setAdjusting
   const finePointerRef = useRef(false)
@@ -630,6 +650,25 @@ export function ItineraryMapView({
           destAnchor = null
         }
       }
+      if (!destAnchor && unionForBias.length > 0) {
+        for (const code of unionForBias) {
+          const name = getCountryByCode(code)?.name
+          if (!name) continue
+          try {
+            const a = await geocodeRegionAnchor(name, { countryCodes: [code] })
+            if (a) {
+              destAnchor = {
+                coord: a.coord,
+                featureType: "country",
+                label: name,
+              }
+              break
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
       if (ac.signal.aborted) return
 
       const resolved: GeocodeResolved[] = []
@@ -651,29 +690,17 @@ export function ItineraryMapView({
             Number.isFinite(saved.lat)
           ) {
             const pin = { lng: saved.lng, lat: saved.lat }
-            if (!destAnchor || mapsPinPassesAnchor(pin, destAnchor)) {
-              const fix: PlaceFix = { coord: pin, precision: "exact" }
-              coordCacheRef.current.set(p.id, fix)
-              return fix
-            }
+            const fix: PlaceFix = { coord: pin, precision: "exact" }
+            coordCacheRef.current.set(p.id, fix)
+            return fix
           }
-          const cached = coordCacheRef.current.get(p.id)
-          if (cached) return cached
+          coordCacheRef.current.delete(p.id)
 
           const region = p.region?.trim() || null
-          let regionAnchor =
+          const regionAnchor =
             region && isIndependentRegionHint(region)
               ? anchors.get(region.toLowerCase())
               : undefined
-          if (regionAnchor && destAnchor) {
-            const asCandidate = {
-              coord: regionAnchor.coord,
-              featureType: regionAnchor.featureType,
-            }
-            if (!candidatePassesAnchor(asCandidate, destAnchor)) {
-              regionAnchor = undefined
-            }
-          }
           const anchor = regionAnchor ?? destAnchor
           if (!anchor) return null
           const tripDestination = region || dest || null
@@ -990,11 +1017,12 @@ export function ItineraryMapView({
         const marker = markersByIdRef.current.get(itemId)
         if (!data || !marker) return
         closeHoverPopup()
-        const ll = marker.getLngLat()
+        const itemType = data.itemType
+        if (!itemType) return
         adjustingSetterRef.current({
           id: itemId,
           name: data.name,
-          proximity: [ll.lng, ll.lat],
+          itemType,
         })
       })
     },
@@ -1266,11 +1294,12 @@ export function ItineraryMapView({
         const marker = markersByIdRef.current.get(id)
         if (!data?.adjustable || !marker) return
         closeHoverPopup()
-        const ll = marker.getLngLat()
+        const itemType = data.itemType
+        if (!itemType) return
         adjustingSetterRef.current({
           id,
           name: data.name,
-          proximity: [ll.lng, ll.lat],
+          itemType,
         })
       }
       el.addEventListener("mouseenter", () => {
@@ -1297,7 +1326,8 @@ export function ItineraryMapView({
       popupDataByIdRef.current.set(v.id, {
         name: v.point.name,
         label: v.label,
-        adjustable: Boolean(onPersistItemCoords),
+        adjustable: Boolean(onPersistItemCoords) && mappableItemType(v.point.type) != null,
+        itemType: mappableItemType(v.point.type) ?? undefined,
       })
       const existing = markersByIdRef.current.get(v.id)
 
@@ -1451,8 +1481,15 @@ export function ItineraryMapView({
   const isGeocoding =
     geocode.status === "loading" || geocode.status === "idle" || geocode.status === "refreshing"
 
+  const visibleIncomplete = filterByDayScope(incompleteTransports, focusDayNumber)
+
   const dayScoped = focusDayNumber != null && focusDayLabel
   const emptyCopy = (() => {
+    if (mapMode === "transport" && visibleIncomplete.length > 0) {
+      return visibleIncomplete.length === 1
+        ? "Fija origen y destino para ver el tramo en el mapa."
+        : `Fija origen y destino de ${visibleIncomplete.length} desplazamientos para verlos en el mapa.`
+    }
     if (dayScoped) {
       const day = focusDayLabel.toLowerCase()
       return mapMode === "transport"
@@ -1497,6 +1534,20 @@ export function ItineraryMapView({
                     : `Seguir carretera · ${routeModeLabel(s.mode)}`}
               </button>
             ))}
+            {visibleIncomplete.length > 0 ? (
+              <button
+                type="button"
+                className="rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground hover:bg-muted"
+                onClick={() => {
+                  const first = visibleIncomplete[0]
+                  if (first) onFixTransport?.(first)
+                }}
+              >
+                {visibleIncomplete.length === 1
+                  ? "Fijar origen y destino"
+                  : `Fijar origen y destino (${visibleIncomplete.length})`}
+              </button>
+            ) : null}
           </>
         ) : null}
 
@@ -1535,6 +1586,8 @@ export function ItineraryMapView({
                       : "Reintentar carretera"
                     : "Ajustar a carretera"}
               </button>
+            ) : visibleResolved.length >= 2 ? (
+              <span>Ajusta las ubicaciones para trazar la ruta por carretera</span>
             ) : null}
             {placesRouteIncomplete ? (
               <span className="text-amber-800 dark:text-amber-200/90">
@@ -1590,6 +1643,20 @@ export function ItineraryMapView({
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/80 px-6 text-center text-sm text-muted-foreground backdrop-blur-[1px]">
             <p className="m-0">{emptyCopy}</p>
             {emptyHint ? <p className="m-0">{emptyHint}</p> : null}
+            {mapMode === "transport" && visibleIncomplete.length > 0 && onFixTransport ? (
+              <button
+                type="button"
+                className="rounded-md border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                onClick={() => {
+                  const first = visibleIncomplete[0]
+                  if (first) onFixTransport(first)
+                }}
+              >
+                {visibleIncomplete.length === 1
+                  ? "Completar origen y destino"
+                  : "Completar el primero"}
+              </button>
+            ) : null}
             {emptyHint && onMapModeChange ? (
               <button
                 type="button"
@@ -1615,12 +1682,13 @@ export function ItineraryMapView({
             if (!open) setAdjusting(null)
           }}
           itemName={adjusting?.name ?? ""}
-          proximity={adjusting?.proximity ?? null}
+          itemType={adjusting?.itemType ?? "activity"}
+          proximity={null}
           countryCodes={countryCodes}
           destinationHint={destination}
           onConfirm={(place) => {
             if (!adjusting) return
-            onPersistItemCoords(adjusting.id, place.coords, place.label)
+            onPersistItemCoords(adjusting.id, place.coords)
             setAdjusting(null)
           }}
         />

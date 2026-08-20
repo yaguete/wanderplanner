@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import type { ExtraTask, Trip } from "@/types/itinerary"
-import { hasWordBoundaryMatch, resolveTripCountryCodes } from "./countries"
+import { hasWordBoundaryMatch, resolveTripCountryCodes, collectCountryCodesFromHint } from "./countries"
 import {
   buildCountryTaskId,
   countryCodeFromTaskId,
@@ -259,6 +259,22 @@ assert.equal(buildCountryTaskId("TH", "Visado TDAC"), "country:th:visado-tdac")
   assert.deepEqual(
     resolveTripCountryCodes({ name: "viaje in us", countries: [] }, []),
     [],
+  )
+}
+
+{
+  // «Granada» es la ciudad andaluza, no el país GD (Grenada).
+  assert.deepEqual(collectCountryCodesFromHint("Granada"), [])
+  assert.deepEqual(collectCountryCodesFromHint("Granada, España"), ["es"])
+  assert.deepEqual(collectCountryCodesFromHint("Provincia de Granada, españa"), ["es"])
+  assert.deepEqual(collectCountryCodesFromHint("Grenada"), ["gd"])
+  assert.equal(
+    resolveTripCountryCodes({ name: "Granada 2026", countries: [] }, []).includes("GD"),
+    false,
+  )
+  assert.deepEqual(
+    resolveTripCountryCodes({ name: "Grenada", countries: [] }, []),
+    ["GD"],
   )
 }
 

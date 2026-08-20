@@ -300,6 +300,13 @@ export function normalizeCountryName(raw: string): string {
 }
 
 /**
+ * Topónimos del catálogo ES que coinciden con una ciudad mucho más buscada.
+ * «Granada» es GD (Grenada) y la ciudad andaluza: inferir `country=gd` manda
+ * el mapa a las Antillas. El inglés «Grenada» (`Intl.DisplayNames`) sí se indexa.
+ */
+const AMBIGUOUS_COUNTRY_INFERENCE_NAMES = new Set(["granada"])
+
+/**
  * Aliases no canónicos / abreviaturas habituales (no duplicar el catálogo ES↔EN).
  * Clave: ya normalizada con `normalizeCountryName`.
  */
@@ -378,6 +385,10 @@ function buildCountryNameIndex(): NameIndex {
 
   for (const [alias, code] of Object.entries(COUNTRY_ALIAS_TO_CODE)) {
     add(alias, code, { allowIso2Alias: true })
+  }
+
+  for (const key of AMBIGUOUS_COUNTRY_INFERENCE_NAMES) {
+    candidates.delete(key)
   }
 
   const exact = new Map<string, string>()

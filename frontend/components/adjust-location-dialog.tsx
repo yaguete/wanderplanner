@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Loader2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,13 +15,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import {
-  geocodeFreeText,
+  geocodeRegionAnchor,
+  haversineKm,
   resolvePermanentCoords,
   seedGeocodeCache,
   suggestPlaces,
   type GeocodeSuggestion,
   type LngLat,
 } from "@/lib/mapbox"
+import {
+  rankPlaceSuggestions,
+  type PlaceSuggestKind,
+} from "@/lib/place-suggest-rank"
+import { formatKm } from "@/lib/map-route-geometry"
+import { getCountryByCode } from "@/lib/countries"
 
 const SUGGEST_DEBOUNCE_MS = 300
 const SUGGEST_MIN_CHARS = 3
@@ -30,6 +37,7 @@ export type AdjustLocationDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   itemName: string
+  itemType?: PlaceSuggestKind
   proximity?: [number, number] | null
   countryCodes?: string[]
   destinationHint?: string | null
@@ -40,6 +48,7 @@ export function AdjustLocationDialog({
   open,
   onOpenChange,
   itemName,
+  itemType = "activity",
   proximity = null,
   countryCodes = [],
   destinationHint = null,
@@ -50,6 +59,7 @@ export function AdjustLocationDialog({
   const [placeQuery, setPlaceQuery] = useState("")
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
   const [suggestLoading, setSuggestLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState<{
     label: string
     coords: LngLat
@@ -59,6 +69,15 @@ export function AdjustLocationDialog({
   const proximityRef = useRef<[number, number] | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const countriesKey = useMemo(
+    () =>
+      countryCodes
+        .map((c) => c.trim().toLowerCase())
+        .filter((c) => c.length === 2)
+        .sort()
+        .join(","),
+    [countryCodes],
+  )
 
   useEffect(() => {
     if (!open) return
@@ -67,13 +86,16 @@ export function AdjustLocationDialog({
     setSelectedPlace(null)
     setListOpen(false)
     setSuggestLoading(false)
+    setSaving(false)
     proximityRef.current = proximity
     if (!proximity) {
       const dest = destinationHint?.trim()
-      const codes = countryCodes.filter((c) => c.trim().length === 2)
+      const codes = countriesKey ? countriesKey.split(",") : []
       if (dest) {
-        void geocodeFreeText(dest, { countryCodes: codes.length ? codes : undefined }).then((p) => {
-          proximityRef.current = p
+        void geocodeRegionAnchor(dest, {
+          countryCodes: codes.length ? codes : undefined,
+        }).then((anchor) => {
+          if (anchor) proximityRef.current = [anchor.coord.lng, anchor.coord.lat]
         })
       }
     }
@@ -101,7 +123,7 @@ export function AdjustLocationDialog({
     debounceRef.current = setTimeout(() => {
       const ac = new AbortController()
       abortRef.current = ac
-      const codes = countryCodes.filter((c) => c.trim().length === 2)
+      const codes = countriesKey ? countriesKey.split(",") : []
       void suggestPlaces(q, {
         proximity: proximityRef.current,
         countryCodes: codes.length ? codes : undefined,
@@ -110,7 +132,7 @@ export function AdjustLocationDialog({
       })
         .then((list) => {
           if (ac.signal.aborted) return
-          setSuggestions(list)
+          setSuggestions(rankPlaceSuggestions(list, q, itemType))
           setListOpen(true)
           setSuggestLoading(false)
         })
@@ -126,27 +148,62 @@ export function AdjustLocationDialog({
       if (debounceRef.current) clearTimeout(debounceRef.current)
       abortRef.current?.abort()
     }
-  }, [placeQuery, open, countryCodes, selectedPlace])
+  }, [placeQuery, open, countriesKey, selectedPlace, itemType])
+
+  const codesForResolve = countriesKey ? countriesKey.split(",") : []
 
   const handleSelectSuggestion = (s: GeocodeSuggestion) => {
     setSelectedPlace({ label: s.text, coords: s.center })
     setPlaceQuery(s.text)
     setSuggestions([])
     setListOpen(false)
-    seedGeocodeCache(s.placeName, s.center, countryCodes)
-    // `s.center` es del dataset temporal y no se puede guardar. Pedimos la
-    // permanente por detrás; si no llega, se confirma la temporal como siempre.
-    void resolvePermanentCoords(s.placeName, s.center, { countryCodes }).then((coords) => {
-      if (coords === s.center) return
-      setSelectedPlace((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
-    })
+    seedGeocodeCache(s.placeName, s.center, codesForResolve)
+    void resolvePermanentCoords(s.placeName, s.center, { countryCodes: codesForResolve }).then(
+      (coords) => {
+        if (coords === s.center) return
+        setSelectedPlace((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
+      },
+    )
   }
 
+  const canSave =
+    Boolean(selectedPlace) || placeQuery.trim().length >= SUGGEST_MIN_CHARS
+
   const handleSubmit = () => {
-    if (!selectedPlace) return
-    onConfirm(selectedPlace)
-    onOpenChange(false)
+    if (selectedPlace) {
+      onConfirm(selectedPlace)
+      onOpenChange(false)
+      return
+    }
+    const q = placeQuery.trim()
+    if (q.length < SUGGEST_MIN_CHARS || saving) return
+    setSaving(true)
+    const codes = codesForResolve.length ? codesForResolve : undefined
+    void suggestPlaces(q, {
+      proximity: proximityRef.current,
+      countryCodes: codes,
+      limit: 6,
+    })
+      .then(async (list) => {
+        const ranked = rankPlaceSuggestions(list, q, itemType)
+        const first = ranked[0]
+        if (!first) return
+        const coords = await resolvePermanentCoords(first.placeName, first.center, {
+          countryCodes: codes,
+        })
+        onConfirm({ label: first.text, coords })
+        onOpenChange(false)
+      })
+      .finally(() => {
+        setSaving(false)
+      })
   }
+
+  const pinLngLat: LngLat | null = proximity
+    ? { lng: proximity[0], lat: proximity[1] }
+    : proximityRef.current
+      ? { lng: proximityRef.current[0], lat: proximityRef.current[1] }
+      : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -182,7 +239,13 @@ export function AdjustLocationDialog({
                 onBlur={() => {
                   window.setTimeout(() => setListOpen(false), 150)
                 }}
-                placeholder="p. ej. Hofkirche, Innsbruck"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    handleSubmit()
+                  }
+                }}
+                placeholder="p. ej. Alhambra, Granada"
                 className="pl-8"
                 autoComplete="off"
                 autoFocus={!isMobileViewport()}
@@ -201,28 +264,43 @@ export function AdjustLocationDialog({
                 className="max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
                 role="listbox"
               >
-                {suggestions.map((s) => (
-                  <li key={s.id} role="option">
-                    <button
-                      type="button"
-                      className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelectSuggestion(s)}
-                    >
-                      <span className="font-medium text-foreground">{s.text}</span>
-                      {s.placeName !== s.text ? (
-                        <span className="line-clamp-1 text-xs text-muted-foreground">
-                          {s.placeName}
+                {suggestions.map((s) => {
+                  const km = pinLngLat ? haversineKm(pinLngLat, s.center) : null
+                  const subtitle = suggestionPlaceSubtitle(s)
+                  return (
+                    <li key={s.id} role="option">
+                      <button
+                        type="button"
+                        className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSelectSuggestion(s)}
+                      >
+                        <span className="flex w-full items-baseline justify-between gap-2">
+                          <span className="font-medium text-foreground">{s.text}</span>
+                          {km != null ? (
+                            <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                              {formatKm(km)}
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
+                        {subtitle ? (
+                          <span className="line-clamp-1 text-xs text-muted-foreground">
+                            {subtitle}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  )
+                })}
               </ul>
             ) : null}
             {selectedPlace ? (
               <p className="text-xs text-muted-foreground">Ubicación fijada en el mapa.</p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Escribe una dirección y pulsa Guardar, o elige una sugerencia.
+              </p>
+            )}
           </div>
         </div>
 
@@ -230,11 +308,27 @@ export function AdjustLocationDialog({
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={!selectedPlace}>
-            Guardar
+          <Button type="button" onClick={handleSubmit} disabled={!canSave || saving}>
+            {saving ? "Guardando…" : "Guardar"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
+}
+
+/** País o place_name: distingue Granada (ES) de Grenada (GD) cuando el título es el mismo. */
+function suggestionPlaceSubtitle(s: GeocodeSuggestion): string | null {
+  if (s.placeName && s.placeName !== s.text) return s.placeName
+  const code = s.countryCode?.trim()
+  if (!code) return null
+  const name = getCountryByCode(code.toUpperCase())?.name
+  if (name && name.toLowerCase() !== s.text.toLowerCase()) return name
+  try {
+    const en = new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase())
+    if (en && en.toLowerCase() !== s.text.toLowerCase()) return en
+  } catch {
+    // runtime sin DisplayNames
+  }
+  return code.toUpperCase()
 }

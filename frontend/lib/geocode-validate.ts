@@ -37,7 +37,8 @@ const RADIUS_M: Record<string, number> = {
   region: 150_000,
 }
 
-const COUNTRY_OK_TYPES = new Set(["place", "locality", "region", "district", "country"])
+/** Tipos con radio estrecho: un match parcial de ancla es catastrófico (Costa → Ourense). */
+const TIGHT_ANCHOR_TYPES = new Set(["place", "locality", "neighborhood", "postcode"])
 
 /** Tipos administrativos: son el centro de una zona, no el sitio con nombre propio. */
 const COARSE_TYPES = new Set([
@@ -197,6 +198,42 @@ export function candidateNameMatchesQuery(
   return tokens.every((t) => blob.includes(t))
 }
 
+/**
+ * ¿Sirve este hit como ancla de región? En tipos de radio estrecho exige
+ * todos los tokens (`Costa Vasca` no puede anclarse en la aldea `Costa`).
+ * `region`/`district`/`country` son sesgo amplio: basta con no ser un miss total.
+ * No sustituye a `sharesSignificantToken` (otros callers).
+ */
+export function anchorHitAcceptable(query: string, hit: GeocodeCandidate): boolean {
+  const tokens = significantTokens(query)
+  if (tokens.length === 0) return false
+  if (candidateNameMatchesQuery(hit, query)) return true
+  return !TIGHT_ANCHOR_TYPES.has(hit.featureType)
+}
+
+/**
+ * Entre los hits aceptables, el más específico (place > region > country).
+ * «Granada» en español es también el país GD: sin esto gana la isla.
+ */
+export function pickBestAnchorHit(
+  hits: GeocodeCandidate[],
+  query: string,
+): GeocodeCandidate | null {
+  const ok = hits.filter((h) => anchorHitAcceptable(query, h))
+  if (ok.length === 0) return null
+  let best = ok[0]!
+  let bestRank = typeSpecificity(best.featureType)
+  for (let i = 1; i < ok.length; i++) {
+    const h = ok[i]!
+    const rank = typeSpecificity(h.featureType)
+    if (rank < bestRank) {
+      best = h
+      bestRank = rank
+    }
+  }
+  return best
+}
+
 function isStreetLike(featureType: string): boolean {
   return STREET_LIKE_TYPES.has(featureType)
 }
@@ -217,7 +254,8 @@ export function candidatePassesAnchor(
   anchor: RegionAnchor,
 ): boolean {
   if (anchor.featureType === "country") {
-    return COUNTRY_OK_TYPES.has(candidate.featureType)
+    // Sin tope de distancia: Search Box trae `poi`/`address`, no solo tipos v5.
+    return true
   }
   const maxM = maxDistanceMetersForAnchorType(anchor.featureType)
   if (maxM == null) return true
@@ -226,8 +264,7 @@ export function candidatePassesAnchor(
 
 /**
  * Radios para pines GPS del artículo. Más holgados que Search Box: un viaje
- * de 20 días en Alaska (`region`) no cabe en 150 km, y un `poi` falla el
- * filtro `country` de `candidatePassesAnchor`. Bali sigue fuera.
+ * de 20 días en Alaska (`region`) no cabe en 150 km. Bali sigue fuera.
  */
 const MAPS_PIN_RADIUS_M: Record<string, number> = {
   locality: 80_000,
@@ -274,22 +311,60 @@ export function pickFirstValidCandidate(
   return best
 }
 
+/**
+ * Si nadie pasa el radio del ancla, el candidato cuyo nombre cubre la query
+ * (todos los tokens) más cercano al ancla. Homónimos lejanos (Gernika CC en
+ * Barcelona) pierden frente al Gernika real. No aplica a `address`/`street`.
+ */
+function pickFarNameMatch(
+  candidates: GeocodeCandidate[],
+  anchor: RegionAnchor,
+  query: string,
+): GeocodeCandidate | null {
+  const matching = candidates.filter((c) => {
+    if (isStreetLike(c.featureType)) return false
+    return candidateNameMatchesQuery(c, query)
+  })
+  if (matching.length === 0) return null
+  let best = matching[0]!
+  let bestD = haversineMeters(best.coord, anchor.coord)
+  for (let i = 1; i < matching.length; i++) {
+    const c = matching[i]!
+    const d = haversineMeters(c.coord, anchor.coord)
+    if (d < bestD) {
+      best = c
+      bestD = d
+    }
+  }
+  return best
+}
+
+function outcomeFromHit(
+  hit: GeocodeCandidate,
+  anchor: RegionAnchor,
+): PlaceGeocodeOutcome {
+  if (COARSE_TYPES.has(hit.featureType)) {
+    return {
+      precision: "approximate",
+      coord: hit.coord,
+      anchorLabel: candidateAnchorLabel(hit, anchor.label),
+    }
+  }
+  return { precision: "exact", coord: hit.coord }
+}
+
 export function pickGeocodeOutcome(
   candidates: GeocodeCandidate[],
   anchor: RegionAnchor | null,
   query?: string | null,
 ): PlaceGeocodeOutcome {
   if (!anchor) return { precision: "unlocated" }
-  const hit = pickFirstValidCandidate(candidates, anchor, query)
-  if (hit) {
-    if (COARSE_TYPES.has(hit.featureType)) {
-      return {
-        precision: "approximate",
-        coord: hit.coord,
-        anchorLabel: candidateAnchorLabel(hit, anchor.label),
-      }
-    }
-    return { precision: "exact", coord: hit.coord }
+  const local = pickFirstValidCandidate(candidates, anchor, query)
+  if (local) return outcomeFromHit(local, anchor)
+  const q = query?.trim()
+  if (q) {
+    const far = pickFarNameMatch(candidates, anchor, q)
+    if (far) return outcomeFromHit(far, anchor)
   }
   return { precision: "approximate", coord: anchor.coord, anchorLabel: anchor.label }
 }

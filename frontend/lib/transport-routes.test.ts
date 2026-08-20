@@ -27,6 +27,7 @@ import {
   collectMapGatewayAnchors,
   collectItineraryPlaces,
   collectTransportDistances,
+  incompleteMapTransports,
   buildPlacesRoute,
   formatKm,
   geodesicLine,
@@ -739,6 +740,46 @@ describe("mapa recorrido de lugares", () => {
     const again = collectTransportDistances(days)
     assert.equal(again.totalKm, dist.totalKm)
     assert.equal(summarizeTransportKm(dist.byMode).includes("avión"), true)
+  })
+
+  it("incompleteMapTransports: hint-only y sin extremos; ignora los ya geocodificados", () => {
+    const days: UserDay[] = [
+      {
+        id: "d1",
+        label: "",
+        items: [
+          {
+            id: "hint",
+            sourceItemId: "s",
+            sourceId: "src",
+            type: "transport",
+            name: "Bilbao → Gernika",
+            detail: null,
+            sourceAuthor: "blog",
+            sourceRouteHint: { from: "Bilbao", to: "Gernika", mode: "train" },
+          },
+          {
+            id: "ok",
+            sourceItemId: "s2",
+            sourceId: "src",
+            type: "transport",
+            name: "Takayama → Kanazawa",
+            detail: null,
+            sourceAuthor: "Tú",
+            route: {
+              from: { label: "Takayama", coords: { lng: 137.25, lat: 36.14 }, kind: "station" },
+              to: { label: "Kanazawa", coords: { lng: 136.65, lat: 36.56 }, kind: "station" },
+              mode: "train",
+            },
+          },
+        ],
+      },
+    ]
+    const incomplete = incompleteMapTransports(days)
+    assert.equal(incomplete.length, 1)
+    assert.equal(incomplete[0]!.itemId, "hint")
+    assert.equal(incomplete[0]!.dayId, "d1")
+    assert.equal(incomplete[0]!.dayNumber, 1)
   })
 
   it("formatKm en tres rangos", () => {
