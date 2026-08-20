@@ -7,13 +7,34 @@ import type { TripDesktopPanel, TripPanelState } from "@/lib/trip-chrome-context
 
 const SEGMENTS: {
   id: TripDesktopPanel
+  /** Etiqueta corta del header. */
   label: string
+  /** Etiqueta de las tarjetas del canvas vacío. */
+  emptyLabel: string
   hint: string
   icon: typeof BookOpen
 }[] = [
-  { id: "sources", label: "Tus Fuentes", hint: "Artículos e inspiración", icon: BookOpen },
-  { id: "plan", label: "Tu Viaje", hint: "Ruta, mapa y tareas", icon: Map },
-  { id: "assistant", label: "Asistente", hint: "Pregunta y planifica", icon: Sparkles },
+  {
+    id: "sources",
+    label: "Fuentes",
+    emptyLabel: "Tus Fuentes",
+    hint: "Artículos e inspiración",
+    icon: BookOpen,
+  },
+  {
+    id: "plan",
+    label: "Viaje",
+    emptyLabel: "Tu Viaje",
+    hint: "Ruta, mapa y tareas",
+    icon: Map,
+  },
+  {
+    id: "assistant",
+    label: "Asistente",
+    emptyLabel: "Asistente",
+    hint: "Pregunta y planifica",
+    icon: Sparkles,
+  },
 ]
 
 type TripPanelTogglesProps = {
@@ -84,12 +105,12 @@ export function TripPanelsEmpty({
         role="group"
         aria-label="Abrir un panel"
       >
-        {SEGMENTS.map(({ id, label, hint, icon: Icon }) => (
+        {SEGMENTS.map(({ id, emptyLabel, hint, icon: Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => onSelect(id)}
-            aria-label={`Mostrar ${label}`}
+            aria-label={`Mostrar ${emptyLabel}`}
             className={cn(
               "flex w-[8.75rem] flex-col items-center rounded-lg bg-background px-3 pb-4 pt-4 text-center",
               "shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-[box-shadow,transform] duration-150 ease-out",
@@ -100,7 +121,7 @@ export function TripPanelsEmpty({
             <span className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Icon className="h-4 w-4" aria-hidden strokeWidth={2} />
             </span>
-            <span className="text-sm font-medium text-foreground">{label}</span>
+            <span className="text-sm font-medium text-foreground">{emptyLabel}</span>
             <span className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{hint}</span>
           </button>
         ))}
