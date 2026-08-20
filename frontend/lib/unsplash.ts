@@ -2,7 +2,7 @@
  * Portadas de viaje: consultas desde la fuente + GET /cover en el backend (Unsplash).
  * Sin claves de Unsplash en el navegador.
  */
-import { collectCountryCodesFromHint, getCountryByCode } from "@/lib/countries"
+import { collectCountryCodesFromHint, getCountryByCode, hasWordBoundaryMatch } from "@/lib/countries"
 import { authHeaders } from "@/lib/api-auth"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -31,8 +31,16 @@ export async function fetchDestinationCover(destination: string): Promise<string
 /**
  * Consultas de portada en orden de preferencia a partir de una fuente:
  * 1) `source.area` (destino del artículo),
- * 2) nombre del país inferido desde ese área.
+ * 2) nombre del país inferido desde ese área,
+ * 3) fallback genérico (maleta/mapa) si Unsplash no tiene foto del destino.
  */
+export const GENERIC_COVER_QUERY_PREFIX = "generic:"
+
+export function genericCoverQuery(seed: string): string {
+  const trimmed = seed.trim() || "viaje"
+  return `${GENERIC_COVER_QUERY_PREFIX}${trimmed}`
+}
+
 export function coverQueriesFromSource(source: {
   area: string | null
 }): string[] {
@@ -43,10 +51,14 @@ export function coverQueriesFromSource(source: {
   const codes = collectCountryCodesFromHint(area)
   for (const code of codes) {
     const name = getCountryByCode(code.toUpperCase())?.name
-    if (name && !queries.some((q) => q.toLowerCase() === name.toLowerCase())) {
-      queries.push(name)
-    }
+    if (!name) continue
+    const already = queries.some((q) => q.toLowerCase() === name.toLowerCase())
+    // Si el área ya nombra el país ("Costa Vasca, España"), no pedir España
+    // suelta: Unsplash devolvería un paisaje cualquiera, no el destino.
+    if (already || (area && hasWordBoundaryMatch(area, name))) continue
+    queries.push(name)
   }
+  queries.push(genericCoverQuery(area || "viaje"))
   return queries
 }
 

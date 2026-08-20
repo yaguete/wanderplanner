@@ -42,6 +42,7 @@ jobs:
       - run: npm run test:geocode-validate
       - run: npm run test:place-suggest-rank
       - run: npm run test:place-search-bias
+      - run: npm run test:unsplash
       - run: npm run test:map-destination
       - run: npm run test:mapbox-permanent
       - run: npm run test:airports

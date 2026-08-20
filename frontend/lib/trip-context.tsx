@@ -484,12 +484,15 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const applyCoverFromSource = useCallback(async (tripId: string, source: Source) => {
     const queries = coverQueriesFromSource(source)
-    // Unsplash (destino/país) → og:image del artículo → emoji (coverUrl null)
+    // Unsplash del destino → genérico (maleta/mapa) → emoji.
+    // No usamos og:image: el hero del blog suele ser un paisaje que no es portada.
     const unsplashUrl = await fetchCoverFromQueries(queries)
-    const url = unsplashUrl ?? (source.ogImage?.trim() || null)
-    setTrips((prev) =>
-      prev.map((t) => (t.id === tripId ? { ...t, coverUrl: url } : t)),
-    )
+    const url = unsplashUrl
+    setTrips((prev) => {
+      const current = prev.find((t) => t.id === tripId)
+      if (!current || current.coverUrl === url) return prev
+      return prev.map((t) => (t.id === tripId ? { ...t, coverUrl: url } : t))
+    })
   }, [])
 
   const scheduleMapsPinResolve = useCallback((source: Source) => {
@@ -528,11 +531,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     })()
   }, [])
 
-  // Backfill: viajes con fuentes y sin coverUrl (mocks / datos previos al cambio).
+  // Backfill: sin portada, o reaplicar una vez por sesión para recuperar
+  // fotos de destino que un fallback genérico hubiera pisado.
   useEffect(() => {
     if (!rehydrated) return
     for (const trip of tripsRef.current) {
-      if (trip.sourceIds.length === 0 || trip.coverUrl) continue
+      if (trip.sourceIds.length === 0) continue
       if (coverBackfillAttempted.current.has(trip.id)) continue
       const firstId = trip.sourceIds[0]
       const source = sourcesRef.current.find((s) => s.id === firstId)

@@ -4,6 +4,9 @@ GET /cover?q=<zona> — portada Unsplash con caché global en `destination_cover
 Cinturón global durable: MAX_PHOTO_LOOKUPS_DAY vía usage_events.kind=photo_paid (compartido con /thumb).
 Sin cuota por usuario: Unsplash no llama a enforce_usage.
 
+Por defecto busca «{zona} travel landscape» (Alpes, costa, ciudad). El front, si eso
+falla, pide `generic:<semilla>` y entonces sí una foto de maleta/mapa/tránsito.
+
 Términos Unsplash: al servir una foto por primera vez (cache miss que encuentra resultado) se
 dispara `download_location`. La respuesta incluye `author_name` / `author_url` para que la UI
 pueda atribuir (pintar atribución queda fuera de esta tarea).
@@ -13,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import zlib
 from typing import Any
 
 import httpx
@@ -35,6 +39,25 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 TABLE = "destination_covers"
+
+GENERIC_COVER_PREFIX = "generic:"
+
+# Fallback cuando el destino no tiene foto. `orientation=landscape` es el recorte
+# de la tarjeta, no el motivo.
+GENERIC_COVER_QUERIES = (
+    "traveler rolling suitcase airport",
+    "travel map backpack luggage",
+    "airplane window passenger wing",
+    "person walking with suitcase",
+)
+
+
+def unsplash_cover_search_query(normalized_query: str) -> str:
+    """Destino → paisaje del lugar. `generic:…` → maleta/mapa."""
+    if normalized_query.startswith(GENERIC_COVER_PREFIX):
+        digest = zlib.crc32(normalized_query.encode("utf-8"))
+        return GENERIC_COVER_QUERIES[digest % len(GENERIC_COVER_QUERIES)]
+    return f"{normalized_query} travel landscape"
 
 
 def _unsplash_key() -> str:
@@ -143,7 +166,7 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
             return _empty_cover()
 
         # TODO(T1.2): meter solo los cache miss de Unsplash.
-        search_q = f"{query} travel landscape"
+        search_q = unsplash_cover_search_query(query)
         try:
             t0 = time.perf_counter()
             r = await client.get(
@@ -280,8 +303,10 @@ async def _resolve_cover(query: str) -> dict[str, Any]:
 @router.get("/cover")
 async def get_cover(q: str = Query(""), _user=Depends(require_user)):
     """
-    Portada Unsplash por zona. 200 {"url", "author_name", "author_url"} (nulls si no hay foto).
+    Portada Unsplash por zona (`{q} travel landscape`). `generic:…` es el fallback
+    de maleta/mapa cuando el destino no tiene foto.
 
+    200 {"url", "author_name", "author_url"} (nulls si no hay foto).
     La UI debe mostrar atribución cuando haya author_*. Sin cuota por usuario
     (Unsplash no llama a enforce_usage); el cinturón global es MAX_PHOTO_LOOKUPS_DAY.
     """

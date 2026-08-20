@@ -3,30 +3,39 @@
 `additionalProperties: false` es obligatorio en cada objeto. No hay `minimum` /
 `maximum` / `minLength` (la API no los admite). `sub_activities` es un nivel,
 nunca recursivo.
+
+Los opcionales son `string` (vacío = ausente), no `anyOf` string|null: Anthropic
+limita a 16 parámetros con uniones o arrays y este esquema ya gasta los arrays.
+En Instagram, `total_days` 0 (o < 1) lo aplana `coerce_instagram_itinerary`.
 """
 from __future__ import annotations
 
 from typing import Any
 
-
-def _str_or_null() -> dict[str, Any]:
-    return {"anyOf": [{"type": "string"}, {"type": "null"}]}
-
-
-def _int_or_null() -> dict[str, Any]:
-    return {"anyOf": [{"type": "integer"}, {"type": "null"}]}
+OPTIONAL_STRING_KEYS = frozenset(
+    {
+        "notes",
+        "region",
+        "affiliate_url",
+        "from",
+        "to",
+        "tips",
+        "general_tips",
+        "vendor",
+    }
+)
 
 
 def _named_item(*, with_affiliate: bool, with_sub: bool) -> dict[str, Any]:
     properties: dict[str, Any] = {
         "name": {"type": "string"},
         "type": {"type": "string"},
-        "notes": _str_or_null(),
-        "region": _str_or_null(),
+        "notes": {"type": "string"},
+        "region": {"type": "string"},
     }
     required = ["name", "type", "notes", "region"]
     if with_affiliate:
-        properties["affiliate_url"] = _str_or_null()
+        properties["affiliate_url"] = {"type": "string"}
         required.append("affiliate_url")
     if with_sub:
         properties["sub_activities"] = {
@@ -68,15 +77,15 @@ def _day_schema() -> dict[str, Any]:
                     "additionalProperties": False,
                     "properties": {
                         "type": {"type": "string"},
-                        "from": _str_or_null(),
-                        "to": _str_or_null(),
-                        "notes": _str_or_null(),
-                        "region": _str_or_null(),
+                        "from": {"type": "string"},
+                        "to": {"type": "string"},
+                        "notes": {"type": "string"},
+                        "region": {"type": "string"},
                     },
                     "required": ["type", "from", "to", "notes", "region"],
                 },
             },
-            "tips": _str_or_null(),
+            "tips": {"type": "string"},
         },
         "required": [
             "day",
@@ -90,19 +99,16 @@ def _day_schema() -> dict[str, Any]:
     }
 
 
-def itinerary_json_schema(*, total_days_nullable: bool) -> dict[str, Any]:
-    total_days: dict[str, Any] = (
-        _int_or_null() if total_days_nullable else {"type": "integer"}
-    )
+def itinerary_json_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
         "properties": {
             "destination": {"type": "string"},
-            "total_days": total_days,
+            "total_days": {"type": "integer"},
             "source_structured_by_days": {"type": "boolean"},
             "days": {"type": "array", "items": _day_schema()},
-            "general_tips": _str_or_null(),
+            "general_tips": {"type": "string"},
             "basics": {
                 "type": "array",
                 "items": {
@@ -111,9 +117,9 @@ def itinerary_json_schema(*, total_days_nullable: bool) -> dict[str, Any]:
                     "properties": {
                         "category": {"type": "string"},
                         "name": {"type": "string"},
-                        "vendor": _str_or_null(),
-                        "notes": _str_or_null(),
-                        "affiliate_url": _str_or_null(),
+                        "vendor": {"type": "string"},
+                        "notes": {"type": "string"},
+                        "affiliate_url": {"type": "string"},
                     },
                     "required": [
                         "category",
@@ -136,8 +142,8 @@ def itinerary_json_schema(*, total_days_nullable: bool) -> dict[str, Any]:
     }
 
 
-BLOG_ITINERARY_SCHEMA = itinerary_json_schema(total_days_nullable=False)
-INSTAGRAM_ITINERARY_SCHEMA = itinerary_json_schema(total_days_nullable=True)
+BLOG_ITINERARY_SCHEMA = itinerary_json_schema()
+INSTAGRAM_ITINERARY_SCHEMA = itinerary_json_schema()
 
 OCR_SLIDES_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -158,6 +164,19 @@ OCR_SLIDES_SCHEMA: dict[str, Any] = {
     },
     "required": ["slides"],
 }
+
+
+def coerce_optional_blanks(obj: Any) -> None:
+    """Tras structured outputs: string vacío → null en campos opcionales."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in OPTIONAL_STRING_KEYS and isinstance(value, str) and not value.strip():
+                obj[key] = None
+            else:
+                coerce_optional_blanks(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            coerce_optional_blanks(item)
 
 
 def output_config_for(schema: dict[str, Any]) -> dict[str, Any]:

@@ -90,6 +90,7 @@ from instagram_url import is_instagram_media_url  # noqa: E402
 from itinerary_schema import (  # noqa: E402
     BLOG_ITINERARY_SCHEMA,
     INSTAGRAM_ITINERARY_SCHEMA,
+    coerce_optional_blanks,
     output_config_for,
 )
 from maps_resolve import router as maps_resolve_router  # noqa: E402
@@ -158,7 +159,8 @@ def call_claude(
     """Sync: Anthropic SDK exige `messages.stream` si `max_tokens` implica >10 min (p. ej. 32K).
 
     Returns (itinerary, input_tokens, output_tokens). Structured outputs
-    (`output_config.format`) fuerzan JSON válido y `total_days` number|null en IG.
+    (`output_config.format`) fuerzan JSON válido. Campos opcionales van como string
+    vacío y `coerce_optional_blanks` los pasa a null.
     """
     path = prompt_path or PROMPT_PATH
     prompt = path.read_text(encoding="utf-8").replace("{article_content}", article_text)
@@ -193,7 +195,9 @@ def call_claude(
             "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
         )
     try:
-        return json.loads(raw), input_tokens, output_tokens
+        payload = json.loads(raw)
+        coerce_optional_blanks(payload)
+        return payload, input_tokens, output_tokens
     except json.JSONDecodeError as exc:
         log_kv(
             logger,
