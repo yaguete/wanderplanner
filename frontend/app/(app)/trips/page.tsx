@@ -349,7 +349,9 @@ export default function TripsHomePage() {
                   <Plus className="h-4 w-4" />
                 </div>
                 <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
-                  Nuevo viaje
+                ¿Tienes otro viaje en mente?
+                <br />
+                Empieza a planificarlo
                 </span>
               </button>
             ) : null}
@@ -426,7 +428,9 @@ export default function TripsHomePage() {
                 <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border sm:h-14 sm:w-14">
                   <Plus className="h-4 w-4" />
                 </span>
-                Nuevo viaje
+                ¿Tienes otro viaje en mente?
+                <br />
+                Empieza a planificarlo
               </button>
             ) : null}
           </div>
