@@ -28,7 +28,7 @@ POST_SLUG_RE = re.compile(r"^[a-z0-9-]{1,120}$")
 REF_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 META_MAX_KEYS = 5
 META_VALUE_MAX = 64
-ALLOWED_META_KEYS = frozenset({"target", "affiliate", "surface"})
+ALLOWED_META_KEYS = frozenset({"target", "affiliate", "surface", "onboarding", "sourceKind"})
 ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
     "target": frozenset(
         {"booking", "skyscanner", "getyourguide", "kayak", "stay22", "other"}
@@ -37,6 +37,8 @@ ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
     "surface": frozenset(
         {"task_row", "route_card", "assistant", "flight_search", "inspiration"}
     ),
+    "onboarding": frozenset({"completed", "skipped", "unseen"}),
+    "sourceKind": frozenset({"instagram", "article"}),
 }
 
 _day: date | None = None

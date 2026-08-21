@@ -134,6 +134,19 @@ function source(overrides: Partial<Source> = {}): Source {
 }
 
 {
+  const pool = new Set<string>()
+  for (const name of ["Uganda", "Indonesia", "Perú", "Tailandia", "Kenia", "Marruecos"]) {
+    for (const s of buildAssistantSuggestions(baseTrip({ name, id: `t-${name}` }), [])) {
+      pool.add(s)
+    }
+  }
+  assert.ok(
+    [...pool].some((s) => /niños|cierre el día/i.test(s)),
+    "el registro práctico tiene que poder salir en los chips",
+  )
+}
+
+{
   const spain = buildAssistantSuggestions(baseTrip({ name: "España", countries: ["ES"] }), [])
   assert.ok(!spain[0]!.toLowerCase().includes("visado"))
   assert.ok(spain[0]!.includes("España") || spain.some((s) => s.includes("España")))

@@ -80,6 +80,8 @@ const GUEST_SIGNUP_NUDGE_MS = 3 * 60 * 1000
 type GateValue = {
   /** `true` si la acción puede continuar; `false` si se ha abierto la modal de registro. */
   requireAccount: (reason: GateReason) => boolean
+  /** La modal de registro está en pantalla: el onboarding no debe autoabrir encima. */
+  isOpen: boolean
 }
 
 const RegistrationGateContext = createContext<GateValue | null>(null)
@@ -307,7 +309,10 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     setNotice(`Te hemos reenviado el enlace a ${target}.`)
   }
 
-  const value = useMemo<GateValue>(() => ({ requireAccount }), [requireAccount])
+  const value = useMemo<GateValue>(
+    () => ({ requireAccount, isOpen: reason !== null }),
+    [requireAccount, reason],
+  )
   const copy = reason ? COPY[reason] : null
   const displayPendingEmail = pendingEmail ?? email.trim()
   const loginBlocked = submitting || extractionLoading || (captchaEnabled && !captchaToken)
@@ -513,5 +518,5 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
 export function useRegistrationGate(): GateValue {
   const ctx = useContext(RegistrationGateContext)
   // Fuera del provider (p. ej. rutas públicas) nunca hay puerta que abrir.
-  return ctx ?? { requireAccount: () => true }
+  return ctx ?? { requireAccount: () => true, isOpen: false }
 }

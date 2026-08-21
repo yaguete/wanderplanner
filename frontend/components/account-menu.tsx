@@ -2,7 +2,7 @@
 
 import { forwardRef, useState, type ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { LogOut, MoreHorizontal, Settings, User, UserPlus } from "lucide-react"
+import { Info, LogOut, MoreHorizontal, Settings, User, UserPlus } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuth } from "@/lib/auth-context"
 import { useTrips } from "@/lib/trip-context"
 import { displayNameFor, initialsFor } from "@/lib/user-display"
+import { openOnboarding } from "@/lib/onboarding"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -151,6 +152,11 @@ export function AccountMenu({
             </DropdownMenuItem>
           </>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => openOnboarding()}>
+          <Info className="h-4 w-4" />
+          Cómo funciona
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={
             isGuest

@@ -151,6 +151,8 @@ function genericSuggestions(trip: Trip, sources: Source[]): string[] {
         `¿Qué platos típicos no me puedo perder en ${dest}?`,
         `¿Cuánto presupuesto diario necesito en ${dest}?`,
         `¿Hay vacunas o trámites de salud para ${dest}?`,
+        "¿Hay algo de mi plan que cierre el día que voy?",
+        "¿Mi plan va bien para ir con niños?",
         hasSources
           ? `Sugiéreme otra fuente útil sobre ${dest}`
           : `Sugiéreme una buena fuente sobre ${dest}`,
@@ -162,6 +164,8 @@ function genericSuggestions(trip: Trip, sources: Source[]): string[] {
         "¿Qué platos típicos no me puedo perder?",
         "¿Cuánto presupuesto diario necesito?",
         "¿Hay vacunas o trámites de salud?",
+        "¿Hay algo de mi plan que cierre el día que voy?",
+        "¿Mi plan va bien para ir con niños?",
         hasSources ? "Sugiéreme otra fuente útil" : "Sugiéreme una buena fuente de inspiración",
         "¿Qué me falta para completar el plan?",
       ]

@@ -54,7 +54,7 @@ export const LEGAL = {
    */
   nif: "78726138J",
   address: "",
-  updatedAt: "2026-08-18",
+  updatedAt: "2026-08-21",
 } as const
 
 export const MAE_TRAVEL_ADVICE_URL =
@@ -99,6 +99,6 @@ export const STORAGE_INVENTORY: readonly StorageRow[] = [
     kind: "Almacenamiento local y de sesión",
     purpose:
       "Tus preferencias de pantalla, una caché de lo que ya has visto (mapas, fotos, sugerencias) y, si llegaste desde el artículo de un blog, de cuál era, para no volver a pedirlo",
-    duration: "Desde la pestaña actual hasta 30 días",
+    duration: "Desde la pestaña actual hasta que la borres",
   },
 ] as const

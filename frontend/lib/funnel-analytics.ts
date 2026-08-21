@@ -11,6 +11,7 @@ import { parseRefParam } from "@/lib/partner-trip"
 import { isOwnBookingAffiliateUrl } from "@/lib/booking-search"
 import { FLIGHT_SEARCH_TRACKING_URL } from "@/lib/flight-search"
 import { sourceKindFromUrl } from "@/lib/instagram-url"
+import { readOnboardingFunnelOutcome } from "@/lib/onboarding"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
@@ -307,5 +308,8 @@ export function outbound(
 }
 
 export function recordAccountCreated(override?: Partial<FunnelAttribution>): void {
-  funnel("account_created", mergeFunnelAttribution(override))
+  funnel("account_created", {
+    ...mergeFunnelAttribution(override),
+    meta: { onboarding: readOnboardingFunnelOutcome() },
+  })
 }

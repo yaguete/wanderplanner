@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { TripProvider } from "@/lib/trip-context"
 import { TripChromeProvider } from "@/lib/trip-chrome-context"
 import { RegistrationGateProvider } from "@/components/auth/registration-gate"
+import { OnboardingProvider } from "@/components/onboarding/onboarding-provider"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 function TripsChrome({ children }: { children: React.ReactNode }) {
@@ -37,11 +38,13 @@ export function TripsShell({ children }: { children: React.ReactNode }) {
   return (
     <TripProvider>
       <RegistrationGateProvider>
-        <TripChromeProvider>
-          <TooltipProvider delayDuration={0}>
-            <TripsChrome>{children}</TripsChrome>
-          </TooltipProvider>
-        </TripChromeProvider>
+        <OnboardingProvider>
+          <TripChromeProvider>
+            <TooltipProvider delayDuration={0}>
+              <TripsChrome>{children}</TripsChrome>
+            </TooltipProvider>
+          </TripChromeProvider>
+        </OnboardingProvider>
       </RegistrationGateProvider>
     </TripProvider>
   )

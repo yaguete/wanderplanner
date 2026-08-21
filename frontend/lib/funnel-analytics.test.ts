@@ -148,6 +148,13 @@ assert.equal(dirty.meta.href, undefined)
 assert.equal(dirty.meta.email, undefined)
 assert.equal(dirty.meta.target, "booking")
 
+const onboarded = buildFunnelBody("account_created", {
+  ref: "lacosmopolilla",
+  postSlug: "que-ver-en-austria-ruta-10-dias",
+  meta: { onboarding: "completed" },
+})
+assert.equal(onboarded.meta.onboarding, "completed")
+
 assert.equal(
   classifyOutboundTarget("https://www.booking.com/hotel/es/x.html?aid=1"),
   "booking",

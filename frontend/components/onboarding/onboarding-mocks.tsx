@@ -1,0 +1,384 @@
+import type { ReactNode } from "react"
+import {
+  ArrowDown,
+  Bed,
+  BookOpen,
+  CalendarDays,
+  Car,
+  Home,
+  List,
+  Luggage,
+  Map as MapIcon,
+  MapPin,
+  Route,
+  Ticket,
+  UtensilsCrossed,
+} from "lucide-react"
+import { LandingArticlePhoto } from "@/components/landing/landing-mocks"
+import { ITEM_COLORS, ITEM_DOT_COLORS, ITEM_LABELS } from "@/lib/item-styles"
+import { cn } from "@/lib/utils"
+import type { ItemType } from "@/types/itinerary"
+
+const ITEM_GLOW =
+  "radial-gradient(42% 55% at 16% 12%, hsl(199 89% 48% / 0.28), transparent 68%)," +
+  "radial-gradient(42% 55% at 84% 10%, hsl(262 83% 58% / 0.26), transparent 68%)," +
+  "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
+  "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)"
+
+/** Retrato 67:84. Container queries solo en móvil; desktop, el mismo retrato a escala mayor. */
+export const ONBOARDING_MOCK_FRAME =
+  "relative isolate mx-auto max-sm:aspect-[67/84] max-sm:h-[min(100cqh,calc(100cqw*84/67))] max-sm:w-[min(100cqw,calc(100cqh*67/84))] sm:h-[24rem] sm:w-[19.1rem]"
+
+function OnboardingWell({ children }: { children: ReactNode }) {
+  return (
+    <div className={ONBOARDING_MOCK_FRAME}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -inset-2 -z-10 rounded-[2rem] blur-xl"
+        style={{ background: ITEM_GLOW }}
+      />
+      <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-12px_rgb(0_0_0/0.16)]">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function InkMark({ tone, children }: { tone: "food" | "activity"; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "font-semibold",
+        tone === "food" && "shadow-[inset_0_-0.35em_0_hsl(160_84%_39%/0.16)]",
+        tone === "activity" && "shadow-[inset_0_-0.35em_0_hsl(263_70%_50%/0.16)]",
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+function FuenteTab({
+  label,
+  icon: Icon,
+  active,
+}: {
+  label: string
+  icon: typeof BookOpen
+  active?: boolean
+}) {
+  return (
+    <span
+      className={cn(
+        "relative inline-flex min-h-8 shrink-0 items-center gap-1 pb-2 text-[11px]",
+        active ? "font-semibold text-foreground" : "font-medium text-muted-foreground",
+      )}
+    >
+      <Icon className="h-3 w-3 shrink-0" strokeWidth={active ? 2.25 : 2} aria-hidden />
+      {label}
+      {active ? (
+        <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />
+      ) : null}
+    </span>
+  )
+}
+
+function PillTab({
+  label,
+  icon: Icon,
+  active,
+}: {
+  label: string
+  icon: typeof Route
+  active?: boolean
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-w-0 flex-1 items-center justify-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-medium",
+        active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+      )}
+    >
+      <Icon className="h-3 w-3 shrink-0" aria-hidden />
+      <span className={cn("truncate", !active && "hidden")}>{label}</span>
+    </span>
+  )
+}
+
+function CompactItem({
+  dot,
+  name,
+  meta,
+}: {
+  dot: string
+  name: string
+  meta?: string
+}) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-border bg-background px-2.5 py-2">
+      <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", dot)} />
+      <div className="min-w-0">
+        <p className="truncate text-[12px] font-medium leading-4 text-foreground">{name}</p>
+        {meta ? (
+          <p className="truncate text-[10px] leading-4 text-muted-foreground">{meta}</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+const PLANNED_ICONS = {
+  food: UtensilsCrossed,
+  activity: MapPin,
+  stay: Home,
+} as const
+
+function PlannedCard({
+  type,
+  name,
+  meta,
+}: {
+  type: "food" | "activity" | "stay"
+  name: string
+  meta: string
+}) {
+  const Icon = PLANNED_ICONS[type]
+  const colors = ITEM_COLORS[type]
+  return (
+    <div className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+      <div className="flex items-center gap-2.5 px-2.5 py-2">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
+          <Icon className={cn("h-3.5 w-3.5", colors.text)} aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-bold leading-4 tracking-tight text-foreground">
+            {name}
+          </p>
+          <p className="truncate text-[10px] leading-4 text-muted-foreground">
+            <span className="font-medium">{ITEM_LABELS[type as ItemType]}</span> {meta}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Slide 1: de un artículo externo a un viaje con días. */
+export function MockOnboardingMecanismo() {
+  return (
+    <OnboardingWell>
+      <div className="pointer-events-none flex h-full select-none flex-col p-3" aria-hidden>
+        <div className="overflow-hidden rounded-lg border border-border bg-background">
+          <LandingArticlePhoto className="h-16 w-full" />
+          <div className="px-2.5 py-2">
+            <p className="truncate text-[12px] font-semibold leading-4 text-foreground">
+              Bali y Java en 12 días
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              unblogdeviajes.com/bali-java-12-dias
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-center py-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
+            <ArrowDown className="h-3.5 w-3.5" strokeWidth={2} />
+          </span>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background p-2.5">
+          <p className="text-[12px] font-semibold tracking-tight text-foreground">Tu viaje</p>
+          <p className="text-[10px] text-muted-foreground">12 días · 2 viajeros</p>
+          <div className="mt-2 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Día 1 · Ubud
+            </p>
+            <CompactItem
+              dot={ITEM_DOT_COLORS.food}
+              name="Nasi campur en un warung"
+            />
+            <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Día 5 · Bromo
+            </p>
+            <CompactItem
+              dot={ITEM_DOT_COLORS.activity}
+              name="Amanecer en el volcán"
+            />
+          </div>
+        </div>
+      </div>
+    </OnboardingWell>
+  )
+}
+
+/** Slide 2: dentro de Fuentes, Crónica se destila en Ruta. */
+export function MockOnboardingFuentes() {
+  return (
+    <OnboardingWell>
+      <div className="pointer-events-none flex h-full select-none flex-col p-3" aria-hidden>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex min-h-6 items-center rounded-full bg-foreground px-2 text-[10px] font-medium text-background">
+            @unblogdeviajes
+          </span>
+        </div>
+        <div className="mt-2 flex items-end gap-3">
+          <FuenteTab label="Crónica" icon={BookOpen} />
+          <FuenteTab label="Ruta" icon={MapPin} active />
+        </div>
+        <p className="mt-2.5 text-[12px] leading-4 text-foreground">
+          En Ubud, un <InkMark tone="food">nasi campur en un warung</InkMark> que no sale en la
+          guía. Y el día 5, madrugón para el{" "}
+          <InkMark tone="activity">amanecer en el Bromo</InkMark>.
+        </p>
+        <div className="flex justify-center py-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground">
+            <ArrowDown className="h-3.5 w-3.5" strokeWidth={2} />
+          </span>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+          <CompactItem
+            dot={ITEM_DOT_COLORS.food}
+            name="Nasi campur en un warung de Ubud"
+            meta="vía @unblogdeviajes"
+          />
+          <CompactItem
+            dot={ITEM_DOT_COLORS.activity}
+            name="Amanecer en el volcán Bromo"
+            meta="vía @unblogdeviajes"
+          />
+        </div>
+      </div>
+    </OnboardingWell>
+  )
+}
+
+/** Slide 3: Mi viaje de verdad — píldoras, no pestañas subrayadas. */
+export function MockOnboardingMiViaje() {
+  return (
+    <OnboardingWell>
+      <div
+        className="pointer-events-none flex h-full select-none flex-col bg-background p-2.5"
+        aria-hidden
+      >
+        <div>
+          <p className="text-[13px] font-semibold tracking-tight text-foreground">
+            Bali y Java en 12 días
+          </p>
+          <p className="text-[10px] text-muted-foreground">14 – 25 marzo · 2 viajeros</p>
+        </div>
+        <div className="mt-2 inline-flex w-full items-center rounded-lg bg-muted p-0.5">
+          <PillTab label="Ruta" icon={Route} active />
+          <PillTab label="Actividades" icon={Ticket} />
+          <PillTab label="Alojamientos" icon={Bed} />
+          <PillTab label="Transporte" icon={Car} />
+          <PillTab label="Básicos" icon={Luggage} />
+        </div>
+        <div className="mt-2 inline-flex w-fit items-center rounded-lg bg-muted p-0.5">
+          <span className="inline-flex items-center gap-1 rounded-md bg-background px-2 py-1 text-[10px] font-medium text-foreground shadow-sm">
+            <List className="h-3 w-3" aria-hidden />
+            Lista
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+            <CalendarDays className="h-3 w-3" aria-hidden />
+            Calendario
+          </span>
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+            <MapIcon className="h-3 w-3" aria-hidden />
+            Mapa
+          </span>
+        </div>
+        <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Día 5 · Ubud
+        </p>
+        <div className="mt-1.5 min-h-0 flex-1 space-y-1.5 overflow-hidden">
+          <PlannedCard
+            type="food"
+            name="Nasi campur en un warung de Ubud"
+            meta="vía @unblogdeviajes"
+          />
+          <PlannedCard
+            type="activity"
+            name="Amanecer en el volcán Bromo"
+            meta="vía @unblogdeviajes"
+          />
+          <PlannedCard type="stay" name="Casa entre arrozales" meta="añadido por ti" />
+        </div>
+        <div className="mt-2 border-t border-border pt-1.5 text-[11px]">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="truncate text-muted-foreground">Reservar hotel · 3 noches</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">180 €</span>
+          </div>
+          <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-border pt-1.5">
+            <span className="font-semibold text-foreground">Total estimado</span>
+            <span className="shrink-0 font-semibold tabular-nums">890 €</span>
+          </div>
+        </div>
+      </div>
+    </OnboardingWell>
+  )
+}
+
+function UserBubble({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[90%] rounded-2xl bg-muted px-2.5 py-1.5 text-[12px] leading-4 text-foreground">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function AssistantTurn({
+  children,
+  cite,
+}: {
+  children: ReactNode
+  cite: string
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[12px] leading-4 text-foreground">{children}</p>
+      <p className="text-[10px] leading-4 text-muted-foreground">{cite}</p>
+    </div>
+  )
+}
+
+/** Slide 4: chat real — burbuja a la derecha, respuesta a ancho, chips abajo. */
+export function MockOnboardingAssistant() {
+  return (
+    <OnboardingWell>
+      <div className="pointer-events-none flex h-full select-none flex-col bg-background" aria-hidden>
+        <p className="shrink-0 px-3 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Asistente
+        </p>
+        <div className="mt-2 min-h-0 flex-1 space-y-3 overflow-hidden px-3">
+          <UserBubble>¿Necesito visado?</UserBubble>
+          <AssistantTurn cite="Ficha del MAE, 3 de marzo.">
+            Visa de llegada de pago, 30 días, y el pasaporte con 6 meses.
+          </AssistantTurn>
+          <UserBubble>¿Me cuadra el día 5?</UserBubble>
+          <AssistantTurn cite="Calendario oficial de Bali.">
+            Tu día 5 cae en Nyepi: la isla entera para 24 h, aeropuerto incluido. Tienes el Bromo
+            esa mañana.
+          </AssistantTurn>
+        </div>
+        <div className="shrink-0 space-y-1.5 px-3 pb-3 pt-2">
+          <div className="flex flex-col items-start gap-1.5">
+            <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-primary">
+              ¿Va bien con niños?
+            </span>
+            <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-primary">
+              ¿Hay vacunas?
+            </span>
+          </div>
+          <div className="flex items-center justify-between rounded-2xl border border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
+            Pregunta sobre tu viaje…
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+              ↑
+            </span>
+          </div>
+        </div>
+      </div>
+    </OnboardingWell>
+  )
+}

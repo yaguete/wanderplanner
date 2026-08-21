@@ -39,10 +39,11 @@ const DialogContent = React.forwardRef<
      * Desktop (`sm:`): restaura el diálogo centrado estándar.
      */
     fullscreenOnMobile?: boolean
+    overlayClassName?: string
   }
->(({ className, children, hideClose = false, fullscreenOnMobile = false, onOpenAutoFocus, ...props }, ref) => (
+>(({ className, children, hideClose = false, fullscreenOnMobile = false, overlayClassName, onOpenAutoFocus, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
