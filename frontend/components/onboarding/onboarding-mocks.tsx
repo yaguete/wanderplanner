@@ -25,9 +25,12 @@ const ITEM_GLOW =
   "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
   "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)"
 
-/** Retrato 67:84. Container queries solo en móvil; desktop, el mismo retrato a escala mayor. */
+/**
+ * Móvil: apaisado, llena el hueco (el retrato se quedaba en miniatura).
+ * Desktop: retrato fijo 67:84.
+ */
 export const ONBOARDING_MOCK_FRAME =
-  "relative isolate mx-auto max-sm:aspect-[67/84] max-sm:h-[min(100cqh,calc(100cqw*84/67))] max-sm:w-[min(100cqw,calc(100cqh*67/84))] sm:h-[24rem] sm:w-[19.1rem]"
+  "relative isolate mx-auto h-full w-full sm:h-[24rem] sm:w-[19.1rem] sm:max-w-[19.1rem] sm:flex-none"
 
 function OnboardingWell({ children }: { children: ReactNode }) {
   return (
@@ -197,13 +200,15 @@ export function MockOnboardingMecanismo() {
               dot={ITEM_DOT_COLORS.food}
               name="Nasi campur en un warung"
             />
-            <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground max-sm:hidden">
               Día 5 · Bromo
             </p>
-            <CompactItem
-              dot={ITEM_DOT_COLORS.activity}
-              name="Amanecer en el volcán"
-            />
+            <div className="max-sm:hidden">
+              <CompactItem
+                dot={ITEM_DOT_COLORS.activity}
+                name="Amanecer en el volcán"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -241,11 +246,13 @@ export function MockOnboardingFuentes() {
             name="Nasi campur en un warung de Ubud"
             meta="vía @unblogdeviajes"
           />
-          <CompactItem
-            dot={ITEM_DOT_COLORS.activity}
-            name="Amanecer en el volcán Bromo"
-            meta="vía @unblogdeviajes"
-          />
+          <div className="max-sm:hidden">
+            <CompactItem
+              dot={ITEM_DOT_COLORS.activity}
+              name="Amanecer en el volcán Bromo"
+              meta="vía @unblogdeviajes"
+            />
+          </div>
         </div>
       </div>
     </OnboardingWell>
@@ -296,12 +303,16 @@ export function MockOnboardingMiViaje() {
             name="Nasi campur en un warung de Ubud"
             meta="vía @unblogdeviajes"
           />
-          <PlannedCard
-            type="activity"
-            name="Amanecer en el volcán Bromo"
-            meta="vía @unblogdeviajes"
-          />
-          <PlannedCard type="stay" name="Casa entre arrozales" meta="añadido por ti" />
+          <div className="max-sm:hidden">
+            <PlannedCard
+              type="activity"
+              name="Amanecer en el volcán Bromo"
+              meta="vía @unblogdeviajes"
+            />
+          </div>
+          <div className="max-sm:hidden">
+            <PlannedCard type="stay" name="Casa entre arrozales" meta="añadido por ti" />
+          </div>
         </div>
         <div className="mt-2 border-t border-border pt-1.5 text-[11px]">
           <div className="flex items-baseline justify-between gap-2">
@@ -356,14 +367,16 @@ export function MockOnboardingAssistant() {
           <AssistantTurn cite="Ficha del MAE, 3 de marzo.">
             Visa de llegada de pago, 30 días, y el pasaporte con 6 meses.
           </AssistantTurn>
-          <UserBubble>¿Me cuadra el día 5?</UserBubble>
-          <AssistantTurn cite="Calendario oficial de Bali.">
-            Tu día 5 cae en Nyepi: la isla entera para 24 h, aeropuerto incluido. Tienes el Bromo
-            esa mañana.
-          </AssistantTurn>
+          <div className="max-sm:hidden">
+            <UserBubble>¿Me cuadra el día 5?</UserBubble>
+            <AssistantTurn cite="Calendario oficial de Bali.">
+              Tu día 5 cae en Nyepi: la isla entera para 24 h, aeropuerto incluido. Tienes el Bromo
+              esa mañana.
+            </AssistantTurn>
+          </div>
         </div>
         <div className="shrink-0 space-y-1.5 px-3 pb-3 pt-2">
-          <div className="flex flex-col items-start gap-1.5">
+          <div className="flex flex-wrap items-start gap-1.5">
             <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-primary">
               ¿Va bien con niños?
             </span>

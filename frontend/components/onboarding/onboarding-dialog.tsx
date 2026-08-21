@@ -195,7 +195,7 @@ export function OnboardingDialog({
                         </>
                       )}
                     </div>
-                    <div className="order-1 flex min-h-0 min-w-0 flex-1 items-center justify-center p-4 [container-type:size] sm:order-2 sm:flex-none sm:p-6 sm:[container-type:normal]">
+                    <div className="order-1 flex min-h-[11rem] min-w-0 flex-1 items-stretch justify-center px-1 py-3 sm:order-2 sm:min-h-0 sm:flex-none sm:items-center sm:p-6">
                       <Mock />
                     </div>
                   </div>

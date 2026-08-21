@@ -14,7 +14,7 @@ export function AiTransferGate({
     <div className="px-3 py-3">
       <p className="text-sm font-medium tracking-tight">Antes de empezar</p>
       <p className="mt-1.5 text-pretty text-xs leading-5 text-foreground/70">
-        Para responderte, el asistente envía los información de tu viaje a proveedores de IA fuera
+        Para poder responderte, el asistente envía información de tu viaje a proveedores de IA fuera
         de la Unión Europea. No enviaremos tu nombre ni tu correo electrónico.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
