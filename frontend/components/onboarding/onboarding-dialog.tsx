@@ -177,7 +177,7 @@ export function OnboardingDialog({
                           <DialogDescription className="mt-1.5 text-pretty text-sm leading-6 text-foreground/75 sm:mt-2">
                             {item.body}
                           </DialogDescription>
-                          <p className="mt-1.5 text-pretty text-sm leading-5 text-muted-foreground sm:mt-2">
+                          <p className="mt-1.5 hidden text-pretty text-sm leading-5 text-muted-foreground sm:mt-2 sm:block">
                             {item.footer}
                           </p>
                         </>
@@ -189,7 +189,7 @@ export function OnboardingDialog({
                           <p className="mt-1.5 text-pretty text-sm leading-6 text-foreground/75 sm:mt-2">
                             {item.body}
                           </p>
-                          <p className="mt-1.5 text-pretty text-sm leading-5 text-muted-foreground sm:mt-2">
+                          <p className="mt-1.5 hidden text-pretty text-sm leading-5 text-muted-foreground sm:mt-2 sm:block">
                             {item.footer}
                           </p>
                         </>
