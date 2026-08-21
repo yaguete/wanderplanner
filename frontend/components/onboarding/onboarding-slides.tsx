@@ -14,7 +14,7 @@ export type OnboardingSlide = {
   /** Nombre del panel junto a la ardilla (slides 2–4). Mismo lockup que el wordmark. */
   kicker?: string
   title: string
-  body: string
+  body: ReactNode
   footer: ReactNode
   Mock: ComponentType
 }
