@@ -7,7 +7,10 @@ export function displayNameFor(
   profile: TravelerProfile | null,
 ): string {
   if (profile?.displayName?.trim()) return profile.displayName.trim()
-  const metaName = (user?.user_metadata?.display_name as string | undefined)?.trim()
+  const meta = user?.user_metadata
+  const metaName = [meta?.display_name, meta?.full_name, meta?.name]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .find(Boolean)
   if (metaName) return metaName
   if (user?.is_anonymous) return "Invitado"
   const email = user?.email?.trim()

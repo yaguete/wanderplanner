@@ -50,6 +50,8 @@
     "test:guest-trip-claim": "tsx lib/guest-trip-claim.test.ts",
     "test:account-security": "tsx lib/account-security.test.ts",
     "test:auth-errors": "tsx lib/auth-errors.test.ts",
+    "test:auth-session-persist": "tsx lib/auth-session-persist.test.ts",
+    "test:auth-google": "tsx lib/auth-google.test.ts",
     "test:onboarding": "tsx lib/onboarding.test.ts"
   },
   "dependencies": {
@@ -89,6 +91,7 @@
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cookie": "^1.0.2",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",

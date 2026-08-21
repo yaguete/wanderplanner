@@ -58,6 +58,8 @@ jobs:
       - run: npm run test:start-session
       - run: npm run test:account-security
       - run: npm run test:auth-errors
+      - run: npm run test:auth-session-persist
+      - run: npm run test:auth-google
       - run: npm run test:onboarding
       - run: npm run test:itinerary-calendar
       - run: npm run test:itinerary-utils

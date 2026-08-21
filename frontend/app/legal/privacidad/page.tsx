@@ -23,7 +23,7 @@ const TOC = [
 
 const DATA_ROWS: readonly (readonly string[])[] = [
   [
-    "Correo y contraseña",
+    "Correo y contraseña, o tu cuenta de Google",
     "Tener una cuenta y poder entrar. Si entras como invitado, no pedimos ninguno de los dos.",
     "Contrato",
   ],
@@ -102,6 +102,10 @@ export default function PrivacidadPage() {
           web), Fly.io (servidor, en Ámsterdam), Cloudflare (comprobar que no eres un
           robot), Tavily (buscar artículos), Mapbox (mapas y lugares), Google (fotos de
           sitios), Wikimedia (fotos de sitios) y Unsplash (portadas).
+        </p>
+        <p>
+          Si eliges entrar con Google, Google sabe que usas WanderPlanner y nos devuelve tu
+          nombre, tu correo y tu foto de perfil; lo trata según su propia política.
         </p>
         <p>
           Para convertir artículos y publicaciones en itinerarios y para el asistente usamos

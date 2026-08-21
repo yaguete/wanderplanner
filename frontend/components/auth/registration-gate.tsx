@@ -28,7 +28,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
+import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { useAuth } from "@/lib/auth-context"
+import { persistModeFromRemember } from "@/lib/auth-session-persist"
+import { writeSessionPersistMode } from "@/lib/supabase/client"
 import { useTrips } from "@/lib/trip-context"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -103,6 +107,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [passwordRepeat, setPasswordRepeat] = useState("")
+  const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -184,6 +189,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
       return
     }
     setSubmitting(true)
+    writeSessionPersistMode(persistModeFromRemember(rememberMe))
     const result = await upgradeGuest({
       email: email.trim(),
       password,
@@ -242,6 +248,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
       setError(prepared.error)
       return
     }
+    writeSessionPersistMode(persistModeFromRemember(rememberMe))
     const result = await signIn(email.trim(), password, captchaToken ?? undefined)
     if (!result.ok) {
       clearStash()
@@ -401,6 +408,12 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                   </button>
                 </div>
 
+                <RememberMeCheckbox
+                  id="gate-login-remember-me"
+                  checked={rememberMe}
+                  onCheckedChange={setRememberMe}
+                />
+
                 {captchaEnabled ? (
                   <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptchaToken} />
                 ) : null}
@@ -415,6 +428,28 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                 <Button type="submit" className="h-11" disabled={loginBlocked}>
                   {submitting ? "Entrando…" : "Entrar y guardar mi viaje"}
                 </Button>
+                <GoogleSignInButton
+                  next="/trips"
+                  rememberMe={rememberMe}
+                  claimUserId={user?.id}
+                  disabled={submitting || extractionLoading}
+                  onError={(message) => setError(message || null)}
+                  beforeRedirect={async () => {
+                    if (extractionLoading) {
+                      setError("Espera a que termine de leer el artículo.")
+                      return false
+                    }
+                    const flushed = await flushPendingSync()
+                    if (!flushed) {
+                      setError("No hemos podido guardar los últimos cambios. Inténtalo de nuevo.")
+                      return false
+                    }
+                    return true
+                  }}
+                  onKeepClaim={() => {
+                    keepClaimRef.current = true
+                  }}
+                />
                 <Button
                   type="button"
                   variant="ghost"
@@ -485,12 +520,40 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                   />
                 </div>
 
+                <RememberMeCheckbox
+                  id="gate-remember-me"
+                  checked={rememberMe}
+                  onCheckedChange={setRememberMe}
+                />
+
                 {error ? <p className="text-sm text-destructive">{error}</p> : null}
                 {notice ? <p className="text-sm text-muted-foreground">{notice}</p> : null}
 
                 <Button type="submit" className="h-11" disabled={submitting}>
                   {submitting ? "Guardando…" : "Crear cuenta y guardar mi viaje"}
                 </Button>
+                <GoogleSignInButton
+                  next="/trips"
+                  rememberMe={rememberMe}
+                  claimUserId={user?.id}
+                  disabled={submitting || extractionLoading}
+                  onError={(message) => setError(message || null)}
+                  beforeRedirect={async () => {
+                    if (extractionLoading) {
+                      setError("Espera a que termine de leer el artículo.")
+                      return false
+                    }
+                    const flushed = await flushPendingSync()
+                    if (!flushed) {
+                      setError("No hemos podido guardar los últimos cambios. Inténtalo de nuevo.")
+                      return false
+                    }
+                    return true
+                  }}
+                  onKeepClaim={() => {
+                    keepClaimRef.current = true
+                  }}
+                />
                 <Button
                   type="button"
                   variant="ghost"

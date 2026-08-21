@@ -1,5 +1,10 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import {
+  SESSION_PERSIST_COOKIE,
+  applyPersistMode,
+  parsePersistMode,
+} from "@/lib/auth-session-persist"
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
@@ -12,6 +17,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return response
 
+  const mode = parsePersistMode(request.cookies.get(SESSION_PERSIST_COOKIE)?.value)
+
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookies: {
       getAll() {
@@ -23,7 +30,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         }
         response = NextResponse.next({ request })
         for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options)
+          response.cookies.set(name, value, applyPersistMode(mode, options ?? {}))
         }
       },
     },

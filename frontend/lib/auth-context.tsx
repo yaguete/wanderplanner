@@ -19,7 +19,10 @@ import {
   useState,
 } from "react"
 import type { Session, User } from "@supabase/supabase-js"
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
+import { clearSessionPersistMode, createClient, isSupabaseConfigured, writeSessionPersistMode } from "@/lib/supabase/client"
+import { persistModeFromRemember } from "@/lib/auth-session-persist"
+import { isRecentlyCreatedUser, takeOAuthFunnelCheck } from "@/lib/auth-google"
+import { recordAccountCreated } from "@/lib/funnel-analytics"
 import {
   loadFavoriteReferences,
   loadProfile,
@@ -140,19 +143,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = createClient()
     let active = true
 
+    const applySession = (nextSession: Session | null) => {
+      const nextUser = nextSession?.user ?? null
+      setSession(nextSession)
+      setUser(nextUser)
+      setIsLoading(false)
+      if (
+        nextUser &&
+        !nextUser.is_anonymous &&
+        takeOAuthFunnelCheck() &&
+        isRecentlyCreatedUser(nextUser)
+      ) {
+        recordAccountCreated()
+      }
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-      setIsLoading(false)
+      applySession(data.session)
     })
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession)
-      setUser(nextSession?.user ?? null)
-      setIsLoading(false)
+      applySession(nextSession)
     })
 
     return () => {
@@ -317,6 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!configured) return { ok: false, error: "Supabase no está configurado." }
       try {
         const supabase = createClient()
+        writeSessionPersistMode(persistModeFromRemember(true))
         const { data, error } = await supabase.auth.signInAnonymously({
           options: {
             ...(options?.referrer ? { data: { signup_referrer: options.referrer } } : {}),
@@ -447,6 +462,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!configured) return
     const supabase = createClient()
     await supabase.auth.signOut()
+    clearSessionPersistMode()
     clearStash()
     clearActiveConversationPointers()
     setProfile(null)
@@ -506,6 +522,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       await supabase.auth.signOut({ scope: "local" })
+      clearSessionPersistMode()
       clearActiveConversationPointers()
       clearStash()
       setProfile(null)

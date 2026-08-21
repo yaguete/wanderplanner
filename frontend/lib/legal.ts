@@ -79,7 +79,13 @@ export const STORAGE_INVENTORY: readonly StorageRow[] = [
     name: "sb-…",
     kind: "Cookie",
     purpose: "Mantener tu sesión iniciada, tengas cuenta o entres como invitado",
-    duration: "Hasta que cierras sesión",
+    duration: "Hasta que cierras el navegador, o hasta que cierras sesión si marcaste Recuérdame",
+  },
+  {
+    name: "wp-session-persist",
+    kind: "Cookie",
+    purpose: "Recordar si quieres seguir con la sesión abierta en este dispositivo",
+    duration: "400 días",
   },
   {
     name: "wp-consent",

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
+import { hasPasswordIdentity } from "@/lib/auth-google"
 import {
   confirmationNameFor,
   matchesAccountConfirmation,
@@ -47,6 +48,7 @@ export default function AccountSettingsPage() {
   const captchaEnabled = isTurnstileEnabled()
   const confirmationName = confirmationNameFor(user, profile)
   const deleteMatches = matchesAccountConfirmation(deleteTyped, confirmationName)
+  const canChangePassword = hasPasswordIdentity(user)
 
   useEffect(() => {
     if (!isLoading && isGuest) router.replace("/trips")
@@ -142,112 +144,128 @@ export default function AccountSettingsPage() {
 
               <section>
                 <h2 className="text-base font-medium text-foreground">Contraseña</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Para cambiarla, confirma la actual y escribe la nueva dos veces.
-                </p>
-                <form onSubmit={handlePasswordSubmit} className="mt-4 flex flex-col gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="current-password">Contraseña actual</Label>
-                    <Input
-                      id="current-password"
-                      type="password"
-                      autoComplete="current-password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                    />
+                {canChangePassword ? (
+                  <>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Para cambiarla, confirma la actual y escribe la nueva dos veces.
+                    </p>
+                    <form onSubmit={handlePasswordSubmit} className="mt-4 flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="current-password">Contraseña actual</Label>
+                        <Input
+                          id="current-password"
+                          type="password"
+                          autoComplete="current-password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                        />
+                        <Link
+                          href="/forgot-password"
+                          className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                        >
+                          ¿No la recuerdas?
+                        </Link>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="new-password">Nueva contraseña</Label>
+                        <Input
+                          id="new-password"
+                          type="password"
+                          autoComplete="new-password"
+                          minLength={6}
+                          value={nextPassword}
+                          onChange={(e) => setNextPassword(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="repeat-password">Repetir nueva contraseña</Label>
+                        <Input
+                          id="repeat-password"
+                          type="password"
+                          autoComplete="new-password"
+                          minLength={6}
+                          value={repeatPassword}
+                          onChange={(e) => setRepeatPassword(e.target.value)}
+                        />
+                      </div>
+
+                      {captchaEnabled ? (
+                        <Turnstile
+                          key={captchaKey}
+                          resetKey={captchaKey}
+                          appearance="interaction-only"
+                          onToken={setCaptchaToken}
+                        />
+                      ) : null}
+
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-11 w-full sm:w-auto sm:px-4"
+                          disabled={savingPassword}
+                          onClick={() => router.push("/trips")}
+                        >
+                          Cancelar y volver
+                        </Button>
+                        <Button
+                          type="submit"
+                          className="h-11 w-full sm:w-auto sm:px-6"
+                          disabled={savingPassword || (captchaEnabled && !captchaToken)}
+                        >
+                          {savingPassword ? "Guardando…" : "Cambiar contraseña"}
+                        </Button>
+                      </div>
+                    </form>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Entras con Google. Si quieres poder entrar también con contraseña,{" "}
                     <Link
                       href="/forgot-password"
-                      className="self-start text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                      className="font-medium text-foreground underline underline-offset-4"
                     >
-                      ¿No la recuerdas?
+                      créate una
                     </Link>
-                  </div>
+                    .
+                  </p>
+                )}
+              </section>
 
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="new-password">Nueva contraseña</Label>
-                    <Input
-                      id="new-password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={6}
-                      value={nextPassword}
-                      onChange={(e) => setNextPassword(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="repeat-password">Repetir nueva contraseña</Label>
-                    <Input
-                      id="repeat-password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={6}
-                      value={repeatPassword}
-                      onChange={(e) => setRepeatPassword(e.target.value)}
-                    />
-                  </div>
-
-                  {captchaEnabled ? (
-                    <Turnstile
-                      key={captchaKey}
-                      resetKey={captchaKey}
-                      appearance="interaction-only"
-                      onToken={setCaptchaToken}
-                    />
-                  ) : null}
-
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <button
+              <section>
+                <button
+                  type="button"
+                  className="inline-flex h-11 w-full items-center justify-center gap-1 text-sm font-medium text-destructive hover:text-destructive/90 sm:h-auto sm:w-auto sm:justify-start"
+                  aria-expanded={showDelete}
+                  onClick={() => setShowDelete((open) => !open)}
+                >
+                  Borrar cuenta
+                  <ChevronDown
+                    className={cn("size-3.5 transition-transform", showDelete && "rotate-180")}
+                    aria-hidden
+                  />
+                </button>
+                {showDelete ? (
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste y todas tus
+                      conversaciones con el asistente. Esta acción no se puede deshacer.
+                    </p>
+                    <Button
                       type="button"
-                      className="inline-flex h-11 w-full items-center justify-center gap-1 text-sm font-medium text-destructive hover:text-destructive/90 sm:h-auto sm:w-auto sm:justify-start"
-                      aria-expanded={showDelete}
-                      onClick={() => setShowDelete((open) => !open)}
+                      variant="destructive"
+                      className="mt-4 h-11 w-full sm:w-auto sm:px-6"
+                      onClick={() => {
+                        setDeleteTyped("")
+                        setDeleteOpen(true)
+                      }}
                     >
                       Borrar cuenta
-                      <ChevronDown
-                        className={cn("size-3.5 transition-transform", showDelete && "rotate-180")}
-                        aria-hidden
-                      />
-                    </button>
-                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="h-11 w-full sm:w-auto sm:px-4"
-                        disabled={savingPassword}
-                        onClick={() => router.push("/trips")}
-                      >
-                        Cancelar y volver
-                      </Button>
-                      <Button
-                        type="submit"
-                        className="h-11 w-full sm:w-auto sm:px-6"
-                        disabled={savingPassword || (captchaEnabled && !captchaToken)}
-                      >
-                        {savingPassword ? "Guardando…" : "Cambiar contraseña"}
-                      </Button>
-                    </div>
+                    </Button>
                   </div>
-                  {showDelete ? (
-                    <div>
-                      <p className="text-sm text-muted-foreground">
-                        Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste y todas tus
-                        conversaciones con el asistente. Esta acción no se puede deshacer.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        className="mt-4 h-11 w-full sm:w-auto sm:px-6"
-                        onClick={() => {
-                          setDeleteTyped("")
-                          setDeleteOpen(true)
-                        }}
-                      >
-                        Borrar cuenta
-                      </Button>
-                    </div>
-                  ) : null}
-                </form>
+                ) : null}
               </section>
             </div>
           )}

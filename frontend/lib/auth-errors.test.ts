@@ -1,5 +1,15 @@
 import assert from "node:assert/strict"
-import { AUTH_ERROR_FALLBACK, AUTH_EMAIL_EXISTS, authErrorMessage, isDuplicateSignUp } from "./auth-errors"
+import {
+  AUTH_CALLBACK_CANCELLED,
+  AUTH_CALLBACK_GENERIC,
+  AUTH_CALLBACK_PROVIDER,
+  AUTH_ERROR_FALLBACK,
+  AUTH_EMAIL_EXISTS,
+  authCallbackErrorCode,
+  authCallbackErrorMessage,
+  authErrorMessage,
+  isDuplicateSignUp,
+} from "./auth-errors"
 
 assert.equal(
   authErrorMessage({ message: "A user with this email address has already been registered" }),
@@ -62,6 +72,21 @@ assert.equal(authErrorMessage({ message: "" }), AUTH_ERROR_FALLBACK)
 
 assert.equal(authErrorMessage("No hay sesión."), "No hay sesión.")
 assert.equal(authErrorMessage(new Error("Supabase no está configurado.")), "Supabase no está configurado.")
+
+assert.equal(authErrorMessage({ code: "access_denied" }), AUTH_CALLBACK_CANCELLED)
+assert.equal(
+  authErrorMessage({ message: "Unsupported provider: provider is not enabled" }),
+  AUTH_CALLBACK_PROVIDER,
+)
+
+assert.equal(authCallbackErrorCode("access_denied"), "cancelled")
+assert.equal(authCallbackErrorCode("server_error", "provider is not enabled"), "provider")
+assert.equal(authCallbackErrorCode("server_error"), "auth")
+assert.equal(authCallbackErrorMessage("cancelled"), AUTH_CALLBACK_CANCELLED)
+assert.equal(authCallbackErrorMessage("provider"), AUTH_CALLBACK_PROVIDER)
+assert.equal(authCallbackErrorMessage("auth"), AUTH_CALLBACK_GENERIC)
+assert.equal(authCallbackErrorMessage("nope"), null)
+assert.equal(authCallbackErrorMessage(null), null)
 
 assert.equal(isDuplicateSignUp({ user: { identities: [] }, session: null }), true)
 assert.equal(isDuplicateSignUp({ user: { identities: [{ id: "1" }] }, session: null }), false)

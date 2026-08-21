@@ -58,6 +58,20 @@ assert.equal(
   "Ana",
 )
 assert.equal(
+  confirmationNameFor(
+    user({ email: "a@b.com", user_metadata: { full_name: "Ada Lovelace" } }),
+    profile(null),
+  ),
+  "Ada Lovelace",
+)
+assert.equal(
+  confirmationNameFor(
+    user({ email: "a@b.com", user_metadata: { name: "Grace" } }),
+    profile(null),
+  ),
+  "Grace",
+)
+assert.equal(
   confirmationNameFor(user({ is_anonymous: true }), null),
   "Invitado",
 )

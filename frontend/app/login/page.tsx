@@ -8,9 +8,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
+import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
-import { createClient } from "@/lib/supabase/client"
+import { authCallbackErrorMessage } from "@/lib/auth-errors"
+import { persistModeFromRemember } from "@/lib/auth-session-persist"
+import { createClient, writeSessionPersistMode } from "@/lib/supabase/client"
 import { clearStash, prepareGuestTripClaim } from "@/lib/guest-trip-claim"
 
 function LoginForm() {
@@ -21,7 +25,10 @@ function LoginForm() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [rememberMe, setRememberMe] = useState(true)
+  const [error, setError] = useState<string | null>(() =>
+    authCallbackErrorMessage(searchParams.get("error")),
+  )
   const [submitting, setSubmitting] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
@@ -98,6 +105,7 @@ function LoginForm() {
       setSubmitting(false)
       return
     }
+    writeSessionPersistMode(persistModeFromRemember(rememberMe))
     const result = await signIn(email.trim(), password, captchaToken ?? undefined)
     setSubmitting(false)
     if (!result.ok) {
@@ -163,6 +171,12 @@ function LoginForm() {
           </Link>
         </div>
 
+        <RememberMeCheckbox
+          id="remember-me"
+          checked={rememberMe}
+          onCheckedChange={setRememberMe}
+        />
+
         {hasGuestTrip ? (
           <label className="flex items-start gap-2.5 text-left text-sm leading-snug">
             <Checkbox
@@ -185,6 +199,14 @@ function LoginForm() {
         >
           {submitting ? "Entrando…" : willClaim ? "Entrar y guardar mi viaje" : "Entrar"}
         </Button>
+
+        <GoogleSignInButton
+          next={next}
+          rememberMe={rememberMe}
+          claimUserId={willClaim ? user?.id : undefined}
+          disabled={submitting}
+          onError={(message) => setError(message || null)}
+        />
       </form>
     </AuthShell>
   )

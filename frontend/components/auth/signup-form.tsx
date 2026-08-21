@@ -12,10 +12,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
+import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { TravelerProfileFields } from "@/components/auth/traveler-profile-fields"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
+import { persistModeFromRemember } from "@/lib/auth-session-persist"
+import { writeSessionPersistMode } from "@/lib/supabase/client"
 import { recordAccountCreated } from "@/lib/funnel-analytics"
 import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
 import { cn } from "@/lib/utils"
@@ -43,6 +47,7 @@ export function SignupForm({
     { label: "", url: "" },
   ])
   const [showProfile, setShowProfile] = useState(!compact)
+  const [rememberMe, setRememberMe] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -85,6 +90,7 @@ export function SignupForm({
     }
     setSubmitting(true)
 
+    writeSessionPersistMode(persistModeFromRemember(rememberMe))
     const payload = {
       email: email.trim(),
       password,
@@ -232,6 +238,12 @@ export function SignupForm({
         </>
       )}
 
+      <RememberMeCheckbox
+        id={`${prefix}remember-me`}
+        checked={rememberMe}
+        onCheckedChange={setRememberMe}
+      />
+
       {captchaEnabled ? (
         <Turnstile
           key={captchaKey}
@@ -250,6 +262,13 @@ export function SignupForm({
       >
         {submitting ? "Creando cuenta…" : "Crear cuenta"}
       </Button>
+      <GoogleSignInButton
+        next={next}
+        rememberMe={rememberMe}
+        claimUserId={isGuest ? user?.id : undefined}
+        disabled={submitting}
+        onError={(message) => setError(message || null)}
+      />
       {compact ? (
         <p className="text-center text-xs text-muted-foreground">
           ¿Ya estás registrado/a?{" "}

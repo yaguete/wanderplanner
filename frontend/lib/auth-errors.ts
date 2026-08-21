@@ -5,6 +5,9 @@
 
 export const AUTH_ERROR_FALLBACK = "Algo ha fallado. Inténtalo de nuevo."
 export const AUTH_EMAIL_EXISTS = "Ya hay una cuenta con este email. Entra o usa otro."
+export const AUTH_CALLBACK_CANCELLED = "Has cancelado el acceso con Google."
+export const AUTH_CALLBACK_PROVIDER = "El acceso con Google no está disponible ahora mismo."
+export const AUTH_CALLBACK_GENERIC = "No hemos podido completar el acceso. Inténtalo de nuevo."
 
 function asText(value: unknown): string {
   if (value == null) return ""
@@ -73,9 +76,42 @@ export function authErrorMessage(error: unknown): string {
   if (/captcha/i.test(blob)) {
     return "Confirma que no eres un robot."
   }
+  if (code === "access_denied" || /access denied/.test(blob)) {
+    return AUTH_CALLBACK_CANCELLED
+  }
+  if (/unsupported provider|provider is not enabled/.test(blob)) {
+    return AUTH_CALLBACK_PROVIDER
+  }
 
   if (isBlankMessage(message)) return AUTH_ERROR_FALLBACK
   return message
+}
+
+export type AuthCallbackErrorCode = "cancelled" | "provider" | "auth"
+
+/** Query `error` / `error_description` que Supabase pega al cancelar o fallar OAuth. */
+export function authCallbackErrorCode(
+  oauthError: string | null | undefined,
+  description?: string | null,
+): AuthCallbackErrorCode {
+  const blob = `${oauthError ?? ""} ${description ?? ""}`.toLowerCase()
+  if (
+    oauthError === "access_denied" ||
+    /access.denied|denied|cancelled|canceled/.test(blob)
+  ) {
+    return "cancelled"
+  }
+  if (/provider|not enabled|unsupported|invalid client/.test(blob)) {
+    return "provider"
+  }
+  return "auth"
+}
+
+export function authCallbackErrorMessage(code: string | null | undefined): string | null {
+  if (code === "cancelled") return AUTH_CALLBACK_CANCELLED
+  if (code === "provider") return AUTH_CALLBACK_PROVIDER
+  if (code === "auth") return AUTH_CALLBACK_GENERIC
+  return null
 }
 
 /**
