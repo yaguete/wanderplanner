@@ -63,6 +63,10 @@ export function OnboardingDialog({
     if (clamped > maxIndexRef.current) maxIndexRef.current = clamped
   }, [])
 
+  useEffect(() => {
+    primaryRef.current?.focus()
+  }, [index])
+
   const finish = useCallback(
     (outcome: OnboardingOutcome) => {
       if (finishedRef.current) return
@@ -142,6 +146,7 @@ export function OnboardingDialog({
               {ONBOARDING_SLIDES.map((item, i) => {
                 const Mock = item.Mock
                 const active = i === index
+                const isFirstSlide = i === 0
                 const isLastSlide = i === SLIDE_COUNT - 1
                 return (
                   <div
@@ -149,13 +154,23 @@ export function OnboardingDialog({
                     className={cn(
                       "flex min-h-0 min-w-full shrink-0 basis-full flex-col px-4",
                       "pt-14 sm:flex-row sm:items-center sm:gap-8 sm:px-8 sm:pt-12",
-                      isLastSlide
-                        ? "pb-[7.5rem] sm:pb-16"
-                        : "pb-[4.75rem] sm:pb-16",
+                      isFirstSlide
+                        ? "pb-[9.5rem] sm:pb-16"
+                        : isLastSlide
+                          ? "pb-[7.5rem] sm:pb-16"
+                          : "pb-[4.75rem] sm:pb-16",
+                      isFirstSlide && "max-sm:justify-center",
                     )}
                     aria-hidden={!active}
                   >
-                    <div className="order-2 mt-5 shrink-0 sm:order-1 sm:mt-0 sm:min-w-0 sm:flex-1">
+                    <div
+                      className={cn(
+                        "shrink-0 sm:min-w-0 sm:flex-1",
+                        isFirstSlide
+                          ? "order-1 sm:order-1"
+                          : "order-2 mt-5 sm:order-1 sm:mt-0",
+                      )}
+                    >
                       <span className="mb-3 flex min-w-0 items-end gap-2">
                         <BrandMark className="h-12" />
                         {item.id === "mecanismo" ? (
@@ -177,9 +192,6 @@ export function OnboardingDialog({
                           <DialogDescription className="mt-1.5 text-pretty text-sm leading-6 text-foreground/75 sm:mt-2">
                             {item.body}
                           </DialogDescription>
-                          <p className="mt-1.5 hidden text-pretty text-sm leading-5 text-muted-foreground sm:mt-2 sm:block">
-                            {item.footer}
-                          </p>
                         </>
                       ) : (
                         <>
@@ -189,13 +201,20 @@ export function OnboardingDialog({
                           <p className="mt-1.5 text-pretty text-sm leading-6 text-foreground/75 sm:mt-2">
                             {item.body}
                           </p>
-                          <p className="mt-1.5 hidden text-pretty text-sm leading-5 text-muted-foreground sm:mt-2 sm:block">
-                            {item.footer}
-                          </p>
                         </>
                       )}
+                      <p className="mt-1.5 hidden text-pretty text-sm leading-5 text-muted-foreground sm:mt-2 sm:block">
+                        {item.footer}
+                      </p>
                     </div>
-                    <div className="order-1 flex min-h-[11rem] min-w-0 flex-1 items-stretch justify-center px-1 py-3 sm:order-2 sm:min-h-0 sm:flex-none sm:items-center sm:p-6">
+                    <div
+                      className={cn(
+                        "min-w-0 items-stretch justify-center",
+                        isFirstSlide
+                          ? "hidden sm:order-2 sm:flex sm:min-h-0 sm:flex-none sm:items-center sm:p-6"
+                          : "order-1 flex min-h-[11rem] flex-1 px-1 py-3 sm:order-2 sm:min-h-0 sm:flex-none sm:items-center sm:p-6",
+                      )}
+                    >
                       <Mock />
                     </div>
                   </div>
@@ -204,14 +223,21 @@ export function OnboardingDialog({
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between bg-transparent px-4 pb-1 pt-3 sm:px-6 sm:pt-4">
-            <button
-              type="button"
-              className="pointer-events-auto text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              onClick={() => finish("skipped")}
-            >
-              Saltar
-            </button>
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-transparent px-4 pb-1 pt-3 sm:px-6 sm:pt-4",
+              index === 0 ? "justify-end" : "justify-between",
+            )}
+          >
+            {index === 0 ? null : (
+              <button
+                type="button"
+                className="pointer-events-auto text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                onClick={() => finish("skipped")}
+              >
+                Saltar
+              </button>
+            )}
             <button
               type="button"
               className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -234,61 +260,82 @@ export function OnboardingDialog({
               "pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center gap-3 bg-transparent px-4 py-3 sm:px-6",
               "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
               last && "max-sm:flex-wrap",
+              index === 0 && "max-sm:flex-col max-sm:items-stretch max-sm:gap-8",
             )}
           >
             {index === 0 ? (
-              <span className="h-10 w-10 shrink-0" aria-hidden />
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="pointer-events-auto h-10 w-10 shrink-0 rounded-full"
-                aria-label="Slide anterior"
-                onClick={() => goTo(index - 1)}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            )}
-
-            <div className="pointer-events-auto flex flex-1 items-center justify-center gap-2">
-              {ONBOARDING_SLIDES.map((item, i) => (
+              <>
                 <button
-                  key={item.id}
                   type="button"
-                  aria-label={`Ir a la slide ${i + 1}`}
-                  aria-current={i === index ? "true" : undefined}
-                  className={cn(
-                    "h-2 rounded-full transition-all",
-                    i === index ? "w-5" : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50",
-                  )}
-                  style={i === index ? { backgroundColor: BRAND_INK } : undefined}
-                  onClick={() => goTo(i)}
-                />
-              ))}
-            </div>
-
-            {last ? (
-              <Button
-                ref={primaryRef}
-                type="button"
-                className="pointer-events-auto h-10 shrink-0 rounded-full px-4 max-sm:w-full"
-                onClick={runCta}
-              >
-                {CTA_LABEL[cta]}
-                <ArrowRight className="h-4 w-4" />
-              </Button>
+                  className="pointer-events-auto text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center max-sm:self-center sm:shrink-0"
+                  onClick={() => finish("skipped")}
+                >
+                  Saltar onboarding
+                </button>
+                <div className="hidden flex-1 sm:block" aria-hidden />
+                <Button
+                  ref={primaryRef}
+                  type="button"
+                  className="pointer-events-auto h-10 w-full rounded-full px-4 sm:w-auto sm:shrink-0"
+                  onClick={() => goTo(1)}
+                >
+                  Cuéntame más
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </>
             ) : (
-              <Button
-                ref={primaryRef}
-                type="button"
-                size="icon"
-                className="pointer-events-auto h-10 w-10 shrink-0 rounded-full"
-                aria-label="Siguiente slide"
-                onClick={() => goTo(index + 1)}
-              >
-                <ArrowRight className="h-4 w-4" />
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="pointer-events-auto h-10 w-10 shrink-0 rounded-full"
+                  aria-label="Slide anterior"
+                  onClick={() => goTo(index - 1)}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="pointer-events-auto flex flex-1 items-center justify-center gap-2">
+                  {ONBOARDING_SLIDES.map((item, i) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-label={`Ir a la slide ${i + 1}`}
+                      aria-current={i === index ? "true" : undefined}
+                      className={cn(
+                        "h-2 rounded-full transition-all",
+                        i === index ? "w-5" : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50",
+                      )}
+                      style={i === index ? { backgroundColor: BRAND_INK } : undefined}
+                      onClick={() => goTo(i)}
+                    />
+                  ))}
+                </div>
+
+                {last ? (
+                  <Button
+                    ref={primaryRef}
+                    type="button"
+                    className="pointer-events-auto h-10 shrink-0 rounded-full px-4 max-sm:w-full"
+                    onClick={runCta}
+                  >
+                    {CTA_LABEL[cta]}
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    ref={primaryRef}
+                    type="button"
+                    size="icon"
+                    className="pointer-events-auto h-10 w-10 shrink-0 rounded-full"
+                    aria-label="Siguiente slide"
+                    onClick={() => goTo(index + 1)}
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>

@@ -45,21 +45,21 @@ export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: "fuentes",
     kicker: "Fuentes",
-    title: "El artículo o reel transformado en actividades y alojamientos listos para reservar",
+    title: "El post o reel se transforma en actividades y alojamientos listos para reservar",
     body: (
       <>
-        Puedes leer la <PanelName>Crónica</PanelName> tal y como aparece en la web original, o puedes ir directamente a la pestaña <PanelName>Ruta</PanelName> para empezar a añadir recomendaciones a tu propio plan de viaje.
+        En la pestaña <PanelName>Ruta</PanelName> tienes todo el itinerario listo para añadir a tu propio plan de viaje. En <PanelName>Crónica</PanelName> encontrarás el texto tal y como aparece en la web original. 
       </>
     ),
-    footer: `¿Aún no tienes ninguna fuente? No te preocupes, elige un destino y nosotros te sugerimos artículos de los mejores blogs y revistas de viaje.`,
+    footer: `Puedes añadir hasta 5 fuentes diferentes para cada viaje (post, artículos, reels, ...). Añade tus propias fuentes o selecciona una de las sugeridas.`,
     Mock: MockOnboardingFuentes,
   },
   {
     id: "viaje",
     kicker: "Viaje",
     title: "Personaliza la ruta a tu gusto, con todas las compras y reservas a un clic",
-    body: "Coges lo que más gusta de cada fuente y lo añades a tu ruta. Convínalo con tus propios planes, y luego refina los últimos detalles con el asistente.",
-    footer: "WanderPlanner lleva la cuenta de lo que falta por reservar y de lo que cuesta.",
+    body: "Coges lo que más gusta de cada fuente y lo añades a tu ruta. Convínalo con tus propios planes, y luego refina los últimos detalles con el asistente. Los descuentos y promociones de afiliado siguen ahí.",
+    footer: "Además, WanderPlanner lleva la cuenta de lo que lo que te falta por hacer, y de lo que cuesta.",
     Mock: MockOnboardingMiViaje,
   },
   {
