@@ -20,9 +20,19 @@ function smoothstep(t: number) {
 export function LandingLockup({
   tone = "light",
   href = "/",
+  label,
+  markSrc,
+  wordmarkClassName,
+  wordmarkInk,
+  wordmarkHand,
 }: {
   tone?: LandingTone
   href?: string
+  label?: string
+  markSrc?: string
+  wordmarkClassName?: string
+  wordmarkInk?: "brand" | "black"
+  wordmarkHand?: boolean
 }) {
   const elRef = useRef<HTMLAnchorElement>(null)
 
@@ -117,9 +127,16 @@ export function LandingLockup({
       ref={elRef}
       href={href}
       className="landing-flying-lockup fixed left-0 top-0 z-50 origin-top-left will-change-transform"
-      aria-label="WanderPlanner — inicio"
+      aria-label={label ? `${label} — inicio` : "WanderPlanner — inicio"}
     >
-      <BrandLockup variant={tone === "negative" ? "negative" : "color"} />
+      <BrandLockup
+        variant={tone === "negative" ? "negative" : "color"}
+        label={label}
+        markSrc={markSrc}
+        wordmarkClassName={wordmarkClassName}
+        wordmarkInk={wordmarkInk}
+        wordmarkHand={wordmarkHand}
+      />
     </a>
   )
 }

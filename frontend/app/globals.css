@@ -643,6 +643,10 @@ html.landing-lockup-armed .landing-flying-lockup {
   max-height: calc(2.25rem * (1 - var(--landing-lockup-p)));
   opacity: calc(1 - var(--landing-lockup-p));
 }
+/* La ardilla es más alta que ancha (1.75×2.25). Un isotipo 1:1 en ese hueco se aplasta. */
+.landing-flying-lockup [data-brand-mark="square"] {
+  max-width: calc(2.25rem * (1 - var(--landing-lockup-p)));
+}
 .landing-flying-lockup > span > :last-child {
   margin-bottom: calc(-0.12em * (1 - var(--landing-lockup-p)));
 }

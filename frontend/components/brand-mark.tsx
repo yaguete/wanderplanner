@@ -55,21 +55,41 @@ export function BrandMark({
 export function BrandWordmark({
   className,
   variant = "color",
+  label,
+  ink = "brand",
+  hand,
 }: {
   className?: string
   variant?: BrandMarkVariant
+  /** Wordmark de una landing de blog; sin él, WanderPlanner (bold + light). */
+  label?: string
+  /** `black`: lockup de blog (no el marrón de WanderPlanner). */
+  ink?: "brand" | "black"
+  /** Letra manuscrita (Caveat / similar a Martie Regular). Sin faux-bold. */
+  hand?: boolean
 }) {
+  const paint =
+    variant === "negative" ? undefined : ink === "black" ? "#000" : BRAND_INK
   return (
     <span
       className={cn(
-        "truncate text-xl font-normal leading-none tracking-tight",
+        "truncate leading-none",
+        hand
+          ? "font-normal font-synthesis-none text-[1.375rem] tracking-normal"
+          : "font-normal text-xl tracking-tight",
         variant === "negative" && "text-white",
         className,
       )}
-      style={variant === "negative" ? undefined : { color: BRAND_INK }}
+      style={paint ? { color: paint } : undefined}
     >
-      <span className="font-bold">Wander</span>
-      <span className="font-light">Planner</span>
+      {label ? (
+        <span className={hand ? "font-normal font-synthesis-none" : "font-bold"}>{label}</span>
+      ) : (
+        <>
+          <span className="font-bold">Wander</span>
+          <span className="font-light">Planner</span>
+        </>
+      )}
     </span>
   )
 }
@@ -78,17 +98,50 @@ export function BrandWordmark({
 export function BrandLockup({
   className,
   variant = "color",
+  label,
+  markSrc,
+  wordmarkClassName,
+  wordmarkInk,
+  wordmarkHand,
 }: {
   className?: string
   variant?: BrandMarkVariant
+  label?: string
+  /** SVG del blog partner; por defecto, la ardilla. El footer no lo pasa. */
+  markSrc?: string
+  wordmarkClassName?: string
+  wordmarkInk?: "brand" | "black"
+  wordmarkHand?: boolean
 }) {
   return (
     <span className={cn("flex min-w-0 items-end gap-2", className)}>
-      {/* `data-brand-mark`: el lockup volador de la landing colapsa este hueco al atracar. */}
-      <span className="inline-flex shrink-0 overflow-hidden" data-brand-mark>
-        <BrandMark variant={variant} />
+      {/* `data-brand-mark`: el lockup volador de la landing colapsa este hueco al atracar.
+          `square`: isotipo 1:1 (rosa de los vientos); sin él, la ardilla (194×271). */}
+      <span
+        className="inline-flex shrink-0 overflow-hidden"
+        data-brand-mark={markSrc ? "square" : true}
+      >
+        {markSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- SVG del catálogo; el lockup volador escala el nodo.
+          <img
+            src={markSrc}
+            alt=""
+            width={36}
+            height={36}
+            aria-hidden
+            className="h-9 w-9 shrink-0 object-contain"
+          />
+        ) : (
+          <BrandMark variant={variant} />
+        )}
       </span>
-      <BrandWordmark className="-mb-[0.12em]" variant={variant} />
+      <BrandWordmark
+        className={cn("-mb-[0.12em]", wordmarkClassName)}
+        variant={variant}
+        label={label}
+        ink={wordmarkInk}
+        hand={wordmarkHand}
+      />
     </span>
   )
 }

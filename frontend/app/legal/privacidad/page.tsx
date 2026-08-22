@@ -151,8 +151,8 @@ export default function PrivacidadPage() {
           llevártelos u oponerte a que los tratemos, y retirar cuando quieras un
           consentimiento que hayas dado. Escríbenos a <LegalMail /> desde el correo de tu
           cuenta y contestaremos en menos de 30 días. Para borrar la cuenta —perfil,
-          viajes, fuentes que añadiste y conversaciones— ve a Configuración; no hace
-          falta escribirnos.
+          viajes, fuentes que añadiste y conversaciones— haz clic en el avatar y ve a Configuración; no hace
+          falta que nos escribas.
         </p>
         <p>
           Si crees que no lo hemos hecho bien, puedes reclamar ante la{" "}

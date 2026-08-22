@@ -44,6 +44,7 @@
     "test:trip-source-suggestions": "tsx lib/trip-source-suggestions.test.ts",
     "test:cookie-consent": "tsx lib/cookie-consent.test.ts",
     "test:funnel-analytics": "tsx lib/funnel-analytics.test.ts",
+    "test:blog-wp-search": "tsx lib/blog-wp-search.test.ts",
     "test:itinerary-calendar": "tsx lib/itinerary-calendar.test.ts",
     "test:itinerary-utils": "tsx lib/itinerary-utils.test.ts",
     "test:maps-links": "tsx lib/maps-links.test.ts",

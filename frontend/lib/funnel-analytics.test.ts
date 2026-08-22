@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {
+  attributionForBlogLanding,
   buildFunnelBody,
   claimStartOpened,
   classifyOutboundAffiliate,
@@ -154,6 +155,25 @@ const onboarded = buildFunnelBody("account_created", {
   meta: { onboarding: "completed" },
 })
 assert.equal(onboarded.meta.onboarding, "completed")
+
+assert.deepEqual(
+  attributionForBlogLanding("lacosmopolilla", { ref: null, postSlug: null }),
+  { ref: "lacosmopolilla", postSlug: null },
+)
+assert.deepEqual(
+  attributionForBlogLanding("lacosmopolilla", {
+    ref: "wp-landing",
+    postSlug: "que-ver-en-austria-ruta-10-dias",
+  }),
+  { ref: "lacosmopolilla", postSlug: null },
+)
+assert.deepEqual(
+  attributionForBlogLanding("lacosmopolilla", {
+    ref: "lacosmopolilla",
+    postSlug: "que-ver-en-austria-ruta-10-dias",
+  }),
+  { ref: "lacosmopolilla", postSlug: "que-ver-en-austria-ruta-10-dias" },
+)
 
 assert.equal(
   classifyOutboundTarget("https://www.booking.com/hotel/es/x.html?aid=1"),

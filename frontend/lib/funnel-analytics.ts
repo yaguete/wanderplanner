@@ -127,6 +127,21 @@ export function startOpenedGuard(input: {
   return !input.authLoading && input.supabaseConfigured
 }
 
+/**
+ * Al montar `/lacosmopolilla`: pisa `ref`; conserva `postSlug` solo si ya
+ * era de este mismo partner (si no, `account_created` iría con `ref` null).
+ */
+export function attributionForBlogLanding(
+  slug: string,
+  stash: FunnelAttribution,
+): FunnelAttribution {
+  const ref = partnerRef(slug)
+  return {
+    ref,
+    postSlug: ref && stash.ref === ref ? stash.postSlug : null,
+  }
+}
+
 export function rememberFunnelAttribution(attr: FunnelAttribution): void {
   if (typeof window === "undefined") return
   try {

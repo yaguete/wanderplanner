@@ -210,12 +210,12 @@ def _response_ttl_sec() -> float:
     return float(_env_int("SOURCE_SUGGEST_RESPONSE_TTL_SEC", 6 * 3600))
 
 
-def _response_cache_key(query: str, cap: int, scope: SuggestScope) -> tuple[str, int, str]:
+def _response_cache_key(query: str, cap: int, scope: str) -> tuple[str, int, str]:
     return (fold_text(query), cap, scope)
 
 
 def get_cached_suggest_response(
-    query: str, cap: int, scope: SuggestScope
+    query: str, cap: int, scope: str
 ) -> SuggestResponse | None:
     key = _response_cache_key(query, cap, scope)
     entry = _response_cache.get(key)
@@ -229,7 +229,7 @@ def get_cached_suggest_response(
 
 
 def set_cached_suggest_response(
-    query: str, cap: int, scope: SuggestScope, resp: SuggestResponse
+    query: str, cap: int, scope: str, resp: SuggestResponse
 ) -> None:
     key = _response_cache_key(query, cap, scope)
     _response_cache[key] = (monotonic(), resp.model_copy(deep=True))

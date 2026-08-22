@@ -35,10 +35,13 @@ LANDING_SOURCE_DOMAINS: tuple[str, ...] = (
 
 # Itinerarios reales de esos dominios (HTTP 200 + artículo con contenido).
 # El script de semilla sigue si una URL 404; editar esta lista es el
-# mantenimiento del catálogo. 10 por dominio; Cosmopolilla lleva 20 + 10.
+# mantenimiento del catálogo. 10 por dominio; Cosmopolilla lleva más (banner).
 LANDING_SEED_URLS: tuple[str, ...] = (
     # lacosmopolilla.com
     "https://lacosmopolilla.com/ruta-islandia-en-10-dias/",
+    "https://lacosmopolilla.com/guia-para-viajar-a-islandia-por-libre-%e2%ad%90-la-isla-del-hielo-y-el-fuego/",
+    "https://lacosmopolilla.com/ruta-por-la-ring-road-de-islandia/",
+    "https://lacosmopolilla.com/que-ver-en-el-norte-de-islandia/",
     "https://lacosmopolilla.com/que-ver-en-las-montanas-rocosas-canada/",
     "https://lacosmopolilla.com/ruta-por-galicia-en-coche-10-dias/",
     "https://lacosmopolilla.com/que-ver-en-costa-rica/",

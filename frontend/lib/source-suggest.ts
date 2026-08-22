@@ -133,3 +133,49 @@ export async function suggestSources(
     needCaptcha: body.need_captcha === true,
   }
 }
+
+export async function suggestBlogSources(
+  blog: string,
+  query: string,
+  options?: { signal?: AbortSignal; limit?: number },
+): Promise<SourceSuggestResponse> {
+  const params = new URLSearchParams({ blog: blog.trim(), q: query.trim() })
+  if (options?.limit != null) params.set("limit", String(options.limit))
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}/sources/blog-suggest?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      signal: options?.signal,
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e
+    throw new SourceSuggestError(
+      "Ahora mismo no podemos buscar en el blog. Inténtalo de nuevo.",
+      0,
+    )
+  }
+
+  if (!response.ok) {
+    let detail: unknown
+    try {
+      const body = await response.json()
+      detail = body?.detail ?? body
+    } catch {
+      detail = null
+    }
+    const { message } = parseApiDetail(detail, response.status)
+    const fallback =
+      response.status >= 500
+        ? "Ahora mismo no podemos buscar en el blog. Inténtalo de nuevo."
+        : "No hemos podido buscar artículos. Inténtalo de nuevo."
+    throw new SourceSuggestError(message || fallback, response.status)
+  }
+
+  const body = (await response.json()) as Record<string, unknown>
+  const rawResults = Array.isArray(body.results) ? body.results : []
+  return {
+    results: rawResults.map(parseHit).filter((hit): hit is SourceSuggestHit => hit != null),
+    needCaptcha: false,
+  }
+}
