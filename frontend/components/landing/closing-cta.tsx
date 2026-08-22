@@ -25,7 +25,7 @@ export function ClosingCta() {
             <Link href="/signup">Empezar a planificar</Link>
           </Button>
           <Button asChild variant="link">
-            <Link href="#empezar">o compienza con una referencia</Link>
+            <Link href="#empezar">o añade una referencia</Link>
           </Button>
         </div>
       </div>

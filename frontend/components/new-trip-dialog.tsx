@@ -453,7 +453,7 @@ export function NewTripDialog({
                   if (suggestions.length > 0) setListOpen(true)
                 }}
                 onBlur={tryAutoselectOnBlur}
-                placeholder="p. ej. Barcelona"
+                placeholder="p. ej. Lugo, España"
                 className="pl-8"
                 autoComplete="off"
                 aria-autocomplete="list"
@@ -517,7 +517,7 @@ export function NewTripDialog({
               min={1}
               value={numTravelers}
               onChange={(e) => setNumTravelers(e.target.value)}
-              placeholder="2"
+              placeholder="Introduce un número"
             />
             <p className="text-xs text-muted-foreground">
               Si lo indicas calcularemos el coste por persona en las tareas del viaje.
@@ -603,7 +603,7 @@ export function NewTripDialog({
               id={expectationsId}
               value={expectations}
               onChange={(e) => setExpectations(e.target.value)}
-              placeholder="Ver animales, disfrutar de la familia, plan de descanso, etc."
+              placeholder="p. ej. Ver animales, disfrutar de la familia, plan de descanso, etc."
               rows={3}
               className="min-h-[80px] resize-y text-sm"
             />
