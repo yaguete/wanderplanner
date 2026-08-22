@@ -16,7 +16,7 @@ import {
   type OnboardingMode,
   type OnboardingOutcome,
   type OnboardingTrigger,
-  focusTripPlanFromOnboarding,
+  focusSourceRutaFromOnboarding,
   openAddSourceFromOnboarding,
   revealSourcesFromOnboarding,
 } from "@/lib/onboarding"
@@ -29,7 +29,7 @@ const SWIPE_PX = 48
 const CTA_LABEL: Record<OnboardingCtaAction, string> = {
   add_source: "Empieza a planificar",
   view_extraction: "Ver cómo va",
-  view_trip: "Ir a mi viaje",
+  view_trip: "Ir a la ruta",
 }
 
 export function OnboardingDialog({
@@ -81,7 +81,7 @@ export function OnboardingDialog({
     queueMicrotask(() => {
       if (cta === "add_source") openAddSourceFromOnboarding()
       else if (cta === "view_extraction") revealSourcesFromOnboarding()
-      else focusTripPlanFromOnboarding()
+      else focusSourceRutaFromOnboarding()
     })
   }, [cta, finish])
 

@@ -45,7 +45,7 @@ export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: "fuentes",
     kicker: "Fuentes",
-    title: "Convierte el artículo o reel que te ha gustado en actividades y alojamientos listos para reservar",
+    title: "El artículo o reel transformado en actividades y alojamientos listos para reservar",
     body: (
       <>
         Puedes leer la <PanelName>Crónica</PanelName> tal y como aparece en la web original, o puedes o ir directamente a la pestaña <PanelName>Ruta</PanelName> para empezar a ubicar las activades, alojamientos o lugares que se recomiendan en tu propio plan de viaje.
@@ -57,7 +57,7 @@ export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: "viaje",
     kicker: "Viaje",
-    title: "Personaliza la ruta a tu gusto, con todas las compras y reservas a un click",
+    title: "Personaliza la ruta a tu gusto, con todas las compras y reservas a un clic",
     body: "Coges lo que más gusta de cada fuente y lo añades a tu ruta. Convínalo con tus propios planes, y luego refina los últimos detalles con el asistente.",
     footer: "WanderPlanner lleva la cuenta de lo que falta por reservar y de lo que cuesta.",
     Mock: MockOnboardingMiViaje,

@@ -12,7 +12,6 @@ import { formatGuideLabel } from "@/lib/itinerary-utils"
 import { confidentTripDestinationLabel } from "@/lib/assistant-suggestions"
 import {
   ADD_SOURCE_OPEN_EVENT,
-  FOCUS_TRIP_PLAN_EVENT,
   REVEAL_SOURCES_EVENT,
 } from "@/lib/onboarding"
 import InspirationPanel from "@/components/inspiration-panel"
@@ -276,24 +275,16 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     else setPanels((prev) => ({ ...prev, sources: true }))
   }, [isMobile, selectMobileSection])
 
-  const revealPlan = useCallback(() => {
-    if (isMobile) selectMobileSection("plan")
-    else setPanels((prev) => ({ ...prev, plan: true }))
-  }, [isMobile, selectMobileSection])
-
   useEffect(() => {
     const onAddSource = () => openAddSource(true)
     const onRevealSources = () => revealSources()
-    const onFocusPlan = () => revealPlan()
     window.addEventListener(ADD_SOURCE_OPEN_EVENT, onAddSource)
     window.addEventListener(REVEAL_SOURCES_EVENT, onRevealSources)
-    window.addEventListener(FOCUS_TRIP_PLAN_EVENT, onFocusPlan)
     return () => {
       window.removeEventListener(ADD_SOURCE_OPEN_EVENT, onAddSource)
       window.removeEventListener(REVEAL_SOURCES_EVENT, onRevealSources)
-      window.removeEventListener(FOCUS_TRIP_PLAN_EVENT, onFocusPlan)
     }
-  }, [openAddSource, revealSources, revealPlan])
+  }, [openAddSource, revealSources])
 
   const openEditTrip = useCallback(() => setEditTripOpen(true), [])
 

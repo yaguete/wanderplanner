@@ -16,8 +16,12 @@ export const ONBOARDING_RECENT_TTL_MS = 45 * 60 * 1000
 
 export const ONBOARDING_OPEN_EVENT = "wp-onboarding-open"
 export const ADD_SOURCE_OPEN_EVENT = "wp-add-source-open"
-export const FOCUS_TRIP_PLAN_EVENT = "wp-focus-trip-plan"
 export const REVEAL_SOURCES_EVENT = "wp-reveal-sources"
+
+export type RevealSourcesDetail = {
+  /** Pestaña del panel Fuentes; sin `tab` solo revela el panel. */
+  tab?: "itinerary"
+}
 
 export type OnboardingRoute = "trip-detail" | "other"
 export type OnboardingTrigger = "auto" | "replay"
@@ -226,12 +230,12 @@ export function openAddSourceFromOnboarding(): void {
   window.dispatchEvent(new Event(ADD_SOURCE_OPEN_EVENT))
 }
 
-export function focusTripPlanFromOnboarding(): void {
+export function revealSourcesFromOnboarding(detail?: RevealSourcesDetail): void {
   if (typeof window === "undefined") return
-  window.dispatchEvent(new Event(FOCUS_TRIP_PLAN_EVENT))
+  window.dispatchEvent(new CustomEvent(REVEAL_SOURCES_EVENT, { detail }))
 }
 
-export function revealSourcesFromOnboarding(): void {
-  if (typeof window === "undefined") return
-  window.dispatchEvent(new Event(REVEAL_SOURCES_EVENT))
+/** Fuentes → pestaña Ruta (CTA cuando ya hay fuente extraída). */
+export function focusSourceRutaFromOnboarding(): void {
+  revealSourcesFromOnboarding({ tab: "itinerary" })
 }

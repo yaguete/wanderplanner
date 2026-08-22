@@ -45,6 +45,7 @@ import { itemTypeLabel } from "@/lib/item-styles"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
 import { canAddSource } from "@/lib/trip-sources"
+import { REVEAL_SOURCES_EVENT, type RevealSourcesDetail } from "@/lib/onboarding"
 import { prefetchTripSourceSuggestions } from "@/lib/trip-source-suggestions"
 import { extractionToastLabel } from "@/lib/extraction-toast"
 import { groupItemsByDayHint } from "@/lib/source-item-groups"
@@ -149,6 +150,15 @@ export default function InspirationPanel({
 
   const [activeSourceId, setActiveSourceId] = useState<string | null>(sources[0]?.id ?? null)
   const [sourceTab, setSourceTab] = useState<SourceTab>("source")
+
+  useEffect(() => {
+    const onRevealSources = (event: Event) => {
+      const tab = (event as CustomEvent<RevealSourcesDetail>).detail?.tab
+      if (tab === "itinerary") setSourceTab("itinerary")
+    }
+    window.addEventListener(REVEAL_SOURCES_EVENT, onRevealSources)
+    return () => window.removeEventListener(REVEAL_SOURCES_EVENT, onRevealSources)
+  }, [])
   const [maxSourcesOpen, setMaxSourcesOpen] = useState(false)
   const [refetchError, setRefetchError] = useState<string | null>(null)
   /** Pendiente de «Añadir al día»: un ítem suelto o todos los de un día de la guía. */
