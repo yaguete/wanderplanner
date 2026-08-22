@@ -23,6 +23,7 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
     numTravelers: null,
     currency: "EUR",
     origin: null,
+    budget: null,
     archived: false,
     ...overrides,
   }
@@ -155,11 +156,111 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   assert.match(md, /## Tareas del viaje/)
   assert.match(md, /ref=`activity:palacio de mirabell`/)
   assert.match(md, /18 EUR/)
+  assert.match(md, /estimado/)
+  assert.match(md, /## Presupuesto del viaje/)
+  const budgetIdx = md.indexOf("## Presupuesto del viaje")
+  const sourcesIdx = md.indexOf("## Fuentes de inspiración")
+  assert.ok(budgetIdx > 0 && sourcesIdx > budgetIdx)
+  assert.match(md, /- techo: \(sin techo\)/)
   assert.match(md, /- id=`src-item-rest` \[Restaurante\] \*\*Stiftskeller\*\*/)
   assert.match(md, /- id=`src-basic-sim` \[SIM \/ eSIM\] \*\*eSIM Austria\*\*/)
   assert.match(md, /## Señales del plan/)
   assert.match(md, /horizonte meteo:/)
   assert.match(md, /día 1: 1 ítem/)
+}
+
+{
+  const md = buildTripBriefing(
+    baseTrip({
+      days: [
+        {
+          id: "d1",
+          label: "",
+          items: [
+            {
+              id: "stay-1",
+              sourceItemId: "s",
+              sourceId: "src-1",
+              type: "stay",
+              name: "Hotel Denali",
+              detail: null,
+              sourceAuthor: "blog",
+            },
+          ],
+        },
+      ],
+      tasks: {
+        "stay:hotel denali": {
+          status: "booked",
+          cost: null,
+          cancellable: null,
+          notes: null,
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
+      },
+    }),
+    [],
+  )
+  assert.match(md, /sin coste · reservado/)
+}
+
+{
+  const md = buildTripBriefing(
+    baseTrip({
+      numDays: 2,
+      days: [
+        {
+          id: "d1",
+          label: "",
+          items: [
+            {
+              id: "stay-1",
+              sourceItemId: "s",
+              sourceId: "src-1",
+              type: "stay",
+              name: "Hotel Denali",
+              detail: null,
+              sourceAuthor: "blog",
+            },
+            {
+              id: "act-1",
+              sourceItemId: "s2",
+              sourceId: "src-1",
+              type: "activity",
+              name: "Osos",
+              detail: null,
+              sourceAuthor: "blog",
+            },
+          ],
+        },
+        { id: "d2", label: "", items: [] },
+      ],
+      tasks: {
+        "stay:hotel denali": {
+          status: "booked",
+          cost: 1800,
+          cancellable: null,
+          notes: null,
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
+      },
+      budget: { total: 3000, byCategory: { accommodation: 1200 } },
+      numTravelers: 2,
+    }),
+    [],
+  )
+  assert.match(md, /## Presupuesto del viaje/)
+  assert.match(md, /techo: 3000 EUR declarado · efectivo 3000 EUR/)
+  assert.match(md, /apuntado: 1800 EUR — estimado 0 · reservado 1800 · pagado 0/)
+  assert.match(md, /grupos por encima de su techo: Alojamiento \(\+600\)/)
+  const budgetBlock = md.slice(
+    md.indexOf("## Presupuesto del viaje"),
+    md.indexOf("## Fuentes de inspiración"),
+  )
+  assert.doesNotMatch(budgetBlock, /Osos/)
+  assert.match(md, /ref=`activity:osos`/)
+  assert.match(md, /sin valorar/)
+  assert.doesNotMatch(md, /sin asignar/)
 }
 
 console.log("assistant-context + mapbox country: ok")

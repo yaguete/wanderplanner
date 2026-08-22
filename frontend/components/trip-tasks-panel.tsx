@@ -5,7 +5,7 @@
  * `buildTripTasks` filtrada por `categories`. Sin `useTrips()`; mutaciones
  * llegan por callbacks desde ItineraryPanel.
  */
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Check,
   CheckSquare,
@@ -30,21 +30,22 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { EmptyState } from "@/components/empty-state"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
+import { CostInput } from "@/components/cost-input"
 import { CountryTasksSection } from "@/components/country-tasks-section"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { stayReserveHref } from "@/lib/booking-search"
 import { outbound } from "@/lib/funnel-analytics"
+import { TASK_CATEGORY_ICONS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
-  TASK_CATEGORY_ORDER,
   formatTaskDays,
   formatTaskMeta,
   formatTripCurrency,
-  parseCostInput,
   taskActionTitle,
   taskGroupKey,
 } from "@/lib/task-labels"
+import { groupTasksByCategory } from "@/lib/trip-budget"
 import {
   buildTripTasks,
   cancellableApplies,
@@ -62,7 +63,11 @@ export type TripTasksPanelProps = {
   /** Categorías visibles en esta pestaña. */
   categories: TripTaskCategory[]
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
-  onAddExtraTask: (data: { title: string; category: TripTaskCategory }) => void
+  onAddExtraTask: (data: {
+    title: string
+    category: TripTaskCategory
+    state?: Partial<TripTaskState>
+  }) => void
   onRemoveExtraTask: (taskId: string) => void
   /** Quitar básico(s) del viaje desde la fila de tarea. */
   onRemoveBasic?: (basicIds: string[]) => void
@@ -163,7 +168,7 @@ export function TripTasksSummaryLine({ trip }: { trip: Trip }) {
   )
 }
 
-/** Desglose de costes por pestaña: Reservado · Gastado (las cards siguen diciendo Pagado). */
+/** Desglose de costes por pestaña: Reservado · Pagado. */
 export function TripTasksSummaryDetail({
   trip,
   categories,
@@ -188,7 +193,7 @@ export function TripTasksSummaryDetail({
       {booked > 0 && paid > 0 ? " · " : null}
       {paid > 0 ? (
         <span className="text-emerald-700">
-          Gastado {formatTripCurrency(paid, currency)}
+          Pagado {formatTripCurrency(paid, currency)}
         </span>
       ) : null}
     </p>
@@ -300,7 +305,7 @@ export function TripTasksPanel({
     [tasks, categorySet],
   )
 
-  const groupedMain = useMemo(() => groupByCategory(mainTasks), [mainTasks])
+  const groupedMain = useMemo(() => groupTasksByCategory(mainTasks), [mainTasks])
   const isEmpty =
     mainTasks.length === 0 && triageTasks.length === 0 && dismissedTasks.length === 0
 
@@ -356,11 +361,14 @@ export function TripTasksPanel({
             />
           ) : (
             <>
-              {groupedMain.map(({ category, list }) => (
+              {groupedMain.map(({ category, list }) => {
+                const Icon = TASK_CATEGORY_ICONS[category]
+                return (
                 <section key={category} className="flex flex-col gap-0">
                   {groupedMain.length > 1 ? (
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      {TASK_CATEGORY_LABELS[category]}
+                    <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span className="min-w-0 truncate">{TASK_CATEGORY_LABELS[category]}</span>
                     </p>
                   ) : null}
                   <ul className="m-0 list-none divide-y divide-border/70 p-0">
@@ -394,7 +402,8 @@ export function TripTasksPanel({
                     ))}
                   </ul>
                 </section>
-              ))}
+                )
+              })}
 
               {triageTasks.length > 0 ? (
                 <TriageSection
@@ -424,21 +433,6 @@ export function TripTasksPanel({
         defaultCategory={defaultCategory}
       />
     </div>
-  )
-}
-
-function groupByCategory(
-  tasks: DerivedTripTask[],
-): { category: TripTaskCategory; list: DerivedTripTask[] }[] {
-  const buckets = new Map<TripTaskCategory, DerivedTripTask[]>()
-  for (const task of tasks) {
-    const key = taskGroupKey(task.category)
-    const list = buckets.get(key)
-    if (list) list.push(task)
-    else buckets.set(key, [task])
-  }
-  return TASK_CATEGORY_ORDER.filter((c) => (buckets.get(c)?.length ?? 0) > 0).map(
-    (category) => ({ category, list: buckets.get(category)! }),
   )
 }
 
@@ -707,63 +701,6 @@ function TaskRow({
   )
 }
 
-function CostInput({
-  value,
-  currency,
-  onChange,
-}: {
-  value: number | null
-  currency: string
-  onChange: (next: number | null) => void
-}) {
-  const [draft, setDraft] = useState(() => (value == null ? "" : String(value)))
-  const [focused, setFocused] = useState(false)
-
-  useEffect(() => {
-    if (focused) return
-    setDraft(value == null ? "" : String(value))
-  }, [value, focused])
-
-  const suffix = currency.trim().toUpperCase() || "EUR"
-  const showPlaceholder = !focused && draft === ""
-
-  return (
-    <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-      <input
-        type="text"
-        inputMode="decimal"
-        value={showPlaceholder ? "" : draft}
-        placeholder="—"
-        aria-label="Coste total"
-        onFocus={() => setFocused(true)}
-        onBlur={() => {
-          setFocused(false)
-          setDraft(value == null ? "" : String(value))
-        }}
-        onChange={(e) => {
-          const raw = e.target.value
-          setDraft(raw)
-          if (raw.trim() === "") {
-            onChange(null)
-            return
-          }
-          const parsed = parseCostInput(raw)
-          if (parsed != null) onChange(parsed)
-        }}
-        className={cn(
-          "h-7 w-[4.75rem] rounded-md bg-transparent px-1.5",
-          "text-right text-xs tabular-nums text-foreground outline-none",
-          "placeholder:text-muted-foreground/70",
-          "hover:bg-muted/50",
-          "focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring",
-          "transition-colors",
-        )}
-      />
-      <span className="tabular-nums">{suffix}</span>
-    </label>
-  )
-}
-
 function CancellableDropdown({
   value,
   onChange,
@@ -826,7 +763,7 @@ function TriageSection({
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
 }) {
   const [open, setOpen] = useState(false)
-  const grouped = useMemo(() => groupByCategory(tasks), [tasks])
+  const grouped = useMemo(() => groupTasksByCategory(tasks), [tasks])
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -858,11 +795,14 @@ function TriageSection({
             />
             <span>¿No estás seguro/a? Pregunta al asistente.</span>
           </p>
-          {grouped.map(({ category, list }) => (
+          {grouped.map(({ category, list }) => {
+            const Icon = TASK_CATEGORY_ICONS[category]
+            return (
             <div key={category}>
               {grouped.length > 1 ? (
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  {TASK_CATEGORY_LABELS[category]}
+                <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="min-w-0 truncate">{TASK_CATEGORY_LABELS[category]}</span>
                 </p>
               ) : null}
               <ul className="m-0 list-none divide-y divide-border/70 p-0">
@@ -901,7 +841,8 @@ function TriageSection({
                 ))}
               </ul>
             </div>
-          ))}
+            )
+          })}
         </div>
       </CollapsibleContent>
     </Collapsible>

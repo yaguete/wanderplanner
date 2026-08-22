@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner"
 import type {
   Trip,
+  TripBudget,
   TripOrigin,
   Source,
   UserDay,
@@ -30,6 +31,7 @@ import type {
   RouteLeg,
   TransportRoute,
 } from "@/types/itinerary"
+import { normalizeTripBudget } from "@/lib/trip-budget"
 import { fetchItinerary, ApiLimitError, ExtractError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
 import { resolveMapsLinks } from "@/lib/maps-api"
 import { canonicalizeMapsUrl } from "@/lib/maps-links"
@@ -288,6 +290,8 @@ interface TripContextValue {
   setNumTravelers: (tripId: string, numTravelers: number | null) => void
   /** Divisa del viaje (ISO 4217). Vacío → EUR. */
   setTripCurrency: (tripId: string, currency: string) => void
+  /** Techo opcional del viaje. Objeto vacío / importes ≤ 0 → null. */
+  setTripBudget: (tripId: string, next: TripBudget | null) => void
   /**
    * Crea o edita el tramo de ida/vuelta (T4B.3) en una sola mutación.
    * Si `origin` viene y el viaje aún no tiene, lo guarda en el mismo setTrips.
@@ -593,6 +597,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         numTravelers,
         currency,
         origin: data.origin ?? null,
+        budget: null,
         archived: false,
       },
       days,
@@ -1386,6 +1391,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  const setTripBudget = useCallback((tripId: string, next: TripBudget | null) => {
+    setTrips((prev) =>
+      prev.map((t) => (t.id !== tripId ? t : { ...t, budget: normalizeTripBudget(next) })),
+    )
+  }, [])
+
   const upsertRouteLeg = useCallback(
     (
       tripId: string,
@@ -1777,10 +1788,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       reevaluateCountryTasks,
       setNumTravelers,
       setTripCurrency,
+      setTripBudget,
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, flushPendingSync, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, flushPendingSync, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

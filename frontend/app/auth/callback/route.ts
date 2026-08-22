@@ -8,12 +8,7 @@ import {
   type PersistMode,
 } from "@/lib/auth-session-persist"
 import { cookies } from "next/headers"
-
-/** Solo rutas internas. Rechaza `//evil.com` y cualquier cosa que no empiece por `/`. */
-function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/trips"
-  return raw
-}
+import { safeNext } from "@/lib/auth-next"
 
 function failRedirect(origin: string, recovery: boolean, code: string): NextResponse {
   const path = recovery ? "/forgot-password" : "/login"

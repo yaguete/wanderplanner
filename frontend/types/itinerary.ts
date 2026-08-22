@@ -107,6 +107,26 @@ export type TripTaskCategory =
   | "other"
 
 /**
+ * Grupos que el usuario ve (cuenta, techo por tipo, selector de extras).
+ * Imagen de `taskGroupKey`: paperwork/health caen en `other`.
+ */
+export type TaskGroupCategory = Exclude<TripTaskCategory, "paperwork" | "health">
+
+/**
+ * Techo opcional del viaje, en `trip.currency`. No es un coste: no entra en
+ * ningún total. `total: null` + `byCategory` vacío = sin techo.
+ * Un 0 persistido (legacy/corrupto) sí es un techo de cero; el setter no lo escribe.
+ * Al desglosar, lo no asignado se escribe en `other` para que sume `total`;
+ * si el desglose (o Otras a mano) supera el global, `total` sube.
+ */
+export interface TripBudget {
+  /** Techo total del viaje. null = no declarado (nunca se persiste 0 desde la UI). */
+  total: number | null
+  /** Solo las claves que el usuario ha rellenado. */
+  byCategory: Partial<Record<TaskGroupCategory, number>>
+}
+
+/**
  * Estado de una tarea. `notNeeded` = "esto no hay que reservarlo" (triaje);
  * `booked` = reservado (o «hecho» en trámites); `paid` = pagado.
  * Los valores son excluyentes. Ausencia en el mapa = nunca tocada.
@@ -197,6 +217,11 @@ export interface Trip {
    * o viaje anterior a T4B.1.
    */
   origin: TripOrigin | null
+  /**
+   * Techo opcional (global y por grupo). null = no configurado / viaje anterior
+   * a la vista de presupuesto. No es un coste: el dinero sigue en `tasks`.
+   */
+  budget: TripBudget | null
   /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */
   archived?: boolean
   /** Slug del partner cuyo CTA originó el viaje (`/start?ref=…`). */

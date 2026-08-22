@@ -13,7 +13,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
   ExtraTask,
   Source,
+  TaskGroupCategory,
   Trip,
+  TripBudget,
   TripOrigin,
   TripTaskState,
   UserBasicItem,
@@ -24,6 +26,7 @@ import { sanitizeUserDays } from "@/lib/route-legs"
 import { isReusableDraftTrip, mergeDraftReferrer } from "@/lib/partner-trip"
 import { endDateFromStartAndNumDays, tomorrowISO } from "@/lib/trip-dates"
 import { pruneTaskStates } from "@/lib/trip-tasks"
+import { TASK_CATEGORY_ORDER } from "@/lib/task-labels"
 import { reconcileExtractedSource, hydrateAffiliateUrlsFromSources, hydrateCoordsFromSources } from "@/lib/itinerary-utils"
 import {
   toStartCandidate,
@@ -76,6 +79,36 @@ export function parseTripOrigin(raw: unknown): TripOrigin | null {
   return { label, countryCode, coords: { lng, lat } }
 }
 
+/**
+ * Lectura defensiva de `trips.budget`. Cualquier forma inválida, números no
+ * finitos, negativos o claves desconocidas se descartan. Si no queda nada → null.
+ * Un 0 sí cuenta como techo (el setter de la UI no lo escribe).
+ */
+export function parseTripBudget(raw: unknown): TripBudget | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+
+  let total: number | null = null
+  if (typeof obj.total === "number" && Number.isFinite(obj.total) && obj.total >= 0) {
+    total = obj.total
+  }
+
+  const byCategory: Partial<Record<TaskGroupCategory, number>> = {}
+  const rawBy = obj.byCategory
+  if (rawBy && typeof rawBy === "object" && !Array.isArray(rawBy)) {
+    const rec = rawBy as Record<string, unknown>
+    for (const key of TASK_CATEGORY_ORDER) {
+      const v = rec[key]
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+        byCategory[key] = v
+      }
+    }
+  }
+
+  if (total == null && Object.keys(byCategory).length === 0) return null
+  return { total, byCategory }
+}
+
 /** Postgres rechaza \\u0000 en text/jsonb (error 22P05). También limpia `route` corrupto. */
 function sanitizeDaysForDb(days: UserDay[]): UserDay[] {
   return sanitizeUserDays(days).map((d) => {
@@ -114,6 +147,7 @@ export type TripRow = {
   num_travelers: number | null
   currency: string | null
   origin: TripOrigin | null
+  budget: TripBudget | null
 }
 
 type SourceRow = {
@@ -130,8 +164,57 @@ type SourceRow = {
   article_html?: string | null
 }
 
-const TRIP_COLUMNS =
+const TRIP_COLUMNS_CORE =
   "id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
+const TRIP_COLUMNS = `${TRIP_COLUMNS_CORE}, budget`
+
+/**
+ * Fallback solo en dev: el front local a veces apunta al proyecto gestionado
+ * antes de aplicar la migración. En producción el fallo tiene que ser ruidoso
+ * (DEPLOY.md: migrar `budget` antes de mergear); bajar el pestillo ahí haría
+ * que el syncer diera éxito y el techo desapareciera al recargar.
+ */
+let budgetColumnLive = true
+
+export function isMissingBudgetColumnError(
+  error: { code?: string; message?: string } | null | undefined,
+): boolean {
+  if (!error) return false
+  const blob = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase()
+  if (!blob.includes("budget")) return false
+  return /pgrst204|does not exist|could not find|schema cache/.test(blob)
+}
+
+function allowBudgetColumnFallback(): boolean {
+  return process.env.NODE_ENV !== "production"
+}
+
+function noteBudgetColumnMissing(): void {
+  if (!allowBudgetColumnFallback()) {
+    console.warn(
+      "[trips-repo] trips.budget missing; refusing to omit the column in production",
+    )
+    return
+  }
+  if (budgetColumnLive) {
+    console.warn(
+      "[trips-repo] trips.budget missing; omitting it for the rest of this session (dev-only)",
+    )
+  }
+  budgetColumnLive = false
+}
+
+function tripSelectColumns(): string {
+  return budgetColumnLive ? TRIP_COLUMNS : TRIP_COLUMNS_CORE
+}
+
+function omitBudgetIfUnsupported<T extends { budget?: unknown }>(row: T): T {
+  if (budgetColumnLive) return row
+  const next = { ...row }
+  delete next.budget
+  return next
+}
+
 /**
  * Columnas de `/start`. Incluye `seed_source_key`, que NO va en `TRIP_COLUMNS` ni
  * en `tripToRow`: el upsert del syncer la pisaría con null.
@@ -215,13 +298,14 @@ export function rowToTrip(row: TripRow): Trip {
     numTravelers: row.num_travelers ?? null,
     currency: row.currency?.trim() ? row.currency.trim() : "EUR",
     origin: parseTripOrigin(row.origin),
+    budget: parseTripBudget(row.budget),
     archived: row.archived,
     referrer: row.referrer,
   }
 }
 
 export function tripToRow(trip: Trip, userId: string): TripRow {
-  return {
+  const row: TripRow = {
     id: trip.id,
     user_id: userId,
     name: trip.name,
@@ -244,7 +328,9 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
     num_travelers: trip.numTravelers ?? null,
     currency: trip.currency?.trim() ? trip.currency.trim() : "EUR",
     origin: parseTripOrigin(trip.origin),
+    budget: trip.budget,
   }
+  return omitBudgetIfUnsupported(row)
 }
 
 function rowToSource(row: SourceRow): Source {
@@ -290,12 +376,15 @@ export async function loadTripsState(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<TripsSnapshot> {
-  const [tripsResult, sourcesResult] = await Promise.all([
+  const loadTrips = () =>
     supabase
       .from("trips")
-      .select(TRIP_COLUMNS)
+      .select(tripSelectColumns())
       .eq("user_id", userId)
-      .order("created_at", { ascending: true }),
+      .order("created_at", { ascending: true })
+
+  const [tripsResult, sourcesResult] = await Promise.all([
+    loadTrips(),
     supabase
       .from("sources")
       .select(SOURCE_COLUMNS)
@@ -303,10 +392,16 @@ export async function loadTripsState(
       .order("created_at", { ascending: true }),
   ])
 
-  if (tripsResult.error) throw tripsResult.error
+  let tripsData = tripsResult
+  if (isMissingBudgetColumnError(tripsData.error) && budgetColumnLive) {
+    noteBudgetColumnMissing()
+    if (!budgetColumnLive) tripsData = await loadTrips()
+  }
+
+  if (tripsData.error) throw tripsData.error
   if (sourcesResult.error) throw sourcesResult.error
 
-  const trips = ((tripsResult.data ?? []) as unknown as TripRow[]).map(rowToTrip)
+  const trips = ((tripsData.data ?? []) as unknown as TripRow[]).map(rowToTrip)
   const sources = ((sourcesResult.data ?? []) as unknown as SourceRow[]).map(rowToSource)
   return {
     trips: hydrateCoordsFromSources(hydrateAffiliateUrlsFromSources(trips, sources), sources),
@@ -350,18 +445,25 @@ export async function findReusableDraftTrip(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ id: string; referrer: string | null } | null> {
-  const { data, error } = await supabase
-    .from("trips")
-    .select(TRIP_COLUMNS)
-    .eq("user_id", userId)
-    .eq("archived", false)
-    .is("start_date", null)
-    .not("referrer", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(20)
+  const loadDrafts = () =>
+    supabase
+      .from("trips")
+      .select(tripSelectColumns())
+      .eq("user_id", userId)
+      .eq("archived", false)
+      .is("start_date", null)
+      .not("referrer", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(20)
+
+  let { data, error } = await loadDrafts()
+  if (isMissingBudgetColumnError(error) && budgetColumnLive) {
+    noteBudgetColumnMissing()
+    if (!budgetColumnLive) ({ data, error } = await loadDrafts())
+  }
 
   if (error) throw error
-  for (const row of (data ?? []) as TripRow[]) {
+  for (const row of (data ?? []) as unknown as TripRow[]) {
     const parsed = rowToTrip(row)
     if (parsed.referrer && isReusableDraftTrip(parsed)) {
       return { id: parsed.id, referrer: parsed.referrer }
@@ -435,7 +537,7 @@ export async function insertDraftTrip(
   const endDate =
     startDate && forcedDays != null ? endDateFromStartAndNumDays(startDate, forcedDays) : null
 
-  const { error } = await supabase.from("trips").insert({
+  const payload = omitBudgetIfUnsupported({
     id,
     user_id: userId,
     name: data.name,
@@ -450,10 +552,18 @@ export async function insertDraftTrip(
     num_travelers: null,
     currency: "EUR",
     origin: null,
+    budget: null as TripBudget | null,
     source_ids: [],
     referrer: data.referrer,
     seed_source_key: data.seedSourceKey || null,
   })
+  let { error } = await supabase.from("trips").insert(payload)
+  if (isMissingBudgetColumnError(error) && budgetColumnLive) {
+    noteBudgetColumnMissing()
+    if (!budgetColumnLive) {
+      ;({ error } = await supabase.from("trips").insert(omitBudgetIfUnsupported(payload)))
+    }
+  }
   if (error) throw error
   return id
 }
@@ -635,7 +745,15 @@ export class TripsSyncer {
     )
 
     if (tripRows.length) {
-      const { error } = await this.supabase.from("trips").upsert(tripRows, { onConflict: "id" })
+      let { error } = await this.supabase.from("trips").upsert(tripRows, { onConflict: "id" })
+      if (isMissingBudgetColumnError(error) && budgetColumnLive) {
+        noteBudgetColumnMissing()
+        if (!budgetColumnLive) {
+          ;({ error } = await this.supabase
+            .from("trips")
+            .upsert(tripRows.map(omitBudgetIfUnsupported), { onConflict: "id" }))
+        }
+      }
       if (error) throw error
     }
     if (sourceRowsWithHtml.length) {

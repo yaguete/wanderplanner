@@ -157,6 +157,14 @@ function showLine(
   if (prefersReducedMotion()) line.style.transition = "none"
 }
 
+/**
+ * ⚠️ `enabled` tiene que ser **false siempre que la lista no esté montada**.
+ * El efecto solo depende de `enabled` (los refs son estables), así que lee
+ * `rootRef.current` una vez y se suscribe a ese nodo. Si la lista se desmonta
+ * con `enabled` en true (otra superficie del panel), no hay limpieza ni nueva
+ * suscripción: al volver, el `pointerdown` sigue colgado del nodo desmontado
+ * y el arrastre queda muerto sin ningún error.
+ */
 export function useItineraryDnd({
   enabled,
   rootRef,

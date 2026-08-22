@@ -1,5 +1,6 @@
 /**
  * Briefing markdown del viaje para el asistente (enviado en cada POST /assistant/chat).
+ * `## Presupuesto del viaje` totaliza igual que la pantalla (solo bucket `main`).
  */
 import type { Source, Trip } from "@/types/itinerary"
 import { BASIC_LABELS, itemTypeLabel } from "@/lib/item-styles"
@@ -8,6 +9,7 @@ import { countriesPlainList } from "@/lib/countries"
 import { travelerTypeLabels } from "@/lib/traveler-profile"
 import { TASK_CATEGORY_LABELS } from "@/lib/task-labels"
 import { buildTripTasks } from "@/lib/trip-tasks"
+import { buildTripBudgetView, formatBudgetBriefingMarkdown } from "@/lib/trip-budget"
 import {
   collectPlanSignals,
   formatPlanSignalsMarkdown,
@@ -163,9 +165,23 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
       const cat = TASK_CATEGORY_LABELS[task.category] ?? task.category
       const cost =
         task.state?.cost != null ? `${task.state.cost} ${currency}` : "sin coste"
-      lines.push(`- ref=\`${task.id}\` [${cat}] **${task.title}** · ${cost}`)
+      const status =
+        task.bucket === "dismissed"
+          ? "sin reserva"
+          : task.bucket === "triage"
+            ? "sin valorar"
+            : task.state?.status === "booked"
+              ? "reservado"
+              : task.state?.status === "paid"
+                ? "pagado"
+                : "estimado"
+      lines.push(`- ref=\`${task.id}\` [${cat}] **${task.title}** · ${cost} · ${status}`)
     }
   }
+  lines.push("")
+
+  // Totales alineados con la vista de presupuesto (solo bucket `main`).
+  lines.push(formatBudgetBriefingMarkdown(buildTripBudgetView(trip)))
   lines.push("")
 
   lines.push("## Fuentes de inspiración")

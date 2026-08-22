@@ -30,6 +30,7 @@ function trip(patch: Partial<Trip> = {}): Trip {
     numTravelers: null,
     currency: "EUR",
     origin: null,
+    budget: null,
     archived: false,
     referrer: null,
     ...patch,

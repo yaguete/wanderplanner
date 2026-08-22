@@ -25,6 +25,8 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  ArrowLeft,
+  Wallet,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -69,6 +71,11 @@ import {
   readStoredRouteView,
   type RouteViewMode,
 } from "@/components/itinerary-calendar-view"
+import {
+  ItineraryBudgetView,
+  budgetChromeHeadline,
+} from "@/components/itinerary-budget-view"
+import { buildTripBudgetView } from "@/lib/trip-budget"
 import { scrollDaySectionIntoView } from "@/lib/itinerary-day-scroll"
 import { TravelItemCard } from "@/components/travel-item-card"
 import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
@@ -173,6 +180,7 @@ export default function ItineraryPanel({
     acceptCountryTask,
     dismissCountryTask,
     reevaluateCountryTasks,
+    setTripBudget,
     upsertRouteLeg,
     upsertTransportRouteItem,
     updateDayLabel,
@@ -229,11 +237,13 @@ export default function ItineraryPanel({
   )
   const { rootRef: daysFlipRef, capture: captureDaysFlip } = useListFlip()
   const listScrollRef = useRef<HTMLDivElement>(null)
+  const budgetScrollRef = useRef<HTMLDivElement>(null)
   const listChromeRef = useRef<HTMLDivElement>(null)
   const insertLineRef = useRef<HTMLDivElement>(null)
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [pendingDayAction, setPendingDayAction] = useState<DayDestructiveAction | null>(null)
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
+  const [planSurface, setPlanSurface] = useState<"plan" | "budget">("plan")
   const [listMode, setListMode] = useState<RouteViewMode>("list")
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
   const [mapMode, setMapMode] = useState<MapViewMode>("places")
@@ -300,7 +310,32 @@ export default function ItineraryPanel({
 
   useEffect(() => {
     setHeaderCollapsed(false)
-  }, [viewMode, setHeaderCollapsed])
+  }, [viewMode, planSurface, setHeaderCollapsed])
+
+  useEffect(() => {
+    setPlanSurface("plan")
+  }, [tripId])
+
+  useEffect(() => {
+    if (planSurface !== "budget") return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlanSurface("plan")
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [planSurface])
+
+  const prevSurfaceRef = useRef(planSurface)
+  useEffect(() => {
+    if (prevSurfaceRef.current === planSurface) return
+    prevSurfaceRef.current = planSurface
+    if (isMobile) {
+      window.scrollTo({ top: 0, behavior: "auto" })
+      return
+    }
+    listScrollRef.current?.scrollTo(0, 0)
+    budgetScrollRef.current?.scrollTo(0, 0)
+  }, [planSurface, isMobile])
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [manualDialogDayId, setManualDialogDayId] = useState<string | null>(null)
   const [manualDialogInitialType, setManualDialogInitialType] = useState<ItemType | null>(null)
@@ -322,7 +357,11 @@ export default function ItineraryPanel({
   )
 
   const handleAddExtraTask = useCallback(
-    (data: { title: string; category: TripTaskCategory }) => {
+    (data: {
+      title: string
+      category: TripTaskCategory
+      state?: Partial<TripTaskState>
+    }) => {
       addExtraTask(tripId, data)
     },
     [addExtraTask, tripId],
@@ -495,7 +534,14 @@ export default function ItineraryPanel({
   )
 
   useItineraryDnd({
-    enabled: Boolean(trip) && viewMode === "itinerary" && listMode === "list",
+    // `planSurface` cuenta: en Presupuesto la lista se desmonta. Si `enabled`
+    // siguiera true, el efecto no se re-suscribiría al volver y el
+    // `pointerdown` quedaría colgado del nodo viejo (arrastre muerto).
+    enabled:
+      Boolean(trip) &&
+      planSurface === "plan" &&
+      viewMode === "itinerary" &&
+      listMode === "list",
     rootRef: daysFlipRef,
     scrollRef: listScrollRef,
     chromeRef: listChromeRef,
@@ -533,6 +579,10 @@ export default function ItineraryPanel({
 
   const routeTaskTotals = useMemo(
     () => (trip ? computeTripTaskTotals(buildTripTasks(trip)) : null),
+    [trip],
+  )
+  const budgetView = useMemo(
+    () => (trip ? buildTripBudgetView(trip) : null),
     [trip],
   )
 
@@ -671,23 +721,58 @@ export default function ItineraryPanel({
             ) : null}
           </div>
 
-          <p className="mt-3 text-xs text-muted-foreground tabular-nums">
-            {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
-            {trip.days.length === 1 ? "día" : "días"}
-            {routeTaskTotals ? <TripTasksManagedFragment totals={routeTaskTotals} /> : null}
-          </p>
+          <div className="mt-3 flex min-h-7 items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums">
+              {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
+              {trip.days.length === 1 ? "día" : "días"}
+              {routeTaskTotals ? <TripTasksManagedFragment totals={routeTaskTotals} /> : null}
+            </p>
+            {planSurface === "plan" ? (
+              <button
+                type="button"
+                onClick={() => setPlanSurface("budget")}
+                className={cn(
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5",
+                  "text-xs font-medium text-foreground transition-colors",
+                  "hover:bg-muted/60",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                )}
+              >
+                <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Presupuesto
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        {/* Fila 3: pestañas — siempre visibles */}
+        {/* Fila 3: pestañas o barra de presupuesto — siempre visibles */}
         <div className="min-h-8">
-          <ItineraryViewModeTabs value={viewMode} onValueChange={setViewMode} />
+          {planSurface === "budget" ? (
+            <div className="flex min-h-8 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPlanSurface("plan")}
+                className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Volver al plan
+              </button>
+              {budgetView ? (
+                <p className="ml-auto truncate text-xs tabular-nums text-muted-foreground">
+                  {budgetChromeHeadline(budgetView)}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <ItineraryViewModeTabs value={viewMode} onValueChange={setViewMode} />
+          )}
         </div>
 
         {routeTaskTotals ? <TripTasksProgressHairline totals={routeTaskTotals} /> : null}
         </div>
       </div>
 
-      {isRoute ? (
+      {planSurface === "plan" && isRoute ? (
           <div className="flex shrink-0 items-center gap-3 px-4 py-2.5">
             <div className="panel-column flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <SegmentedControl
@@ -760,7 +845,21 @@ export default function ItineraryPanel({
       ) : null}
       </div>
 
-      {isRoute ? (
+      {planSurface === "budget" && budgetView ? (
+        <div
+          ref={budgetScrollRef}
+          className="max-md:contents md:min-h-0 md:flex-1 md:overflow-hidden md:flex md:flex-col"
+        >
+          <ItineraryBudgetView
+            trip={trip}
+            view={budgetView}
+            onSetTaskState={handleSetTaskState}
+            onSetBudget={(next) => setTripBudget(tripId, next)}
+            onAddExtraTask={handleAddExtraTask}
+            onEditTrip={onEditTrip}
+          />
+        </div>
+      ) : isRoute ? (
         <>
           {listMode === "list" ? (
             <div

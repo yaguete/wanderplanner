@@ -33,6 +33,7 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
     numTravelers: null,
     currency: "EUR",
     origin: null,
+    budget: null,
     archived: false,
     ...overrides,
   }

@@ -35,6 +35,7 @@ export type OutboundAffiliate = "partner" | "own" | "none"
 
 export type OutboundSurface =
   | "task_row"
+  | "budget_row"
   | "route_card"
   | "assistant"
   | "flight_search"

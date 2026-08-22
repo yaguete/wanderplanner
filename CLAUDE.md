@@ -82,6 +82,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       unsplash.ts          # portadas vía GET /cover (sin clave en el navegador)
       country-tasks.ts     # GET /country-tasks (lazy; sessionStorage + dismissals)
       trip-tasks.ts        # Selector de tareas + claves (`taskKeyForItem`)
+      trip-budget.ts       # Techo, veredicto, cobertura y cuenta; puro
       task-labels.ts       # Verbo de cada tarea según tipo / `route.mode`
       item-provenance.ts   # MANUAL_SOURCE_ID / ASSISTANT_SOURCE_ID + atribución
       route-legs.ts        # Ciclo de vida de ida/vuelta (reanclado, rescate)
@@ -107,6 +108,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
                            # call sites → funnel(); no URLs ni emails. start_opened ANTES del captcha.
       guest-trip-claim.ts  # login de invitado → cuenta existente (`wp-guest-trip-claim`)
       auth-session-persist.ts # remember-me: `wp-session-persist` + applyPersistMode (test:auth-session-persist)
+      auth-next.ts         # saneador de `?next=` post-login (test:auth-next)
       auth-google.ts       # SSO Google + flag NEXT_PUBLIC_GOOGLE_AUTH_ENABLED (test:auth-google)
       start-session.ts     # decisión pura de `/start` (open/reuse/create/replace)
       account-security.ts  # confirmación de borrado + validación de contraseña
@@ -118,7 +120,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
                            # use-virtual-keyboard, use-mobile, use-toast
 ```
 
-**Tests:** ficheros `lib/*.test.ts` ejecutados con `tsx` (`npm run test:<nombre>`), no vitest. [`ci.yml`](.github/workflows/ci.yml) ejecuta **solo un subconjunto** del front; al añadir una suite nueva, añádela también al workflow. El job `backend` corre `pytest` (instala `requirements-dev.txt`).
+**Tests:** ficheros `lib/*.test.ts` ejecutados con `tsx` (`npm run test:<nombre>`), no vitest. [`ci.yml`](.github/workflows/ci.yml) ejecuta **todas** las suites del front, una por línea; al añadir una, añádela también al workflow o dejará de ser cierto. El job `backend` corre `pytest` (instala `requirements-dev.txt`).
 
 ## Rutas App Router y shell
 
@@ -136,10 +138,10 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ### Panel «Mi viaje»: cinco pestañas, no dos niveles
 
-[`itinerary-view-mode-tabs.tsx`](frontend/components/itinerary-view-mode-tabs.tsx) — **Ruta · Actividades · Alojamientos · Transporte · Básicos** en una sola fila. **Ruta** es el timeline (**Lista · Calendario · Mapa**) y las otras cuatro son la **vista de tareas filtrada por categoría** (`VIEW_MODE_TASK_CATEGORIES`). No existe el nivel «Itinerario | Tareas» que describen planes antiguos. El calendario es vista de lectura (sin fechas: mes fantasma + CTA); el alta y la edición siguen en Lista.
+[`itinerary-view-mode-tabs.tsx`](frontend/components/itinerary-view-mode-tabs.tsx) — **Ruta · Actividades · Alojamientos · Transporte · Básicos** en una sola fila. **Ruta** es el timeline (**Lista · Calendario · Mapa**) y las otras cuatro son la **vista de tareas filtrada por categoría** (`VIEW_MODE_TASK_CATEGORIES`). El presupuesto **no es una sexta pestaña**: el botón vive en la fila de meta (ítems · días · gestionadas) y, al entrar, sustituye la fila de pestañas por «Volver al plan» ([`itinerary-budget-view.tsx`](frontend/components/itinerary-budget-view.tsx)). No existe el nivel «Itinerario | Tareas» que describen planes antiguos. El calendario es vista de lectura (sin fechas: mes fantasma + CTA); el alta y la edición siguen en Lista.
 
 - El botón de alta de cada pestaña crea un **ítem real**: Transporte → [`transport-route-dialog.tsx`](frontend/components/transport-route-dialog.tsx); Alojamientos / Actividades → [`add-manual-item-dialog.tsx`](frontend/components/add-manual-item-dialog.tsx) con el tipo fijado.
-- El **`ExtraTask`** (tarea suelta sin día ni lugar) solo se crea desde **Básicos**.
+- El **`ExtraTask`** (tarea suelta sin día ni lugar) se crea desde **Básicos** o desde **Añadir gasto** en la vista de presupuesto.
 - Regla: si lo que se añade tiene sitio y día → `UserDayItem`; si no → `ExtraTask`. No hay una tercera cosa.
 
 ## Auth e invitados
@@ -153,7 +155,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Persistencia (modelo documento)
 
-- Tablas `trips` / `sources`: columnas planas + `days`/`basics`/`items` en **jsonb camelCase** (contrato de [`types/itinerary.ts`](frontend/types/itinerary.ts)).
+- Tablas `trips` / `sources`: columnas planas + `days`/`basics`/`items`/`budget` en **jsonb camelCase** (contrato de [`types/itinerary.ts`](frontend/types/itinerary.ts)).
+- `trips.budget`: techo opcional `{ total, byCategory }`. Va en `TRIP_COLUMNS` / `tripToRow` (no es como `seed_source_key`).
 - `trips.seed_source_key`: `sourceMatchKey` del artículo del CTA. Lo escribe solo `/start`, **fuera** de `TRIP_COLUMNS` / `tripToRow` para que el syncer no lo pise.
 - `sources.total_days` (= `Source.totalDays`): duración declarada por la guía (`itinerary.total_days`); permite que un viaje de partner adopte los días del artículo.
 - [`trip-context.tsx`](frontend/lib/trip-context.tsx): mutaciones **síncronas** sobre `useState`; [`TripsSyncer`](frontend/lib/db/trips-repo.ts) hace upsert/delete por diffing (debounce ~1 s, cola, flush `pagehide`). Last-write-wins.
@@ -174,7 +177,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
   - `${type}:${normalizeName(name)}` — todo lo demás (un hotel de 3 noches es UNA reserva aunque aparezca 3 veces en la Ruta).
 - Ida y vuelta **en avión espejadas** (mismos IATA invertidos) se agregan como **una** tarea con clave `leg:outbound`; el coste de `leg:return` se pliega ahí. `taskKeyForItem` no cambia. La Ruta sigue mostrando dos tarjetas.
 - **El dinero vive en un solo sitio**: `trip.tasks[clave].cost`. Ni los ítems ni `route` llevan precio.
-- Divisa **del viaje** (`trip.currency`, default EUR), nunca por tarea. Coste por persona con `trip.numTravelers`.
+- El **techo** opcional vive en `trips.budget` (jsonb: `{ total, byCategory }`). No es un coste y no entra en ningún total. Vacío = `null`.
+- Divisa **del viaje** (`trip.currency`, default EUR), nunca por tarea. Coste por persona con `trip.numTravelers`. Cambiar la divisa no convierte importes ni el techo.
 - `nights` se deriva hoy de `dayIndexes.length`: un alojamiento añadido a mano se ancla a un día y cuenta **1 noche**. `spanDays` (T4B.2b) está pendiente — ver deuda.
 
 ## Tramos, transporte y mapa (Fase 4B)
@@ -199,13 +203,15 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/components/partners/partner-button-builder.tsx`](frontend/components/partners/partner-button-builder.tsx).
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
 - [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously, requestPasswordReset, updatePassword, deleteAccount.
-- [`frontend/lib/auth-session-persist.ts`](frontend/lib/auth-session-persist.ts) / [`auth-google.ts`](frontend/lib/auth-google.ts) — remember-me y SSO Google.
+- [`frontend/lib/auth-session-persist.ts`](frontend/lib/auth-session-persist.ts) / [`auth-next.ts`](frontend/lib/auth-next.ts) / [`auth-google.ts`](frontend/lib/auth-google.ts) — remember-me, destino `?next=` y SSO Google.
 - [`frontend/lib/guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) — stash + RPC para llevar el viaje del invitado a una cuenta existente.
 - [`frontend/lib/start-session.ts`](frontend/lib/start-session.ts) — decisión pura de `/start` (open / reuse / create / replace).
 - [`frontend/lib/account-security.ts`](frontend/lib/account-security.ts) — confirmación de borrado (`displayNameFor`) y validación de contraseña.
 - [`frontend/components/auth/registration-gate.tsx`](frontend/components/auth/registration-gate.tsx).
 - [`frontend/lib/api.ts`](frontend/lib/api.ts) / [`assistant-api.ts`](frontend/lib/assistant-api.ts) / [`api-auth.ts`](frontend/lib/api-auth.ts) / [`thumbs.ts`](frontend/lib/thumbs.ts) / [`unsplash.ts`](frontend/lib/unsplash.ts) / [`country-tasks.ts`](frontend/lib/country-tasks.ts) — Bearer del access token; thumbs, covers y trámites.
 - [`frontend/lib/trip-tasks.ts`](frontend/lib/trip-tasks.ts) — Claves de tarea y agregación; única fuente de `taskKeyForItem`.
+- [`frontend/lib/trip-budget.ts`](frontend/lib/trip-budget.ts) — Techo, veredicto, cobertura y cuenta (puro).
+- [`frontend/components/itinerary-budget-view.tsx`](frontend/components/itinerary-budget-view.tsx) / [`cost-input.tsx`](frontend/components/cost-input.tsx) — Superficie de presupuesto y input de importe.
 - [`frontend/lib/route-legs.ts`](frontend/lib/route-legs.ts) / [`transport-routes.ts`](frontend/lib/transport-routes.ts) / [`transport-hubs.ts`](frontend/lib/transport-hubs.ts) — Tramos de ida/vuelta y traslados.
 - [`frontend/lib/mapbox.ts`](frontend/lib/mapbox.ts) / [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts) / [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts) — Búsqueda de lugares, licencia y geometría del mapa.
 - [`frontend/lib/item-provenance.ts`](frontend/lib/item-provenance.ts) — `MANUAL_SOURCE_ID` / `ASSISTANT_SOURCE_ID`; **única** ruta de atribución.
@@ -218,7 +224,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 **`UserDayItem`:** `coords?: {lng,lat}` resueltas al elegir candidato; `route?: TransportRoute` en transportes (ver Fase 4B); `sourceRouteHint?` = `from`/`to`/`mode` en texto que trae la extracción y solo precarga el formulario. `sourceId` puede ser un centinela (`"manual"` / `"assistant"`), nunca `null`.
 
-**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `tasks`, `extraTasks`, `dismissedCountryTasks`, `numTravelers`, `currency`, `origin` (`TripOrigin | null`: label + coords `{lng,lat}` + countryCode), `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
+**`Trip` (app):** metadatos, `countries`, fechas opcionales (`startDate` / `endDate`), `numDays` (= `days.length`), `expectations`, `cover`/`coverUrl`, `archived`, `sourceIds`, `days`, `basics`, `tasks`, `extraTasks`, `dismissedCountryTasks`, `numTravelers`, `currency`, `origin` (`TripOrigin | null`: label + coords `{lng,lat}` + countryCode), `budget` (`TripBudget | null`: techo global + por grupo), `referrer?`. Con `startDate`, `endDate` = inicio + `numDays` − 1 (calendario inclusive; p. ej. 14 sept + 7 días → 20 sept). Sin inicio, no hay fechas en cabeceras de día. Normalización en lectura en `rowToTrip` para legacy desacoplado.
 
 **Portada:** primera fuente → `GET /cover`(área/país) → `ogImage` → emoji.
 
@@ -254,7 +260,6 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **`place_thumbs.kind` no está en la PK.** `single_flight` sí lleva `kind` (`thumb:{kind}:{query}`). La fila sigue siendo last-write-wins por `query`; partir la clave duplicaría getMedia.
 - Límites por usuario (`usage_events`): `cleanup_usage_events()` está programada a las 04:15 UTC y **corre** (comprobado 18 ago 2026). `cleanup_funnel_events()` va a las 04:30 UTC (migración `funnel_events`).
 - **`spanDays` pendiente (T4B.2b):** un alojamiento o transporte añadido a mano cuenta 1 noche / 1 día, y el coste por noche de la fila miente. Es lo siguiente de la Fase 4B.
-- **CI parcial (front):** al añadir una suite, añádela también al workflow. `assistant-suggestions` sí corre; `route-legs` y `transport-routes` entran con el embudo.
 - **Coste de Mapbox sin verificar:** falta comparar las peticiones a Directions de un viaje sin tramos antes/después del mapa nuevo; `place_suggest` / `transport_hub` no están en el presupuesto mensual.
 - **Proxy de Mapbox sin enchufar:** [`place_search.py`](backend/place_search.py) (`/places/suggest`, `/transport-hubs`) está escrito y nadie lo llama — el front va directo a `api.mapbox.com` con `NEXT_PUBLIC_MAPBOX_TOKEN`. Consecuencias: el token viaja en el bundle (defensa: restricción por URL del token, que es lo único que hay), y los kinds `place_suggest` / `transport_hub` de `usage_events` nunca se escriben, así que el gasto va sin medir. Enrutar `suggestPlaces` / `searchTransportHubs` por el proxy cierra las dos cosas; los tiles de `mapbox-gl` y Directions seguirán yendo directos igualmente, así que el token público no desaparece del navegador.
 - **Primera llamada a `resolveTripCountryCodes` (~460 ms):** ahí se compilan de golpe los ~400 patrones de [`countries.ts`](frontend/lib/countries.ts). Ocurre una vez por carga, en el primer render del asistente. Se quitaría indexando los países por su primera palabra para probar solo candidatos plausibles; ojo con los nombres con guion (`guinea-bissau`).
@@ -264,7 +269,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 - ❌ **No uses `useTrips()`** fuera del shell de [`trips-shell.tsx`](frontend/components/trips-shell.tsx). El `TripProvider` se monta desde [`app/(app)/layout.tsx`](frontend/app/(app)/layout.tsx) (`/trips` y `/account`).
 - ❌ **No pongas `/start` en `Disallow` de `robots.txt`.** Es el CTA de los blogs: tiene que ser rastreable para que Google lea el `noindex, follow`. `/trips` y `/account` sí van en `Disallow`. `/` y `/partners` se indexan. `Disallow` + `noindex` sobre la misma URL se anulan.
-- ❌ **No amplíes `ItemType` / `BasicCategory`** sin alinear [`item-styles.ts`](frontend/lib/item-styles.ts).
+- ❌ **No amplíes `ItemType` / `BasicCategory` / `TaskGroupCategory`** sin alinear [`item-styles.ts`](frontend/lib/item-styles.ts) (`ITEM_TYPE_ICONS`, `BASIC_ICONS`, `TASK_CATEGORY_ICONS`).
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
 - ❌ **No coercees un itinerario de Instagram con `media.caption`.** El detector es `InstagramText` (`instagram_llm_text`); si vuelves a `media.caption`, la revalidación aplana un Caso A que el OCR había estructurado. El hash es `sha256(IG_PIPELINE_VERSION + caption)` — calculable **sin** OCR. `/partners/prewarm` rechaza URLs de Instagram.
 - ❌ **No mutes a mano** `trip.days[…].items` → solo `moveItemBetweenDays`.
@@ -288,6 +293,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No reintroduzcas el asistente overlay/FAB** en desktop ni paneles redimensionables en el detalle.
 - ❌ **No compongas claves de tarea a mano** ni las renombres → `taskKeyForItem` / `taskKeyForBasic`. Cambiarlas huérfana los costes ya guardados en `trip.tasks`.
 - ❌ **No guardes precios en el ítem ni en `route`** → `trip.tasks[clave].cost`.
+- ❌ **No dupliques la agrupación por categoría** ni la lista de «las seis» → `taskGroupKey` / `TASK_CATEGORY_ORDER` / `groupTasksByCategory`.
+- ❌ **No inventes precios para completar la cobertura** del presupuesto ni uses APIs de precios. El hueco es la honestidad del cálculo.
 - ❌ **No persistas candidatos efímeros de Search Box** (hubs) sin pasar por [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts): es una cuestión de licencia de Mapbox, no de estilo.
 - ❌ **No pidas geocoding permanente con `permanent=true` sobre `mapbox.places`.** En v5 el permanente es un **endpoint distinto** (`mapbox.places-permanent`), no un parámetro, y `mapbox.places` **ignora en silencio** lo que no conoce: responde 200 igual con un parámetro inventado. Así estuvo el flag `NEXT_PUBLIC_MAPBOX_PERMANENT_GEOCODING` sin hacer nada mientras `toPersistableRoutePlace` etiquetaba como `permanent-geocode` coordenadas del dataset temporal. Si tocas la URL, el test [`mapbox-permanent.test.ts`](frontend/lib/mapbox-permanent.test.ts) comprueba el dataset.
 - ❌ **No pidas Directions para vuelos, trenes ni tramos largos** → geodésica/línea propia; Mapbox no tiene perfil `rail`.
@@ -309,7 +316,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Esquema SQL / RLS | [`supabase/migrations/`](supabase/migrations/), [`supabase/README.md`](supabase/README.md) |
 | [`types/itinerary.ts`](frontend/types/itinerary.ts) | prompt itinerario, `itinerary-utils`, `main.py`, forma de jsonb |
 | `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
-| Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`start-session.ts`](frontend/lib/start-session.ts), [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`auth-session-persist.ts`](frontend/lib/auth-session-persist.ts), [`auth-google.ts`](frontend/lib/auth-google.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql), [`20260818120000_trip_seed_source_key.sql`](supabase/migrations/20260818120000_trip_seed_source_key.sql), [`20260818130000_cleanup_anonymous_users_v2.sql`](supabase/migrations/20260818130000_cleanup_anonymous_users_v2.sql), [`20260821120000_google_display_name.sql`](supabase/migrations/20260821120000_google_display_name.sql), [`account-security.ts`](frontend/lib/account-security.ts), [`20260817190000_delete_own_account.sql`](supabase/migrations/20260817190000_delete_own_account.sql) |
+| Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`start-session.ts`](frontend/lib/start-session.ts), [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`auth-session-persist.ts`](frontend/lib/auth-session-persist.ts), [`auth-next.ts`](frontend/lib/auth-next.ts), [`auth-google.ts`](frontend/lib/auth-google.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql), [`20260818120000_trip_seed_source_key.sql`](supabase/migrations/20260818120000_trip_seed_source_key.sql), [`20260818130000_cleanup_anonymous_users_v2.sql`](supabase/migrations/20260818130000_cleanup_anonymous_users_v2.sql), [`20260821120000_google_display_name.sql`](supabase/migrations/20260821120000_google_display_name.sql), [`account-security.ts`](frontend/lib/account-security.ts), [`20260817190000_delete_own_account.sql`](supabase/migrations/20260817190000_delete_own_account.sql) |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-dock.tsx`](frontend/components/assistant-dock.tsx), [`assistant-actions.ts`](frontend/lib/assistant-actions.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), [`travel_assistant.md`](backend/agents/travel_assistant.md), perfil. Propuestas: `propose_add_item` / `propose_add_source` / `propose_move_item` (esta última confirma vía `moveItemBetweenDays`). |
 | JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
@@ -319,6 +326,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Trámites de país | [`country_tasks.py`](backend/country_tasks.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country-tasks.ts`](frontend/lib/country-tasks.ts), [`country-tasks-section.tsx`](frontend/components/country-tasks-section.tsx), `dismissed_country_tasks` |
 | Thumbs / covers | [`place_thumbs.py`](backend/place_thumbs.py), [`wikimedia_thumbs.py`](backend/wikimedia_thumbs.py), [`covers.py`](backend/covers.py), [`thumbs.ts`](frontend/lib/thumbs.ts), [`unsplash.ts`](frontend/lib/unsplash.ts) |
 | Tareas / costes | [`trip-tasks.ts`](frontend/lib/trip-tasks.ts) (+ test), [`task-labels.ts`](frontend/lib/task-labels.ts), [`trip-tasks-panel.tsx`](frontend/components/trip-tasks-panel.tsx), `tasks` / `extra_tasks` / `currency` / `num_travelers`, [`booking-search.ts`](frontend/lib/booking-search.ts) (stay del asistente) |
+| Presupuesto | [`trip-budget.ts`](frontend/lib/trip-budget.ts), [`itinerary-budget-view.tsx`](frontend/components/itinerary-budget-view.tsx), [`cost-input.tsx`](frontend/components/cost-input.tsx), `trips.budget`, [`assistant-context.ts`](frontend/lib/assistant-context.ts), [`travel_assistant.md`](backend/agents/travel_assistant.md) |
 | Tramos de transporte | [`route-legs.ts`](frontend/lib/route-legs.ts), [`transport-routes.ts`](frontend/lib/transport-routes.ts), [`transport-route-form.tsx`](frontend/components/transport-route-form.tsx), `taskKeyForItem`, mapa |
 | Búsqueda de lugares / hubs | [`place_search.py`](backend/place_search.py), [`mapbox.ts`](frontend/lib/mapbox.ts), [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts), [`usage.py`](backend/usage.py), `MAPBOX_ACCESS_TOKEN` |
 | Mapa | [`itinerary-map-view.tsx`](frontend/components/itinerary-map-view.tsx), [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts), [`map-geocode-state.ts`](frontend/lib/map-geocode-state.ts), coste de Directions |

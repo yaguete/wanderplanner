@@ -11,6 +11,7 @@ import { AuthShell } from "@/components/auth/auth-shell"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { safeNext } from "@/lib/auth-next"
 import { useAuth } from "@/lib/auth-context"
 import { authCallbackErrorMessage } from "@/lib/auth-errors"
 import { persistModeFromRemember } from "@/lib/auth-session-persist"
@@ -20,8 +21,13 @@ import { clearStash, prepareGuestTripClaim } from "@/lib/guest-trip-claim"
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { signIn, isGuest, user } = useAuth()
-  const next = searchParams.get("next") || "/trips"
+  const { signIn, isGuest, user, isLoading } = useAuth()
+  const next = safeNext(searchParams.get("next"))
+
+  useEffect(() => {
+    if (isLoading) return
+    if (user && !isGuest) router.replace(next)
+  }, [isGuest, isLoading, next, router, user])
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")

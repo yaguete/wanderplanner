@@ -9,6 +9,7 @@
     "start": "next start",
     "test:trip-dates": "tsx lib/trip-dates.test.ts",
     "test:trip-tasks": "tsx lib/trip-tasks.test.ts",
+    "test:trip-budget": "tsx lib/trip-budget.test.ts",
     "test:country-tasks": "tsx lib/country-tasks.test.ts",
     "test:task-labels": "tsx lib/task-labels.test.ts",
     "test:day-summary": "tsx lib/day-summary.test.ts",
@@ -50,8 +51,10 @@
     "test:guest-trip-claim": "tsx lib/guest-trip-claim.test.ts",
     "test:account-security": "tsx lib/account-security.test.ts",
     "test:auth-errors": "tsx lib/auth-errors.test.ts",
+    "test:auth-next": "tsx lib/auth-next.test.ts",
     "test:auth-session-persist": "tsx lib/auth-session-persist.test.ts",
     "test:auth-google": "tsx lib/auth-google.test.ts",
+    "test:turnstile": "tsx components/auth/turnstile.test.ts",
     "test:onboarding": "tsx lib/onboarding.test.ts"
   },
   "dependencies": {

@@ -1,9 +1,12 @@
 import {
+  Bed,
   Bus,
   Car,
   Caravan,
+  CircleEllipsis,
   CircleHelp,
   Home,
+  Luggage,
   MapPin,
   Plane,
   Shield,
@@ -15,7 +18,14 @@ import {
   Wifi,
   type LucideIcon,
 } from "lucide-react"
-import type { BasicCategory, ItemType, RouteMode, SourceRouteHint, UserDayItem } from "@/types/itinerary"
+import type {
+  BasicCategory,
+  ItemType,
+  RouteMode,
+  SourceRouteHint,
+  TaskGroupCategory,
+  UserDayItem,
+} from "@/types/itinerary"
 
 /** Chip con borde neutro; el color de tipo va en el texto (y en iconos de Mi viaje). */
 export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: string }> = {
@@ -73,6 +83,19 @@ export const ITEM_TYPE_ICONS: Record<ItemType, LucideIcon> = {
   stay: Home,
   food: UtensilsCrossed,
   activity: MapPin,
+}
+
+/**
+ * Iconos de los seis grupos visibles. Alineado con `ItineraryViewModeTabs`
+ * a propósito (Bed / Ticket / Car / Luggage), no con los puntos del timeline.
+ */
+export const TASK_CATEGORY_ICONS: Record<TaskGroupCategory, LucideIcon> = {
+  accommodation: Bed,
+  transport: Car,
+  activity: Ticket,
+  food: UtensilsCrossed,
+  basic: Luggage,
+  other: CircleEllipsis,
 }
 
 /**

@@ -19,6 +19,7 @@ import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 import { persistModeFromRemember } from "@/lib/auth-session-persist"
+import { safeNext } from "@/lib/auth-next"
 import { writeSessionPersistMode } from "@/lib/supabase/client"
 import { recordAccountCreated } from "@/lib/funnel-analytics"
 import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
@@ -35,6 +36,7 @@ export function SignupForm({
 }) {
   const router = useRouter()
   const { signUp, isGuest, upgradeGuest, user, isLoading } = useAuth()
+  const dest = safeNext(next)
   const compact = variant === "compact"
 
   const [name, setName] = useState("")
@@ -115,7 +117,7 @@ export function SignupForm({
       "Cuenta creada. Te hemos enviado un correo para confirmar tu email, revisa tu bandeja de entrada.",
     )
     if (result.signedIn === false) return
-    router.push(next)
+    router.push(dest)
     router.refresh()
   }
 
@@ -263,7 +265,7 @@ export function SignupForm({
         {submitting ? "Creando cuenta…" : "Crear cuenta"}
       </Button>
       <GoogleSignInButton
-        next={next}
+        next={dest}
         rememberMe={rememberMe}
         claimUserId={isGuest ? user?.id : undefined}
         disabled={submitting}

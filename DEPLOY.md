@@ -220,6 +220,7 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   16. `20260816180000_guest_trip_claim.sql`
   17. `20260817000000_place_thumbs_wikimedia.sql`
   18. `20260817120000_photo_paid_usage.sql` (antes del backend que escribe `photo_paid`; si no, el tope global lee 0)
+  19. `20260822120000_trip_budget.sql` (`trips.budget`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
 
 ```bash
 # Con CLI vinculada al proyecto:
@@ -232,6 +233,8 @@ supabase db push
 **T4.4 trámites por destino:** aplicar `20260808200000_dismissed_country_tasks.sql` y `20260808210000_country_task_suggestions.sql` **antes** del frontend que pide `dismissed_country_tasks` en `TRIP_COLUMNS`. Orden de despliegue: **migraciones → backend Fly (`GET /country-tasks`) → frontend Vercel**.
 
 **⚠️ T4B.1 origen del viaje:** `20260808220000_trip_origin.sql` añade `trips.origin` (jsonb nullable). El frontend la incluye en `TRIP_COLUMNS`; si mergeas a `main` **antes** de aplicar la migración, PostgREST responde *column does not exist* y **`/trips` cae para todos los usuarios**. Orden obligatorio: **1) aplicar la migración en Supabase de producción, 2) verificar la columna, 3) solo entonces mergear**. Aditiva e idempotente: segura con el front viejo aún en producción.
+
+**⚠️ Vista de presupuesto:** `20260822120000_trip_budget.sql` añade `trips.budget` (jsonb nullable). El frontend la incluye en `TRIP_COLUMNS`; si mergeas a `main` **antes** de aplicar la migración, PostgREST responde *Could not find the 'budget' column* (`PGRST204`) y **falla cada escritura de viaje**, no solo las de presupuesto. Orden obligatorio: **1) aplicar la migración en Supabase de producción, 2) verificar la columna, 3) solo entonces mergear**. Aditiva e idempotente: segura con el front viejo aún en producción.
 
 **Google SSO:** orden **1) migración** `20260821120000_google_display_name.sql` (el trigger `handle_new_user` lee `full_name` / `name`), **2) dashboard** Auth → Google con Client ID/Secret y redirect de Google Cloud, **3) flag** `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true` en Vercel. Si el botón llega antes que 1+2, cada clic es un 400. Rollback: apagar el flag (email+contraseña siguen). Local: `[auth.external.google]` en `supabase/config.toml` va **`enabled = false`** en git; redirect de Google `http://127.0.0.1:54321/auth/v1/callback`.
 

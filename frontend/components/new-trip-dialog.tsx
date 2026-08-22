@@ -627,6 +627,7 @@ export function NewTripDialog({
             </Select>
             <p className="text-xs text-muted-foreground">
               Elige la divisa en la que quieres que se muestren los costes de tu viaje.
+              Cambiarla no convierte importes ni el techo ya apuntados.
             </p>
           </div>
           {formError ? (

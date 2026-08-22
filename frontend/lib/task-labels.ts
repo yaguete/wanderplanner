@@ -11,12 +11,13 @@ import type {
   ItemType,
   RouteMode,
   RoutePlace,
+  TaskGroupCategory,
   TripTaskCategory,
   TripTaskStatus,
 } from "@/types/itinerary"
 
 /** Orden de grupos en la lista principal (y en el selector de extras). */
-export const TASK_CATEGORY_ORDER: TripTaskCategory[] = [
+export const TASK_CATEGORY_ORDER: TaskGroupCategory[] = [
   "accommodation",
   "transport",
   "activity",
@@ -35,16 +36,6 @@ export const TASK_CATEGORY_LABELS: Record<TripTaskCategory, string> = {
   health: "Otras",
   other: "Otras",
 }
-
-/** Categorías elegibles al crear una tarea manual (seis grupos visibles). */
-export const EXTRA_TASK_CATEGORIES: TripTaskCategory[] = [
-  "accommodation",
-  "transport",
-  "activity",
-  "food",
-  "basic",
-  "other",
-]
 
 export const TASK_STATUS_LABELS: Record<TripTaskStatus, string> = {
   booked: "Reservado",
@@ -243,7 +234,7 @@ function formatDayList(days: number[]): string {
 }
 
 /** Clave de agrupación visual: paperwork/health caen en «Otras». */
-export function taskGroupKey(category: TripTaskCategory): TripTaskCategory {
+export function taskGroupKey(category: TripTaskCategory): TaskGroupCategory {
   if (category === "paperwork" || category === "health") return "other"
   return category
 }

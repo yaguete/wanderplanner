@@ -6,7 +6,7 @@ import type {
   UserBasicItem,
   UserDayItem,
 } from "@/types/itinerary"
-import { parseTripOrigin, rowToTrip, tripToRow, type TripRow } from "./db/trips-repo"
+import { parseTripBudget, parseTripOrigin, rowToTrip, tripToRow, type TripRow } from "./db/trips-repo"
 import {
   buildTripTasks,
   cancellableApplies,
@@ -112,6 +112,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     numTravelers: null,
     currency: "EUR",
     origin: null,
+    budget: null,
     archived: false,
     ...overrides,
   }
@@ -657,6 +658,7 @@ assert.equal(isBookableTransportMode(null), false)
   assert.equal(loaded.numTravelers, null)
   assert.equal(loaded.currency, "EUR")
   assert.equal(loaded.origin, null)
+  assert.equal(loaded.budget, null)
 
   const trip = makeTrip({
     tasks: {
@@ -682,6 +684,7 @@ assert.equal(isBookableTransportMode(null), false)
       coords: { lng: 2.1734, lat: 41.3851 },
     },
     numTravelers: 2,
+    budget: { total: 3000, byCategory: { accommodation: 1200 } },
   })
   const row = tripToRow(trip, "user-1")
   assert.ok(row.tasks)
@@ -699,6 +702,10 @@ assert.equal(isBookableTransportMode(null), false)
   const back = rowToTrip(row)
   assert.deepEqual(back.origin, trip.origin)
   assert.equal(back.numTravelers, 2)
+  assert.deepEqual(back.budget, {
+    total: 3000,
+    byCategory: { accommodation: 1200 },
+  })
 }
 
 // ── parseTripOrigin: lectura defensiva ───────────────────────────────────────
@@ -734,6 +741,54 @@ assert.equal(isBookableTransportMode(null), false)
     }),
     { label: "Barcelona", countryCode: "ES", coords: { lng: 2.17, lat: 41.38 } },
   )
+}
+
+// ── parseTripBudget: lectura defensiva ───────────────────────────────────────
+
+{
+  assert.equal(parseTripBudget(null), null)
+  assert.equal(parseTripBudget(undefined), null)
+  assert.equal(parseTripBudget("3000"), null)
+  assert.equal(parseTripBudget([]), null)
+  assert.equal(parseTripBudget({}), null)
+  assert.equal(parseTripBudget({ total: -10, byCategory: { food: -1 } }), null)
+  assert.equal(parseTripBudget({ total: Number.NaN, byCategory: { ghost: 50 } }), null)
+  assert.deepEqual(parseTripBudget({ total: 0, byCategory: {} }), {
+    total: 0,
+    byCategory: {},
+  })
+  assert.deepEqual(
+    parseTripBudget({
+      total: 3000,
+      byCategory: { accommodation: 1200, paperwork: 80, food: 50 },
+    }),
+    { total: 3000, byCategory: { accommodation: 1200, food: 50 } },
+  )
+  const corrupted = rowToTrip({
+    id: "t",
+    user_id: "u",
+    name: "X",
+    countries: [],
+    start_date: null,
+    end_date: null,
+    num_days: 1,
+    expectations: null,
+    cover: "✈️",
+    cover_url: null,
+    archived: false,
+    referrer: null,
+    source_ids: [],
+    days: [{ id: "d1", label: "", items: [] }],
+    basics: [],
+    tasks: {},
+    extra_tasks: [],
+    dismissed_country_tasks: [],
+    num_travelers: null,
+    currency: "EUR",
+    origin: null,
+    budget: { total: "mucho", byCategory: null },
+  } as unknown as TripRow)
+  assert.equal(corrupted.budget, null)
 }
 
 // ── T4B.3: ida/vuelta — claves semánticas y costes independientes ────────────

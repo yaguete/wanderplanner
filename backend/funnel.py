@@ -35,7 +35,7 @@ ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
     ),
     "affiliate": frozenset({"partner", "own", "none"}),
     "surface": frozenset(
-        {"task_row", "route_card", "assistant", "flight_search", "inspiration"}
+        {"task_row", "budget_row", "route_card", "assistant", "flight_search", "inspiration"}
     ),
     "onboarding": frozenset({"completed", "skipped", "unseen"}),
     "sourceKind": frozenset({"instagram", "article"}),

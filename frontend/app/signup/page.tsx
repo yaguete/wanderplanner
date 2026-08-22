@@ -5,12 +5,13 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { SignupForm } from "@/components/auth/signup-form"
+import { safeNext } from "@/lib/auth-next"
 import { useAuth } from "@/lib/auth-context"
 
 function SignupPageBody() {
   const searchParams = useSearchParams()
   const { isGuest } = useAuth()
-  const next = searchParams.get("next") || "/trips"
+  const next = safeNext(searchParams.get("next"))
 
   return (
     <AuthShell

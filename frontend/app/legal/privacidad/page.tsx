@@ -34,7 +34,7 @@ const DATA_ROWS: readonly (readonly string[])[] = [
   ],
   [
     "Tus viajes",
-    "Destinos, fechas, sitios, transportes, tareas, costes y los artículos que has guardado. Es lo que la app hace.",
+    "Destinos, fechas, sitios, transportes, tareas, costes, presupuesto y los artículos que has guardado. Es lo que la app hace.",
     "Contrato",
   ],
   [

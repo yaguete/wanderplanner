@@ -3,9 +3,11 @@ import {
   formatTaskDays,
   formatTripCurrency,
   parseCostInput,
+  TASK_CATEGORY_ORDER,
   taskActionTitle,
   taskGroupKey,
 } from "./task-labels"
+import type { TaskGroupCategory } from "@/types/itinerary"
 import type { DerivedTripTask } from "./trip-tasks"
 
 function task(
@@ -218,6 +220,19 @@ assert.equal(
 assert.equal(taskGroupKey("paperwork"), "other")
 assert.equal(taskGroupKey("health"), "other")
 assert.equal(taskGroupKey("accommodation"), "accommodation")
+
+{
+  const expected: TaskGroupCategory[] = [
+    "accommodation",
+    "transport",
+    "activity",
+    "food",
+    "basic",
+    "other",
+  ]
+  assert.deepEqual([...TASK_CATEGORY_ORDER], expected)
+  assert.equal(new Set(TASK_CATEGORY_ORDER).size, expected.length)
+}
 
 // Divisa y parseo de coste.
 assert.match(formatTripCurrency(840, "EUR"), /840/)
