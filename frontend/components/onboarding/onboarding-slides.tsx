@@ -48,7 +48,7 @@ export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
     title: "El artículo o reel transformado en actividades y alojamientos listos para reservar",
     body: (
       <>
-        Puedes leer la <PanelName>Crónica</PanelName> tal y como aparece en la web original, o puedes o ir directamente a la pestaña <PanelName>Ruta</PanelName> para empezar a ubicar las activades, alojamientos o lugares que se recomiendan en tu propio plan de viaje.
+        Puedes leer la <PanelName>Crónica</PanelName> tal y como aparece en la web original, o puedes ir directamente a la pestaña <PanelName>Ruta</PanelName> para empezar a añadir recomendaciones a tu propio plan de viaje.
       </>
     ),
     footer: `¿Aún no tienes ninguna fuente? No te preocupes, elige un destino y nosotros te sugerimos artículos de los mejores blogs y revistas de viaje.`,

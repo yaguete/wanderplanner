@@ -11,6 +11,7 @@ import { useTrips } from "@/lib/trip-context"
 import { NewTripDialog } from "@/components/new-trip-dialog"
 import { SidebarAccountFooter } from "@/components/account-menu"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { useOpeningTrip } from "@/components/opening-trip"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
 
 /**
@@ -75,6 +76,7 @@ export function AppSidebar({
   const router = useRouter()
   const { trips, createTrip } = useTrips()
   const { requireAccount } = useRegistrationGate()
+  const { beginOpenTrip, clearOpeningTrip } = useOpeningTrip()
   const rail = useSidebarRail()
   const { chromeHydrated } = useTripChrome()
   const [newTripOpen, setNewTripOpen] = useState(false)
@@ -152,6 +154,7 @@ export function AppSidebar({
                 <Link
                   href="/trips"
                   onClick={(e) => {
+                    clearOpeningTrip()
                     if (!requireAccount("home")) {
                       e.preventDefault()
                       return
@@ -170,6 +173,7 @@ export function AppSidebar({
             <Link
               href="/trips"
               onClick={(e) => {
+                clearOpeningTrip()
                 if (!requireAccount("home")) {
                   e.preventDefault()
                   return
@@ -194,7 +198,10 @@ export function AppSidebar({
                     <TooltipTrigger asChild>
                       <Link
                         href={`/trips/${t.id}`}
-                        onClick={onNavigate}
+                        onClick={(e) => {
+                          beginOpenTrip({ id: t.id, name: t.name }, e)
+                          onNavigate?.()
+                        }}
                         className={navLinkClass(isActive)}
                         aria-label={t.name}
                       >
@@ -229,7 +236,10 @@ export function AppSidebar({
                       <Link
                         key={t.id}
                         href={`/trips/${t.id}`}
-                        onClick={onNavigate}
+                        onClick={(e) => {
+                          beginOpenTrip({ id: t.id, name: t.name }, e)
+                          onNavigate?.()
+                        }}
                         className={cn(
                           "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] leading-snug transition-colors",
                           isActive
@@ -287,6 +297,7 @@ export function AppSidebar({
           const trip = createTrip(data)
           setNewTripOpen(false)
           onNavigate?.()
+          beginOpenTrip({ id: trip.id, name: trip.name })
           router.push(`/trips/${trip.id}`)
         }}
       />

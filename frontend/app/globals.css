@@ -563,6 +563,31 @@ li[data-wp-draggable] {
   }
 }
 
+/*
+ * Ardilla al abrir un viaje: un salto corto (solo transform). El bloque
+ * global de prefers-reduced-motion ya corta duration/iteration.
+ */
+@keyframes wp-squirrel-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-7px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  65% {
+    transform: translateY(-3px);
+  }
+}
+
+.wp-squirrel-hop {
+  animation: wp-squirrel-hop 1s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+
 /* ===== Landing (/) — reveal por scroll sin JS y textura de grid ===== */
 
 /* Progressive enhancement: solo navegadores con scroll-driven animations. */

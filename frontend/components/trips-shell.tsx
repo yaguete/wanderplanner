@@ -7,6 +7,7 @@ import { TripProvider } from "@/lib/trip-context"
 import { TripChromeProvider } from "@/lib/trip-chrome-context"
 import { RegistrationGateProvider } from "@/components/auth/registration-gate"
 import { OnboardingProvider } from "@/components/onboarding/onboarding-provider"
+import { OpeningTripOverlay, OpeningTripProvider } from "@/components/opening-trip"
 import { useIsMobile } from "@/hooks/use-mobile"
 
 function TripsChrome({ children }: { children: React.ReactNode }) {
@@ -27,7 +28,10 @@ function TripsChrome({ children }: { children: React.ReactNode }) {
       <AppHeader />
       <div className="flex flex-1 md:min-h-0">
         {!isMobile ? <AppSidebar /> : null}
-        <main className="flex min-w-0 flex-1 flex-col md:min-h-0">{children}</main>
+        <main className="relative flex min-w-0 flex-1 flex-col md:min-h-0">
+          {children}
+          <OpeningTripOverlay />
+        </main>
       </div>
     </div>
   )
@@ -40,9 +44,11 @@ export function TripsShell({ children }: { children: React.ReactNode }) {
       <RegistrationGateProvider>
         <OnboardingProvider>
           <TripChromeProvider>
-            <TooltipProvider delayDuration={0}>
-              <TripsChrome>{children}</TripsChrome>
-            </TooltipProvider>
+            <OpeningTripProvider>
+              <TooltipProvider delayDuration={0}>
+                <TripsChrome>{children}</TripsChrome>
+              </TooltipProvider>
+            </OpeningTripProvider>
           </TripChromeProvider>
         </OnboardingProvider>
       </RegistrationGateProvider>

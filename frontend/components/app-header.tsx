@@ -13,6 +13,7 @@ import {
   useAccountIdentity,
 } from "@/components/account-menu"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
+import { useOpeningTrip } from "@/components/opening-trip"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
@@ -61,6 +62,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
   const { name } = useAccountIdentity()
   const isMobile = useIsMobile()
   const { chrome, chromeHydrated } = useTripChrome()
+  const { clearOpeningTrip } = useOpeningTrip()
   const rail = useSidebarRail()
 
   const showPanelToggles = !isMobile && chrome !== null
@@ -94,6 +96,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
         <Link
           href="/trips"
           aria-label="WanderPlanner"
+          onClick={() => clearOpeningTrip()}
           className={cn(
             "flex min-w-0 items-center outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
             // Rail: la ardilla sigue centrada en w-14 (eje de los iconos del aside).

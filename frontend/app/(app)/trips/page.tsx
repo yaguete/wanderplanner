@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Archive,
@@ -26,6 +27,7 @@ import {
 import { countriesPlainList } from "@/lib/countries"
 import { formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
+import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
@@ -136,6 +138,7 @@ export default function TripsHomePage() {
   const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip } =
     useTrips()
   const router = useRouter()
+  const { openingTrip, beginOpenTrip } = useOpeningTrip()
   const { requireAccount } = useRegistrationGate()
   const [dialogOpen, setDialogOpen] = useState(false)
   const openNewTripDialog = () => {
@@ -284,11 +287,21 @@ export default function TripsHomePage() {
             {visibleTrips.map((trip) => {
               const itemCount = tripItemCount(trip)
               return (
-                <div key={trip.id} className="group/card relative">
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/trips/${trip.id}`)}
-                    className="w-full overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:bg-muted/40"
+                <div
+                  key={trip.id}
+                  className={cn(
+                    "group/card relative",
+                    openingTrip?.id === trip.id && "z-[1]",
+                  )}
+                >
+                  <Link
+                    href={`/trips/${trip.id}`}
+                    onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
+                    aria-busy={openingTrip?.id === trip.id || undefined}
+                    className={cn(
+                      "block w-full overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:bg-muted/40",
+                      openingTrip?.id === trip.id && "ring-2 ring-foreground/15",
+                    )}
                   >
                     <div className="relative h-28 overflow-hidden bg-muted sm:h-32">
                       {trip.coverUrl ? (
@@ -325,7 +338,7 @@ export default function TripsHomePage() {
                         </Badge>
                       </div>
                     </div>
-                  </button>
+                  </Link>
                   <div className="absolute right-2 top-2">
                     <TripActions
                       trip={trip}
@@ -362,11 +375,18 @@ export default function TripsHomePage() {
               {visibleTrips.map((trip) => {
                 const itemCount = tripItemCount(trip)
                 return (
-                  <li key={trip.id} className="group/row relative">
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/trips/${trip.id}`)}
-                      className="flex w-full items-center gap-3 py-3 pl-3 pr-28 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4 sm:pr-32"
+                  <li
+                    key={trip.id}
+                    className={cn("group/row relative", openingTrip?.id === trip.id && "z-[1]")}
+                  >
+                    <Link
+                      href={`/trips/${trip.id}`}
+                      onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
+                      aria-busy={openingTrip?.id === trip.id || undefined}
+                      className={cn(
+                        "flex w-full items-center gap-3 py-3 pl-3 pr-28 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4 sm:pr-32",
+                        openingTrip?.id === trip.id && "bg-muted/40",
+                      )}
                     >
                       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted sm:h-14 sm:w-14">
                         {trip.coverUrl ? (
@@ -405,7 +425,7 @@ export default function TripsHomePage() {
                           </Badge>
                         </div>
                       </div>
-                    </button>
+                    </Link>
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
                       <TripActions
                         trip={trip}
@@ -479,6 +499,7 @@ export default function TripsHomePage() {
           }
           const trip = createTrip(data)
           setDialogOpen(false)
+          beginOpenTrip({ id: trip.id, name: trip.name })
           router.push(`/trips/${trip.id}`)
         }}
       />

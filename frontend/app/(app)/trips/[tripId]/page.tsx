@@ -19,7 +19,7 @@ import ItineraryPanel from "@/components/itinerary-panel-v2"
 import { AssistantPanelLayer } from "@/components/assistant-dock"
 import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
-import { Spinner } from "@/components/ui/spinner"
+import { OpeningTripStatus, useOpeningTrip } from "@/components/opening-trip"
 import { TripPanelsEmpty } from "@/components/trip-panel-toggles"
 import {
   useTripChrome,
@@ -107,6 +107,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const pendingSourceUrl = querySource || stashedSource
   const isMobile = useIsMobile()
   const { setChrome, setAutoCollapsed } = useTripChrome()
+  const { openingTrip, clearOpeningTrip } = useOpeningTrip()
 
   const [panels, setPanels] = useState<TripPanelState>(DEFAULT_PANELS)
   const [panelsHydrated, setPanelsHydrated] = useState(false)
@@ -165,8 +166,15 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   useEffect(() => {
     if (authLoading || isLoading || !user) return
-    if (!trip) router.replace("/trips")
-  }, [authLoading, isLoading, user, trip, router])
+    if (!trip) {
+      clearOpeningTrip()
+      router.replace("/trips")
+    }
+  }, [authLoading, isLoading, user, trip, router, clearOpeningTrip])
+
+  useEffect(() => {
+    if (trip && openingTrip?.id === trip.id) clearOpeningTrip()
+  }, [trip, openingTrip, clearOpeningTrip])
 
   useEffect(() => {
     if (querySource) return
@@ -333,8 +341,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   if (isLoading && !trip) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center">
-        <Spinner className="size-5 text-muted-foreground" />
+      <div className="flex h-full flex-1 flex-col items-center justify-center">
+        <OpeningTripStatus />
       </div>
     )
   }
