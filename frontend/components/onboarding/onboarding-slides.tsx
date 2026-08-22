@@ -13,7 +13,7 @@ export type OnboardingSlide = {
   id: OnboardingSlideId
   /** Nombre del panel junto a la ardilla (slides 2–4). Mismo lockup que el wordmark. */
   kicker?: string
-  title: string
+  title: ReactNode
   body: ReactNode
   footer: ReactNode
   Mock: ComponentType
@@ -26,7 +26,13 @@ function PanelName({ children }: { children: ReactNode }) {
 export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: "mecanismo",
-    title: "Ese viaje te ha gustado. Ahora, hagámoslo a tu manera.",
+    title: (
+      <>
+        Ese viaje te ha gustado.
+        <br />
+        Ahora, hagámoslo a tu manera.
+      </>
+    ),
     body: "WanderPlanner organiza todo lo que has encontrado y te ayuda a adaptar y configurar tu propia ruta.",
     footer: (
       <>
