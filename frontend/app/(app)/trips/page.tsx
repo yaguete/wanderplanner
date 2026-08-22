@@ -50,6 +50,18 @@ function tripItemCount(trip: Trip): number {
   return trip.days.reduce((sum, d) => sum + d.items.length, 0)
 }
 
+function tripStatsLine(trip: Trip, itemCount: number): string {
+  const parts: string[] = []
+  if (trip.numDays != null) {
+    parts.push(`${trip.numDays} ${trip.numDays === 1 ? "día" : "días"}`)
+  }
+  parts.push(
+    `${trip.sourceIds.length} ${trip.sourceIds.length === 1 ? "fuente" : "fuentes"}`,
+  )
+  parts.push(`${itemCount} ítems`)
+  return parts.join(" · ")
+}
+
 function TripActions({
   trip,
   onArchive,
@@ -358,13 +370,15 @@ export default function TripsHomePage() {
                 onClick={openNewTripDialog}
                 className="group flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-transparent p-8 transition-colors hover:border-foreground/30 hover:bg-muted/30"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
-                  <Plus className="h-4 w-4" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
+                  <Plus className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.5} />
                 </div>
-                <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground">
-                ¿Tienes otro viaje en mente?
-                <br />
-                Empieza a planificarlo
+                <span className="text-center text-sm">
+                  <span className="text-muted-foreground group-hover:text-foreground">
+                    ¿Tienes otro viaje en mente?
+                  </span>
+                  <br />
+                  <span className="font-medium text-foreground">Empieza a planificarlo</span>
                 </span>
               </button>
             ) : null}
@@ -401,7 +415,7 @@ export default function TripsHomePage() {
                           </div>
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 text-left">
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <h3 className="truncate text-sm font-semibold tracking-tight">
                             {trip.name}
@@ -410,20 +424,9 @@ export default function TripsHomePage() {
                             {formatTripDates(trip.startDate, trip.endDate) ?? "Sin fechas"}
                           </span>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {trip.numDays != null && (
-                            <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                              {trip.numDays} {trip.numDays === 1 ? "día" : "días"}
-                            </Badge>
-                          )}
-                          <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                            {trip.sourceIds.length}{" "}
-                            {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
-                          </Badge>
-                          <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                            {itemCount} ítems
-                          </Badge>
-                        </div>
+                        <p className="mt-1 text-[12px] leading-snug tabular-nums text-muted-foreground">
+                          {tripStatsLine(trip, itemCount)}
+                        </p>
                       </div>
                     </Link>
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
@@ -443,14 +446,18 @@ export default function TripsHomePage() {
               <button
                 type="button"
                 onClick={openNewTripDialog}
-                className="flex w-full items-center gap-3 border-t border-dashed border-border px-3 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground sm:px-4"
+                className="group flex w-full items-center gap-3 border-t border-dashed border-border px-3 py-3 text-left text-sm transition-colors hover:bg-muted/30 sm:px-4"
               >
-                <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border sm:h-14 sm:w-14">
-                  <Plus className="h-4 w-4" />
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border text-foreground transition-colors group-hover:border-foreground/30 sm:h-14 sm:w-14">
+                  <Plus className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.5} />
                 </span>
-                ¿Tienes otro viaje en mente?
-                <br />
-                Empieza a planificarlo
+                <span>
+                  <span className="text-muted-foreground group-hover:text-foreground">
+                    ¿Tienes otro viaje en mente?
+                  </span>
+                  <br />
+                  <span className="font-medium text-foreground">Empieza a planificarlo</span>
+                </span>
               </button>
             ) : null}
           </div>
