@@ -5,6 +5,7 @@ import { LandingHeader } from "@/components/landing/landing-header"
 import { LandingFooter } from "@/components/landing/landing-footer"
 import { BlogLandingAttribution } from "@/components/landing/blog/blog-landing-attribution"
 import { BlogLandingHero } from "@/components/landing/blog/blog-landing-hero"
+import { ValueProps } from "@/components/landing/value-props"
 import { getBlogLanding } from "@/lib/blog-landings"
 
 /** Rotulador fino (Martie Three Regular / Sharpie ultrafine). Gochi Hand era demasiado gruesa. */
@@ -61,6 +62,7 @@ export default function LacosmopolillaPage() {
             wordmarkClassName={caveat.className}
             destinationPlaceholder={landing.destinationPlaceholder}
           />
+          <ValueProps sections={["plan", "oficial"]} />
         </main>
         <LandingFooter />
       </div>
