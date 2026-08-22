@@ -26,8 +26,8 @@ function PanelName({ children }: { children: ReactNode }) {
 export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: "mecanismo",
-    title: "Haz realidad las rutas, recomendaciones y consejos de las fuentes en las que confías",
-    body: "¿Has visto un artículo o un reel que te ha convencido? WanderPlanner lo convierte en un plan de viaje personalizado, a tu ritmo, con todo lo que necesitas para hacerlo realidad.",
+    title: "Ese viaje que te ha gustado. Ahora, hagámoslo a tu manera.",
+    body: "WanderPlanner organiza todo lo que has encontrado y te ayuda a adaptar y configurar tu propia ruta.",
     footer: (
       <>
         Sin capturas, sin notas sueltas, sin un Google Doc o un Excel a medias. Todo en un solo lugar: tus <PanelName>fuentes</PanelName> de inspiración, tu plan de{" "}
