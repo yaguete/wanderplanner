@@ -48,10 +48,7 @@ export function TripPanelToggles({ panels, onToggle, className }: TripPanelToggl
     <div
       role="group"
       aria-label="Paneles visibles"
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-muted p-1",
-        className,
-      )}
+      className={cn("inline-flex items-center gap-1.5", className)}
     >
       {SEGMENTS.map(({ id, label, icon: Icon }) => {
         const pressed = panels[id]
@@ -63,18 +60,18 @@ export function TripPanelToggles({ panels, onToggle, className }: TripPanelToggl
             aria-label={pressed ? `Ocultar ${label}` : `Mostrar ${label}`}
             onClick={() => onToggle(id)}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[13px] transition-[color,background-color,box-shadow,transform] duration-150 ease-out",
+              "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium text-foreground",
+              "transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out",
               "active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+              // Independientes, no radio: el panel visible se hunde (gris,
+              // plano); el oculto se eleva (blanco, borde, sombra) para que
+              // se lea como un botón que lo vuelve a abrir.
               pressed
-                ? "bg-background font-semibold text-foreground shadow-sm"
-                : "font-medium text-muted-foreground hover:text-foreground",
+                ? "border-transparent bg-foreground/[0.08] shadow-none"
+                : "border-border bg-background shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:border-foreground/20",
             )}
           >
-            <Icon
-              className={cn("h-3.5 w-3.5 shrink-0", pressed ? "opacity-100" : "opacity-70")}
-              aria-hidden
-              strokeWidth={pressed ? 2.5 : 2}
-            />
+            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={2} />
             <span>{label}</span>
           </button>
         )

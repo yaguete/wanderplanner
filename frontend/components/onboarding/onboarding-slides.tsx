@@ -26,7 +26,7 @@ function PanelName({ children }: { children: ReactNode }) {
 export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
   {
     id: "mecanismo",
-    title: "Ese viaje que te ha gustado. Ahora, hagámoslo a tu manera.",
+    title: "Ese viaje te ha gustado. Ahora, hagámoslo a tu manera.",
     body: "WanderPlanner organiza todo lo que has encontrado y te ayuda a adaptar y configurar tu propia ruta.",
     footer: (
       <>
