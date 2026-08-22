@@ -553,7 +553,7 @@ function BillGroup({
   onSetTaskState: ItineraryBudgetViewProps["onSetTaskState"]
   highlightOver?: boolean
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const over = highlightOver && group.over > 0
   const Icon = TASK_CATEGORY_ICONS[group.category]
 
