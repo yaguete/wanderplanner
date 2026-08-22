@@ -7,9 +7,19 @@
  * tampoco exige token (Supabase local). Contra el proyecto gestionado, el login sin
  * captcha responde `captcha_failed`.
  *
- * `api.js` onload no basta: `window.turnstile` se asigna un tick después. Fallar en
- * ese momento enseña «bloqueador» en falso (localhost y, en una carrera, producción).
- * Esperamos a que exista el API, o a `turnstile.ready()` si está.
+ * ❌ NUNCA llamar a `turnstile.ready()`. Su primera línea es:
+ *     ready: function(cb){ g.scriptWasLoadedAsync && (warn(...), throwTurnstileError(...)), ... }
+ * Es decir: si api.js se cargó con async/defer, `ready()` **lanza** siempre, no falla
+ * "a veces". Un script inyectado desde JS es async por definición, así que para nosotros
+ * lanzaba el 100% de las veces. Al hacerlo dentro de un `setTimeout`, la excepción salía
+ * fuera de la promesa: nadie la capturaba, `waitForTurnstileApi` no resolvía jamás y a los
+ * 8 s saltaba READY_MS con «El captcha no terminó a tiempo» sobre un hueco vacío. Login,
+ * alta, recuperación, /start, invitado y partners: todos muertos a la vez.
+ * Por eso `ready` no está en `TurnstileApi`: que no compile es la defensa.
+ *
+ * La vía soportada con async es el parámetro `onload=` de api.js: Cloudflare invoca ese
+ * global cuando el API está lista. Mantenemos además un sondeo de `window.turnstile.render`
+ * como red de seguridad (script ya cargado por un montaje anterior, o `onload` que no llega).
  *
  * En `next dev`, React Strict Mode monta/desmonta el efecto: un `render()` síncrono
  * deja el widget zombi. El `setTimeout` cancela el primer montaje. Nunca vaciar el
@@ -21,8 +31,13 @@
 import { useEffect, useRef, useState } from "react"
 
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""
-const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+/** Global que invoca api.js al terminar de inicializarse (`onload=` en la URL). */
+const CALLBACK_NAME = "__wpTurnstileOnload"
+const SCRIPT_SRC = `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=${CALLBACK_NAME}`
+/** Marca propia: buscar por `src` es frágil porque la URL lleva query. */
+const SCRIPT_MARKER = "data-wp-turnstile"
 const STRICT_MODE_DEFER_MS = 50
+const POLL_MS = 50
 const READY_MS = 8_000
 
 type TurnstileAppearance = "always" | "execute" | "interaction-only"
@@ -43,7 +58,7 @@ type TurnstileApi = {
   ) => string
   remove: (id: string) => void
   reset: (id: string) => void
-  ready?: (cb: () => void) => void
+  // `ready` existe en el API real y está omitido a propósito: ver la cabecera.
 }
 
 declare global {
@@ -73,10 +88,60 @@ export function turnstileFailureMessage(kind: "load" | "widget" | "timeout", err
   return "No se pudo verificar el captcha. Reinténtalo."
 }
 
-function waitForTurnstileApi(): Promise<TurnstileApi> {
+/** El API solo sirve cuando `render` existe: `window.turnstile` se puebla por fases. */
+function readyApi(): TurnstileApi | null {
+  if (typeof window === "undefined") return null
+  const api = window.turnstile
+  return api && typeof api.render === "function" ? api : null
+}
+
+type Waiter = (error: Error | null, api?: TurnstileApi) => void
+
+const waiters = new Set<Waiter>()
+/** Un `load` fallido deja el <script> muerto: al reintentar hay que tirarlo y volver a pedirlo. */
+let scriptFailed = false
+
+function notifyWaiters(error: Error | null, api?: TurnstileApi) {
+  const pending = [...waiters]
+  waiters.clear()
+  for (const waiter of pending) waiter(error, api)
+}
+
+function ensureScript() {
+  const stale = document.querySelector<HTMLScriptElement>(`script[${SCRIPT_MARKER}]`)
+  if (stale && !scriptFailed) return
+  if (stale) stale.remove()
+  scriptFailed = false
+
+  const globals = window as unknown as Record<string, unknown>
+  globals[CALLBACK_NAME] = () => notifyWaiters(null, readyApi() ?? undefined)
+
+  const script = document.createElement("script")
+  script.src = SCRIPT_SRC
+  script.async = true
+  script.setAttribute(SCRIPT_MARKER, "true")
+  script.addEventListener(
+    "error",
+    () => {
+      scriptFailed = true
+      notifyWaiters(new Error("load"))
+    },
+    { once: true },
+  )
+  document.head.appendChild(script)
+}
+
+export function waitForTurnstileApi(): Promise<TurnstileApi> {
   return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || typeof document === "undefined") {
       reject(new Error("load"))
+      return
+    }
+
+    // Script ya cargado por un montaje anterior: `onload` no volverá a dispararse.
+    const loaded = readyApi()
+    if (loaded) {
+      resolve(loaded)
       return
     }
 
@@ -85,34 +150,29 @@ function waitForTurnstileApi(): Promise<TurnstileApi> {
       if (settled) return
       settled = true
       window.clearTimeout(timeout)
+      waiters.delete(waiter)
       if (error || !api) reject(error ?? new Error("load"))
       else resolve(api)
     }
 
     const timeout = window.setTimeout(() => finish(new Error("timeout")), READY_MS)
+    const waiter: Waiter = (error, api) => finish(error, api ?? readyApi() ?? undefined)
+    waiters.add(waiter)
 
-    if (!document.querySelector(`script[src="${SCRIPT_SRC}"]`)) {
-      const script = document.createElement("script")
-      script.src = SCRIPT_SRC
-      script.async = true
-      script.onerror = () => finish(new Error("load"))
-      document.head.appendChild(script)
-    }
+    ensureScript()
 
-    const tick = () => {
+    // Red de seguridad por si `onload=` no llega (proxy que reescribe la URL, api.js
+    // servida desde caché rara). Sondear es barato y nos ahorra depender de un único hilo.
+    const poll = () => {
       if (settled) return
-      const api = window.turnstile
-      if (!api) {
-        window.setTimeout(tick, 50)
+      const api = readyApi()
+      if (api) {
+        finish(null, api)
         return
       }
-      if (typeof api.ready === "function") {
-        api.ready(() => finish(null, api))
-        return
-      }
-      finish(null, api)
+      window.setTimeout(poll, POLL_MS)
     }
-    tick()
+    window.setTimeout(poll, POLL_MS)
   })
 }
 
@@ -166,19 +226,25 @@ export function Turnstile({
         .then((api) => {
           if (cancelled || !containerRef.current) return
           removeWidget(api)
-          widgetId = api.render(containerRef.current, {
-            sitekey: SITE_KEY,
-            appearance,
-            theme,
-            size: "normal",
-            callback: (token) => {
-              setError(null)
-              onTokenRef.current(token)
-            },
-            "error-callback": (code) => fail("widget", String(code ?? "")),
-            "expired-callback": () => onTokenRef.current(null),
-            "timeout-callback": () => fail("timeout"),
-          })
+          try {
+            widgetId = api.render(containerRef.current, {
+              sitekey: SITE_KEY,
+              appearance,
+              theme,
+              size: "normal",
+              callback: (token) => {
+                setError(null)
+                onTokenRef.current(token)
+              },
+              "error-callback": (code) => fail("widget", String(code ?? "")),
+              "expired-callback": () => onTokenRef.current(null),
+              "timeout-callback": () => fail("timeout"),
+            })
+          } catch {
+            // `render()` lanza si el contenedor ya tiene widget o la sitekey no vale:
+            // sin este catch el formulario se queda mudo con el botón deshabilitado.
+            fail("widget")
+          }
         })
         .catch((err) => {
           fail(err instanceof Error && err.message === "timeout" ? "timeout" : "load")
