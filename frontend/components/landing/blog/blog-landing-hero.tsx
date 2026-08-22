@@ -8,12 +8,14 @@ export function BlogLandingHero({
   blogSlug,
   markSrc,
   wordmarkClassName,
+  destinationPlaceholder,
 }: {
   displayName: string
   referrer: string
   blogSlug: string
   markSrc: string
   wordmarkClassName?: string
+  destinationPlaceholder?: string
 }) {
   return (
     <section className="relative overflow-hidden bg-canvas pb-16 pt-20 sm:pb-24">
@@ -48,10 +50,11 @@ export function BlogLandingHero({
           suggest="blog"
           blogSlug={blogSlug}
           surface={blogSlug}
+          destinationPlaceholder={destinationPlaceholder}
         />
       </div>
 
-      <ProductFrame />
+      <ProductFrame scene="granada" />
     </section>
   )
 }

@@ -14,6 +14,7 @@ export function DestinationSearchField({
   onSubmit,
   loading = false,
   inputRef,
+  placeholder = "Japón, Vietnam, Islandia…",
 }: {
   id: string
   value: string
@@ -21,6 +22,7 @@ export function DestinationSearchField({
   onSubmit: () => void
   loading?: boolean
   inputRef?: Ref<HTMLInputElement>
+  placeholder?: string
 }) {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -37,7 +39,7 @@ export function DestinationSearchField({
         id={id}
         type="search"
         enterKeyHint="search"
-        placeholder="Japón, Vietnam, Islandia…"
+        placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="landing-start-input"

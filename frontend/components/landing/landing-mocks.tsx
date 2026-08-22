@@ -115,6 +115,57 @@ export function LandingArticlePhoto({ className }: { className?: string }) {
   )
 }
 
+/** Miniatura OG: Catedral de Granada, sin raster. Distinta de la Alhambra de la crónica. */
+export function LandingAlhambraThumb({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 80 56" className={cn("block", className)} aria-hidden>
+      <rect width="80" height="56" fill="#cfdce8" />
+      <rect y="44" width="80" height="12" fill="#c4b49a" />
+      <path d="M10 44 L40 10 L70 44Z" fill="#d9c4a0" />
+      <rect x="16" y="28" width="48" height="16" fill="#cbb089" />
+      <circle cx="40" cy="24" r="6" fill="#8a9aab" />
+      <circle cx="40" cy="24" r="3" fill="#cfdce8" />
+      <rect x="34" y="36" width="12" height="8" fill="#6b4a38" />
+      <path d="M34 36 Q40 30 46 36Z" fill="#6b4a38" />
+      <rect x="58" y="8" width="14" height="36" fill="#b8956a" />
+      <rect x="61" y="12" width="3.5" height="6" fill="#cfdce8" opacity="0.55" />
+      <rect x="66.5" y="12" width="3.5" height="6" fill="#cfdce8" opacity="0.55" />
+      <rect x="61" y="22" width="3.5" height="6" fill="#cfdce8" opacity="0.55" />
+      <rect x="66.5" y="22" width="3.5" height="6" fill="#cfdce8" opacity="0.55" />
+      <rect x="20" y="32" width="5" height="6" fill="#efe6d4" opacity="0.55" />
+      <rect x="55" y="32" width="5" height="6" fill="#efe6d4" opacity="0.55" />
+    </svg>
+  )
+}
+
+/** Foto de crónica inventada: atardecer en la Sabika, sin raster. */
+export function LandingAlhambraPhoto({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 320 168"
+      className={cn("block", className)}
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden
+    >
+      <rect width="320" height="168" fill="#f0c9a0" />
+      <rect y="72" width="320" height="96" fill="#d4a574" />
+      <path d="M0 88 L320 70 L320 168 L0 168Z" fill="#c49262" />
+      <rect x="78" y="54" width="164" height="52" fill="#c45c3e" />
+      <rect x="68" y="42" width="22" height="64" fill="#a3442c" />
+      <rect x="230" y="36" width="26" height="70" fill="#a3442c" />
+      <rect x="148" y="40" width="24" height="28" fill="#8b3424" />
+      <rect x="96" y="68" width="14" height="18" fill="#f0c9a0" opacity="0.4" />
+      <rect x="122" y="68" width="14" height="18" fill="#f0c9a0" opacity="0.4" />
+      <rect x="184" y="68" width="14" height="18" fill="#f0c9a0" opacity="0.4" />
+      <rect x="210" y="68" width="14" height="18" fill="#f0c9a0" opacity="0.4" />
+      <path d="M28 96 L36 58 L44 96Z" fill="#2f4a3c" />
+      <path d="M48 98 L54 64 L60 98Z" fill="#2f4a3c" />
+      <path d="M272 92 L280 52 L288 92Z" fill="#2f4a3c" />
+      <path d="M292 94 L298 62 L304 94Z" fill="#2f4a3c" />
+    </svg>
+  )
+}
+
 /** Casco viejo: distinta de las terrazas del marco del producto. */
 export function LandingStreetPhoto({ className }: { className?: string }) {
   return (

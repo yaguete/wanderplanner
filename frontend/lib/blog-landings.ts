@@ -14,6 +14,8 @@ export type BlogLanding = {
   enabled: boolean
   /** Isotipo del blog (SVG en `/public/brand`). Footer de WanderPlanner no lo usa. */
   markSrc: string
+  /** Placeholder del buscador de destino (solo esta landing). */
+  destinationPlaceholder?: string
   /** Taxonomía ajena; la denylist de slug es la capa que degrada bien sola. */
   excludeCategoryIds: readonly number[]
 }
@@ -26,6 +28,7 @@ export const BLOG_LANDINGS: readonly BlogLanding[] = [
     host: "lacosmopolilla.com",
     enabled: true,
     markSrc: "/brand/lacosmopolilla-mark.svg",
+    destinationPlaceholder: "Granada, Islandia, Costa Rica, …",
     excludeCategoryIds: [
       41, // consejos-viajeros
       44, // sorteos

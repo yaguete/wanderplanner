@@ -56,6 +56,7 @@ export function LandingStart({
   suggest = "tavily",
   blogSlug,
   surface,
+  destinationPlaceholder,
 }: {
   tabs?: StartTab[]
   referrer?: string
@@ -63,6 +64,8 @@ export function LandingStart({
   blogSlug?: string
   /** Distingue `track()` de la home (ausente) y de `/lacosmopolilla`. */
   surface?: string
+  /** Placeholder del buscador de destino. La home no lo pasa. */
+  destinationPlaceholder?: string
 } = {}) {
   const router = useRouter()
   const baseId = useId()
@@ -337,6 +340,7 @@ export function LandingStart({
               loading={destLoading}
               onChange={onDestChange}
               onSubmit={onDestSubmit}
+              placeholder={destinationPlaceholder}
             />
             {showDestOverlay ? (
               <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-background p-3 text-left shadow-lg">

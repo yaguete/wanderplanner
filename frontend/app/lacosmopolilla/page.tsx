@@ -59,6 +59,7 @@ export default function LacosmopolillaPage() {
             blogSlug={landing.slug}
             markSrc={landing.markSrc}
             wordmarkClassName={caveat.className}
+            destinationPlaceholder={landing.destinationPlaceholder}
           />
         </main>
         <LandingFooter />
