@@ -76,6 +76,19 @@ export function LegalMail({ children }: { children?: ReactNode }) {
   )
 }
 
+export function LegalHolder({ children }: { children?: ReactNode }) {
+  return (
+    <a
+      href={LEGAL.holderUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-medium text-foreground underline underline-offset-4"
+    >
+      {children ?? LEGAL.holderName}
+    </a>
+  )
+}
+
 export function LegalTable({
   columns,
   rows,

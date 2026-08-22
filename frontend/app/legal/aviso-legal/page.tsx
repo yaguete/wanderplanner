@@ -1,6 +1,11 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { LegalDocument, LegalMail, LegalSection } from "@/components/legal/legal-document"
+import {
+  LegalDocument,
+  LegalHolder,
+  LegalMail,
+  LegalSection,
+} from "@/components/legal/legal-document"
 import { LEGAL, MAE_TRAVEL_ADVICE_URL } from "@/lib/legal"
 
 export const metadata: Metadata = {
@@ -9,12 +14,12 @@ export const metadata: Metadata = {
 }
 
 const TOC = [
-  { id: "titular", label: "Titular" },
   { id: "servicio", label: "Qué es WanderPlanner" },
   { id: "contenido-terceros", label: "Artículos y publicaciones" },
   { id: "inteligencia-artificial", label: "Inteligencia artificial" },
   { id: "enlaces-comerciales", label: "Enlaces que salen del sitio" },
   { id: "uso", label: "Uso del servicio" },
+  { id: "titular", label: "Titular" },
   { id: "ley", label: "Ley aplicable" },
 ] as const
 
@@ -29,25 +34,6 @@ export default function AvisoLegalPage() {
       }
       toc={TOC}
     >
-      <LegalSection id="titular" title="Titular">
-        <p>
-          {LEGAL.siteName} ({LEGAL.siteUrl}) es un servicio de {LEGAL.holderName}, persona
-          física residente en {LEGAL.country}. Puedes escribirnos a <LegalMail />.
-        </p>
-        {LEGAL.nif ? <p>NIF: {LEGAL.nif}.</p> : null}
-        {LEGAL.address ? (
-          <p>Domicilio a efectos de notificaciones: {LEGAL.address}.</p>
-        ) : null}
-        {!LEGAL.nif || !LEGAL.address ? (
-          <p>
-            Facilitamos {!LEGAL.nif && !LEGAL.address ? "el NIF y el domicilio" : null}
-            {!LEGAL.nif && LEGAL.address ? "el NIF" : null}
-            {LEGAL.nif && !LEGAL.address ? "el domicilio" : null} a efectos de
-            notificaciones a quien lo solicite en ese correo.
-          </p>
-        ) : null}
-      </LegalSection>
-
       <LegalSection id="servicio" title="Qué es WanderPlanner">
         <p>
           Pegas el artículo de un viajero en el que confías, o buscas un destino, y
@@ -131,6 +117,31 @@ export default function AvisoLegalPage() {
           respondemos de reservas perdidas, información desactualizada ni de lo que hagas
           con un itinerario generado. La marca y el código son nuestros; tus viajes y tus
           notas son tuyos.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="titular" title="Titular">
+        <p>
+          WanderPlanner.ai es un servicio de <LegalHolder />
+          {LEGAL.nif ? <> ({LEGAL.nif})</> : null}, persona física residente en{" "}
+          {LEGAL.country}.
+          {LEGAL.address ? (
+            <> Domicilio a efectos de notificaciones: {LEGAL.address}.</>
+          ) : null}
+          {!LEGAL.nif || !LEGAL.address ? (
+            <>
+              {" "}
+              Facilitamos {!LEGAL.nif && !LEGAL.address ? "el NIF y el domicilio" : null}
+              {!LEGAL.nif && LEGAL.address ? "el NIF" : null}
+              {LEGAL.nif && !LEGAL.address ? "el domicilio" : null} a efectos de
+              notificaciones a quien lo solicite en <LegalMail />.
+            </>
+          ) : (
+            <>
+              {" "}
+              Puedes escribirnos a <LegalMail />.
+            </>
+          )}
         </p>
       </LegalSection>
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import {
   LegalDocument,
+  LegalHolder,
   LegalMail,
   LegalSection,
   LegalTable,
@@ -14,7 +15,6 @@ export const metadata: Metadata = {
 }
 
 const TOC = [
-  { id: "responsable", label: "Quién trata tus datos" },
   { id: "datos", label: "Qué guardamos y por qué" },
   { id: "terceros", label: "Quién más los ve" },
   { id: "conservacion", label: "Cuánto tiempo" },
@@ -71,14 +71,6 @@ export default function PrivacidadPage() {
       lede={<p>Qué datos guarda WanderPlanner, para qué y qué puedes pedirnos.</p>}
       toc={TOC}
     >
-      <LegalSection id="responsable" title="Quién trata tus datos">
-        <p>
-          {LEGAL.holderName}, persona física residente en {LEGAL.country}, responsable de{" "}
-          {LEGAL.siteName}. Para cualquier cosa relacionada con esta página:{" "}
-          <LegalMail />.
-        </p>
-      </LegalSection>
-
       <LegalSection id="datos" title="Qué guardamos y por qué">
         <LegalTable columns={["Datos", "Para qué", "Base legal"]} rows={DATA_ROWS} />
         <p>
@@ -121,9 +113,9 @@ export default function PrivacidadPage() {
           Algunos están fuera de la Unión Europea. Con los de Estados Unidos firmamos las
           cláusulas contractuales tipo que aprueba la Comisión Europea. Con los países que
           no tienen un acuerdo de protección de datos con Europa —hoy, China— no vale ese
-          contrato, así que te lo preguntamos antes de que uses el asistente por primera
-          vez en cada navegador. Si dices que no, el asistente se queda apagado y todo lo
-          demás funciona igual.
+          contrato, así que te lo preguntamos antes de que uses sus servicios por primera
+          vez en cada navegador. Si dices que no, quedarán apagados y todo lo demás
+          funciona igual.
         </p>
         <p>
           La IA propone y tú decides: no tomamos decisiones automatizadas que te afecten
@@ -154,7 +146,8 @@ export default function PrivacidadPage() {
 
       <LegalSection id="derechos" title="Tus derechos">
         <p>
-          Puedes pedirnos acceder a tus datos, corregirlos, limitarlos,
+          <LegalHolder />, persona física residente en {LEGAL.country}, es la responsable
+          de los datos alojados en {LEGAL.siteName}. Puedes pedirnos acceder a tus datos, corregirlos, limitarlos,
           llevártelos u oponerte a que los tratemos, y retirar cuando quieras un
           consentimiento que hayas dado. Escríbenos a <LegalMail /> desde el correo de tu
           cuenta y contestaremos en menos de 30 días. Para borrar la cuenta —perfil,
