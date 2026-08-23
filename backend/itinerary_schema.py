@@ -11,6 +11,7 @@ En Instagram, `total_days` 0 (o < 1) lo aplana `coerce_instagram_itinerary`.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 OPTIONAL_STRING_KEYS = frozenset(
     {
@@ -24,6 +25,30 @@ OPTIONAL_STRING_KEYS = frozenset(
         "vendor",
     }
 )
+
+# Structured outputs obliga a string; Haiku a veces escribe estos en vez de "".
+_AFFILIATE_SENTINELS = frozenset(
+    {"/", "#", "n/a", "na", "none", "null", "-", "undefined"}
+)
+
+
+def usable_affiliate_url(raw: str | None) -> str | None:
+    """http(s) absoluto con host. Relativas y centinelas → None (no son afiliado)."""
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text or text.lower() in _AFFILIATE_SENTINELS:
+        return None
+    candidate = f"https:{text}" if text.startswith("//") else text
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    if not parsed.netloc:
+        return None
+    return candidate
 
 
 def _named_item(*, with_affiliate: bool, with_sub: bool) -> dict[str, Any]:
@@ -167,10 +192,16 @@ OCR_SLIDES_SCHEMA: dict[str, Any] = {
 
 
 def coerce_optional_blanks(obj: Any) -> None:
-    """Tras structured outputs: string vacío → null en campos opcionales."""
+    """Tras structured outputs: string vacío → null en campos opcionales.
+
+    `affiliate_url` además exige http(s) absoluto: `/` / `n/a` / relativas no
+    son un enlace del bloguero (en el front se resolverían contra nuestro origen).
+    """
     if isinstance(obj, dict):
         for key, value in obj.items():
-            if key in OPTIONAL_STRING_KEYS and isinstance(value, str) and not value.strip():
+            if key == "affiliate_url" and isinstance(value, str):
+                obj[key] = usable_affiliate_url(value)
+            elif key in OPTIONAL_STRING_KEYS and isinstance(value, str) and not value.strip():
                 obj[key] = None
             else:
                 coerce_optional_blanks(value)

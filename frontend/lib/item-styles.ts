@@ -18,6 +18,7 @@ import {
   Wifi,
   type LucideIcon,
 } from "lucide-react"
+import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import type {
   BasicCategory,
   ItemType,
@@ -74,7 +75,7 @@ export function itemTypeLabel(
   type: ItemType,
   opts?: { affiliateUrl?: string | null },
 ): string {
-  if (type === "activity" && !opts?.affiliateUrl?.trim()) return "Lugar"
+  if (type === "activity" && !sanitizeAffiliateUrl(opts?.affiliateUrl)) return "Lugar"
   return ITEM_LABELS[type]
 }
 
@@ -107,7 +108,7 @@ export function itemTypeIcon(
   type: ItemType,
   opts?: { affiliateUrl?: string | null },
 ): LucideIcon {
-  if (type === "activity" && opts?.affiliateUrl?.trim()) return Ticket
+  if (type === "activity" && sanitizeAffiliateUrl(opts?.affiliateUrl)) return Ticket
   return ITEM_TYPE_ICONS[type]
 }
 

@@ -10,6 +10,7 @@
  * pintar, no se persisten — ver [`booking-dates.ts`](./booking-dates.ts).
  */
 import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
+import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { bookingStayHref, isBookingStayUrl } from "@/lib/booking-dates"
 
 /** Enganche de afiliación PROPIO: solo stays vía asistente, nunca fuentes. */
@@ -73,7 +74,7 @@ export function buildAssistantBookingSearchUrl(params: {
 
 /** Base persistible: el afiliado del ítem, o Booking nuestro si es del asistente. */
 export function resolveStayAffiliateUrl(item: StayReserveInput): string | null {
-  const stored = item.affiliateUrl?.trim() || null
+  const stored = sanitizeAffiliateUrl(item.affiliateUrl)
   if (stored) return stored
   if (item.type === "stay" && item.sourceId === ASSISTANT_SOURCE_ID) {
     return buildAssistantBookingSearchUrl({ name: item.name, region: item.region })

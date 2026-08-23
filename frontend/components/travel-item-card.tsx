@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
+import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS } from "@/lib/item-styles"
 import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import type { FlightSearchHit } from "@/lib/flight-search"
@@ -145,6 +146,7 @@ function trackCardOutbound(
 }
 
 export function TravelItemCard(props: TravelItemCardProps) {
+  const href = sanitizeAffiliateUrl(props.href)
   if (props.variant === "source") {
     return (
       <div
@@ -174,14 +176,14 @@ export function TravelItemCard(props: TravelItemCardProps) {
             <p className="min-w-0 flex-1 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
               {props.title}
             </p>
-            {props.href ? (
+            {href ? (
               <a
-                href={props.href}
+                href={href}
                 target="_blank"
                 rel="noreferrer noopener"
                 onClick={(e) => {
                   e.stopPropagation()
-                  trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+                  trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
                 }}
                 className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Abrir enlace de «${props.title}»`}
@@ -254,14 +256,14 @@ export function TravelItemCard(props: TravelItemCardProps) {
           props.className,
         )}
       >
-        {props.href ? (
+        {href ? (
           <a
-            href={props.href}
+            href={href}
             target="_blank"
             rel="noreferrer noopener"
             className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() =>
-              trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+              trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
             }
           >
             {main}
@@ -304,7 +306,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
         <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-snug text-muted-foreground">
           {BASIC_LABELS[props.category]} {provenance}
           {props.vendor ? <span className="text-muted-foreground/80"> · {props.vendor}</span> : null}
-          {props.href ? <ExternalLink className="wp-ext-link ml-0.5 h-3 w-3 shrink-0" aria-hidden /> : null}
+          {href ? <ExternalLink className="wp-ext-link ml-0.5 h-3 w-3 shrink-0" aria-hidden /> : null}
         </p>
       </div>
     )
@@ -317,14 +319,14 @@ export function TravelItemCard(props: TravelItemCardProps) {
         )}
       >
         <div className="flex min-h-0 items-stretch">
-          {props.href ? (
+          {href ? (
             <a
-              href={props.href}
+              href={href}
               target="_blank"
               rel="noreferrer noopener"
               className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() =>
-                trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+                trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
               }
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-muted-foreground" aria-hidden>
@@ -378,7 +380,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
           "aria-hidden": true,
         })
       ) : props.type === "activity" ? (
-        props.href?.trim() ? (
+        href?.trim() ? (
           <Ticket className={cn("h-4 w-4", colors.text)} aria-hidden />
         ) : (
           <MapPin className={cn("h-4 w-4", colors.text)} aria-hidden />
@@ -405,7 +407,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
           <span className="truncate">
             {routeSummary} · {provenance}
           </span>
-          {props.href ? (
+          {href ? (
             <ExternalLink className="wp-ext-link h-3 w-3 shrink-0" aria-hidden />
           ) : null}
         </p>
@@ -416,7 +418,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
             {region ? <span title={region}>{region} </span> : null}
             {provenance}
           </span>
-          {props.href ? (
+          {href ? (
             <ExternalLink className="wp-ext-link h-3 w-3 shrink-0" aria-hidden />
           ) : null}
         </p>
@@ -437,15 +439,15 @@ export function TravelItemCard(props: TravelItemCardProps) {
       data-wp-drag-card=""
     >
       <div className="flex min-h-0 items-stretch">
-        {props.href ? (
+        {href ? (
           <a
-            href={props.href}
+            href={href}
             target="_blank"
             rel="noreferrer noopener"
             draggable={false}
             className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() =>
-              trackCardOutbound(props.href, props.outboundSurface, props.outboundAffiliate)
+              trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
             }
           >
             {icon}

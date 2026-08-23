@@ -10,6 +10,7 @@ import {
   collectShortMapsUrls,
   dedupeRedundantPlaces,
   dropDuplicateOtherBasics,
+  flattenBasics,
   flattenItinerary,
   formatGuideLabel,
   hydrateAffiliateUrlsFromSources,
@@ -18,6 +19,7 @@ import {
   normalizeAffiliateUrl,
   reconcileExtractedSource,
 } from "./itinerary-utils"
+import { sanitizeAffiliateUrl } from "./affiliate-url"
 
 function itinerary(overrides: Partial<Itinerary> = {}): Itinerary {
   return {
@@ -313,9 +315,113 @@ function itinerary(overrides: Partial<Itinerary> = {}): Itinerary {
   assert.equal(demoted.basics[0]?.category, "other")
 }
 
+{
+  const items = flattenItinerary(
+    itinerary({
+      days: [
+        {
+          day: 1,
+          title: "Riga",
+          accommodations: [],
+          restaurants: [],
+          transport: [],
+          tips: null,
+          activities: [
+            {
+              name: "Plaza del Ayuntamiento",
+              type: "attraction",
+              notes: null,
+              affiliate_url: "/",
+            },
+            {
+              name: "Paseo en barco",
+              type: "excursion",
+              notes: null,
+              affiliate_url: "https://www.civitatis.com/es/riga/paseo-barco-riga/?aid=1006",
+            },
+          ],
+        },
+      ],
+      basics: [
+        {
+          category: "sim",
+          name: "Holafly eSIM",
+          vendor: "Holafly",
+          notes: "5%",
+          affiliate_url: "http://holafly.sjv.io/19b6NB",
+        },
+      ],
+    }),
+  )
+  const plaza = items.find((i) => i.name === "Plaza del Ayuntamiento")
+  assert.equal(plaza!.affiliateUrl, null)
+  assert.equal(itemTypeLabel("activity", plaza), "Lugar")
+  const boat = items.find((i) => i.name === "Paseo en barco")
+  assert.equal(
+    boat!.affiliateUrl,
+    "https://www.civitatis.com/es/riga/paseo-barco-riga/?aid=1006",
+  )
+  assert.equal(itemTypeLabel("activity", boat), "Actividad")
+  const basics = flattenBasics(
+    itinerary({
+      basics: [
+        {
+          category: "sim",
+          name: "Holafly eSIM",
+          vendor: "Holafly",
+          notes: "5%",
+          affiliate_url: "http://holafly.sjv.io/19b6NB",
+        },
+        {
+          category: "other",
+          name: "Basura",
+          vendor: null,
+          notes: null,
+          affiliate_url: "/",
+        },
+      ],
+    }),
+  )
+  assert.equal(basics[0]!.affiliateUrl, "http://holafly.sjv.io/19b6NB")
+  assert.equal(basics[1]!.affiliateUrl, null)
+}
+
+{
+  assert.equal(sanitizeAffiliateUrl("/"), null)
+  assert.equal(sanitizeAffiliateUrl("n/a"), null)
+  assert.equal(sanitizeAffiliateUrl("foo.html"), null)
+  assert.equal(
+    sanitizeAffiliateUrl("http://holafly.sjv.io/19b6NB"),
+    "http://holafly.sjv.io/19b6NB",
+  )
+  assert.equal(
+    sanitizeAffiliateUrl("//www.booking.com/hotel/x?aid=1"),
+    "https://www.booking.com/hotel/x?aid=1",
+  )
+  assert.equal(normalizeAffiliateUrl("/"), null)
+}
+
+{
+  const dirty: SourceItem = {
+    id: "si-plaza",
+    type: "activity",
+    name: "Plaza del Ayuntamiento",
+    detail: null,
+    dayHint: 1,
+    region: "Riga, Letonia",
+    thumbUrl: null,
+    affiliateUrl: "/",
+  }
+  const { items } = reconcileExtractedSource([dirty], [])
+  assert.equal(items[0]!.affiliateUrl, null)
+  assert.equal(itemTypeLabel("activity", items[0]), "Lugar")
+}
+
 assert.equal(itemTypeLabel("activity"), "Lugar")
 assert.equal(itemTypeLabel("activity", { affiliateUrl: null }), "Lugar")
 assert.equal(itemTypeLabel("activity", { affiliateUrl: "  " }), "Lugar")
+assert.equal(itemTypeLabel("activity", { affiliateUrl: "/" }), "Lugar")
+assert.equal(itemTypeLabel("activity", { affiliateUrl: "n/a" }), "Lugar")
 assert.equal(
   itemTypeLabel("activity", { affiliateUrl: "https://aff.example/osos" }),
   "Actividad",
@@ -330,6 +436,7 @@ assert.equal(itemTypeLabel("transport"), "Transporte")
   const activityIcon = itemTypeIcon("activity", { affiliateUrl: "https://aff.example/t" })
   assert.notEqual(placeIcon, activityIcon)
   assert.equal(placeIcon, itemTypeIcon("activity", { affiliateUrl: null }))
+  assert.equal(placeIcon, itemTypeIcon("activity", { affiliateUrl: "/" }))
   assert.equal(itemTypeIcon("stay", { affiliateUrl: "https://booking.example" }), itemTypeIcon("stay"))
 }
 

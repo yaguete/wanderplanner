@@ -4,6 +4,7 @@
  * No cambies `dayHint` sin entender `source_structured_by_days` y el panel de inspiración.
  */
 import type { BasicCategory, Itinerary, Source, SourceBasicItem, SourceItem, Trip } from "@/types/itinerary"
+import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { sourceRouteHintFromTransport } from "@/lib/transport-routes"
 import { normalizeName } from "@/lib/trip-tasks"
@@ -36,8 +37,28 @@ function sourceAffiliate(href: string | null | undefined): {
   affiliateUrl: string | null
   vendor: string | null
 } {
-  const url = href?.trim() ? href.trim() : null
+  const url = sanitizeAffiliateUrl(href)
   return { affiliateUrl: url, vendor: url ? vendorFromUrl(url) : null }
+}
+
+function scrubItemAffiliate(item: SourceItem): SourceItem {
+  const aff = sourceAffiliate(item.affiliateUrl)
+  if (aff.affiliateUrl === (item.affiliateUrl?.trim() || null)) return item
+  return {
+    ...item,
+    affiliateUrl: aff.affiliateUrl,
+    vendor: item.vendor?.trim() || aff.vendor,
+  }
+}
+
+function scrubBasicAffiliate(basic: SourceBasicItem): SourceBasicItem {
+  const aff = sourceAffiliate(basic.affiliateUrl)
+  if (aff.affiliateUrl === (basic.affiliateUrl?.trim() || null)) return basic
+  return {
+    ...basic,
+    affiliateUrl: aff.affiliateUrl,
+    vendor: basic.vendor?.trim() || aff.vendor,
+  }
 }
 
 /**
@@ -45,16 +66,12 @@ function sourceAffiliate(href: string | null | undefined): {
  * No toca querystring (los parámetros de afiliado viven ahí).
  */
 export function normalizeAffiliateUrl(href: string | null | undefined): string | null {
-  const raw = href?.trim()
+  const raw = sanitizeAffiliateUrl(href)
   if (!raw) return null
-  try {
-    const u = new URL(raw)
-    const host = u.hostname.toLowerCase()
-    const path = u.pathname.replace(/\/+$/, "")
-    return `${u.protocol}//${host}${path}${u.search}`
-  } catch {
-    return raw.replace(/\/+$/, "").toLowerCase()
-  }
+  const u = new URL(raw)
+  const host = u.hostname.toLowerCase()
+  const path = u.pathname.replace(/\/+$/, "")
+  return `${u.protocol}//${host}${path}${u.search}`
 }
 
 /** Marketplaces de experiencias: el enlace es un tour, no un básico. */
@@ -606,7 +623,10 @@ export function reconcileExtractedSource(
   html?: string | null,
   resolved?: MapsPinResolved,
 ): { items: SourceItem[]; basics: SourceBasicItem[] } {
-  const lifted = liftOtherBasicsToActivities(items, basics)
+  const lifted = liftOtherBasicsToActivities(
+    items.map(scrubItemAffiliate),
+    basics.map(scrubBasicAffiliate),
+  )
   let linked = html?.trim()
     ? attachExperienceLinksFromHtml(html, lifted.items)
     : lifted.items
@@ -641,7 +661,7 @@ export function hydrateAffiliateUrlsFromSources(trips: Trip[], sources: Source[]
   const hrefBySourceItemId = new Map<string, string>()
   for (const source of sources) {
     for (const item of source.items) {
-      const href = item.affiliateUrl?.trim()
+      const href = sanitizeAffiliateUrl(item.affiliateUrl)
       if (href) hrefBySourceItemId.set(item.id, href)
     }
   }
@@ -834,15 +854,18 @@ export function flattenItinerary(itinerary: Itinerary): SourceItem[] {
 export function flattenBasics(itinerary: Itinerary): SourceBasicItem[] {
   const list = itinerary.basics ?? []
   // Cada `b.affiliate_url` se expone como `affiliateUrl` alineado con el resto del front.
-  return list.map((b) => ({
-    id: uidBasic(),
-    category: mapBasicCategory(b.category),
-    name: b.name,
-    detail: b.notes,
-    vendor: b.vendor,
-    affiliateUrl: b.affiliate_url,
-    thumbUrl: b.thumb_url ?? null,
-  }))
+  return list.map((b) => {
+    const aff = sourceAffiliate(b.affiliate_url)
+    return {
+      id: uidBasic(),
+      category: mapBasicCategory(b.category),
+      name: b.name,
+      detail: b.notes,
+      vendor: b.vendor?.trim() || aff.vendor,
+      affiliateUrl: aff.affiliateUrl,
+      thumbUrl: b.thumb_url ?? null,
+    }
+  })
 }
 
 /**
