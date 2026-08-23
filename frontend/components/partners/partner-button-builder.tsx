@@ -412,9 +412,6 @@ export function PartnerButtonBuilder() {
             void handleGenerate(false)
           }}
         >
-          <h2 className="text-lg font-semibold tracking-tight text-white sm:text-xl">
-            Genera el CTA para tu contenido
-          </h2>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="partner-url" className="text-white">
               URL del post

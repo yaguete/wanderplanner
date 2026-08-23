@@ -1,6 +1,5 @@
 import { BrandLockup } from "@/components/brand-mark"
-import { PartnerButtonBuilder } from "@/components/partners/partner-button-builder"
-import { BlogFrame } from "./blog-frame"
+import { PartnerStart } from "./partner-start"
 
 export function PartnerHero() {
   return (
@@ -22,17 +21,10 @@ export function PartnerHero() {
           <span className="text-white/50">haga realidad tus viajes.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-balance text-base text-white/70 sm:text-xl">
-          WanderPlanner transforma tus guías y recomendaciones en un plan de viaje ejecutable. Tu contenido, tu marca y tu monetización siguen siendo tuyos.
+          WanderPlanner transforma tus guías y recomendaciones en un plan de viaje ejecutable. <strong>Tu contenido, tu marca y tu monetización</strong> siguen siendo tuyos.
         </p>
-        <div
-          id="empezar"
-          className="relative z-20 mx-auto mt-10 w-full max-w-2xl scroll-mt-24 text-left"
-        >
-          <PartnerButtonBuilder />
-        </div>
       </div>
-
-      <BlogFrame />
+      <PartnerStart />
     </section>
   )
 }
