@@ -8,7 +8,8 @@
  */
 import { useEffect, useId, useRef, useState, type FormEvent } from "react"
 import { track } from "@vercel/analytics"
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
+import { AlertCircle, RefreshCw } from "lucide-react"
+import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -61,7 +62,10 @@ export function AddSourceProgress({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden />
+      <BrandMark
+        variant="mono"
+        className="h-10 wp-squirrel-hop text-foreground"
+      />
       <div className="space-y-1.5">
         <p className="text-sm font-medium text-foreground">Analizando la fuente…</p>
         <p className="text-xs text-muted-foreground">
