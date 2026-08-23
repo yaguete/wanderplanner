@@ -181,14 +181,17 @@ export function AccountMenu({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <AlertDialogCancel className="mt-0">Seguir aquí</AlertDialogCancel>
             <button
               type="button"
-              className={buttonVariants({ variant: "outline" })}
+              className={cn(
+                buttonVariants({ variant: "ghost" }),
+                "text-destructive hover:bg-destructive/10 hover:text-destructive",
+              )}
               onClick={() => void handleSignOut()}
             >
               Salir y descartar
             </button>
+            <AlertDialogCancel className="mt-0">Seguir aquí</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 router.push("/signup")

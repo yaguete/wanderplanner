@@ -51,6 +51,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { loadActiveConversationId } from "@/lib/db/assistant-repo"
 import { useTrips } from "@/lib/trip-context"
+import { pinRootScrollerForCollapsedChrome } from "@/lib/mobile-browser-chrome"
 import { cn } from "@/lib/utils"
 import type { UserDayItem } from "@/types/itinerary"
 import type { MoveParams } from "@/lib/itinerary-dnd"
@@ -345,6 +346,7 @@ const ChatComposer = memo(function ChatComposer({
         onKeyDown={onKeyDown}
         placeholder="Pregunta sobre tu viaje…"
         rows={1}
+        enterKeyHint="send"
         // text-base en móvil: <16px provoca auto-zoom de iOS al enfocar (y no se deshace).
         className="min-h-8 flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-base shadow-none focus-visible:ring-0 md:text-sm"
         style={{ maxHeight: COMPOSER_MAX_HEIGHT }}
@@ -458,6 +460,16 @@ export function AssistantPanelLayer({
   const isSection = variant === "section"
   const isPanel = variant === "panel"
   const { open: keyboardOpen, inset: keyboardInset } = useVirtualKeyboard()
+
+  /**
+   * Móvil + teclado: el documento está congelado (`data-wp-scroll-lock`) y
+   * Safari/Firefox no pliegan la barra de URL. Liberamos 48 px de scroll en
+   * el root mientras el teclado está abierto. Desktop (`variant=panel`) no entra.
+   */
+  useEffect(() => {
+    if (!isSection || !keyboardOpen) return
+    return pinRootScrollerForCollapsedChrome()
+  }, [isSection, keyboardOpen])
   /** Alto real del composer flotante: reserva espacio al final de la conversación. */
   const [composerHeight, setComposerHeight] = useState(0)
   const { containerRef: panelRef, collapsed: headerCollapsed } = useCollapsingHeader(
@@ -1181,7 +1193,12 @@ export function AssistantPanelLayer({
       {!showHistory ? (
         <>
           <div ref={chatScrollRef} className="min-h-0 flex-1">
-            <ScrollArea className="h-full">
+            <ScrollArea
+              className={cn(
+                "h-full",
+                isSection && "[&>[data-radix-scroll-area-viewport]]:overscroll-y-contain",
+              )}
+            >
               <div className="space-y-3 p-4">
                 {messages.length === 0 && (hydrated || canShowSuggestionsEarly) ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
