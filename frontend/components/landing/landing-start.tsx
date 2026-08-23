@@ -13,7 +13,7 @@ import { SignupForm } from "@/components/auth/signup-form"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { DestinationSearchField } from "@/components/destination-search-field"
 import { SourceSuggestList } from "@/components/source-suggest-list"
-import { isBlogLandingEnabled } from "@/lib/blog-landings"
+import { isBlogLandingEnabled, getBlogLanding } from "@/lib/blog-landings"
 import { cleanSourceUrl } from "@/lib/partner-button"
 import { unsupportedSourceUrlMessage } from "@/lib/instagram-url"
 import { LANDING_REF } from "@/lib/partner-trip"
@@ -89,6 +89,8 @@ export function LandingStart({
   const showWebCaptcha = webEnabled && needCaptcha && isTurnstileEnabled()
   const showDestination = tabs.some((item) => item.id === "destination")
   const showArticle = tabs.some((item) => item.id === "article")
+  const blogHost =
+    suggest === "blog" && blogSlug ? getBlogLanding(blogSlug)?.host : undefined
 
   const trackProps = useCallback(
     (extra: Record<string, string | number | boolean>) =>
@@ -306,7 +308,7 @@ export function LandingStart({
                     className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground"
                     aria-hidden
                   >
-                    <span className="truncate">Pega una dirección web (https://…)</span>
+                    <span className="truncate">Pega un enlace web</span>
                     <Globe className="size-3.5 shrink-0 opacity-75" strokeWidth={2} />
                     <Instagram className="size-3.5 shrink-0 opacity-75" strokeWidth={2} />
                     
@@ -342,6 +344,19 @@ export function LandingStart({
               onSubmit={onDestSubmit}
               placeholder={destinationPlaceholder}
             />
+            {blogHost ? (
+              <p className="mt-2.5 text-pretty text-xs leading-5 text-foreground/50">
+                ¿No lo tienes claro? Regresa a{" "}
+                <a
+                  href={`https://${blogHost}`}
+                  rel="nofollow noopener noreferrer"
+                  className="underline decoration-foreground/25 underline-offset-2 hover:text-foreground/70"
+                >
+                  {blogHost}
+                </a>{" "}
+                para encontrar inspiración.
+              </p>
+            ) : null}
             {showDestOverlay ? (
               <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-background p-3 text-left shadow-lg">
                 {destError ? <p className="px-1 py-2 text-sm text-destructive">{destError}</p> : null}
