@@ -125,7 +125,7 @@ export function PartnerStart() {
               hidden={tab !== "landing"}
             >
               <div className="flex min-h-[16rem] flex-col justify-center gap-6 sm:min-h-[14rem]">
-                <p className="text-pretty text-base leading-7 text-white/80 sm:text-lg">
+                <p className="mx-auto max-w-2xl text-balance text-center text-base leading-7 text-white/80 sm:text-lg">
                   Una página tuya, con tu nombre y tu buscador. Tu audiencia escribe un destino y
                   solo encuentra tus guías y artículos. La montamos nosotros y tú la enlazas desde
                   donde quieras.
