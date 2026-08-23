@@ -51,7 +51,15 @@ def test_hard_ttl_falls_back_to_legacy_env(monkeypatch):
     monkeypatch.delenv("EXTRACTION_HARD_TTL_DAYS", raising=False)
     monkeypatch.setenv("EXTRACTION_CACHE_TTL_DAYS", "45")
     assert hard_ttl_days() == 45
-    assert revalidate_days() == 15
+    assert revalidate_days() == 2
+
+
+def test_default_revalidate_window_is_two_days(monkeypatch):
+    monkeypatch.delenv("EXTRACTION_REVALIDATE_DAYS", raising=False)
+    now = datetime.now(timezone.utc)
+    assert revalidate_days() == 2
+    assert classify_freshness(now - timedelta(days=1), now=now) == "fresh"
+    assert classify_freshness(now - timedelta(days=3), now=now) == "stale"
 
 
 @pytest.mark.asyncio

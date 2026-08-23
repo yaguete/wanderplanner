@@ -21,11 +21,13 @@ POST /funnel (público, tope IP): contadores del CTA de blogs (`start_opened`,
 POST /maps/resolve: despliega short links de Google Maps del artículo (allowlist
 de hosts, caché `maps_link_pins`). Kill switch MAPS_LINK_RESOLVE_ENABLED.
 
-Caché global stale-while-revalidate (`article_extractions`):
-  - fresh → payload al instante
-  - stale → payload al instante + revalidación en fondo
-  - expired/miss → fetch + Claude síncrono
-  - refresh=true → validación remota síncrona; Claude solo si cambió el contenido útil
+Caché global por URL (`article_extractions`):
+  - fresh (< 2 días) → payload al instante, sin GET
+  - stale/expired en un alta → GET + hash síncrono; Claude solo si el texto útil cambió
+  - miss → fetch + Claude síncrono
+  - refresh=true (Recargar) → GET + hash siempre, ignora la ventana de 2 días
+  - GET fallido / post desaparecido → se conserva la caché
+  - prewarm stale → payload al instante + revalidación en fondo (el kit no espera)
 
 Las miniaturas y portadas NO se resuelven aquí: ver GET /thumb (Commons + Places) y GET /cover (Unsplash).
 """
@@ -397,15 +399,9 @@ def _flight_key(url: str) -> str:
 
 
 def _content_unchanged(entry: CacheEntry, fetched: ArticleFetchResult) -> bool:
-    """True si no hace falta redestilar (misma fecha o mismo hash útil)."""
-    if (
-        fetched.article_modified_at is not None
-        and entry.article_modified_at is not None
-        and fetched.article_modified_at == entry.article_modified_at
-    ):
-        return True
-    if fetched.content_hash and entry.content_hash and fetched.content_hash == entry.content_hash:
-        return True
+    """True si el texto útil no ha cambiado. El hash manda; la fecha no corta."""
+    if fetched.content_hash and entry.content_hash:
+        return fetched.content_hash == entry.content_hash
     return False
 
 
@@ -472,11 +468,9 @@ async def _fetch_source(
     if is_instagram_media_url(url):
         fetched, media, text = await fetch_instagram(url, allow_ocr=allow_ocr)
         return fetched, media, text
-    fetched = await fetch_article(
-        url,
-        etag=entry.etag if entry else None,
-        last_modified=entry.last_modified if entry else None,
-    )
+    # Sin If-None-Match / If-Modified-Since: WordPress y CDNs mienten el 304
+    # y saltaríamos el hash del cuerpo (caso Cosmopolilla Costa Rica).
+    fetched = await fetch_article(url)
     return fetched, None, None
 
 
@@ -748,8 +742,8 @@ async def revalidate_in_background(url: str, entry: CacheEntry) -> None:
                 and entry.content_version != CONTENT_VERSION
                 and entry.content_hash
             ):
-                # Recalculamos hash sobre el texto nuevo; si coincide con lo guardado
-                # (raro tras cambio de limpiador) o si dateModified no cambió → solo touch.
+                # Recalculamos hash sobre el texto nuevo; si coincide con lo
+                # guardado (raro tras cambio de limpiador) → solo touch.
                 if _content_unchanged(entry, fetched) or (
                     fetched.article_modified_at is None
                     and entry.article_modified_at is None
@@ -817,13 +811,47 @@ async def _validate_sync_for_refresh(
     *,
     user: AuthUser | None,
     progress_stage: list[str] | None = None,
+    record_refresh: bool = True,
 ) -> dict:
-    """Validación síncrona forzada (Recargar): Claude solo si cambió el contenido."""
+    """GET + hash síncrono. Claude solo si cambió el texto útil.
+
+    Recargar (`record_refresh=True`) y alta stale/expired (`False`) comparten
+    el camino. Si el GET falla, se devuelve la caché.
+    """
     t0 = time.perf_counter()
     ig = is_instagram_media_url(url)
     if ig:
         await _enforce_instagram_provider(user)
-    fetched, media, ig_text = await _fetch_source(url, entry, allow_ocr=False)
+    tag = "refresh" if record_refresh else "revalidate"
+
+    async def _note_refresh() -> None:
+        if record_refresh and user is not None:
+            await record_event(user.id, "refresh")
+
+    try:
+        fetched, media, ig_text = await _fetch_source(url, entry, allow_ocr=False)
+    except Exception as e:
+        fetch_ms = int((time.perf_counter() - t0) * 1000)
+        log_kv(
+            logger,
+            event="extraction_revalidate" if not record_refresh else "extraction_refresh",
+            outcome="fetch_failed",
+            host=_host(url),
+            error_type=type(e).__name__,
+        )
+        payload = dict(entry.payload)
+        _strip_thumb_urls(payload)
+        _log_extraction(
+            url=url,
+            outcome="ok",
+            cache_hit=True,
+            fetch_ms=fetch_ms,
+            items=_count_items(payload),
+            freshness=f"{tag}_fetch_failed",
+            error_type=type(e).__name__,
+        )
+        return payload
+
     fetch_ms = int((time.perf_counter() - t0) * 1000)
     _set_progress(progress_stage, "extracting")
 
@@ -837,8 +865,7 @@ async def _validate_sync_for_refresh(
     if fetched.not_modified:
         await _charge()
         await _touch_from_fetch(url, entry, fetched)
-        if user is not None:
-            await record_event(user.id, "refresh")
+        await _note_refresh()
         payload = dict(entry.payload)
         _strip_thumb_urls(payload)
         _log_extraction(
@@ -847,7 +874,7 @@ async def _validate_sync_for_refresh(
             cache_hit=True,
             fetch_ms=fetch_ms,
             items=_count_items(payload),
-            freshness="refresh_not_modified",
+            freshness=f"{tag}_not_modified",
             **_ocr_fields(ig_text),
         )
         return payload
@@ -867,8 +894,7 @@ async def _validate_sync_for_refresh(
             content_version=CONTENT_VERSION,
             cache_url=entry.url,
         )
-        if user is not None:
-            await record_event(user.id, "refresh")
+        await _note_refresh()
         payload = dict(entry.payload)
         _strip_thumb_urls(payload)
         return payload
@@ -876,8 +902,7 @@ async def _validate_sync_for_refresh(
     if _content_unchanged(entry, fetched):
         await _charge()
         await _touch_from_fetch(url, entry, fetched)
-        if user is not None:
-            await record_event(user.id, "refresh")
+        await _note_refresh()
         payload = dict(entry.payload)
         _strip_thumb_urls(payload)
         _log_extraction(
@@ -886,7 +911,7 @@ async def _validate_sync_for_refresh(
             cache_hit=True,
             fetch_ms=fetch_ms,
             items=_count_items(payload),
-            freshness="refresh_unchanged",
+            freshness=f"{tag}_unchanged",
             **_ocr_fields(ig_text),
         )
         return payload
@@ -907,7 +932,7 @@ async def _validate_sync_for_refresh(
     await _store_from_fetch(url, itinerary, fetched, cache_url=entry.url)
     if user is not None:
         await record_event(user.id, "extraction", cost_hint=output_tokens)
-        await record_event(user.id, "refresh")
+        await _note_refresh()
     _log_extraction(
         url=url,
         outcome="ok",
@@ -917,7 +942,7 @@ async def _validate_sync_for_refresh(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         items=_count_items(itinerary),
-        freshness="refresh_changed",
+        freshness=f"{tag}_changed",
         source_kind="instagram" if ig else "article",
         structured=bool(itinerary.get("source_structured_by_days"))
         if isinstance(itinerary.get("source_structured_by_days"), bool)
@@ -965,8 +990,8 @@ async def _stream_itinerary(
             if user is not None:
                 await record_event(user.id, "refresh")
 
-        # ── Hit fresco / stale ───────────────────────────────────────────────
-        if entry is not None and entry.freshness in ("fresh", "stale") and not refresh:
+        # ── Hit fresco (< 2 días): sin GET ───────────────────────────────────
+        if entry is not None and entry.freshness == "fresh" and not refresh:
             payload = dict(entry.payload)
             _strip_thumb_urls(payload)
             hit_structured = payload.get("source_structured_by_days")
@@ -981,11 +1006,34 @@ async def _stream_itinerary(
             )
             yield _sse("progress", {"stage": "fetching"})
             yield _sse("result", payload)
-            if entry.freshness == "stale":
-                _spawn_background(revalidate_in_background(url, entry))
             return
 
-        # ── Miss / expired: destilación síncrona con heartbeats ──────────────
+        # ── Stale / expired: GET + hash síncrono; Claude solo si cambió ──────
+        if entry is not None and not refresh:
+            revalidate_box = [
+                "resolving" if is_instagram_media_url(url) else "fetching"
+            ]
+            yield _sse("progress", {"stage": revalidate_box[0]})
+            result: dict | None = None
+            async for item in _await_with_heartbeats(
+                _validate_sync_for_refresh(
+                    url,
+                    entry,
+                    user=user,
+                    progress_stage=revalidate_box,
+                    record_refresh=False,
+                ),
+                revalidate_box,
+            ):
+                if _is_sse_chunk(item):
+                    yield item  # type: ignore[misc]
+                else:
+                    result = item  # type: ignore[misc]
+            assert result is not None
+            yield _sse("result", result)
+            return
+
+        # ── Miss: destilación síncrona con heartbeats ────────────────────────
         stage_box = [
             "resolving" if is_instagram_media_url(url) else "fetching"
         ]
@@ -1122,8 +1170,10 @@ async def generate_itinerary(
 
     if request.refresh:
         await enforce_usage(user, "refresh")
-    # Miss/expired (o refresh sin fila): habrá destilación síncrona → cuota de extraction.
-    if entry is None or entry.freshness == "expired":
+    # Miss (o refresh sin fila): destilación síncrona → cuota de extraction.
+    # Stale/expired hacen GET+hash; la cuota de extraction solo si Claude entra
+    # (dentro de _validate_sync_for_refresh).
+    if entry is None:
         await enforce_usage(user, "extraction")
 
     return StreamingResponse(

@@ -1,10 +1,11 @@
 """
 Caché global de extracciones por URL (`public.article_extractions` en Supabase).
 
-Política stale-while-revalidate:
-  - fresh  (< REVALIDATE_DAYS): servir al instante, sin revalidar
-  - stale  (entre REVALIDATE y HARD_TTL): servir al instante + revalidar en fondo
-  - expired / miss: flujo síncrono (fetch + Claude)
+Política de frescura (`validated_at`):
+  - fresh  (< REVALIDATE_DAYS, default 2): servir al instante, sin GET
+  - stale  (entre REVALIDATE y HARD_TTL): en un alta, GET + hash síncrono
+  - expired / miss: GET + hash (expired) o destilación (miss)
+  - Recargar ignora la ventana. El prewarm stale sigue revalidando en fondo.
 
 La clave de lookup es `url` cruda, luego `canonical_url` (siempre) y la PK canónica.
 Acceso solo con `service_role`. Si faltan env vars, degrada a "sin caché".
@@ -21,7 +22,7 @@ import httpx
 from article_fetch import CONTENT_VERSION, normalize_article_url
 
 TABLE = "article_extractions"
-DEFAULT_REVALIDATE_DAYS = 15
+DEFAULT_REVALIDATE_DAYS = 2
 DEFAULT_HARD_TTL_DAYS = 90
 
 Freshness = Literal["fresh", "stale", "expired", "miss"]

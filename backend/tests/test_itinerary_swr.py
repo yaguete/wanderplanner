@@ -70,22 +70,154 @@ async def test_fresh_hit_serves_cache_without_fetch():
 
 
 @pytest.mark.asyncio
-async def test_stale_hit_serves_cache_and_schedules_revalidate():
-    entry = _entry(age_days=20)
+async def test_stale_hit_gets_and_skips_claude_when_hash_matches():
+    entry = _entry(age_days=3)
     assert entry.freshness == "stale"
+    fetched = ArticleFetchResult(
+        plain_text="texto estable",
+        cleaned_html="<p>x</p>",
+        article_modified_at=entry.article_modified_at,
+        content_hash=entry.content_hash,
+        content_version=CONTENT_VERSION,
+    )
     scheduled = []
 
     def fake_spawn(coro):
         scheduled.append(coro)
-        # Cerrar la corrutina para evitar "never awaited".
         coro.close()
 
-    with patch.object(main_mod, "_spawn_background", side_effect=fake_spawn):
-        body = await _collect_sse(
-            main_mod._stream_itinerary(entry.url, entry=entry, user=None, refresh=False)
-        )
+    with patch.object(main_mod, "fetch_article", new=AsyncMock(return_value=fetched)) as fetch:
+        with patch.object(main_mod, "_spawn_background", side_effect=fake_spawn):
+            with patch.object(main_mod, "touch_validation", new=AsyncMock()) as touch:
+                with patch.object(main_mod, "call_claude") as claude:
+                    body = await _collect_sse(
+                        main_mod._stream_itinerary(
+                            entry.url, entry=entry, user=None, refresh=False
+                        )
+                    )
     assert "event: result" in body
-    assert len(scheduled) == 1
+    assert "Austria" in body
+    fetch.assert_awaited()
+    claude.assert_not_called()
+    touch.assert_awaited()
+    assert scheduled == []
+
+
+@pytest.mark.asyncio
+async def test_stale_hit_redistills_when_hash_changes():
+    entry = _entry(age_days=3)
+    fetched = ArticleFetchResult(
+        plain_text="guía de 15 lugares",
+        cleaned_html="<p>nuevo</p>",
+        article_modified_at=entry.article_modified_at,
+        content_hash=content_hash("guía de 15 lugares"),
+        content_version=CONTENT_VERSION,
+    )
+    new_itinerary = {"title": "Costa Rica v2", "days": [], "basics": []}
+    with patch.object(main_mod, "fetch_article", new=AsyncMock(return_value=fetched)):
+        with patch.object(
+            main_mod, "call_claude", return_value=(new_itinerary, 10, 20)
+        ) as claude:
+            with patch.object(main_mod, "enforce_usage", new=AsyncMock()):
+                with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                    with patch.object(main_mod, "record_event", new=AsyncMock()):
+                        body = await _collect_sse(
+                            main_mod._stream_itinerary(
+                                entry.url, entry=entry, user=None, refresh=False
+                            )
+                        )
+    assert "Costa Rica v2" in body
+    assert claude.call_count == 1
+    store.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stale_fetch_error_keeps_cache():
+    entry = _entry(age_days=3)
+    with patch.object(
+        main_mod, "fetch_article", new=AsyncMock(side_effect=RuntimeError("404"))
+    ):
+        with patch.object(main_mod, "call_claude") as claude:
+            with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                body = await _collect_sse(
+                    main_mod._stream_itinerary(
+                        entry.url, entry=entry, user=None, refresh=False
+                    )
+                )
+    assert "Austria" in body
+    claude.assert_not_called()
+    store.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_idle_ten_days_gets_on_first_request():
+    entry = _entry(age_days=10)
+    assert entry.freshness == "stale"
+    fetched = ArticleFetchResult(
+        plain_text="texto estable",
+        cleaned_html="<p>x</p>",
+        content_hash=entry.content_hash,
+        content_version=CONTENT_VERSION,
+    )
+    with patch.object(main_mod, "fetch_article", new=AsyncMock(return_value=fetched)) as fetch:
+        with patch.object(main_mod, "touch_validation", new=AsyncMock()):
+            with patch.object(main_mod, "call_claude") as claude:
+                await _collect_sse(
+                    main_mod._stream_itinerary(
+                        entry.url, entry=entry, user=None, refresh=False
+                    )
+                )
+    fetch.assert_awaited()
+    claude.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_same_date_different_hash_redistills():
+    entry = _entry(age_days=1)
+    fetched = ArticleFetchResult(
+        plain_text="el post cambió y Yoast no movió dateModified",
+        cleaned_html="<p>nuevo</p>",
+        article_modified_at=entry.article_modified_at,
+        content_hash=content_hash("el post cambió y Yoast no movió dateModified"),
+        content_version=CONTENT_VERSION,
+    )
+    new_itinerary = {"title": "15 lugares", "days": [], "basics": []}
+    with patch.object(main_mod, "fetch_article", new=AsyncMock(return_value=fetched)):
+        with patch.object(
+            main_mod, "call_claude", return_value=(new_itinerary, 8, 16)
+        ) as claude:
+            with patch.object(main_mod, "enforce_usage", new=AsyncMock()):
+                with patch.object(main_mod, "store_extraction", new=AsyncMock()):
+                    with patch.object(main_mod, "record_event", new=AsyncMock()):
+                        body = await _collect_sse(
+                            main_mod._stream_itinerary(
+                                entry.url, entry=entry, user=None, refresh=True
+                            )
+                        )
+    assert "15 lugares" in body
+    claude.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_newer_date_same_hash_skips_claude():
+    entry = _entry(age_days=1)
+    fetched = ArticleFetchResult(
+        plain_text="texto estable",
+        cleaned_html="<p>x</p>",
+        article_modified_at=datetime(2026, 8, 23, 12, 0, tzinfo=timezone.utc),
+        content_hash=entry.content_hash,
+        content_version=CONTENT_VERSION,
+    )
+    with patch.object(main_mod, "fetch_article", new=AsyncMock(return_value=fetched)):
+        with patch.object(main_mod, "touch_validation", new=AsyncMock()):
+            with patch.object(main_mod, "call_claude") as claude:
+                with patch.object(main_mod, "record_event", new=AsyncMock()):
+                    await _collect_sse(
+                        main_mod._stream_itinerary(
+                            entry.url, entry=entry, user=None, refresh=True
+                        )
+                    )
+    claude.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -185,7 +317,7 @@ async def test_revalidate_network_error_keeps_payload():
 @pytest.mark.asyncio
 async def test_content_version_bump_without_redistill():
     entry = _entry(age_days=20, content_version=CONTENT_VERSION - 1 if CONTENT_VERSION > 0 else 0)
-    # Simular versión antigua: dateModified igual → no redestilar.
+    # Simular versión antigua: mismo hash → no redestilar.
     entry.content_version = 0
     fetched = ArticleFetchResult(
         plain_text="texto estable",

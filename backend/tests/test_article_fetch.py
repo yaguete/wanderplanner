@@ -76,8 +76,8 @@ def test_extract_article_modified_from_json_ld():
 
 
 def test_extract_ignores_published_only_signals():
-    # La fecha de publicación no cambia al editar: usarla como fallback haría
-    # que _content_unchanged diera "sin cambios" para siempre en esos blogs.
+    # datePublished no se mueve al editar; no es señal de modificación.
+    # El alta compara el hash del texto útil, no esta fecha.
     html = """
     <html><head>
       <meta property="article:published_time" content="2026-01-01T00:00:00+00:00" />
