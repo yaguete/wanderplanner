@@ -24,7 +24,6 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
@@ -181,22 +180,23 @@ export function AccountMenu({
               Si sales, perderás «{guestTripName}»: no tiene cuenta a la que volver. ¿Seguro?
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Seguir aquí</AlertDialogCancel>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <AlertDialogCancel className="mt-0">Seguir aquí</AlertDialogCancel>
             <button
               type="button"
               className={buttonVariants({ variant: "outline" })}
+              onClick={() => void handleSignOut()}
+            >
+              Salir y descartar
+            </button>
+            <AlertDialogAction
               onClick={() => {
-                setDiscardOpen(false)
                 router.push("/signup")
               }}
             >
-              Crear cuenta
-            </button>
-            <AlertDialogAction onClick={() => void handleSignOut()}>
-              Salir y descartar
+              Crear cuenta y guardar
             </AlertDialogAction>
-          </AlertDialogFooter>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
     ) : null}
