@@ -56,7 +56,8 @@
     "test:auth-session-persist": "tsx lib/auth-session-persist.test.ts",
     "test:auth-google": "tsx lib/auth-google.test.ts",
     "test:turnstile": "tsx components/auth/turnstile.test.ts",
-    "test:onboarding": "tsx lib/onboarding.test.ts"
+    "test:onboarding": "tsx lib/onboarding.test.ts",
+    "test:visual-viewport": "tsx lib/visual-viewport.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

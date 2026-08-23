@@ -305,7 +305,7 @@ export function LandingStart({
                 />
                 {!urlValue ? (
                   <span
-                    className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-1.5 text-[0.9375rem] text-muted-foreground"
+                    className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-1.5 text-base text-muted-foreground sm:text-[0.9375rem]"
                     aria-hidden
                   >
                     <span className="truncate">Pega un enlace web</span>

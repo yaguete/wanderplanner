@@ -731,9 +731,20 @@ html.landing-header-scrolled .landing-header::before {
   min-width: 0;
   flex: 1;
   background: transparent;
-  font-size: 0.9375rem;
+  /*
+   * 16px en móvil: iOS (Safari, Firefox, Chrome) hace auto-zoom al enfocar
+   * un campo <16px, y el zoom no se deshace al navegar a /start ni al
+   * abrir el onboarding. Mismo criterio que `Input` (`text-base md:text-sm`).
+   */
+  font-size: 1rem;
   color: hsl(var(--foreground));
   outline: none;
+}
+
+@media (min-width: 640px) {
+  .landing-start-input {
+    font-size: 0.9375rem;
+  }
 }
 
 .landing-start-input::placeholder {

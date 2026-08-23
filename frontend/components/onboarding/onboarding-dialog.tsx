@@ -21,6 +21,7 @@ import {
   revealSourcesFromOnboarding,
 } from "@/lib/onboarding"
 import { cn } from "@/lib/utils"
+import { isDialogFullscreenViewport } from "@/lib/visual-viewport"
 import { ONBOARDING_SLIDES } from "./onboarding-slides"
 
 const SLIDE_COUNT = ONBOARDING_SLIDES.length
@@ -64,6 +65,9 @@ export function OnboardingDialog({
   }, [])
 
   useEffect(() => {
+    // Móvil: no enfocar el CTA inferior. Con zoom residual de iOS o chrome
+    // overlay (Firefox), scroll-into-view del foco mete el botón bajo la barra.
+    if (isDialogFullscreenViewport()) return
     primaryRef.current?.focus()
   }, [index])
 
@@ -116,7 +120,7 @@ export function OnboardingDialog({
         overlayClassName="bg-black/45"
         onOpenAutoFocus={(event) => {
           event.preventDefault()
-          primaryRef.current?.focus()
+          if (!isDialogFullscreenViewport()) primaryRef.current?.focus()
         }}
         onKeyDown={onKeyDown}
         className={cn(

@@ -6,6 +6,7 @@ import { X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { isMobileViewport } from '@/hooks/use-mobile'
+import { useVisualViewportFill } from '@/hooks/use-visual-viewport-fill'
 
 const Dialog = DialogPrimitive.Root
 
@@ -41,16 +42,31 @@ const DialogContent = React.forwardRef<
     fullscreenOnMobile?: boolean
     overlayClassName?: string
   }
->(({ className, children, hideClose = false, fullscreenOnMobile = false, overlayClassName, onOpenAutoFocus, ...props }, ref) => (
-  <DialogPortal>
+>(({ className, children, hideClose = false, fullscreenOnMobile = false, overlayClassName, onOpenAutoFocus, ...props }, ref) => {
+  const nodeRef = React.useRef<HTMLDivElement>(null)
+  useVisualViewportFill(nodeRef, fullscreenOnMobile)
+  const setRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      nodeRef.current = node
+      if (typeof ref === 'function') ref(node)
+      else if (ref) ref.current = node
+    },
+    [ref],
+  )
+
+  return (
+    <DialogPortal>
     <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
-      ref={ref}
+      ref={setRef}
       className={cn(
         fullscreenOnMobile
           ? [
               // Columna flex: permite cabecera/footer fijos y cuerpo con scroll.
-              'fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col',
+              // `svh` (no `dvh`) como fallback CSS: en iOS `dvh` es el viewport
+              // grande y el chrome del navegador (Firefox iOS, barra de Safari)
+              // tapa el borde inferior. JS ancla al visual viewport encima.
+              'fixed inset-0 left-0 top-0 z-50 flex h-[100svh] max-h-[100svh] w-full max-w-none flex-col',
               'translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-lg',
               'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out',
               'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
@@ -97,8 +113,9 @@ const DialogContent = React.forwardRef<
         </DialogPrimitive.Close>
       ) : null}
     </DialogPrimitive.Content>
-  </DialogPortal>
-))
+    </DialogPortal>
+  )
+})
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 const DialogHeader = ({
