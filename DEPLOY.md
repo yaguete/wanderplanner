@@ -221,6 +221,9 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   17. `20260817000000_place_thumbs_wikimedia.sql`
   18. `20260817120000_photo_paid_usage.sql` (antes del backend que escribe `photo_paid`; si no, el tope global lee 0)
   19. `20260822120000_trip_budget.sql` (`trips.budget`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
+  20. `20260824120000_trip_sharing.sql` (tablas `trip_members` / `trip_invites`, `trips.version`, RLS, Realtime)
+
+**Compartir viaje:** orden **1) migración** `20260824120000_trip_sharing.sql`, **2) Realtime** publicación de `trips` y `trip_members` en el dashboard de Supabase, **3) backend Fly** (`RESEND_API_KEY`, `INVITE_EMAIL_FROM`, `SUPABASE_ANON_KEY`, `SITE_URL`) + dominio verificado en Resend, **4) frontend Vercel**. El front pide `version` y `user_id` en `TRIP_COLUMNS`: si llega antes que la migración, PostgREST falla. `/invite/**` no pasa por GoTrue; no hace falta redirect URL nueva.
 
 ```bash
 # Con CLI vinculada al proyecto:

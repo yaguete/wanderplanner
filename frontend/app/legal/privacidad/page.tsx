@@ -96,6 +96,16 @@ export default function PrivacidadPage() {
           sitios), Wikimedia (fotos de sitios) y Unsplash (portadas).
         </p>
         <p>
+          Si compartes un viaje, guardamos el correo de la persona invitada hasta que
+          acepta o la invitación caduca (14 días; después se borra sola). Quien ya está en
+          el viaje ve el nombre de los demás y el correo enmascarado. Las conversaciones
+          con el asistente no se comparten: cada uno tiene las suyas.
+        </p>
+        <p>
+          Para enviar esas invitaciones usamos un proveedor de correo transaccional con
+          sede en Estados Unidos (cláusulas contractuales tipo).
+        </p>
+        <p>
           Si eliges entrar con Google, Google sabe que usas WanderPlanner y nos devuelve tu
           nombre, tu correo y tu foto de perfil; lo trata según su propia política.
         </p>
@@ -135,6 +145,10 @@ export default function PrivacidadPage() {
           Mientras tengas la cuenta. Si la borras, se van contigo el perfil, los viajes y
           las conversaciones del asistente. Las sesiones de invitado que quedan abandonadas
           se limpian periódicamente.
+        </p>
+        <p>
+          El correo de una invitación a un viaje se guarda como máximo 14 días, o hasta que
+          se acepta o se cancela. Al aceptar, esa persona pasa a ser miembro del viaje.
         </p>
         <p>
           Cuando extraemos un artículo guardamos una copia asociada a su dirección web, no

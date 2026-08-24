@@ -28,6 +28,7 @@ import {
   validatePasswordChange,
 } from "@/lib/account-security"
 import { cn } from "@/lib/utils"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 
 export default function AccountSettingsPage() {
   const router = useRouter()
@@ -44,6 +45,7 @@ export default function AccountSettingsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteTyped, setDeleteTyped] = useState("")
   const [deleting, setDeleting] = useState(false)
+  const [sharedOthers, setSharedOthers] = useState(0)
 
   const captchaEnabled = isTurnstileEnabled()
   const confirmationName = confirmationNameFor(user, profile)
@@ -53,6 +55,15 @@ export default function AccountSettingsPage() {
   useEffect(() => {
     if (!isLoading && isGuest) router.replace("/trips")
   }, [isLoading, isGuest, router])
+
+  useEffect(() => {
+    if (!showDelete && !deleteOpen) return
+    if (!isSupabaseConfigured()) return
+    const supabase = createClient()
+    void supabase.rpc("count_owned_shared_trips").then(({ data }) => {
+      setSharedOthers(typeof data === "number" ? data : Number(data) || 0)
+    })
+  }, [showDelete, deleteOpen])
 
   const resetCaptcha = () => {
     setCaptchaToken(null)
@@ -252,6 +263,9 @@ export default function AccountSettingsPage() {
                     <p className="text-sm text-muted-foreground">
                       Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste y todas tus
                       conversaciones con el asistente. Esta acción no se puede deshacer.
+                      {sharedOthers > 0
+                        ? ` ${sharedOthers} ${sharedOthers === 1 ? "persona perderá" : "personas perderán"} acceso a los viajes que has compartido.`
+                        : ""}
                     </p>
                     <Button
                       type="button"
@@ -285,7 +299,11 @@ export default function AccountSettingsPage() {
             <AlertDialogTitle>Borrar cuenta</AlertDialogTitle>
             <AlertDialogDescription>
               Se irán tu perfil, tus viajes, las fuentes que añadiste y las conversaciones
-              del asistente. Esta acción no se puede deshacer.
+              del asistente
+              {sharedOthers > 0
+                ? `, y ${sharedOthers} ${sharedOthers === 1 ? "persona perderá" : "personas perderán"} acceso a lo que hayas compartido`
+                : ""}
+              . Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex flex-col gap-1.5">

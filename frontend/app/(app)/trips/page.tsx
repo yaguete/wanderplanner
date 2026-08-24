@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -8,6 +8,7 @@ import {
   ArchiveRestore,
   LayoutGrid,
   List,
+  LogOut,
   Pencil,
   Plus,
   Trash2,
@@ -27,8 +28,12 @@ import {
 import { countriesPlainList } from "@/lib/countries"
 import { formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
+import { useAuth } from "@/lib/auth-context"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { useMyTripInvites, useMyTripOccupants } from "@/hooks/use-trip-members"
+import { TripMemberAvatars } from "@/components/trip-member-avatars"
+import { createClient } from "@/lib/supabase/client"
 import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
 
@@ -64,16 +69,20 @@ function tripStatsLine(trip: Trip, itemCount: number): string {
 
 function TripActions({
   trip,
+  isOwner,
   onArchive,
   onUnarchive,
   onEdit,
   onDelete,
+  onLeave,
 }: {
   trip: Trip
+  isOwner: boolean
   onArchive: () => void
   onUnarchive: () => void
   onEdit: () => void
   onDelete: () => void
+  onLeave: () => void
 }) {
   const archived = Boolean(trip.archived)
   const btnClass = cn(
@@ -83,75 +92,97 @@ function TripActions({
 
   return (
     <div className="flex items-center gap-1">
-      {archived ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={btnClass}
-          aria-label={`Desarchivar ${trip.name}`}
-          title="Desarchivar"
-          onClick={(e) => {
-            e.stopPropagation()
-            onUnarchive()
-          }}
-        >
-          <ArchiveRestore className="h-3.5 w-3.5" />
-        </Button>
+      {isOwner ? (
+        <>
+          {archived ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={btnClass}
+              aria-label={`Desarchivar ${trip.name}`}
+              title="Desarchivar"
+              onClick={(e) => {
+                e.stopPropagation()
+                onUnarchive()
+              }}
+            >
+              <ArchiveRestore className="h-3.5 w-3.5" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={btnClass}
+              aria-label={`Archivar ${trip.name}`}
+              title="Archivar"
+              onClick={(e) => {
+                e.stopPropagation()
+                onArchive()
+              }}
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={btnClass}
+            aria-label={`Editar ${trip.name}`}
+            title="Editar"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(btnClass, "hover:bg-destructive hover:text-destructive-foreground")}
+            aria-label={`Eliminar ${trip.name}`}
+            title="Eliminar"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </>
       ) : (
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className={btnClass}
-          aria-label={`Archivar ${trip.name}`}
-          title="Archivar"
+          aria-label={`Salir de ${trip.name}`}
+          title="Salir del viaje"
           onClick={(e) => {
             e.stopPropagation()
-            onArchive()
+            onLeave()
           }}
         >
-          <Archive className="h-3.5 w-3.5" />
+          <LogOut className="h-3.5 w-3.5" />
         </Button>
       )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={btnClass}
-        aria-label={`Editar ${trip.name}`}
-        title="Editar"
-        onClick={(e) => {
-          e.stopPropagation()
-          onEdit()
-        }}
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(btnClass, "hover:bg-destructive hover:text-destructive-foreground")}
-        aria-label={`Eliminar ${trip.name}`}
-        title="Eliminar"
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete()
-        }}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
     </div>
   )
 }
 
 export default function TripsHomePage() {
-  const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip } =
+  const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, reloadTrips } =
     useTrips()
+  const { user } = useAuth()
   const router = useRouter()
   const { openingTrip, beginOpenTrip } = useOpeningTrip()
   const { requireAccount } = useRegistrationGate()
+  const { invites, reload: reloadInvites } = useMyTripInvites()
+  const occupantsByTrip = useMyTripOccupants()
   const [dialogOpen, setDialogOpen] = useState(false)
   const openNewTripDialog = () => {
     if (requireAccount("new-trip")) setDialogOpen(true)
@@ -159,9 +190,17 @@ export default function TripsHomePage() {
   const [editingTripId, setEditingTripId] = useState<string | null>(null)
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
   const [filter, setFilter] = useState<TripFilter>("active")
-  const [viewMode, setViewMode] = useState<ViewMode>(readViewMode)
+  const [viewMode, setViewMode] = useState<ViewMode>("grid")
+  const [leavingTripId, setLeavingTripId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setViewMode(readViewMode())
+  }, [])
+
+  const isOwnerOf = (trip: Trip) => !trip.ownerId || trip.ownerId === user?.id
 
   const tripToDelete = deletingTripId ? trips.find((t) => t.id === deletingTripId) : null
+  const tripToLeave = leavingTripId ? trips.find((t) => t.id === leavingTripId) : null
   const editingTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null
   const formOpen = dialogOpen || !!editingTrip
 
@@ -192,6 +231,54 @@ export default function TripsHomePage() {
             </p>
           </div>
         </div>
+
+        {invites.length > 0 ? (
+          <ul className="mb-6 space-y-2">
+            {invites.map((inv) => (
+              <li
+                key={inv.inviteId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
+              >
+                <p className="text-sm">
+                  <span className="font-medium">{inv.inviterName}</span>
+                  {" te invita a editar "}
+                  <span className="font-medium">{inv.tripName}</span>
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={async () => {
+                      const supabase = createClient()
+                      const { error } = await supabase.rpc("accept_trip_invite_by_id", {
+                        p_invite_id: inv.inviteId,
+                      })
+                      if (error) return
+                      await reloadInvites()
+                      await reloadTrips()
+                      beginOpenTrip({ id: inv.tripId, name: inv.tripName })
+                      router.push(`/trips/${inv.tripId}`)
+                    }}
+                  >
+                    Aceptar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      const supabase = createClient()
+                      await supabase.rpc("decline_trip_invite", { p_invite_id: inv.inviteId })
+                      await reloadInvites()
+                    }}
+                  >
+                    Ahora no
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div
@@ -332,9 +419,16 @@ export default function TripsHomePage() {
                     </div>
                     <div className="p-4">
                       <h3 className="text-[15px] font-semibold tracking-tight">{trip.name}</h3>
-                      <p className="mt-0.5 text-[13px] tabular-nums text-muted-foreground">
-                        {formatTripDates(trip.startDate, trip.endDate) ?? "Sin fechas"}
-                      </p>
+                      <div className="mt-0.5 flex items-center justify-between gap-2">
+                        <p className="min-w-0 truncate text-[13px] tabular-nums text-muted-foreground">
+                          {formatTripDates(trip.startDate, trip.endDate) ?? "Sin fechas"}
+                        </p>
+                        <TripMemberAvatars
+                          members={occupantsByTrip[trip.id] ?? []}
+                          size="sm"
+                          className="shrink-0"
+                        />
+                      </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {trip.numDays != null && (
                           <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
@@ -354,10 +448,12 @@ export default function TripsHomePage() {
                   <div className="absolute right-2 top-2">
                     <TripActions
                       trip={trip}
+                      isOwner={isOwnerOf(trip)}
                       onArchive={() => archiveTrip(trip.id)}
                       onUnarchive={() => unarchiveTrip(trip.id)}
                       onEdit={() => setEditingTripId(trip.id)}
                       onDelete={() => setDeletingTripId(trip.id)}
+                      onLeave={() => setLeavingTripId(trip.id)}
                     />
                   </div>
                 </div>
@@ -388,6 +484,7 @@ export default function TripsHomePage() {
             <ul className="divide-y divide-border">
               {visibleTrips.map((trip) => {
                 const itemCount = tripItemCount(trip)
+                const shared = (occupantsByTrip[trip.id] ?? []).length >= 2
                 return (
                   <li
                     key={trip.id}
@@ -398,7 +495,8 @@ export default function TripsHomePage() {
                       onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       aria-busy={openingTrip?.id === trip.id || undefined}
                       className={cn(
-                        "flex w-full items-center gap-3 py-3 pl-3 pr-28 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4 sm:pr-32",
+                        "flex w-full items-center gap-3 py-3 pl-3 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4",
+                        shared ? "pr-40 sm:pr-48" : "pr-28 sm:pr-32",
                         openingTrip?.id === trip.id && "bg-muted/40",
                       )}
                     >
@@ -430,13 +528,21 @@ export default function TripsHomePage() {
                       </div>
                     </Link>
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:right-3">
-                      <TripActions
-                        trip={trip}
-                        onArchive={() => archiveTrip(trip.id)}
-                        onUnarchive={() => unarchiveTrip(trip.id)}
-                        onEdit={() => setEditingTripId(trip.id)}
-                        onDelete={() => setDeletingTripId(trip.id)}
-                      />
+                      <div className="flex items-center gap-2">
+                        <TripMemberAvatars
+                          members={occupantsByTrip[trip.id] ?? []}
+                          size="sm"
+                        />
+                        <TripActions
+                          trip={trip}
+                          isOwner={isOwnerOf(trip)}
+                          onArchive={() => archiveTrip(trip.id)}
+                          onUnarchive={() => unarchiveTrip(trip.id)}
+                          onEdit={() => setEditingTripId(trip.id)}
+                          onDelete={() => setDeletingTripId(trip.id)}
+                          onLeave={() => setLeavingTripId(trip.id)}
+                        />
+                      </div>
                     </div>
                   </li>
                 )
@@ -510,6 +616,32 @@ export default function TripsHomePage() {
           router.push(`/trips/${trip.id}`)
         }}
       />
+
+      <Dialog open={!!leavingTripId} onOpenChange={(open) => !open && setLeavingTripId(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Salir del viaje</DialogTitle>
+            <DialogDescription>
+              ¿Seguro que quieres salir de <strong>{tripToLeave?.name}</strong>? Dejarás de ver
+              el plan. Tus conversaciones con el asistente se quedan en tu cuenta.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLeavingTripId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (leavingTripId) void leaveTrip(leavingTripId)
+                setLeavingTripId(null)
+              }}
+            >
+              Salir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deletingTripId} onOpenChange={(open) => !open && setDeletingTripId(null)}>
         <DialogContent className="sm:max-w-sm">

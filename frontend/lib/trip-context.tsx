@@ -48,6 +48,7 @@ import {
 import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
+import { mergeTrips } from "@/lib/trip-merge"
 import { redeemGuestTripClaim } from "@/lib/guest-trip-claim"
 import { useAuth } from "@/lib/auth-context"
 import { coverQueriesFromSource, fetchCoverFromQueries } from "@/lib/unsplash"
@@ -170,6 +171,8 @@ interface TripContextValue {
    * el login de invitado no debe seguir (el viaje se perdería).
    */
   flushPendingSync: () => Promise<boolean>
+  /** Relee viajes y fuentes (p. ej. tras aceptar una invitación). */
+  reloadTrips: () => Promise<void>
   createTrip: (data: {
     name: string
     countries: string[]
@@ -197,6 +200,10 @@ interface TripContextValue {
   deleteTrip: (tripId: string) => void
   archiveTrip: (tripId: string) => void
   unarchiveTrip: (tripId: string) => void
+  leaveTrip: (tripId: string) => Promise<void>
+  applyRemoteTrip: (trip: Trip) => void
+  /** Quita el viaje del estado local (revocación remota). No llama a leave_trip. */
+  dropTrip: (tripId: string) => void
 
   getTrip: (tripId: string) => Trip | undefined
   getTripSources: (tripId: string) => Source[]
@@ -410,9 +417,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setRehydrated(false)
 
     const supabase = createClient()
-    const syncer = new TripsSyncer(supabase, userId, () => {
-      toast.error("No hemos podido guardar los últimos cambios. Reintentando…")
-    })
+    const syncer = new TripsSyncer(
+      supabase,
+      userId,
+      (error) => {
+        console.error("[trips] persist failed", error)
+        toast.error("No hemos podido guardar los últimos cambios. Reintentando…")
+      },
+      {
+        onConflictMerged: (trip) => {
+          setTrips((prev) => prev.map((t) => (t.id === trip.id ? trip : t)))
+          toast.message("Se han combinado cambios de las dos personas")
+        },
+        onAccessRevoked: (tripId) => {
+          setTrips((prev) => prev.filter((t) => t.id !== tripId))
+          toast.error("Ya no tienes acceso a este viaje")
+        },
+      },
+    )
     syncerRef.current?.dispose()
     syncerRef.current = syncer
 
@@ -446,7 +468,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             toast.success(`Hemos añadido ${claimedIds.length} viajes a tu cuenta`)
           }
         }
-      } catch {
+      } catch (err) {
+        console.error("[trips] load failed", err)
         if (active) toast.error("No hemos podido cargar tus viajes.")
       } finally {
         if (active) setIsLoading(false)
@@ -485,6 +508,27 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     if (!syncer) return true
     return syncer.flushNow()
   }, [])
+
+  const reloadTrips = useCallback(async () => {
+    const userId = user?.id
+    if (!userId || !isSupabaseConfigured()) return
+    setIsLoading(true)
+    try {
+      await syncerRef.current?.flushNow()
+      const supabase = createClient()
+      const snapshot = await loadTripsState(supabase, userId)
+      syncerRef.current?.reset(snapshot)
+      setTrips(snapshot.trips)
+      setSources(snapshot.sources)
+      setRehydrated(true)
+      hydratedFor.current = userId
+    } catch (err) {
+      console.error("[trips] reload failed", err)
+      toast.error("No hemos podido cargar tus viajes.")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user?.id])
 
   const applyCoverFromSource = useCallback(async (tripId: string, source: Source) => {
     const queries = coverQueriesFromSource(source)
@@ -599,12 +643,14 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         origin: data.origin ?? null,
         budget: null,
         archived: false,
+        ownerId: user?.id ?? "",
+        version: 1,
       },
       days,
     )
     setTrips((prev) => [...prev, trip])
     return trip
-  }, [])
+  }, [user?.id])
 
   const updateTrip = useCallback(
     (
@@ -700,6 +746,27 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       })
       return next
     })
+  }, [])
+
+  const leaveTrip = useCallback(async (tripId: string) => {
+    if (!isSupabaseConfigured()) return
+    const supabase = createClient()
+    const { error } = await supabase.rpc("leave_trip", { p_trip_id: tripId })
+    if (error) throw error
+    setTrips((prev) => prev.filter((t) => t.id !== tripId))
+  }, [])
+
+  const applyRemoteTrip = useCallback((trip: Trip) => {
+    setTrips((prev) => {
+      const current = prev.find((t) => t.id === trip.id)
+      if (!current) return prev
+      const { trip: merged } = mergeTrips(current, current, trip)
+      return prev.map((t) => (t.id === trip.id ? merged : t))
+    })
+  }, [])
+
+  const dropTrip = useCallback((tripId: string) => {
+    setTrips((prev) => prev.filter((t) => t.id !== tripId))
   }, [])
 
   const ensureArticleHtml = useCallback(async (sourceId: string) => {
@@ -1746,11 +1813,15 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       sources,
       isLoading,
       flushPendingSync,
+      reloadTrips,
       createTrip,
       updateTrip,
       deleteTrip,
       archiveTrip,
       unarchiveTrip,
+      leaveTrip,
+      applyRemoteTrip,
+      dropTrip,
       getTrip,
       getTripSources,
       startSourceExtraction,
@@ -1792,7 +1863,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, flushPendingSync, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

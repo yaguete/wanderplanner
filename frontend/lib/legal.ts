@@ -56,7 +56,7 @@ export const LEGAL = {
    */
   nif: "78726138J",
   address: "",
-  updatedAt: "2026-08-22",
+  updatedAt: "2026-08-24",
 } as const
 
 export const MAE_TRAVEL_ADVICE_URL =

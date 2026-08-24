@@ -285,7 +285,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.user && data.session) {
           await persistProfile(data.user.id, profileData)
         }
-        return { ok: true, signedIn: Boolean(data.session) }
+        return {
+          ok: true,
+          signedIn: Boolean(data.session),
+          userId: data.user?.id,
+        }
       } catch (e) {
         return { ok: false, error: errorMessage(e) }
       }

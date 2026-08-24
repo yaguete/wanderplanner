@@ -54,15 +54,15 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 
 ### Desktop
 - Shell: canvas gris + sidebar colapsable (expandido / icon-rail, `wp-sidebar-collapsed`).
-- Header: marca al rincón (alineada con la columna del sidebar) · colapso (`PanelLeftClose`/`PanelLeftOpen`, junto a la marca) · toggles Fuentes / Viaje / Asistente (detalle). El avatar vive en el pie del sidebar.
+- Header: marca al rincón (alineada con la columna del sidebar) · colapso (`PanelLeftClose`/`PanelLeftOpen`, junto a la marca) · toggles Fuentes / Viaje / Asistente (detalle) · **Invitar** a la derecha (`UserPlus` + etiqueta). El avatar vive en el pie del sidebar.
 - Tres paneles alícuota (`wp-trip-panels`); mínimo uno activo. Conmutación instantánea (sin animar `flex-grow`). Con 3 paneles y viewport &lt; ~1280px el sidebar se auto-colapsa a rail.
-- Título del viaje en la cabecera del panel Viaje (no en el header).
+- Título del viaje en la cabecera del panel Viaje (no en el header). Los avatares de quienes comparten el viaje van en las cards de Inicio.
 - Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes y Mi viaje. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista · Calendario · Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
 - Sidebar: «Inicio» y «Tus viajes» como filas hermanas; pie de cuenta (avatar + nombre expandido, solo avatar en rail).
 - Asistente: panel peer montado desde el inicio; chips de sugerencia sin esperar a Supabase si no hay conversación activa.
 
 ### Móvil
-- **Sin** título de viaje en header de detalle (marca + avatar).
+- **Sin** título de viaje en header de detalle (marca + icono Invitar a la izquierda del avatar).
 - Nav inferior de tres secciones (`TripMobileNav`): Fuentes · Mi viaje · Asistente.
 - Cabeceras que se colapsan al scroll; composer ajustado al teclado virtual.
 - «Añadir fuente» desde chips / sheet en Fuentes.
@@ -74,7 +74,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Enlaces del chat: clicables, sin botón «Añadir fuente». Citar el origen de un dato ≠ indexar el artículo. Añadir una fuente va por `propose_add_source` (tarjeta) o por el panel Fuentes.
 
 ### Home de viajes
-- Tarjetas/lista con portada fotográfica (`coverUrl`) o emoji; acciones Archivar / Editar / Eliminar a primer nivel.
+- Home de viajes: tarjetas de invitación pendiente (Aceptar / Ahora no). El editor no ve Archivar ni Eliminar; ve «Salir del viaje». Badges «Compartido» / «De [nombre]» si aplica.
 - Mientras se cargan los viajes desde Supabase, el bloque muestra un spinner en el mismo contenedor punteado que el empty state (nunca «No hay viajes activos» de forma prematura).
 
 ### Superficie de marketing (landing)

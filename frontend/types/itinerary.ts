@@ -226,6 +226,10 @@ export interface Trip {
   archived?: boolean
   /** Slug del partner cuyo CTA originó el viaje (`/start?ref=…`). */
   referrer?: string | null
+  /** Dueño (`trips.user_id`). Lo rellena la carga / el alta; vacío solo en fixtures de test. */
+  ownerId?: string
+  /** Versión OCC (`trips.version`). Default 1. */
+  version?: number
 }
 
 export interface Source {
@@ -246,6 +250,8 @@ export interface Source {
   basics: SourceBasicItem[]
   articleHtml: string
   ogImage: string | null
+  /** Dueño de la fila (`sources.user_id`). Las fuentes de un viaje compartido son del dueño. */
+  ownerId?: string
 }
 
 /**

@@ -85,6 +85,9 @@ const DialogContent = React.forwardRef<
               'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
               'sm:rounded-lg',
             ],
+        // Móvil: el cierre es un círculo de 44px (`right-4`); el encabezado
+        // no debe meterse debajo. Solo cuando hay X (no `hideClose`).
+        !hideClose && 'max-sm:[&_[data-slot=dialog-header]]:pr-16',
         className,
       )}
       {...props}
@@ -123,8 +126,9 @@ const DialogHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
+    data-slot="dialog-header"
     className={cn(
-      'flex flex-col space-y-1.5 text-center sm:text-left',
+      'flex flex-col space-y-1.5 text-left',
       className,
     )}
     {...props}

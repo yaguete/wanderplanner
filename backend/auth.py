@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -88,7 +88,7 @@ def _jwk_for_token(token: str, jwks: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(status_code=500, detail="JWKS sin clave compatible")
 
 
-async def _decode(token: str) -> dict[str, Any]:
+async def _decode(token: str, *, require_signature: bool = False) -> dict[str, Any]:
     secret = (os.getenv("SUPABASE_JWT_SECRET") or "").strip()
     options = {"verify_aud": False}
 
@@ -104,7 +104,8 @@ async def _decode(token: str) -> dict[str, Any]:
 
     # Local sin JWKS/secret: si REQUIRE_AUTH no está activo, lee claims sin verificar
     # (el front ya autenticó con Supabase). En producción pon SUPABASE_JWT_SECRET o JWKS.
-    if not _require_auth():
+    # require_signature=True (invitar, correo) nunca cae aquí: sin clave → 500.
+    if not require_signature and not _require_auth():
         return jwt.get_unverified_claims(token)
 
     raise HTTPException(
@@ -164,4 +165,54 @@ async def require_user(
         id=user_id,
         email=(claims.get("email") or None),
         is_anonymous=claims.get("is_anonymous") is True,
+    )
+
+
+@dataclass(frozen=True)
+class VerifiedUser:
+    """Usuario con JWT verificado (firma obligatoria) y token crudo para PostgREST."""
+
+    id: str
+    email: str | None
+    is_anonymous: bool
+    token: str
+    user_metadata: dict[str, Any] = field(default_factory=dict)
+
+
+async def require_verified_user(
+    authorization: str | None = Header(default=None),
+) -> VerifiedUser:
+    """
+    Exige token SIEMPRE, verificado SIEMPRE (nunca claims sin firma) y no anónimo.
+    Sin SUPABASE_JWT_SECRET ni JWKS → 500. Sin token → 401. Anónimo → 403.
+    """
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Falta el token de sesión")
+
+    try:
+        claims = await _decode(token, require_signature=True)
+    except HTTPException:
+        raise
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token de sesión inválido")
+
+    user_id = str(claims.get("sub") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token de sesión sin usuario")
+    if claims.get("is_anonymous") is True:
+        raise HTTPException(
+            status_code=403,
+            detail="Necesitas una cuenta para compartir un viaje",
+        )
+
+    meta = claims.get("user_metadata")
+    return VerifiedUser(
+        id=user_id,
+        email=(claims.get("email") or None),
+        is_anonymous=False,
+        token=token,
+        user_metadata=meta if isinstance(meta, dict) else {},
     )

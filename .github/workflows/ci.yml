@@ -67,6 +67,10 @@ jobs:
       - run: npm run test:onboarding
       - run: npm run test:visual-viewport
       - run: npm run test:mobile-browser-chrome
+      - run: npm run test:trip-merge
+      - run: npm run test:trip-share
+      - run: npm run test:trip-invite-url
+      - run: npm run test:trips-repo
       - run: npm run test:itinerary-calendar
       - run: npm run test:itinerary-utils
       - run: npm run test:maps-links

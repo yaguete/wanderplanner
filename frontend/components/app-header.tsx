@@ -13,9 +13,17 @@ import {
   useAccountIdentity,
 } from "@/components/account-menu"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
+import { InviteTripButton } from "@/components/invite-trip-button"
 import { useOpeningTrip } from "@/components/opening-trip"
+import { useTrips } from "@/lib/trip-context"
+import { useAuth } from "@/lib/auth-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
+
+function tripIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/trips\/([^/]+)$/)
+  return match?.[1] ?? null
+}
 
 function SidebarCollapseControl() {
   const { toggleSidebar, sidebarCollapsed, autoCollapsed } = useTripChrome()
@@ -60,13 +68,18 @@ type AppHeaderProps = {
 export function AppHeader({ leading }: AppHeaderProps) {
   const pathname = usePathname()
   const { name } = useAccountIdentity()
+  const { user } = useAuth()
+  const { getTrip } = useTrips()
   const isMobile = useIsMobile()
   const { chrome, chromeHydrated } = useTripChrome()
   const { clearOpeningTrip } = useOpeningTrip()
   const rail = useSidebarRail()
 
   const showPanelToggles = !isMobile && chrome !== null
-  const onTripDetail = /^\/trips\/[^/]+/.test(pathname)
+  const tripId = tripIdFromPath(pathname)
+  const onTripDetail = Boolean(tripId)
+  const openTrip = tripId ? getTrip(tripId) : undefined
+  const isTripOwner = Boolean(openTrip && (!openTrip.ownerId || openTrip.ownerId === user?.id))
 
   return (
     <header
@@ -120,18 +133,22 @@ export function AppHeader({ leading }: AppHeaderProps) {
 
       <div className="flex-1" />
 
-      {/* md:hidden: media query, no useIsMobile() — el hook es false al hidratar y el avatar parpadearía. */}
-      <div className="flex items-center gap-2.5 md:hidden">
-        <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
-        <AccountMenu side="bottom" align="end">
-          <button
-            type="button"
-            className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Abrir menú de cuenta"
-          >
-            <AccountAvatar />
-          </button>
-        </AccountMenu>
+      <div className="flex items-center gap-1.5">
+        {openTrip ? <InviteTripButton tripId={openTrip.id} isOwner={isTripOwner} /> : null}
+
+        {/* md:hidden: media query, no useIsMobile() — el hook es false al hidratar y el avatar parpadearía. */}
+        <div className="flex items-center gap-2.5 md:hidden">
+          <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
+          <AccountMenu side="bottom" align="end">
+            <button
+              type="button"
+              className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Abrir menú de cuenta"
+            >
+              <AccountAvatar />
+            </button>
+          </AccountMenu>
+        </div>
       </div>
     </header>
   )

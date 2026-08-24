@@ -253,7 +253,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Preguntas abiertas / deuda
 
-- Multi-pestaña: last-write-wins sin Realtime.
+- Multi-pestaña: last-write-wins salvo viajes compartidos (`trips.version` + fusión a 3 bandas + Realtime del viaje abierto).
 - Normalizar jsonb a tablas hijas solo si hace falta colaboración/queries.
 - `REQUIRE_AUTH=true` en producción.
 - Metering de uso de Places/Unsplash (T1.2) antes de producción: el cinturón `MAX_PHOTO_LOOKUPS_DAY` es durable (`usage_events.kind=photo_paid`, fail-closed, memo ~60 s). **`/cover` no tiene cuota por usuario** (`enforce_usage` / `record_event` de `photo_lookup`): Unsplash solo cuenta contra el tope global. No meter `USER_MAX_*` en portadas sin decidir el producto — un 429 en `/cover` deja el listado de viajes sin foto.
@@ -263,7 +263,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **Coste de Mapbox sin verificar:** falta comparar las peticiones a Directions de un viaje sin tramos antes/después del mapa nuevo; `place_suggest` / `transport_hub` no están en el presupuesto mensual.
 - **Proxy de Mapbox sin enchufar:** [`place_search.py`](backend/place_search.py) (`/places/suggest`, `/transport-hubs`) está escrito y nadie lo llama — el front va directo a `api.mapbox.com` con `NEXT_PUBLIC_MAPBOX_TOKEN`. Consecuencias: el token viaja en el bundle (defensa: restricción por URL del token, que es lo único que hay), y los kinds `place_suggest` / `transport_hub` de `usage_events` nunca se escriben, así que el gasto va sin medir. Enrutar `suggestPlaces` / `searchTransportHubs` por el proxy cierra las dos cosas; los tiles de `mapbox-gl` y Directions seguirán yendo directos igualmente, así que el token público no desaparece del navegador.
 - **Primera llamada a `resolveTripCountryCodes` (~460 ms):** ahí se compilan de golpe los ~400 patrones de [`countries.ts`](frontend/lib/countries.ts). Ocurre una vez por carga, en el primer render del asistente. Se quitaría indexando los países por su primera palabra para probar solo candidatos plausibles; ojo con los nombres con guion (`guinea-bissau`).
-- Placeholders: compartir/descargar; landing definitiva.
+- Placeholders: descargar; landing definitiva.
 
 ## Reglas que no se rompen
 
@@ -281,6 +281,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No metas `seed_source_key` en `TRIP_COLUMNS` ni en `tripToRow`.** El upsert del syncer la pisaría con `null`. Solo la escriben `insertDraftTrip` / `reuseOrInsertDraftTrip` desde `/start`.
 - ❌ **No cierres la sesión de invitado en `/signup`.** El formulario ya ramifica a `upgradeGuest` y conserva el `user_id`.
 - ❌ **No reasignes `user_id` desde el cliente** → RLS lo bloquea. El único camino es [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) + [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql).
+- ❌ **No filtres al dueño si el email ya tiene cuenta.** La respuesta de `POST /trips/{id}/invites` y el estado «Pendiente» son idénticos exista o no. Añadir a un compañero de `list_share_peers` sí entra directo.
 - ❌ **No pongas `force row level security` en `trips` / `sources` / `assistant_conversations`** sin revisar esas funciones: el `security definer` deja de funcionar en silencio.
 - ❌ **No pidas portada Unsplash en `createTrip`** → `applyCoverFromSource`.
 - ❌ **No expongas claves de imágenes** (`GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`) al frontend / `NEXT_PUBLIC_*`.
@@ -319,7 +320,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
 | Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`start-session.ts`](frontend/lib/start-session.ts), [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`auth-session-persist.ts`](frontend/lib/auth-session-persist.ts), [`auth-next.ts`](frontend/lib/auth-next.ts), [`auth-google.ts`](frontend/lib/auth-google.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql), [`20260818120000_trip_seed_source_key.sql`](supabase/migrations/20260818120000_trip_seed_source_key.sql), [`20260818130000_cleanup_anonymous_users_v2.sql`](supabase/migrations/20260818130000_cleanup_anonymous_users_v2.sql), [`20260821120000_google_display_name.sql`](supabase/migrations/20260821120000_google_display_name.sql), [`account-security.ts`](frontend/lib/account-security.ts), [`20260817190000_delete_own_account.sql`](supabase/migrations/20260817190000_delete_own_account.sql) |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-dock.tsx`](frontend/components/assistant-dock.tsx), [`assistant-actions.ts`](frontend/lib/assistant-actions.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), [`travel_assistant.md`](backend/agents/travel_assistant.md), perfil. Propuestas: `propose_add_item` / `propose_add_source` / `propose_move_item` (esta última confirma vía `moveItemBetweenDays`). |
-| JWT / CORS API | [`auth.py`](backend/auth.py), [`api-auth.ts`](frontend/lib/api-auth.ts), `ALLOWED_ORIGINS` |
+| Compartir / invitaciones | [`trip_share.py`](backend/trip_share.py), [`emails.py`](backend/emails.py), [`invite-trip-button.tsx`](frontend/components/invite-trip-button.tsx), [`app-header.tsx`](frontend/components/app-header.tsx), [`share-trip-dialog.tsx`](frontend/components/share-trip-dialog.tsx), [`invite-accept.tsx`](frontend/components/invite-accept.tsx), [`use-trip-members.ts`](frontend/hooks/use-trip-members.ts), [`20260824120000_trip_sharing.sql`](supabase/migrations/20260824120000_trip_sharing.sql), `RESEND_API_KEY` |
+| Fusión OCC | [`trip-merge.ts`](frontend/lib/trip-merge.ts), [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), `trips.version` |
 | Captcha (Turnstile) | [`turnstile.tsx`](frontend/components/auth/turnstile.tsx) (+ [test](frontend/components/auth/turnstile.test.ts)), sus 8 consumidores (`/login`, `/signup`, `/forgot-password`, `/start`, `account/settings`, `RegistrationGate`, `LandingStart`, `PartnerButtonBuilder`), `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, Hostname management de Cloudflare |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |
 | Embudo CTA blogs | [`funnel-analytics.ts`](frontend/lib/funnel-analytics.ts), [`funnel.py`](backend/funnel.py), [`/start`](frontend/app/start/page.tsx), [`funnel_events`](supabase/migrations/20260818200000_funnel_events.sql), consultas en [`supabase/queries/funnel.sql`](supabase/queries/funnel.sql) |

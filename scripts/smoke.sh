@@ -5,8 +5,8 @@
 #
 # Comprueba:
 #   1) GET / responde 2xx
-#   2) POST /itinerary, GET /thumb y GET /country-tasks sin Authorization → 401
-#      (REQUIRE_AUTH=true)
+#   2) POST /itinerary, GET /thumb, GET /country-tasks y POST /trips/{uuid}/invites
+#      sin Authorization → 401 (REQUIRE_AUTH=true)
 #   3) CORS rechaza un Origin no permitido (sin Access-Control-Allow-Origin)
 #   4) POST /partners/prewarm: URL inválida → 400; sin captcha → 403 o 503
 #      (503 = TURNSTILE_SECRET_KEY olvidada con REQUIRE_AUTH)
@@ -121,6 +121,23 @@ else
   bad "GET /country-tasks sin Authorization esperaba 401, obtuvo '${CT_CODE:-error de red}'"
   if [[ -s "$CT_BODY" ]]; then
     echo "  body: $(head -c 200 "$CT_BODY")" >&2
+  fi
+fi
+
+INVITE_BODY="$TMPDIR/invite.body"
+INVITE_CODE="$(
+  http_code "$INVITE_BODY" \
+    -X POST "$BASE/trips/00000000-0000-0000-0000-000000000001/invites" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"smoke@example.com"}' \
+  || true
+)"
+if [[ "$INVITE_CODE" == "401" ]]; then
+  ok "POST /trips/{id}/invites sin Authorization → 401"
+else
+  bad "POST /trips/{id}/invites sin Authorization esperaba 401, obtuvo '${INVITE_CODE:-error de red}'"
+  if [[ -s "$INVITE_BODY" ]]; then
+    echo "  body: $(head -c 200 "$INVITE_BODY")" >&2
   fi
 fi
 

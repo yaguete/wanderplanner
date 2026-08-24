@@ -51,6 +51,7 @@ Kind = Literal[
     "photo_paid",
     "maps_resolve",
     "extraction_instagram",
+    "trip_invite",
 ]
 _USERLESS_KINDS = frozenset(
     {
@@ -144,6 +145,9 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("extraction_instagram", "daily"): (
         "Has alcanzado el límite diario de posts de Instagram. Vuelve mañana."
+    ),
+    ("trip_invite", "daily"): (
+        "Has enviado muchas invitaciones hoy. Prueba mañana."
     ),
 }
 
@@ -422,6 +426,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
     if kind == "extraction_instagram":
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_INSTAGRAM_EXTRACTIONS_DAY", 5):
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "trip_invite":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_TRIP_INVITES_DAY", 20):
             _raise_limit(user, kind, "daily")
         return
 

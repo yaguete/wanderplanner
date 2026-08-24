@@ -58,7 +58,11 @@
     "test:turnstile": "tsx components/auth/turnstile.test.ts",
     "test:onboarding": "tsx lib/onboarding.test.ts",
     "test:visual-viewport": "tsx lib/visual-viewport.test.ts",
-    "test:mobile-browser-chrome": "tsx lib/mobile-browser-chrome.test.ts"
+    "test:mobile-browser-chrome": "tsx lib/mobile-browser-chrome.test.ts",
+    "test:trip-merge": "tsx lib/trip-merge.test.ts",
+    "test:trip-share": "tsx lib/trip-share.test.ts",
+    "test:trip-invite-url": "tsx lib/trip-invite-url.test.ts",
+    "test:trips-repo": "tsx lib/db/schema-column-errors.test.ts && tsx lib/db/trips-persist.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

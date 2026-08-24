@@ -26,6 +26,7 @@ import {
   type TripDesktopPanel,
   type TripPanelState,
 } from "@/lib/trip-chrome-context"
+import { useTripRealtime } from "@/hooks/use-trip-realtime"
 
 const PANELS_KEY = "wp-trip-panels"
 /** Con 3 paneles activos, por debajo de este ancho útil se auto-colapsa el sidebar a rail. */
@@ -96,6 +97,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
+  useTripRealtime(tripId, Boolean(trip))
   const tripSources = useStableList(getTripSources(tripId))
   const emptyDestination = useMemo(
     () => (trip ? confidentTripDestinationLabel(trip, tripSources) : null),
@@ -167,10 +169,11 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   useEffect(() => {
     if (authLoading || isLoading || !user) return
     if (!trip) {
+      if (openingTrip?.id === tripId) return
       clearOpeningTrip()
       router.replace("/trips")
     }
-  }, [authLoading, isLoading, user, trip, router, clearOpeningTrip])
+  }, [authLoading, isLoading, user, trip, tripId, openingTrip, router, clearOpeningTrip])
 
   useEffect(() => {
     if (trip && openingTrip?.id === trip.id) clearOpeningTrip()
