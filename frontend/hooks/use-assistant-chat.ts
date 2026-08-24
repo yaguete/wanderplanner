@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Source, Trip } from "@/types/itinerary"
 import {
+  ASSISTANT_CONNECTION_ERROR,
   streamAssistant,
   type AssistantAction,
   type AssistantChatMessage,
@@ -493,17 +494,13 @@ export function useAssistantChat(tripId: string, trip: Trip | undefined, sources
               setMessages((prev) => prev.filter((m) => m.id !== currentAssistantId))
               return
             }
-            const message = typeof err === "string" ? err : "Error del asistente"
-            setError(message)
             const id = currentAssistantId
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === id
                   ? {
                       ...m,
-                      content:
-                        m.content.trim() ||
-                        "No he podido completar la respuesta. Revisa la conexión o la configuración del API.",
+                      content: m.content.trim() || ASSISTANT_CONNECTION_ERROR,
                     }
                   : m,
               ),

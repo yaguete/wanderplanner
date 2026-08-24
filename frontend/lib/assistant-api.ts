@@ -7,6 +7,10 @@ import { parseSse } from "@/lib/sse"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
+/** Fallo de red/stream: copy de producto, sin URLs ni “configura el API”. */
+export const ASSISTANT_CONNECTION_ERROR =
+  "Hemos encontrado un problema de conexión. Inténtalo más tarde."
+
 export type AssistantChatMessage = {
   role: "user" | "assistant"
   content: string
@@ -132,26 +136,20 @@ export async function streamAssistant(
     })
   } catch (e) {
     if (signal?.aborted) return
-    const network =
-      e instanceof TypeError
-        ? `No se pudo conectar con el API en ${API_BASE}. Comprueba que el backend esté en marcha.`
-        : e instanceof Error
-          ? e.message
-          : "Error de red"
-    handlers.onError?.(network)
+    handlers.onError?.(ASSISTANT_CONNECTION_ERROR)
     return
   }
 
   // El 429 llega como HTTP normal antes del SSE.
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as { detail?: unknown }
-    const { message, limitError } = parseApiDetail(error.detail, response.status)
-    handlers.onError?.(limitError ?? message)
+    const { limitError } = parseApiDetail(error.detail, response.status)
+    handlers.onError?.(limitError ?? ASSISTANT_CONNECTION_ERROR)
     return
   }
 
   if (!response.body) {
-    handlers.onError?.("Respuesta sin cuerpo")
+    handlers.onError?.(ASSISTANT_CONNECTION_ERROR)
     return
   }
 
@@ -194,7 +192,7 @@ export async function streamAssistant(
           handlers.onDone?.()
           break
         case "error":
-          handlers.onError?.(String(payload.message ?? "Error del asistente"))
+          handlers.onError?.(ASSISTANT_CONNECTION_ERROR)
           break
         default:
           break
@@ -202,6 +200,6 @@ export async function streamAssistant(
     }
   } catch (e) {
     if (signal?.aborted) return
-    handlers.onError?.(e instanceof Error ? e.message : "Error leyendo el stream")
+    handlers.onError?.(ASSISTANT_CONNECTION_ERROR)
   }
 }
