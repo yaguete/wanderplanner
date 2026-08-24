@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 import logging
 import os
+from urllib.parse import quote
 
 import httpx
 
@@ -50,6 +51,14 @@ def _from_addr() -> str:
 
 def invite_url(token: str) -> str:
     return f"{_site_url()}/invite/{token}"
+
+
+def invite_cta_url(token: str, *, existing_account: bool = False) -> str:
+    """Quien ya tiene cuenta entra por `/login`; el resto acepta en `/invite`."""
+    path = f"/invite/{token}"
+    if existing_account:
+        return f"{_site_url()}/login?next={quote(path, safe='')}"
+    return f"{_site_url()}{path}"
 
 
 def _clip(text: str, n: int) -> str:
@@ -170,35 +179,43 @@ def _invite_bodies(
     inviter_name: str,
     trip_name: str,
     token: str,
+    existing_account: bool = False,
 ) -> tuple[str, str, str]:
     who = inviter_label(inviter_name)
     trip = _clip(trip_name, 80) or "un viaje"
-    url = invite_url(token)
+    url = invite_cta_url(token, existing_account=existing_account)
     subject = f"{who} te invita a editar «{trip}»"
+    cta_label = "Entrar y unirme" if existing_account else "Aceptar invitación"
+    cta_text = "Entra en tu cuenta para unirte:" if existing_account else "Acepta la invitación:"
 
     who_esc = html.escape(who)
     trip_esc = html.escape(trip)
 
     text = (
         f"{who} te invita a editar «{trip}» en WanderPlanner.\n\n"
-        f"Acepta la invitación: {url}\n\n"
+        f"{cta_text} {url}\n\n"
         f"El enlace caduca en {INVITE_TTL_DAYS} días.\n"
         "Si no conoces a esta persona, ignora este correo; "
         "no se ha creado ninguna cuenta a tu nombre."
+    )
+    extra = (
+        "Ya tienes cuenta: entra para unirte al viaje."
+        if existing_account
+        else "Podréis editar el plan a la vez. El asistente de cada uno sigue siendo privado."
     )
     body_html = (
         f'<p style="margin:0 0 8px 0;font-family:{FONT};font-size:15px;line-height:1.6;color:{BODY};">'
         f"<strong>{who_esc}</strong> te invita a editar <strong>{trip_esc}</strong> en WanderPlanner."
         f"</p>"
         f'<p style="margin:0 0 28px 0;font-family:{FONT};font-size:15px;line-height:1.6;color:{BODY};">'
-        "Podréis editar el plan a la vez. El asistente de cada uno sigue siendo privado."
+        f"{html.escape(extra)}"
         "</p>"
     )
     html_body = _card_html(
         title="Te invitan a un viaje",
         preheader=f"{who} te invita a editar «{trip}»",
         body_html=body_html,
-        cta_label="Aceptar invitación",
+        cta_label=cta_label,
         cta_url=url,
         expiry=f"El enlace caduca en {INVITE_TTL_DAYS} días.",
         footer=(
@@ -249,6 +266,7 @@ async def send_invite_email(
     inviter_name: str,
     trip_name: str,
     token: str,
+    existing_account: bool = False,
 ) -> bool:
     """
     Envía el correo de invitación. Sin clave: log en local y False; en producción (REQUIRE_AUTH) falla.
@@ -257,6 +275,7 @@ async def send_invite_email(
         inviter_name=inviter_name,
         trip_name=trip_name,
         token=token,
+        existing_account=existing_account,
     )
     api_key = _env("RESEND_API_KEY", "RESEND_API_KEY")
     if not api_key:

@@ -8,6 +8,7 @@ export type InviteLookup = {
   tripName?: string
   inviterName?: string
   email?: string
+  hasAccount?: boolean
 }
 
 export async function sendTripInvite(

@@ -11,6 +11,11 @@ export function inviteUrl(origin: string, token: string): string {
   return `${base}${invitePath(token)}`
 }
 
+/** Login que vuelve a la invitación. Quien ya tiene cuenta no debe ir al alta. */
+export function inviteLoginPath(token: string): string {
+  return `/login?next=${encodeURIComponent(invitePath(token))}`
+}
+
 /** `next` seguro tras aceptar: solo rutas internas de viaje. */
 export function tripPathAfterAccept(tripId: string): string {
   const id = tripId.trim()

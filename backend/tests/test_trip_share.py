@@ -530,3 +530,28 @@ async def test_complete_signup_upgrades_anonymous_guest(monkeypatch):
     assert put_json["json"]["email_confirm"] is True
     assert put_json["json"]["email"] == "destino@example.com"
     assert "guest-1" in put_json["url"]
+
+
+@pytest.mark.asyncio
+async def test_get_invite_flags_existing_account(monkeypatch):
+    from trip_share import get_invite
+
+    async def lookup(_token):
+        return {
+            "email": "ya@example.com",
+            "trip_name": "Japón",
+            "inviter_name": "Ana",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+        }
+
+    async def has_account(email, client=None):
+        return email == "ya@example.com"
+
+    monkeypatch.setattr("trip_share._allow_lookup_ip", lambda _ip: True)
+    monkeypatch.setattr("trip_share._lookup_invite", lookup)
+    monkeypatch.setattr("trip_share._email_has_account", has_account)
+
+    out = await get_invite("tok", request=_Req())  # type: ignore[arg-type]
+    assert out["status"] == "valid"
+    assert out["hasAccount"] is True
+    assert out["email"] == "ya@example.com"

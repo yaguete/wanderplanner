@@ -68,3 +68,24 @@ def test_added_html_matches_confirmation_layout():
     assert "/legal/privacidad" in html_body
     assert "caduca" not in html_body
     assert "Ábrelo en:" in text
+
+
+def test_invite_existing_account_cta_is_login():
+    from emails import invite_cta_url, _invite_bodies
+
+    assert "/invite/tok" in invite_cta_url("tok")
+    assert "/login?next=" in invite_cta_url("tok", existing_account=True)
+    assert "%2Finvite%2Ftok" in invite_cta_url("tok", existing_account=True)
+
+    _subject, text, html_body = _invite_bodies(
+        inviter_name="María López",
+        trip_name="Austria — 10 días",
+        token="tok",
+        existing_account=True,
+    )
+    assert "Entrar y unirme" in html_body
+    assert "Aceptar invitación" not in html_body
+    assert "/login?next=" in html_body
+    assert "/login?next=" in text
+    assert "Entra en tu cuenta para unirte:" in text
+    assert "Ya tienes cuenta" in html_body

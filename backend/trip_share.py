@@ -90,6 +90,45 @@ def _normalize_email(raw: str) -> str:
     return (raw or "").strip().lower()
 
 
+async def _email_has_account(email: str, client: httpx.AsyncClient | None = None) -> bool:
+    """¿Hay un usuario no anónimo con ese email? Fallo → False (se muestra el alta)."""
+    service = _service_key()
+    base = _supabase_url()
+    needle = _normalize_email(email)
+    if not service or not base or not needle:
+        return False
+
+    async def _lookup(http: httpx.AsyncClient) -> bool:
+        r = await http.get(
+            f"{base}/auth/v1/admin/users",
+            headers={"apikey": service, "Authorization": f"Bearer {service}"},
+            params={"filter": needle, "page": "1", "per_page": "50"},
+        )
+        if r.status_code != 200:
+            return False
+        payload = r.json()
+        users = payload.get("users") if isinstance(payload, dict) else payload
+        if not isinstance(users, list):
+            return False
+        for row in users:
+            if not isinstance(row, dict):
+                continue
+            if row.get("is_anonymous"):
+                continue
+            if _normalize_email(str(row.get("email") or "")) == needle:
+                return True
+        return False
+
+    try:
+        if client is not None:
+            return await _lookup(client)
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            return await _lookup(http)
+    except Exception:
+        logger.debug("email_has_account_failed", exc_info=True)
+        return False
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -432,6 +471,7 @@ async def create_invite(
                     inviter_name=await _inviter_display_name(client, user),
                     trip_name=trip_name,
                     token=token,
+                    existing_account=await _email_has_account(email, client),
                 )
             )
         except Exception:
@@ -457,18 +497,22 @@ async def get_invite(token: str, request: Request) -> dict[str, Any]:
             )
         except ValueError:
             expired = False
+    email = str(row.get("email") or "")
+    has_account = await _email_has_account(email) if email else False
     if expired:
         return {
             "status": "expired",
             "tripName": row.get("trip_name"),
             "inviterName": row.get("inviter_name"),
             "email": row.get("email"),
+            "hasAccount": has_account,
         }
     return {
         "status": "valid",
         "tripName": row.get("trip_name"),
         "inviterName": row.get("inviter_name"),
         "email": row.get("email"),
+        "hasAccount": has_account,
     }
 
 

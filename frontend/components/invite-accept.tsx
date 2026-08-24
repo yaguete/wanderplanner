@@ -1,16 +1,23 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { lookupInvite, completeInviteSignup, type InviteLookup } from "@/lib/trip-share-api"
-import { invitePath, inviterLabel, tripIdFromAcceptPayload, tripPathAfterAccept } from "@/lib/trip-invite-url"
+import {
+  inviteLoginPath,
+  invitePath,
+  inviterLabel,
+  tripIdFromAcceptPayload,
+  tripPathAfterAccept,
+} from "@/lib/trip-invite-url"
 import { createClient } from "@/lib/supabase/client"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 
@@ -25,6 +32,7 @@ export function InviteAccept({ token }: { token: string }) {
   const [captchaKey, setCaptchaKey] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const autoJoin = useRef(false)
 
   useEffect(() => {
     void lookupInvite(token).then(setInfo)
@@ -38,6 +46,23 @@ export function InviteAccept({ token }: { token: string }) {
     if (!tripId) throw new Error("No se pudo aceptar la invitación")
     window.location.assign(tripPathAfterAccept(tripId))
   }
+
+  useEffect(() => {
+    if (!info || isLoading || autoJoin.current) return
+    if (info.status !== "valid" || !user || isGuest) return
+    const sessionEmail = (user.email || "").trim().toLowerCase()
+    const target = (info.email || "").trim().toLowerCase()
+    if (!sessionEmail || !target || sessionEmail !== target) return
+    autoJoin.current = true
+    setBusy(true)
+    void joinTrip().catch(() => {
+      autoJoin.current = false
+      setBusy(false)
+      setError("No se pudo aceptar la invitación")
+    })
+    // joinTrip captura el token actual; no va en deps a propósito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info, isLoading, user, isGuest])
 
   if (!info || isLoading) {
     return (
@@ -66,7 +91,81 @@ export function InviteAccept({ token }: { token: string }) {
   const tripName = info.tripName || "un viaje"
   const inviter = inviterLabel(info.inviterName)
   const inviteEmail = info.email || ""
-  const loginHref = `/login?next=${encodeURIComponent(invitePath(token))}`
+  const hasAccount = Boolean(info.hasAccount)
+  const loginHref = inviteLoginPath(token)
+
+  const loginForm = (
+    <AuthShell title="Invitación">
+      <h1 className="text-lg font-semibold">
+        {inviter} te invita a planear «{tripName}»
+      </h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Ya tienes cuenta con {inviteEmail}. Entra para unirte al viaje.
+      </p>
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          setError(null)
+          if (isTurnstileEnabled() && !captcha) {
+            setError("Confirma que no eres un robot")
+            return
+          }
+          setBusy(true)
+          const login = await signIn(inviteEmail, password, captcha ?? undefined)
+          if (!login.ok) {
+            setError(login.error)
+            setCaptcha(null)
+            setCaptchaKey((k) => k + 1)
+            setBusy(false)
+            return
+          }
+          try {
+            await joinTrip()
+          } catch {
+            setError("No se pudo aceptar la invitación")
+            setBusy(false)
+          }
+        }}
+      >
+        <div>
+          <Label>Email</Label>
+          <Input value={inviteEmail} readOnly />
+        </div>
+        <div>
+          <Label>Contraseña</Label>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        {isTurnstileEnabled() ? (
+          <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptcha} />
+        ) : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <Button type="submit" className="w-full" disabled={busy}>
+          Entrar y unirme
+        </Button>
+        <GoogleSignInButton
+          next={invitePath(token)}
+          rememberMe
+          disabled={busy}
+          onError={(message) => setError(message || null)}
+        />
+        <p className="text-center text-sm text-muted-foreground">
+          <Link href="/forgot-password" className="underline underline-offset-2">
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+      </form>
+    </AuthShell>
+  )
+
+  if (hasAccount && (!user || isGuest)) {
+    return loginForm
+  }
 
   if (isGuest && user) {
     return (
@@ -160,6 +259,9 @@ export function InviteAccept({ token }: { token: string }) {
         <h1 className="text-lg font-semibold">
           {inviter} te invita a editar «{tripName}»
         </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {busy ? "Uniéndote al viaje…" : "Acepta para abrir el plan en tu cuenta."}
+        </p>
         <div className="mt-4 flex gap-2">
           <Button
             onClick={async () => {
