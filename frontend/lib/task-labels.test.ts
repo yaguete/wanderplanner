@@ -6,6 +6,7 @@ import {
   TASK_CATEGORY_ORDER,
   taskActionTitle,
   taskGroupKey,
+  triageCategoryLabel,
 } from "./task-labels"
 import type { TaskGroupCategory } from "@/types/itinerary"
 import type { DerivedTripTask } from "./trip-tasks"
@@ -233,6 +234,10 @@ assert.equal(taskGroupKey("accommodation"), "accommodation")
   assert.deepEqual([...TASK_CATEGORY_ORDER], expected)
   assert.equal(new Set(TASK_CATEGORY_ORDER).size, expected.length)
 }
+
+assert.equal(triageCategoryLabel("activity"), "Lugares")
+assert.equal(triageCategoryLabel("food"), "Restaurantes")
+assert.equal(triageCategoryLabel("transport"), "Transporte")
 
 // Divisa y parseo de coste.
 assert.match(formatTripCurrency(840, "EUR"), /840/)

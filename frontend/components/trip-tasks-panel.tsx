@@ -35,7 +35,7 @@ import { CountryTasksSection } from "@/components/country-tasks-section"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { stayReserveHref } from "@/lib/booking-search"
 import { outbound } from "@/lib/funnel-analytics"
-import { TASK_CATEGORY_ICONS } from "@/lib/item-styles"
+import { TASK_CATEGORY_ICONS, itemTypeIcon } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import {
   TASK_CATEGORY_LABELS,
@@ -44,6 +44,7 @@ import {
   formatTripCurrency,
   taskActionTitle,
   taskGroupKey,
+  triageCategoryLabel,
 } from "@/lib/task-labels"
 import { groupTasksByCategory } from "@/lib/trip-budget"
 import {
@@ -767,84 +768,89 @@ function TriageSection({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger
-        className={cn(
-          "flex w-full items-center justify-between rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5",
-          "text-left text-sm font-medium text-foreground transition-colors hover:bg-muted/50",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        )}
-      >
-        <span>
-          Podrían requerir reserva{" "}
-          <span className="font-normal text-muted-foreground">({tasks.length})</span>
-        </span>
-        <ChevronDown
+      <div className="rounded-lg border border-border/70 bg-muted/20">
+        <CollapsibleTrigger
           className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            open && "rotate-180",
+            "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left",
+            "text-sm font-medium text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-        <div className="flex flex-col gap-4 pt-3">
-          <p className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
-            <Info
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/80"
-              strokeWidth={2}
-              aria-hidden
-            />
-            <span>¿No estás seguro/a? Pregunta al asistente.</span>
-          </p>
-          {grouped.map(({ category, list }) => {
-            const Icon = TASK_CATEGORY_ICONS[category]
-            return (
-            <div key={category}>
-              {grouped.length > 1 ? (
-                <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  <span className="min-w-0 truncate">{TASK_CATEGORY_LABELS[category]}</span>
-                </p>
-              ) : null}
-              <ul className="m-0 list-none divide-y divide-border/70 p-0">
-                {list.map((task) => (
-                  <li
-                    key={task.id}
-                    className="flex flex-col gap-2 py-3 @md:flex-row @md:items-center @md:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground">
-                        {taskActionTitle(task)}
-                      </p>
-                      {formatTaskDays(task.dayIndexes, undefined, startDate) ? (
-                        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                          {formatTaskDays(task.dayIndexes, undefined, startDate)}
+        >
+          <span>
+            Podrían requerir reserva{" "}
+            <span className="font-normal text-muted-foreground">({tasks.length})</span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              open && "rotate-180",
+            )}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+          <div className="flex flex-col gap-4 px-3 pb-3">
+            <p className="flex items-start gap-2 text-xs leading-snug text-muted-foreground">
+              <Info
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/80"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <span>¿No estás seguro/a? Pregunta al asistente.</span>
+            </p>
+            {grouped.map(({ category, list }) => {
+              const Icon =
+                category === "activity"
+                  ? itemTypeIcon("activity")
+                  : TASK_CATEGORY_ICONS[category]
+              return (
+              <div key={category}>
+                {grouped.length > 1 ? (
+                  <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="min-w-0 truncate">{triageCategoryLabel(category)}</span>
+                  </p>
+                ) : null}
+                <ul className="m-0 list-none divide-y divide-border/70 p-0">
+                  {list.map((task) => (
+                    <li
+                      key={task.id}
+                      className="flex flex-col gap-2 py-3 @md:flex-row @md:items-center @md:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {taskActionTitle(task)}
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onSetTaskState(task.id, { status: "pending" })}
-                        className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                      >
-                        {usesDoneChip(task) ? "Incluir" : "Reservar"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onSetTaskState(task.id, { status: "notNeeded" })}
-                        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        No hace falta
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            )
-          })}
-        </div>
-      </CollapsibleContent>
+                        {formatTaskDays(task.dayIndexes, undefined, startDate) ? (
+                          <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                            {formatTaskDays(task.dayIndexes, undefined, startDate)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onSetTaskState(task.id, { status: "pending" })}
+                          className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                        >
+                          {usesDoneChip(task) ? "Incluir" : "Reservar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onSetTaskState(task.id, { status: "notNeeded" })}
+                          className="rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          No hace falta
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              )
+            })}
+          </div>
+        </CollapsibleContent>
+      </div>
     </Collapsible>
   )
 }

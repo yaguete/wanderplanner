@@ -37,6 +37,16 @@ export const TASK_CATEGORY_LABELS: Record<TripTaskCategory, string> = {
   other: "Otras",
 }
 
+/**
+ * Cabecera de grupo en el triaje. En Ruta una activity sin enlace es un
+ * «Lugar»; esas son las que caen aquí (`taskBucket`), no las «Actividades»
+ * con reserva.
+ */
+export function triageCategoryLabel(category: TripTaskCategory): string {
+  if (category === "activity") return "Lugares"
+  return TASK_CATEGORY_LABELS[category]
+}
+
 export const TASK_STATUS_LABELS: Record<TripTaskStatus, string> = {
   booked: "Reservado",
   paid: "Pagado",
