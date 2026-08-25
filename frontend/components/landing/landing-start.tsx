@@ -344,19 +344,6 @@ export function LandingStart({
               onSubmit={onDestSubmit}
               placeholder={destinationPlaceholder}
             />
-            {blogHost ? (
-              <p className="mt-2.5 text-pretty text-xs leading-5 text-foreground/50">
-                ¿No lo tienes claro? Regresa a{" "}
-                <a
-                  href={`https://${blogHost}`}
-                  rel="nofollow noopener noreferrer"
-                  className="underline decoration-foreground/25 underline-offset-2 hover:text-foreground/70"
-                >
-                  {blogHost}
-                </a>{" "}
-                para encontrar inspiración.
-              </p>
-            ) : null}
             {showDestOverlay ? (
               <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-background p-3 text-left shadow-lg">
                 {destError ? <p className="px-1 py-2 text-sm text-destructive">{destError}</p> : null}
@@ -383,6 +370,19 @@ export function LandingStart({
                   </div>
                 ) : null}
               </div>
+            ) : null}
+            {blogHost ? (
+              <p className="mt-2.5 text-pretty text-xs leading-5 text-foreground/50">
+                ¿No lo tienes claro? Regresa a{" "}
+                <a
+                  href={`https://${blogHost}`}
+                  rel="nofollow noopener noreferrer"
+                  className="underline decoration-foreground/25 underline-offset-2 hover:text-foreground/70"
+                >
+                  {blogHost}
+                </a>{" "}
+                para encontrar inspiración.
+              </p>
             ) : null}
           </div>
         ) : null}
