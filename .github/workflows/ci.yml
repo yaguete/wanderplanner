@@ -35,6 +35,7 @@ jobs:
       - run: npm run test:trip-origin
       - run: npm run test:text-highlight
       - run: npm run test:chronicle-search
+      - run: npm run test:chronicle-html
       - run: npm run test:trip-sources
       - run: npm run test:inspirational-source
       - run: npm run test:instagram-url

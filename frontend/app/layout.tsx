@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Newsreader } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { AnalyticsGate } from "@/components/analytics-gate"
 import { CookieBanner } from "@/components/cookie-banner"
@@ -10,6 +10,15 @@ import "./globals.css"
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+})
+
+/** Solo la Crónica (`.prose-article`). `preload: false` para no costearla en la landing. */
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-newsreader",
+  display: "swap",
+  preload: false,
 })
 
 export const metadata: Metadata = {
@@ -36,7 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${newsreader.variable} font-sans antialiased`}>
         <AuthProvider>
           {children}
           <Toaster />

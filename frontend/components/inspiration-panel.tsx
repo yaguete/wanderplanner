@@ -59,6 +59,7 @@ import {
   setActiveHighlight,
 } from "@/lib/text-highlight"
 import { chronicleSearchNeedles } from "@/lib/chronicle-search"
+import { curateArticleHtml, guardChronicleImages } from "@/lib/chronicle-html"
 import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { userDayItemFromSource } from "@/lib/item-provenance"
 import { toast } from "sonner"
@@ -419,7 +420,8 @@ export default function InspirationPanel({
     if (sourceTab !== "source") return
     const root = articleRef.current
     if (!root) return
-    root.innerHTML = currentSource?.articleHtml ?? ""
+    root.innerHTML = curateArticleHtml(currentSource?.articleHtml ?? "")
+    guardChronicleImages(root)
     marksRef.current = []
     lastScrolledQueryRef.current = null
     lastScrolledIndexRef.current = null
@@ -1031,7 +1033,7 @@ export default function InspirationPanel({
               </div>
             ) : sourceTab === "source" ? (
               <div className="flex flex-1 flex-col md:min-h-0 md:overflow-hidden">
-                <div className="px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto md:overflow-x-hidden">
+                <div className="px-4 pb-6 pt-4 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto md:overflow-x-hidden">
                   <div className="panel-column">
                   {isInstagramMediaUrl(currentSource.url) ? (
                     <InstagramEmbed url={currentSource.url} />

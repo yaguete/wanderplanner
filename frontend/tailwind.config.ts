@@ -12,6 +12,7 @@ const config: Config = {
   theme: {
     fontFamily: {
       sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
+      serif: ['var(--font-newsreader)', 'ui-serif', 'Georgia', 'serif'],
     },
     extend: {
       colors: {
