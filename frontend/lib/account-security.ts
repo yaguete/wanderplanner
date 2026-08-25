@@ -72,3 +72,23 @@ export function validatePasswordChange(input: {
   }
   return null
 }
+
+function nonNegInt(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.floor(n)
+}
+
+/** `count_owned_shared_trips` devuelve jsonb `{ shared_trips, editors }`, no un número. */
+export function sharedDeletionWarning(raw: unknown): string {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return ""
+  const rec = raw as Record<string, unknown>
+  const sharedTrips = nonNegInt(rec.shared_trips)
+  const editors = nonNegInt(rec.editors)
+  if (sharedTrips <= 0 && editors <= 0) return ""
+  const people =
+    editors === 1 ? "1 persona perderá" : `${Math.max(editors, 1)} personas perderán`
+  const trips =
+    sharedTrips === 1 ? "al viaje que has compartido" : "a los viajes que has compartido"
+  return `${people} acceso ${trips}.`
+}

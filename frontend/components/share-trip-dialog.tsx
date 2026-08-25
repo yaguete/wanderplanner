@@ -37,7 +37,7 @@ export function ShareTripDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { isGuest, user } = useAuth()
-  const { members, invites, peers, reload } = useTripMembers(open ? tripId : null)
+  const { members, invites, peers, reload } = useTripMembers(open ? tripId : null, { isOwner })
   const [email, setEmail] = useState("")
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -45,23 +45,9 @@ export function ShareTripDialog({
   const occupancy = occupancyOf({ memberCount: members.length, pendingInviteCount: invites.length })
   const canInvite = canInviteToTrip({ isOwner, isGuest, occupancy })
   const presentIds = useMemo(() => new Set(members.map((m) => m.userId)), [members])
-  const pendingEmails = useMemo(
-    () => new Set(invites.map((i) => normalizeEmail(i.email))),
-    [invites],
-  )
   const availablePeers = useMemo(
-    () =>
-      filterAvailablePeers(
-        peers.map((p) => ({
-          userId: p.userId,
-          displayName: p.displayName,
-          avatarUrl: p.avatarUrl,
-          emailMasked: p.emailMasked,
-        })),
-        presentIds,
-        pendingEmails,
-      ),
-    [peers, presentIds, pendingEmails],
+    () => filterAvailablePeers(peers, presentIds),
+    [peers, presentIds],
   )
 
   const selectedPeer = availablePeers.find((p) => p.userId === selectedPeerId) ?? null
@@ -91,7 +77,7 @@ export function ShareTripDialog({
         const result = await sendTripInvite(tripId, { email: normalized })
         if (result.emailSent === false) {
           toast.success(
-            "Invitación guardada. El correo no se ha enviado (Resend ha rechazado el envío o falta la clave).",
+            "La invitación está guardada, pero no hemos podido enviar el correo",
           )
         } else {
           toast.success("Invitación enviada")

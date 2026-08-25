@@ -25,6 +25,7 @@ export type SharePeer = {
   displayName: string
   avatarUrl: string | null
   emailMasked: string
+  alreadyInTrip?: boolean
 }
 
 function mapMember(r: Record<string, unknown>): TripMember {
@@ -38,7 +39,8 @@ function mapMember(r: Record<string, unknown>): TripMember {
   }
 }
 
-export function useTripMembers(tripId: string | null) {
+export function useTripMembers(tripId: string | null, opts?: { isOwner?: boolean }) {
+  const isOwner = opts?.isOwner ?? false
   const [members, setMembers] = useState<TripMember[]>([])
   const [invites, setInvites] = useState<TripInviteRow[]>([])
   const [peers, setPeers] = useState<SharePeer[]>([])
@@ -50,8 +52,10 @@ export function useTripMembers(tripId: string | null) {
     const supabase = createClient()
     const [m, i, p] = await Promise.all([
       supabase.rpc("list_trip_members", { p_trip_id: tripId }),
-      supabase.rpc("list_trip_invites", { p_trip_id: tripId }),
-      supabase.rpc("list_share_peers"),
+      isOwner
+        ? supabase.rpc("list_trip_invites", { p_trip_id: tripId })
+        : Promise.resolve({ data: [] as unknown[] }),
+      supabase.rpc("list_share_peers", { p_trip_id: tripId }),
     ])
     if (Array.isArray(m.data)) setMembers(m.data.map((row) => mapMember(row as Record<string, unknown>)))
     if (Array.isArray(i.data)) {
@@ -71,19 +75,22 @@ export function useTripMembers(tripId: string | null) {
     }
     if (Array.isArray(p.data)) {
       setPeers(
-        p.data.map((row) => {
-          const r = row as Record<string, unknown>
-          return {
-            userId: String(r.user_id),
-            displayName: String(r.display_name ?? "Viajero"),
-            avatarUrl: (r.avatar_url as string | null) ?? null,
-            emailMasked: String(r.email_masked ?? ""),
-          }
-        }),
+        p.data
+          .map((row) => {
+            const r = row as Record<string, unknown>
+            return {
+              userId: String(r.user_id),
+              displayName: String(r.display_name ?? "Viajero"),
+              avatarUrl: (r.avatar_url as string | null) ?? null,
+              emailMasked: String(r.email_masked ?? ""),
+              alreadyInTrip: Boolean(r.already_in_trip),
+            }
+          })
+          .filter((peer) => !peer.alreadyInTrip),
       )
     }
     setLoading(false)
-  }, [tripId])
+  }, [tripId, isOwner])
 
   useEffect(() => {
     void reload()

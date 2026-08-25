@@ -11,6 +11,7 @@ import type {
   UserDay,
   UserDayItem,
 } from "@/types/itinerary"
+import { endDateFromStartAndNumDays } from "@/lib/trip-dates"
 
 export type TripMergeField =
   | "name"
@@ -89,8 +90,12 @@ function mergeItem(base: UserDayItem | undefined, local: UserDayItem, remote: Us
   return { ...local, ...remote }
 }
 
-function mergeDay(base: UserDay | undefined, local: UserDay, remote: UserDay): UserDay {
-  const notes: TripMergeNote[] = []
+function mergeDay(
+  base: UserDay | undefined,
+  local: UserDay,
+  remote: UserDay,
+  notes: TripMergeNote[],
+): UserDay {
   const label = pickScalar(base?.label ?? "", local.label, remote.label, "name", notes)
   const items = mergeById(base?.items ?? [], local.items, remote.items, mergeItem)
   return {
@@ -105,6 +110,28 @@ function mergeDay(base: UserDay | undefined, local: UserDay, remote: UserDay): U
       notes,
     ),
   }
+}
+
+/** Tres bandas sobre un set de ids: baja de un lado gana; alta de un lado se conserva. */
+function mergeIdSet(base: string[], local: string[], remote: string[]): string[] {
+  const baseSet = new Set(base)
+  const localSet = new Set(local)
+  const remoteSet = new Set(remote)
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const id of [...remote, ...local, ...base]) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const inBase = baseSet.has(id)
+    const inLocal = localSet.has(id)
+    const inRemote = remoteSet.has(id)
+    if (inBase) {
+      if (inLocal && inRemote) out.push(id)
+    } else if (inLocal || inRemote) {
+      out.push(id)
+    }
+  }
+  return out
 }
 
 function mergeBasic(base: UserBasicItem | undefined, local: UserBasicItem, remote: UserBasicItem): UserBasicItem {
@@ -183,7 +210,6 @@ export function mergeTrips(base: Trip | null, local: Trip, remote: Trip): TripMe
 
   const name = pickScalar(base.name, local.name, remote.name, "name", notes)
   const startDate = pickScalar(base.startDate, local.startDate, remote.startDate, "dates", notes)
-  const numDays = pickScalar(base.numDays, local.numDays, remote.numDays, "dates", notes)
   const expectations = pickScalar(
     base.expectations,
     local.expectations,
@@ -205,21 +231,34 @@ export function mergeTrips(base: Trip | null, local: Trip, remote: Trip): TripMe
   const currency = pickScalar(base.currency, local.currency, remote.currency, "currency", notes)
   const archived = pickScalar(base.archived, local.archived, remote.archived, "archived", notes)
 
-  const days = mergeById(base.days, local.days, remote.days, mergeDay)
+  const days = mergeById(base.days, local.days, remote.days, (b, l, r) =>
+    mergeDay(b, l, r, notes),
+  )
   const basics = mergeById(base.basics, local.basics, remote.basics, mergeBasic)
   const extraTasks = mergeById(base.extraTasks, local.extraTasks, remote.extraTasks, mergeExtra)
   const tasks = mergeTasks(base.tasks, local.tasks, remote.tasks)
   const sourceIds = mergeSourceIds(base.sourceIds, local.sourceIds, remote.sourceIds)
-  const dismissed = Array.from(
-    new Set([...local.dismissedCountryTasks, ...remote.dismissedCountryTasks]),
+  const dismissed = mergeIdSet(
+    base.dismissedCountryTasks,
+    local.dismissedCountryTasks,
+    remote.dismissedCountryTasks,
   )
+  // Misma regla que rowToTrip: days.length gana; si no hay días, el escalar.
+  const numDays =
+    days.length > 0
+      ? days.length
+      : pickScalar(base.numDays, local.numDays, remote.numDays, "dates", notes)
+  const endDate =
+    startDate && numDays != null && numDays > 0
+      ? endDateFromStartAndNumDays(startDate, numDays)
+      : null
 
   const trip: Trip = {
     ...remote,
     name,
     startDate,
     numDays,
-    endDate: remote.endDate,
+    endDate,
     expectations,
     cover,
     coverUrl,

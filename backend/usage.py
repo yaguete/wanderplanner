@@ -433,6 +433,10 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
         used = await count_events(user.id, kind, since=day_ago)
         if used >= _env_int("USER_MAX_TRIP_INVITES_DAY", 20):
             _raise_limit(user, kind, "daily")
+        global_used = await count_kind_events_strict(kind, since=day_ago)
+        cap = _env_int("GLOBAL_MAX_TRIP_INVITES_DAY", 200)
+        if global_used is not None and cap > 0 and global_used >= cap:
+            _raise_limit(user, kind, "daily")
         return
 
     # photo_lookup

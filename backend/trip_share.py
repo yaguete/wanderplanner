@@ -237,6 +237,16 @@ def _rpc_error(r: httpx.Response) -> str:
     return r.text or ""
 
 
+def _pg_code(r: httpx.Response) -> str:
+    try:
+        data = r.json()
+        if isinstance(data, dict):
+            return str(data.get("code") or "")
+    except Exception:
+        pass
+    return ""
+
+
 async def _inviter_display_name(client: httpx.AsyncClient, user: VerifiedUser) -> str:
     profile_name = ""
     try:
@@ -311,7 +321,7 @@ async def _upsert_invite(
                 logger,
                 event="invite_patch_failed",
                 status=patched.status_code,
-                body=(patched.text or "")[:500],
+                code=_pg_code(patched),
             )
             raise HTTPException(status_code=502, detail="No se pudo reenviar la invitación")
         return
@@ -333,7 +343,11 @@ async def _upsert_invite(
         return
 
     body = inserted.text or ""
-    logger.warning("invite_insert_failed status=%s body=%s", inserted.status_code, body[:500])
+    logger.warning(
+        "invite_insert_failed status=%s code=%s",
+        inserted.status_code,
+        _pg_code(inserted),
+    )
     msg = body.lower()
     if "share cap" in msg or "p0001" in msg or "23514" in msg:
         raise HTTPException(status_code=409, detail="Este viaje admite hasta 8 personas")
@@ -364,7 +378,7 @@ async def _upsert_invite(
                     logger,
                     event="invite_patch_failed",
                     status=patched.status_code,
-                    body=(patched.text or "")[:500],
+                    code=_pg_code(patched),
                 )
         raise HTTPException(status_code=502, detail="No se pudo reenviar la invitación")
     raise HTTPException(status_code=502, detail="No se pudo crear la invitación")
@@ -401,9 +415,9 @@ async def create_invite(
         )
         if owned.status_code != 200:
             logger.warning(
-                "invite_trip_check_failed status=%s body=%s",
+                "invite_trip_check_failed status=%s code=%s",
                 owned.status_code,
-                (owned.text or "")[:400],
+                _pg_code(owned),
             )
             raise HTTPException(status_code=502, detail="No se pudo comprobar el viaje")
         rows = owned.json()
@@ -560,9 +574,9 @@ async def complete_signup(
             )
             if patched.status_code >= 400:
                 logger.warning(
-                    "invite_guest_upgrade_failed status=%s body=%s",
+                    "invite_guest_upgrade_failed status=%s code=%s",
                     patched.status_code,
-                    (patched.text or "")[:400],
+                    _pg_code(patched),
                 )
                 raise HTTPException(status_code=502, detail="No se pudo crear la cuenta")
             return {"status": "upgraded"}
@@ -584,9 +598,9 @@ async def complete_signup(
             )
         if created.status_code >= 400:
             logger.warning(
-                "invite_complete_signup_failed status=%s body=%s",
+                "invite_complete_signup_failed status=%s code=%s",
                 created.status_code,
-                (created.text or "")[:400],
+                _pg_code(created),
             )
             raise HTTPException(status_code=502, detail="No se pudo crear la cuenta")
     return {"status": "created"}
@@ -681,9 +695,9 @@ async def _lookup_invite(token: str) -> dict[str, Any] | None:
         )
     if r.status_code != 200:
         logger.warning(
-            "invite_lookup_failed status=%s body=%s",
+            "invite_lookup_failed status=%s code=%s",
             r.status_code,
-            (r.text or "")[:400],
+            _pg_code(r),
         )
         return None
     rows = r.json()

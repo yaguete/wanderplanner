@@ -196,12 +196,12 @@ function shouldRetryWithoutVersion(error: PostgrestLikeError): boolean {
   return isMissingVersionColumnError(error) || isSchemaCacheError(error)
 }
 
-function allowSchemaColumnFallback(): boolean {
-  return process.env.NODE_ENV !== "production"
+function schemaFallbackAllowed(): boolean {
+  return process.env.NEXT_PUBLIC_ALLOW_SCHEMA_FALLBACK === "1"
 }
 
 function noteBudgetColumnMissing(): void {
-  if (!allowSchemaColumnFallback()) {
+  if (!schemaFallbackAllowed()) {
     console.warn(
       "[trips-repo] trips.budget missing; refusing to omit the column in production",
     )
@@ -216,9 +216,14 @@ function noteBudgetColumnMissing(): void {
 }
 
 function noteVersionColumnMissing(): void {
-  // `version` es aditiva (sharing). El .env.local de este repo apunta al
-  // Supabase gestionado, que aún no tiene la migración: hay que omitirla
-  // también en `next start`, no solo en `next dev`.
+  // Solo con NEXT_PUBLIC_ALLOW_SCHEMA_FALLBACK=1 (local). `next start` es
+  // NODE_ENV=production y no debe apagar OCC por un blip de red.
+  if (!schemaFallbackAllowed()) {
+    console.warn(
+      "[trips-repo] trips.version missing; refusing to omit OCC (set NEXT_PUBLIC_ALLOW_SCHEMA_FALLBACK=1 locally)",
+    )
+    return
+  }
   if (versionColumnLive) {
     console.warn(
       "[trips-repo] trips.version missing; loading without OCC until the sharing migration is applied",
@@ -246,7 +251,7 @@ function omitBudgetIfUnsupported<T extends { budget?: unknown }>(row: T): T {
 const START_CANDIDATE_COLUMNS =
   "id, name, archived, referrer, seed_source_key, source_ids, start_date, days, basics, tasks, extra_tasks, expectations, num_travelers"
 /** Sin `article_html`: puede ser enorme y solo hace falta al abrir la Crónica. */
-const SOURCE_COLUMNS = "id, url, author, title, area, total_days, og_image, items, basics"
+const SOURCE_COLUMNS = "id, user_id, url, author, title, area, total_days, og_image, items, basics"
 
 type StartTripRow = {
   id: string
@@ -377,6 +382,12 @@ export function tripUpdatePayloadsEqual(a: Trip, b: Trip): boolean {
   return JSON.stringify(tripToUpdateRow(a)) === JSON.stringify(tripToUpdateRow(b))
 }
 
+/** Baseline OCC: nunca adoptar `trip.version` si no vino de una escritura o lectura real. */
+export function keepSavedVersion(saved: Trip, trip: Trip): Trip {
+  const version = saved.version ?? 1
+  return (trip.version ?? 1) === version ? trip : { ...trip, version }
+}
+
 function rowToSource(row: SourceRow): Source {
   const reconciled = reconcileExtractedSource(
     row.items ?? [],
@@ -439,12 +450,10 @@ export async function loadTripsState(
 
   const tripsResult = await loadTrips()
   let tripsData = tripsResult
-  // Cualquier fallo con `version` en el SELECT: el proyecto gestionado aún no
-  // tiene la columna. Reintentar sin ella cubre PGRST204 y formas raras del error.
-  if (tripsData.error && versionColumnLive) {
+  if (tripsData.error && versionColumnLive && shouldRetryWithoutVersion(tripsData.error)) {
     console.warn("[trips-repo] trips select failed; retrying without version", tripsData.error)
     noteVersionColumnMissing()
-    tripsData = await loadTrips()
+    if (!versionColumnLive) tripsData = await loadTrips()
   }
   if (isMissingBudgetColumnError(tripsData.error) && budgetColumnLive) {
     noteBudgetColumnMissing()
@@ -460,19 +469,26 @@ export async function loadTripsState(
     return { trips, sources: [] }
   }
 
-  const sourcesResult = await supabase
-    .from("sources")
-    .select(SOURCE_COLUMNS)
-    .in("id", sourceIds)
-    .order("created_at", { ascending: true })
-
-  if (sourcesResult.error) throw sourcesResult.error
-
-  const sources = ((sourcesResult.data ?? []) as unknown as SourceRow[]).map(rowToSource)
+  const sources = await loadSourcesByIds(supabase, sourceIds)
   return {
     trips: hydrateCoordsFromSources(hydrateAffiliateUrlsFromSources(trips, sources), sources),
     sources,
   }
+}
+
+export async function loadSourcesByIds(
+  supabase: SupabaseClient,
+  ids: string[],
+): Promise<Source[]> {
+  const unique = [...new Set(ids)].filter(Boolean)
+  if (unique.length === 0) return []
+  const { data, error } = await supabase
+    .from("sources")
+    .select(SOURCE_COLUMNS)
+    .in("id", unique)
+    .order("created_at", { ascending: true })
+  if (error) throw error
+  return ((data ?? []) as unknown as SourceRow[]).map(rowToSource)
 }
 
 export type DraftTripInput = {
@@ -699,6 +715,8 @@ async function withRetry(run: () => Promise<void>): Promise<void> {
 export type TripsSyncerHooks = {
   onConflictMerged?: (trip: Trip, notes: { field: string }[]) => void
   onAccessRevoked?: (tripId: string) => void
+  onRemoteMerged?: (trip: Trip) => void
+  onRemoteSources?: (sources: Source[]) => void
 }
 
 export class TripsSyncer {
@@ -743,6 +761,39 @@ export class TripsSyncer {
   acknowledgeSource(source: Source): void {
     this.savedSources.set(source.id, source)
     this.deferredHtml.delete(source.id)
+  }
+
+  savedTrip(id: string): Trip | undefined {
+    return this.savedTrips.get(id)
+  }
+
+  /** El remoto es la fila: el baseline OCC pasa a ser eso. No escribe. */
+  acknowledgeTrip(remote: Trip): void {
+    this.savedTrips.set(remote.id, remote)
+  }
+
+  /**
+   * Fuentes bajadas por Realtime/conflicto. Sin esto el siguiente persist
+   * las inserta con `article_html: ""` y borra el artículo para todos.
+   * SOURCE_COLUMNS no trae HTML → deferredHtml.
+   */
+  acknowledgeLoadedSources(sources: Source[]): void {
+    for (const s of sources) {
+      this.savedSources.set(s.id, s)
+      if (!s.articleHtml) this.deferredHtml.add(s.id)
+    }
+  }
+
+  /**
+   * Ingesta Realtime por la misma cola que persist (evita carrera sobre savedTrips).
+   * Skip de eco: el hook no llama si `payload.version <= savedTrip().version`.
+   */
+  ingestRemote(tripId: string): Promise<void> {
+    this.queue = this.queue.then(() => this.runIngestRemote(tripId)).catch((e) => {
+      this.lastError = e
+      console.error("[trips-repo] ingest remote failed", e)
+    })
+    return this.queue
   }
 
   schedule(snapshot: TripsSnapshot): void {
@@ -808,46 +859,85 @@ export class TripsSyncer {
       if (error) throw error
       return trip
     }
+    let expected = expectedVersion
+    let current = trip
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error } = await this.supabase
+        .from("trips")
+        .update(tripToUpdateRow(current))
+        .eq("id", current.id)
+        .eq("version", expected)
+        .select("id, version")
+        .maybeSingle()
+      if (error) {
+        if (shouldRetryWithoutVersion(error)) {
+          noteVersionColumnMissing()
+          const retry = await this.supabase.from("trips").update(tripToUpdateRow(current)).eq("id", current.id)
+          if (retry.error) throw retry.error
+          return current
+        }
+        throw error
+      }
+      if (data) {
+        return { ...current, version: Number(data.version) || expected + 1 }
+      }
+      const { data: remoteRow, error: fetchErr } = await this.supabase
+        .from("trips")
+        .select(tripSelectColumns())
+        .eq("id", current.id)
+        .maybeSingle()
+      if (fetchErr) throw fetchErr
+      if (!remoteRow) return "revoked"
+      const remote = rowToTrip(remoteRow as unknown as TripRow)
+      const base = this.savedTrips.get(current.id) ?? remote
+      const merged = mergeTrips(base, current, remote)
+      this.hooks.onConflictMerged?.(merged.trip, merged.notes)
+      this.acknowledgeTrip(remote)
+      current = merged.trip
+      expected = remote.version ?? 1
+    }
+    throw new Error("trip persist conflict retries exhausted")
+  }
+
+  private async runIngestRemote(tripId: string): Promise<void> {
+    if (this.disposed) return
     const { data, error } = await this.supabase
       .from("trips")
-      .update(payload)
-      .eq("id", trip.id)
-      .eq("version", expectedVersion)
-      .select("id, version")
-      .maybeSingle()
-    if (error) {
-      if (shouldRetryWithoutVersion(error)) {
-        noteVersionColumnMissing()
-        const retry = await this.supabase.from("trips").update(payload).eq("id", trip.id)
-        if (retry.error) throw retry.error
-        return trip
-      }
-      throw error
-    }
-    if (data) {
-      return { ...trip, version: Number(data.version) || expectedVersion + 1 }
-    }
-    const { data: remoteRow, error: fetchErr } = await this.supabase
-      .from("trips")
       .select(tripSelectColumns())
-      .eq("id", trip.id)
+      .eq("id", tripId)
       .maybeSingle()
-    if (fetchErr) throw fetchErr
-    if (!remoteRow) return "revoked"
-    const remote = rowToTrip(remoteRow as unknown as TripRow)
-    const base = this.savedTrips.get(trip.id) ?? remote
-    const merged = mergeTrips(base, trip, remote)
-    this.hooks.onConflictMerged?.(merged.trip, merged.notes)
-    const retry = await this.supabase
-      .from("trips")
-      .update(tripToUpdateRow(merged.trip))
-      .eq("id", merged.trip.id)
-      .eq("version", remote.version ?? 1)
-      .select("id, version")
-      .maybeSingle()
-    if (retry.error) throw retry.error
-    if (!retry.data) return "revoked"
-    return { ...merged.trip, version: Number(retry.data.version) || (remote.version ?? 1) + 1 }
+    if (error) throw error
+    if (!data) return
+    const remote = rowToTrip(data as unknown as TripRow)
+    const saved = this.savedTrips.get(tripId)
+    if (versionColumnLive && saved && (remote.version ?? 1) <= (saved.version ?? 1)) {
+      return
+    }
+    const local =
+      this.latest?.trips.find((t) => t.id === tripId) ?? saved ?? remote
+    const base = saved ?? local
+    const { trip: merged } = mergeTrips(base, local, remote)
+    this.acknowledgeTrip(remote)
+    if (this.latest) {
+      this.latest = {
+        ...this.latest,
+        trips: this.latest.trips.map((t) => (t.id === tripId ? merged : t)),
+      }
+    }
+    this.hooks.onRemoteMerged?.(merged)
+
+    const known = new Set(
+      (this.latest?.sources ?? [...this.savedSources.values()]).map((s) => s.id),
+    )
+    const missing = merged.sourceIds.filter((id) => !known.has(id))
+    if (missing.length === 0) return
+    const loaded = await loadSourcesByIds(this.supabase, missing)
+    if (loaded.length === 0) return
+    this.acknowledgeLoadedSources(loaded)
+    if (this.latest) {
+      this.latest = { ...this.latest, sources: [...this.latest.sources, ...loaded] }
+    }
+    this.hooks.onRemoteSources?.(loaded)
   }
 
   private async persist(snapshot: TripsSnapshot): Promise<void> {
@@ -858,13 +948,13 @@ export class TripsSyncer {
       const saved = this.savedTrips.get(trip.id)
       if (!saved) {
         const row = omitBudgetIfUnsupported(tripToRow(trip, this.userId))
-        let { error } = await this.supabase.from("trips").insert(row)
+        let { error } = await this.supabase.from("trips").upsert(row, { onConflict: "id" })
         if (isMissingBudgetColumnError(error) && budgetColumnLive) {
           noteBudgetColumnMissing()
           if (!budgetColumnLive) {
             ;({ error } = await this.supabase
               .from("trips")
-              .insert(omitBudgetIfUnsupported(row)))
+              .upsert(omitBudgetIfUnsupported(row), { onConflict: "id" }))
           }
         }
         if (error) throw error
@@ -872,11 +962,7 @@ export class TripsSyncer {
         continue
       }
       if (saved === trip || tripUpdatePayloadsEqual(saved, trip)) {
-        const version = Math.max(saved.version ?? 1, trip.version ?? 1)
-        persistedTrips.set(
-          trip.id,
-          (trip.version ?? 1) === version ? trip : { ...trip, version },
-        )
+        persistedTrips.set(trip.id, keepSavedVersion(saved, trip))
         continue
       }
       const result = await this.persistTrip(trip, saved.version ?? 1)
@@ -912,11 +998,15 @@ export class TripsSyncer {
     }
 
     if (sourceRowsWithHtml.length) {
-      const { error } = await this.supabase.from("sources").insert(sourceRowsWithHtml)
+      const { error } = await this.supabase
+        .from("sources")
+        .upsert(sourceRowsWithHtml, { onConflict: "id" })
       if (error) throw error
     }
     if (sourceRowsWithoutHtml.length) {
-      const { error } = await this.supabase.from("sources").insert(sourceRowsWithoutHtml)
+      const { error } = await this.supabase
+        .from("sources")
+        .upsert(sourceRowsWithoutHtml, { onConflict: "id" })
       if (error) throw error
     }
 

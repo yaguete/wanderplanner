@@ -74,7 +74,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Enlaces del chat: clicables, sin botón «Añadir fuente». Citar el origen de un dato ≠ indexar el artículo. Añadir una fuente va por `propose_add_source` (tarjeta) o por el panel Fuentes.
 
 ### Home de viajes
-- Home de viajes: tarjetas de invitación pendiente (Aceptar / Ahora no). El editor no ve Archivar ni Eliminar; ve «Salir del viaje». Badges «Compartido» / «De [nombre]» si aplica.
+- Home de viajes: portada en cada tarjeta + Archivar / Editar / Eliminar. Tarjetas de invitación pendiente (Aceptar / Rechazar). El editor no ve Archivar ni Eliminar; ve «Salir del viaje». Badges «Compartido» / «De [nombre]» si aplica.
 - Mientras se cargan los viajes desde Supabase, el bloque muestra un spinner en el mismo contenedor punteado que el empty state (nunca «No hay viajes activos» de forma prematura).
 
 ### Superficie de marketing (landing)

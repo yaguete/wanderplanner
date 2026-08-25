@@ -47,7 +47,7 @@ import {
 } from "@/lib/itinerary-utils"
 import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
-import { fetchArticleHtml, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
+import { fetchArticleHtml, loadSourcesByIds, loadTripsState, TripsSyncer } from "@/lib/db/trips-repo"
 import { mergeTrips } from "@/lib/trip-merge"
 import { redeemGuestTripClaim } from "@/lib/guest-trip-claim"
 import { useAuth } from "@/lib/auth-context"
@@ -202,6 +202,9 @@ interface TripContextValue {
   unarchiveTrip: (tripId: string) => void
   leaveTrip: (tripId: string) => Promise<void>
   applyRemoteTrip: (trip: Trip) => void
+  /** Ingesta Realtime por la cola del syncer (refetch + fusión + fuentes). */
+  ingestRemote: (tripId: string) => Promise<void>
+  savedTrip: (id: string) => Trip | undefined
   /** Quita el viaje del estado local (revocación remota). No llama a leave_trip. */
   dropTrip: (tripId: string) => void
 
@@ -380,6 +383,32 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   sourcesRef.current = sources
   pendingSourcesRef.current = pendingSources
 
+  const applyMergedTrip = useCallback((trip: Trip) => {
+    setTrips((prev) => {
+      if (!prev.some((t) => t.id === trip.id)) return prev
+      const synced = syncTripSchedule(trip, trip.days)
+      const next = prev.map((t) => (t.id === trip.id ? synced : t))
+      const used = new Set(next.flatMap((t) => t.sourceIds))
+      const nextSources = sourcesRef.current.filter((s) => used.has(s.id))
+      if (nextSources.length !== sourcesRef.current.length) {
+        setSources(nextSources)
+      }
+      return hydrateDayItems(next, nextSources)
+    })
+  }, [])
+
+  const applyRemoteSources = useCallback((incoming: Source[]) => {
+    if (incoming.length === 0) return
+    setSources((prev) => {
+      const seen = new Set(prev.map((s) => s.id))
+      const added = incoming.filter((s) => !seen.has(s.id))
+      if (added.length === 0) return prev
+      const next = [...prev, ...added]
+      setTrips((tPrev) => hydrateDayItems(tPrev, next))
+      return next
+    })
+  }, [])
+
   // Al desmontar el provider (salir de /trips): abortar extracciones en vuelo.
   useEffect(() => {
     const aborts = abortByPendingIdRef.current
@@ -426,13 +455,23 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       },
       {
         onConflictMerged: (trip) => {
-          setTrips((prev) => prev.map((t) => (t.id === trip.id ? trip : t)))
+          applyMergedTrip(trip)
           toast.message("Se han combinado cambios de las dos personas")
+          const missing = trip.sourceIds.filter(
+            (id) => !sourcesRef.current.some((s) => s.id === id),
+          )
+          if (missing.length === 0) return
+          void loadSourcesByIds(supabase, missing).then((loaded) => {
+            syncerRef.current?.acknowledgeLoadedSources(loaded)
+            applyRemoteSources(loaded)
+          })
         },
         onAccessRevoked: (tripId) => {
           setTrips((prev) => prev.filter((t) => t.id !== tripId))
           toast.error("Ya no tienes acceso a este viaje")
         },
+        onRemoteMerged: (trip) => applyMergedTrip(trip),
+        onRemoteSources: (sources) => applyRemoteSources(sources),
       },
     )
     syncerRef.current?.dispose()
@@ -760,10 +799,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setTrips((prev) => {
       const current = prev.find((t) => t.id === trip.id)
       if (!current) return prev
-      const { trip: merged } = mergeTrips(current, current, trip)
-      return prev.map((t) => (t.id === trip.id ? merged : t))
+      const saved = syncerRef.current?.savedTrip(trip.id)
+      const { trip: merged } = mergeTrips(saved ?? current, current, trip)
+      const synced = syncTripSchedule(merged, merged.days)
+      const next = prev.map((t) => (t.id === trip.id ? synced : t))
+      const used = new Set(next.flatMap((t) => t.sourceIds))
+      const nextSources = sourcesRef.current.filter((s) => used.has(s.id))
+      if (nextSources.length !== sourcesRef.current.length) {
+        setSources(nextSources)
+      }
+      return hydrateDayItems(next, nextSources)
     })
   }, [])
+
+  const ingestRemote = useCallback((tripId: string) => {
+    return syncerRef.current?.ingestRemote(tripId) ?? Promise.resolve()
+  }, [])
+
+  const savedTrip = useCallback((id: string) => syncerRef.current?.savedTrip(id), [])
 
   const dropTrip = useCallback((tripId: string) => {
     setTrips((prev) => prev.filter((t) => t.id !== tripId))
@@ -1821,6 +1874,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       unarchiveTrip,
       leaveTrip,
       applyRemoteTrip,
+      ingestRemote,
+      savedTrip,
       dropTrip,
       getTrip,
       getTripSources,
@@ -1863,7 +1918,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

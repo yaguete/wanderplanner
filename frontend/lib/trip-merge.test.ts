@@ -165,4 +165,52 @@ function names(result: TripMergeResult): string[] {
   assert.equal(r.trip.extraTasks[0].title, "Visa local")
 }
 
+{
+  const base = trip({
+    id: "t",
+    startDate: "2026-09-14",
+    numDays: 1,
+    endDate: "2026-09-14",
+    days: [day("d1", [])],
+    version: 1,
+  })
+  const local = { ...base }
+  const remote = {
+    ...base,
+    version: 2,
+    numDays: 1,
+    endDate: "2026-09-20",
+    days: [day("d1", []), day("d2", []), day("d3", [])],
+  }
+  const r = mergeTrips(base, local, remote)
+  assert.equal(r.trip.numDays, 3)
+  assert.equal(r.trip.endDate, "2026-09-16")
+  assert.equal(r.trip.days.length, 3)
+}
+
+{
+  const base = trip({
+    id: "t",
+    dismissedCountryTasks: ["country:th:tdac"],
+    version: 1,
+  })
+  const local = { ...base, dismissedCountryTasks: [] }
+  const remote = { ...base, version: 2, dismissedCountryTasks: ["country:th:tdac"] }
+  const r = mergeTrips(base, local, remote)
+  assert.deepEqual(r.trip.dismissedCountryTasks, [])
+}
+
+{
+  const base = trip({
+    id: "t",
+    days: [day("d1", [], "Base")],
+    version: 1,
+  })
+  const local = { ...base, days: [day("d1", [], "Local")] }
+  const remote = { ...base, version: 2, days: [day("d1", [], "Remoto")] }
+  const r = mergeTrips(base, local, remote)
+  assert.equal(r.trip.days[0].label, "Remoto")
+  assert.ok(r.notes.some((n) => n.field === "name" && n.takenFrom === "remote"))
+}
+
 console.log("trip-merge: ok")

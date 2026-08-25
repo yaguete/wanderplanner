@@ -12,17 +12,6 @@ export function isLikelyEmail(raw: string): boolean {
   return EMAIL_RE.test(normalizeEmail(raw))
 }
 
-/** `ana@gmail.com` → `ana•••@gmail.com`. Local corto: primera letra + •••. */
-export function maskEmail(raw: string | null | undefined): string {
-  const email = normalizeEmail(raw ?? "")
-  const at = email.indexOf("@")
-  if (at < 1) return email || ""
-  const local = email.slice(0, at)
-  const domain = email.slice(at)
-  const keep = local.length <= 3 ? 1 : 3
-  return `${local.slice(0, keep)}•••${domain}`
-}
-
 export function canInviteToTrip(opts: {
   isOwner: boolean
   isGuest: boolean
@@ -36,19 +25,14 @@ export type SharePeer = {
   displayName: string
   avatarUrl: string | null
   emailMasked: string
+  alreadyInTrip?: boolean
 }
 
 export function filterAvailablePeers(
   peers: SharePeer[],
   presentUserIds: Set<string>,
-  pendingEmails: Set<string>,
 ): SharePeer[] {
-  return peers.filter((p) => {
-    if (presentUserIds.has(p.userId)) return false
-    const email = normalizeEmail(p.emailMasked)
-    if (email && pendingEmails.has(email)) return false
-    return true
-  })
+  return peers.filter((p) => !presentUserIds.has(p.userId) && !p.alreadyInTrip)
 }
 
 export function occupancyOf(opts: {

@@ -18,7 +18,9 @@ import {
   tripIdFromAcceptPayload,
   tripPathAfterAccept,
 } from "@/lib/trip-invite-url"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, writeSessionPersistMode } from "@/lib/supabase/client"
+import { persistModeFromRemember } from "@/lib/auth-session-persist"
+import { prepareGuestTripClaim } from "@/lib/guest-trip-claim"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 
 export function InviteAccept({ token }: { token: string }) {
@@ -112,6 +114,15 @@ export function InviteAccept({ token }: { token: string }) {
             return
           }
           setBusy(true)
+          if (isGuest && user?.id) {
+            const prepared = await prepareGuestTripClaim(createClient(), user.id)
+            if (!prepared.ok) {
+              setError(prepared.error)
+              setBusy(false)
+              return
+            }
+          }
+          writeSessionPersistMode(persistModeFromRemember(true))
           const login = await signIn(inviteEmail, password, captcha ?? undefined)
           if (!login.ok) {
             setError(login.error)
@@ -151,6 +162,7 @@ export function InviteAccept({ token }: { token: string }) {
         <GoogleSignInButton
           next={invitePath(token)}
           rememberMe
+          claimUserId={isGuest ? user?.id : undefined}
           disabled={busy}
           onError={(message) => setError(message || null)}
         />
@@ -317,6 +329,7 @@ export function InviteAccept({ token }: { token: string }) {
             setBusy(false)
             return
           }
+          writeSessionPersistMode(persistModeFromRemember(true))
           const login = await signIn(inviteEmail, password, captcha ?? undefined)
           if (!login.ok) {
             setError(login.error)

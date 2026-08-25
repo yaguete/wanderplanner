@@ -34,8 +34,14 @@ import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useMyTripInvites, useMyTripOccupants } from "@/hooks/use-trip-members"
 import { TripMemberAvatars } from "@/components/trip-member-avatars"
 import { createClient } from "@/lib/supabase/client"
+import {
+  acceptStatusFromPayload,
+  isFailedAcceptStatus,
+  tripIdFromAcceptPayload,
+} from "@/lib/trip-invite-url"
 import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 type TripFilter = "active" | "archived"
 type ViewMode = "grid" | "list"
@@ -250,14 +256,28 @@ export default function TripsHomePage() {
                     size="sm"
                     onClick={async () => {
                       const supabase = createClient()
-                      const { error } = await supabase.rpc("accept_trip_invite_by_id", {
+                      const { data, error } = await supabase.rpc("accept_trip_invite_by_id", {
                         p_invite_id: inv.inviteId,
                       })
-                      if (error) return
+                      if (error) {
+                        toast.error("No se pudo aceptar la invitación")
+                        return
+                      }
+                      const status = acceptStatusFromPayload(data)
+                      if (isFailedAcceptStatus(status)) {
+                        toast.error(
+                          status === "expired"
+                            ? "Esta invitación ha caducado"
+                            : "No encontramos esa invitación",
+                        )
+                        await reloadInvites()
+                        return
+                      }
+                      const tripId = tripIdFromAcceptPayload(data) || inv.tripId
                       await reloadInvites()
                       await reloadTrips()
-                      beginOpenTrip({ id: inv.tripId, name: inv.tripName })
-                      router.push(`/trips/${inv.tripId}`)
+                      beginOpenTrip({ id: tripId, name: inv.tripName })
+                      router.push(`/trips/${tripId}`)
                     }}
                   >
                     Aceptar
@@ -268,11 +288,17 @@ export default function TripsHomePage() {
                     variant="ghost"
                     onClick={async () => {
                       const supabase = createClient()
-                      await supabase.rpc("decline_trip_invite", { p_invite_id: inv.inviteId })
+                      const { error } = await supabase.rpc("decline_trip_invite", {
+                        p_invite_id: inv.inviteId,
+                      })
+                      if (error) {
+                        toast.error("No se pudo rechazar la invitación")
+                        return
+                      }
                       await reloadInvites()
                     }}
                   >
-                    Ahora no
+                    Rechazar
                   </Button>
                 </div>
               </li>

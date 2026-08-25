@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js"
 import {
   confirmationNameFor,
   matchesAccountConfirmation,
+  sharedDeletionWarning,
   validatePasswordChange,
   validatePasswordPair,
 } from "./account-security"
@@ -130,6 +131,18 @@ assert.equal(
   }),
   null,
 )
+
+assert.equal(sharedDeletionWarning(2), "")
+assert.equal(sharedDeletionWarning(null), "")
+assert.equal(
+  sharedDeletionWarning({ shared_trips: 1, editors: 1 }),
+  "1 persona perderá acceso al viaje que has compartido.",
+)
+assert.equal(
+  sharedDeletionWarning({ shared_trips: 2, editors: 3 }),
+  "3 personas perderán acceso a los viajes que has compartido.",
+)
+assert.equal(sharedDeletionWarning({ shared_trips: 0, editors: 0 }), "")
 
 assert.equal(validatePasswordPair("123", "123"), "La contraseña debe tener al menos 6 caracteres.")
 assert.equal(validatePasswordPair("secret1", "secret2"), "Las contraseñas no coinciden.")

@@ -51,6 +51,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     country_tasks_cache.py # country_task_suggestions vía service_role
     assistant.py           # POST /assistant/chat (SSE)
     auth.py                # JWT Supabase (HS256 o JWKS)
+    trip_share.py          # POST /trips/{id}/invites + lookup/complete-signup
+    emails.py              # Resend: invitaciones (sin loguear el email del invitado)
     usage.py               # usage_events: límites por usuario/día/invitado por `kind`
     funnel.py              # POST /funnel: contadores del CTA (start_opened, outbound_click, account_created)
     obs.py                 # log_kv (logs estructurados)
@@ -111,13 +113,17 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       auth-next.ts         # saneador de `?next=` post-login (test:auth-next)
       auth-google.ts       # SSO Google + flag NEXT_PUBLIC_GOOGLE_AUTH_ENABLED (test:auth-google)
       start-session.ts     # decisión pura de `/start` (open/reuse/create/replace)
-      account-security.ts  # confirmación de borrado + validación de contraseña
+      account-security.ts  # confirmación de borrado + validación de contraseña + aviso sharing
+      trip-merge.ts        # fusión a 3 bandas OCC (numDays/endDate derivados)
+      trip-share.ts        # tope 8, peers, emails (test:trip-share)
+      trip-invite-url.ts   # /invite/{token} (test:trip-invite-url)
+      ai-transfer-consent.ts # Consentimiento art. 49.1.a del asistente: `wp-ai-transfer-consent:{userId}`
       ai-transfer-consent.ts # Consentimiento art. 49.1.a del asistente: `wp-ai-transfer-consent:{userId}`
                            # para la UI + `profiles.ai_transfer_consent_at/_version` como constancia
       db/                  # trips-repo, assistant-repo, profile-repo
       supabase/            # client, server, middleware helpers
-    hooks/                 # use-assistant-chat, use-collapsing-header,
-                           # use-virtual-keyboard, use-mobile, use-toast
+    hooks/                 # use-assistant-chat, use-trip-realtime, use-trip-members,
+                           # use-collapsing-header, use-virtual-keyboard, use-mobile, use-toast
 ```
 
 **Tests:** ficheros `lib/*.test.ts` ejecutados con `tsx` (`npm run test:<nombre>`), no vitest. [`ci.yml`](.github/workflows/ci.yml) ejecuta **todas** las suites del front, una por línea; al añadir una, añádela también al workflow o dejará de ser cierto. El job `backend` corre `pytest` (instala `requirements-dev.txt`).
@@ -159,7 +165,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - `trips.budget`: techo opcional `{ total, byCategory }`. Va en `TRIP_COLUMNS` / `tripToRow` (no es como `seed_source_key`).
 - `trips.seed_source_key`: `sourceMatchKey` del artículo del CTA. Lo escribe solo `/start`, **fuera** de `TRIP_COLUMNS` / `tripToRow` para que el syncer no lo pise.
 - `sources.total_days` (= `Source.totalDays`): duración declarada por la guía (`itinerary.total_days`); permite que un viaje de partner adopte los días del artículo.
-- [`trip-context.tsx`](frontend/lib/trip-context.tsx): mutaciones **síncronas** sobre `useState`; [`TripsSyncer`](frontend/lib/db/trips-repo.ts) hace upsert/delete por diffing (debounce ~1 s, cola, flush `pagehide`). Last-write-wins.
+- [`trip-context.tsx`](frontend/lib/trip-context.tsx): mutaciones **síncronas** sobre `useState`; [`TripsSyncer`](frontend/lib/db/trips-repo.ts) hace upsert/delete por diffing (debounce ~1 s, cola, flush `pagehide`). Viajes compartidos: OCC con `trips.version` + fusión a 3 bandas; Realtime del viaje abierto entra por la misma cola (`ingestRemote`). Fuentes nuevas de Realtime/conflicto: `acknowledgeLoadedSources` **antes** de meterlas en el estado (si no, el persist las upserta con `article_html: ""`).
+- Compartir: tablas `trip_members` / `trip_invites`; invitaciones por email (`POST /trips/{id}/invites`) o compañero de `list_share_peers`. El dueño invita; el editor sale con `leave_trip`. El asistente sigue privado por conversación.
 - Viajes de partner (`trip.referrer`): al añadir la primera fuente, si el viaje sigue virgen (sin fechas, ≤1 día vacío), se redimensiona a `totalDays` (tope 60), se fija `startDate` = mañana y se renombra con `source.area`. Con `&days=N` el calendario ya viene fijado en `/start` y solo se renombra. Nunca pisa viajes creados por el usuario.
 - Extracción de fuente: `startSourceExtraction` (fire-and-forget) → chip pendiente en Fuentes (`pendingSources`); sin modal bloqueante. Tope **5 fuentes/viaje** ([`trip-sources.ts`](frontend/lib/trip-sources.ts)). Quitar una fuente **no** borra ítems/basics ya consolidados en Mi viaje.
 - `article_html` se excluye de la carga inicial; `ensureArticleHtml` / `fetchArticleHtml` al abrir Crónica.
@@ -253,7 +260,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Preguntas abiertas / deuda
 
-- Multi-pestaña: last-write-wins salvo viajes compartidos (`trips.version` + fusión a 3 bandas + Realtime del viaje abierto).
+- Multi-pestaña (incluido el mismo usuario en dos pestañas): el **viaje abierto** está cubierto — `trips.version` + OCC + fusión a 3 bandas + Realtime filtrado por `id` —, sea compartido o no. El listado `/trips` no tiene Realtime: renombrar o archivar desde dos pestañas a la vez sigue siendo last-write-wins.
 - Normalizar jsonb a tablas hijas solo si hace falta colaboración/queries.
 - `REQUIRE_AUTH=true` en producción.
 - Metering de uso de Places/Unsplash (T1.2) antes de producción: el cinturón `MAX_PHOTO_LOOKUPS_DAY` es durable (`usage_events.kind=photo_paid`, fail-closed, memo ~60 s). **`/cover` no tiene cuota por usuario** (`enforce_usage` / `record_event` de `photo_lookup`): Unsplash solo cuenta contra el tope global. No meter `USER_MAX_*` en portadas sin decidir el producto — un 429 en `/cover` deja el listado de viajes sin foto.
@@ -282,6 +289,13 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No cierres la sesión de invitado en `/signup`.** El formulario ya ramifica a `upgradeGuest` y conserva el `user_id`.
 - ❌ **No reasignes `user_id` desde el cliente** → RLS lo bloquea. El único camino es [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) + [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql).
 - ❌ **No filtres al dueño si el email ya tiene cuenta.** La respuesta de `POST /trips/{id}/invites` y el estado «Pendiente» son idénticos exista o no. Añadir a un compañero de `list_share_peers` sí entra directo.
+- ❌ **No adelantes `version` en el baseline del syncer sin el documento del que salió.** `savedTrips` guarda dos cosas acopladas: qué contenía la fila y en qué versión estaba. Si el número avanza y el documento no, el siguiente `UPDATE … WHERE version = N` acierta con un documento viejo y **pisa lo que escribió la otra persona, en silencio**. Así se perdían ítems: Realtime inyectaba `version` sin `days`/`tasks` y un `Math.max` lo subía al baseline. La rama de «nada cambió» de `persist` pasa por [`keepSavedVersion`](frontend/lib/db/trips-repo.ts) — que fuerza `saved.version` y **no** hereda `trip.version` — y el baseline solo avanza por una escritura con éxito o por `acknowledgeTrip(remote)` tras leer la fila entera. El `trip.version` del estado de React va retrasado a propósito (`persistTrip` devuelve la versión nueva al syncer, no a `setTrips`): por eso el skip del eco de Realtime compara contra `savedTrip(id)`, nunca contra el estado.
+- ❌ **No metas fuentes en el estado sin `acknowledgeLoadedSources`.** Una `Source` que llega al estado sin registrarse en `savedSources` + `deferredHtml` entra en el siguiente persist como alta, y como `SOURCE_COLUMNS` no trae `article_html` la fila viaja con `article_html: ""`: **borra el artículo para todos los miembros** y devuelve `items`/`basics` a la versión sin hidratar. Vale para `ingestRemote` y para cualquier carga perezosa futura; el modelo es `reset()` / `acknowledgeSource`.
+- ❌ **No quites `user_id` de `SOURCE_COLUMNS`.** Sin él, `Source.ownerId` es `undefined` en todo lo cargado y el guardia `ownedRemovedSources` del persist deja de proteger: el cliente de un editor intenta `DELETE` sobre filas del dueño y lo único que lo para es la política `source_is_orphan`.
+- ❌ **No vuelvas a leer `public.sources` dentro del `WITH CHECK` de `sources`.** Postgres lo trata como política recursiva (`42P17 infinite recursion detected in policy`) y **todo** `PATCH`/upsert de fuentes revienta con un 500. Congelar `user_id` es trabajo de un trigger, no del `WITH CHECK` ([`20260824160000_fix_sources_rls_recursion.sql`](supabase/migrations/20260824160000_fix_sources_rls_recursion.sql)).
+- ❌ **No hagas incondicional el freeze de `protect_source_owner_fields`,** ni repares dueños con el trigger puesto. Los triggers también corren dentro de un `security definer`: congelar siempre deja `claim_guest_trips` sin mover `sources`, y a los ~30 días el cleanup de anónimos se lleva los artículos del viaje ya reclamado. El freeze cede solo si el dueño saliente es anónimo, el nuevo es `auth.uid()` y el llamante no es editor de un viaje que referencia esa fuente; las reparaciones van entre `disable trigger` / `enable trigger` porque en una migración `auth.uid()` es `null` ([`20260824170000_fix_source_owner_claim.sql`](supabase/migrations/20260824170000_fix_source_owner_claim.sql)).
+- ❌ **No suscribas `sources` a Realtime, ni ningún `postgres_changes` sin `filter`.** Los eventos DELETE **no** pasan por RLS: una suscripción abierta a `trips` reparte ids de filas borradas de cualquiera, y `sources` no se puede filtrar por viaje. Las fuentes nuevas se detectan por el diff de `source_ids` y se piden por id.
+- ❌ **No cambies la aridad de una función SQL sin `drop function` explícito.** `create or replace` con otra firma crea un **overload**, no reemplaza: la llamada queda ambigua y PostgREST puede resolver a la vieja. Ya pasó con [`cleanup_anonymous_users`](supabase/migrations/20260818130000_cleanup_anonymous_users_v2.sql) y con `list_share_peers` al añadirle `p_trip_id`.
 - ❌ **No pongas `force row level security` en `trips` / `sources` / `assistant_conversations`** sin revisar esas funciones: el `security definer` deja de funcionar en silencio.
 - ❌ **No pidas portada Unsplash en `createTrip`** → `applyCoverFromSource`.
 - ❌ **No expongas claves de imágenes** (`GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`) al frontend / `NEXT_PUBLIC_*`.
@@ -320,7 +334,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
 | Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`start-session.ts`](frontend/lib/start-session.ts), [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`auth-session-persist.ts`](frontend/lib/auth-session-persist.ts), [`auth-next.ts`](frontend/lib/auth-next.ts), [`auth-google.ts`](frontend/lib/auth-google.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql), [`20260818120000_trip_seed_source_key.sql`](supabase/migrations/20260818120000_trip_seed_source_key.sql), [`20260818130000_cleanup_anonymous_users_v2.sql`](supabase/migrations/20260818130000_cleanup_anonymous_users_v2.sql), [`20260821120000_google_display_name.sql`](supabase/migrations/20260821120000_google_display_name.sql), [`account-security.ts`](frontend/lib/account-security.ts), [`20260817190000_delete_own_account.sql`](supabase/migrations/20260817190000_delete_own_account.sql) |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-dock.tsx`](frontend/components/assistant-dock.tsx), [`assistant-actions.ts`](frontend/lib/assistant-actions.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), [`travel_assistant.md`](backend/agents/travel_assistant.md), perfil. Propuestas: `propose_add_item` / `propose_add_source` / `propose_move_item` (esta última confirma vía `moveItemBetweenDays`). |
-| Compartir / invitaciones | [`trip_share.py`](backend/trip_share.py), [`emails.py`](backend/emails.py), [`invite-trip-button.tsx`](frontend/components/invite-trip-button.tsx), [`app-header.tsx`](frontend/components/app-header.tsx), [`share-trip-dialog.tsx`](frontend/components/share-trip-dialog.tsx), [`invite-accept.tsx`](frontend/components/invite-accept.tsx), [`use-trip-members.ts`](frontend/hooks/use-trip-members.ts), [`20260824120000_trip_sharing.sql`](supabase/migrations/20260824120000_trip_sharing.sql), `RESEND_API_KEY` |
+| Compartir / invitaciones | [`trip_share.py`](backend/trip_share.py), [`emails.py`](backend/emails.py), [`invite-trip-button.tsx`](frontend/components/invite-trip-button.tsx), [`app-header.tsx`](frontend/components/app-header.tsx), [`share-trip-dialog.tsx`](frontend/components/share-trip-dialog.tsx), [`invite-accept.tsx`](frontend/components/invite-accept.tsx), [`use-trip-members.ts`](frontend/hooks/use-trip-members.ts), [`20260824120000_trip_sharing.sql`](supabase/migrations/20260824120000_trip_sharing.sql) + `…170000`, `RESEND_API_KEY` |
 | Fusión OCC | [`trip-merge.ts`](frontend/lib/trip-merge.ts), [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), `trips.version` |
 | Captcha (Turnstile) | [`turnstile.tsx`](frontend/components/auth/turnstile.tsx) (+ [test](frontend/components/auth/turnstile.test.ts)), sus 8 consumidores (`/login`, `/signup`, `/forgot-password`, `/start`, `account/settings`, `RegistrationGate`, `LandingStart`, `PartnerButtonBuilder`), `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, Hostname management de Cloudflare |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |

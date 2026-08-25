@@ -220,10 +220,24 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   16. `20260816180000_guest_trip_claim.sql`
   17. `20260817000000_place_thumbs_wikimedia.sql`
   18. `20260817120000_photo_paid_usage.sql` (antes del backend que escribe `photo_paid`; si no, el tope global lee 0)
-  19. `20260822120000_trip_budget.sql` (`trips.budget`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
-  20. `20260824120000_trip_sharing.sql` (tablas `trip_members` / `trip_invites`, `trips.version`, RLS, Realtime)
+  19. `20260817190000_delete_own_account.sql`
+  20. `20260818120000_trip_seed_source_key.sql`
+  21. `20260818130000_cleanup_anonymous_users_v2.sql`
+  22. `20260818200000_funnel_events.sql`
+  23. `20260819120000_maps_link_pins.sql`
+  24. `20260819220000_extraction_instagram_usage.sql`
+  25. `20260821120000_google_display_name.sql`
+  26. `20260822120000_trip_budget.sql` (`trips.budget`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
+  27. `20260824120000_trip_sharing.sql` (tablas `trip_members` / `trip_invites`, `trips.version`, RLS, Realtime)
+  28. `20260824133000_fix_invite_normalize_email.sql`
+  29. `20260824134500_fix_lookup_invite_email_type.sql`
+  30. `20260824140000_inviter_display_name.sql`
+  31. `20260824143000_list_my_trip_occupants.sql`
+  32. `20260824150000_skip_noop_trip_version_bump.sql`
+  33. `20260824160000_fix_sources_rls_recursion.sql`
+  34. `20260824170000_fix_source_owner_claim.sql` (claim de `sources`, ocupación sin caducadas, `list_share_peers(p_trip_id)`)
 
-**Compartir viaje:** orden **1) migración** `20260824120000_trip_sharing.sql`, **2) Realtime** publicación de `trips` y `trip_members` en el dashboard de Supabase, **3) backend Fly** (`RESEND_API_KEY`, `INVITE_EMAIL_FROM`, `SUPABASE_ANON_KEY`, `SITE_URL`) + dominio verificado en Resend, **4) frontend Vercel**. El front pide `version` y `user_id` en `TRIP_COLUMNS`: si llega antes que la migración, PostgREST falla. `/invite/**` no pasa por GoTrue; no hace falta redirect URL nueva.
+**Compartir viaje:** son ocho ficheros (`20260824120000_trip_sharing.sql` más los siete `fix` hasta `20260824170000`). Orden de despliegue: **1) las ocho migraciones**, **2) Realtime** publicación de `trips` y `trip_members` en el dashboard de Supabase, **3) backend Fly** (`RESEND_API_KEY`, `INVITE_EMAIL_FROM`, `SUPABASE_ANON_KEY`, `SITE_URL`, `GLOBAL_MAX_TRIP_INVITES_DAY`) + dominio verificado en Resend, **4) frontend Vercel**. El front pide `version` y `user_id` en `TRIP_COLUMNS`: si llega antes que la migración, PostgREST falla. `/invite/**` no pasa por GoTrue; no hace falta redirect URL nueva. Quien reconstruya la BD solo con `…120000` se come otra vez la recursión de RLS de `sources` y el INSERT de invitaciones roto.
 
 ```bash
 # Con CLI vinculada al proyecto:

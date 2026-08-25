@@ -30,6 +30,17 @@ export function tripIdFromAcceptPayload(data: unknown): string {
   return tripId.trim()
 }
 
+/** `expired` / `gone` / `unknown` no deben navegar. */
+export function acceptStatusFromPayload(data: unknown): string {
+  if (!data || typeof data !== "object") return ""
+  const status = "status" in data ? (data as { status: unknown }).status : ""
+  return typeof status === "string" ? status : ""
+}
+
+export function isFailedAcceptStatus(status: string): boolean {
+  return status === "expired" || status === "gone" || status === "unknown"
+}
+
 export const ANON_INVITER = "Una persona"
 
 /** Nombre a mostrar del que invita: nunca el local-part del email. */

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict"
-import { tripToUpdateRow, tripUpdatePayloadsEqual } from "./trips-repo"
+import {
+  keepSavedVersion,
+  tripToUpdateRow,
+  tripUpdatePayloadsEqual,
+} from "./trips-repo"
 import type { Trip, UserDay } from "@/types/itinerary"
 
 function day(id: string): UserDay {
@@ -53,6 +57,16 @@ function trip(partial: Partial<Trip> & { id: string }): Trip {
   assert.equal(tripUpdatePayloadsEqual(a, cloned), true)
   assert.ok(!("user_id" in tripToUpdateRow(a)))
   assert.ok(!("version" in tripToUpdateRow(a)))
+}
+
+{
+  const saved = trip({ id: "t1", version: 4, name: "Ana" })
+  const injected = { ...saved, version: 38, name: "Ana" }
+  const kept = keepSavedVersion(saved, injected)
+  assert.equal(kept.version, 4)
+  assert.equal(kept.name, "Ana")
+  const sameRef = keepSavedVersion(saved, saved)
+  assert.equal(sameRef, saved)
 }
 
 console.log("trips-persist: ok")
