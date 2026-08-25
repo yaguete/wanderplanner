@@ -22,6 +22,7 @@ import type {
   TripBudget,
   TripOrigin,
   Source,
+  SourceItem,
   UserDay,
   UserDayItem,
   UserBasicItem,
@@ -71,6 +72,13 @@ import {
 } from "@/lib/transport-routes"
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { canAddSource } from "@/lib/trip-sources"
+import { userDayItemFromSource } from "@/lib/item-provenance"
+import {
+  applySourceRouteImport,
+  planSourceRouteImport,
+  sourceRouteItems,
+  type SourceRouteImportResult,
+} from "@/lib/source-route-import"
 
 export type PendingSourceErrorKind = "guest-limit" | "limit" | "generic" | "permanent"
 
@@ -245,6 +253,18 @@ interface TripContextValue {
   addItemToDay: (tripId: string, dayId: string, item: UserDayItem) => void
   /** Varios ítems a la vez; no duplica `sourceItemId` ya presente en ese día. */
   addItemsToDay: (tripId: string, dayId: string, items: UserDayItem[]) => void
+  /**
+   * Copia la ruta de una fuente (sin transportes) a Mi viaje: día N → día N.
+   * No duplica ítems ya presentes, no mueve los existentes y crea días si faltan.
+   */
+  addSourceRouteToTrip: (
+    tripId: string,
+    source: Source,
+    items?: SourceItem[],
+  ) => Pick<
+    SourceRouteImportResult,
+    "addedCount" | "skippedExisting" | "skippedPastCap" | "daysCreated"
+  >
   removeItemFromDay: (tripId: string, dayId: string, itemId: string) => void
   /** Vacía los ítems de un día (conserva ida/vuelta); una sola mutación. */
   clearDayItems: (tripId: string, dayId: string) => void
@@ -1351,6 +1371,43 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  const addSourceRouteToTrip = useCallback((
+    tripId: string,
+    source: Source,
+    items?: SourceItem[],
+  ) => {
+    const empty = {
+      addedCount: 0,
+      skippedExisting: 0,
+      skippedPastCap: 0,
+      daysCreated: 0,
+    }
+    const routeItems = items ?? sourceRouteItems(source)
+    const trip = tripsRef.current.find((t) => t.id === tripId)
+    if (!trip || routeItems.length === 0) return empty
+    const plan = planSourceRouteImport(trip.days, routeItems)
+    const summary = {
+      addedCount: plan.addedCount,
+      skippedExisting: plan.skippedExisting,
+      skippedPastCap: plan.skippedPastCap,
+      daysCreated: plan.daysToCreate,
+    }
+    if (plan.addedCount === 0 && plan.daysToCreate === 0) return summary
+    setTrips((prev) =>
+      prev.map((t) => {
+        if (t.id !== tripId) return t
+        const applied = applySourceRouteImport(
+          t.days,
+          routeItems,
+          (item) => userDayItemFromSource(item, source),
+        )
+        if (applied.addedCount === 0 && applied.daysCreated === 0) return t
+        return syncTripSchedule(t, applied.days)
+      }),
+    )
+    return summary
+  }, [])
+
   const removeItemFromDay = useCallback((tripId: string, dayId: string, itemId: string) => {
     setTrips((prev) =>
       prev.map((t) => {
@@ -1899,6 +1956,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       removeSelectedDays,
       addItemToDay,
       addItemsToDay,
+      addSourceRouteToTrip,
       removeItemFromDay,
       clearDayItems,
       setDayItemCoords,
@@ -1918,7 +1976,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, addSourceRouteToTrip, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

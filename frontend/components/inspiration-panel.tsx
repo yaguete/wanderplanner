@@ -20,6 +20,7 @@ import {
   ChevronUp,
   ChevronDown,
   AlertCircle,
+  ListPlus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -49,6 +50,7 @@ import { REVEAL_SOURCES_EVENT, type RevealSourcesDetail } from "@/lib/onboarding
 import { prefetchTripSourceSuggestions } from "@/lib/trip-source-suggestions"
 import { extractionToastLabel } from "@/lib/extraction-toast"
 import { groupItemsByDayHint } from "@/lib/source-item-groups"
+import { isSourceDayCompleteOnTrip, sourceRouteItems } from "@/lib/source-route-import"
 import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { InstagramEmbed } from "@/components/instagram-embed"
 import {
@@ -75,15 +77,23 @@ function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
   return false
 }
 
-function daysWhereAllSourceItemsPresent(
-  days: { items: { sourceItemId: string }[] }[],
-  sourceItemIds: string[],
-): number[] {
-  if (sourceItemIds.length === 0) return []
-  return days.flatMap((day, index) => {
-    const present = new Set(day.items.map((i) => i.sourceItemId))
-    return sourceItemIds.every((id) => present.has(id)) ? [index + 1] : []
-  })
+function toastSourceRouteImport(
+  result: { addedCount: number; daysCreated: number },
+  emptyMessage: string,
+) {
+  if (result.addedCount === 0) {
+    toast.message(emptyMessage)
+    return
+  }
+  const itemsLabel =
+    result.addedCount === 1 ? "1 ítem" : `${result.addedCount} ítems`
+  const daysExtra =
+    result.daysCreated === 0
+      ? ""
+      : result.daysCreated === 1
+        ? " y 1 día"
+        : ` y ${result.daysCreated} días`
+  toast.success(`Hemos añadido ${itemsLabel}${daysExtra} a tu viaje`)
 }
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
@@ -135,7 +145,7 @@ export default function InspirationPanel({
     ensureArticleHtml,
     isArticleHtmlLoading,
     addItemToDay,
-    addItemsToDay,
+    addSourceRouteToTrip,
     addBasicToTrip,
     addDay,
   } = useTrips()
@@ -161,12 +171,8 @@ export default function InspirationPanel({
   }, [])
   const [maxSourcesOpen, setMaxSourcesOpen] = useState(false)
   const [refetchError, setRefetchError] = useState<string | null>(null)
-  /** Pendiente de «Añadir al día»: un ítem suelto o todos los de un día de la guía. */
-  const [picking, setPicking] = useState<
-    | { kind: "item"; item: SourceItem }
-    | { kind: "day"; day: number | null; items: SourceItem[] }
-    | null
-  >(null)
+  /** Pendiente de «Añadir al día»: un ítem suelto. */
+  const [picking, setPicking] = useState<SourceItem | null>(null)
   /** Query compartida Crónica ↔ Ruta (no Desplazamientos/Descuentos). */
   const [sourceQuery, setSourceQuery] = useState("")
   /** Barra de búsqueda: un solo interruptor para Crónica y Ruta. */
@@ -354,8 +360,7 @@ export default function InspirationPanel({
 
   const groupedItems = useMemo(() => {
     if (!currentSource) return []
-    const items = currentSource.items.filter((i) => i.type !== "transport")
-    return groupItemsByDayHint(items)
+    return groupItemsByDayHint(sourceRouteItems(currentSource))
   }, [currentSource])
 
   const groupedTransportItems = useMemo(() => {
@@ -546,21 +551,25 @@ export default function InspirationPanel({
     addItemToDay(tripId, dayId, userDayItemFromSource(item, currentSource))
   }
 
-  const handleAddDayItems = (items: SourceItem[], dayId: string) => {
-    if (!currentSource) return
-    addItemsToDay(
-      tripId,
-      dayId,
-      items.map((item) => userDayItemFromSource(item, currentSource)),
-    )
-  }
-
   const handleAddAllForSourceDay = (group: {
     day: number | null
     items: SourceItem[]
   }) => {
-    if (!group.items.length) return
-    setPicking({ kind: "day", day: group.day, items: group.items })
+    if (!currentSource || !group.items.length) return
+    toastSourceRouteImport(
+      addSourceRouteToTrip(tripId, currentSource, group.items),
+      group.day == null
+        ? "Todos los sitios de esta fuente ya están en tu viaje"
+        : `Todos los ítems del día ${group.day} ya están en tu viaje`,
+    )
+  }
+
+  const handleAddSourceRoute = () => {
+    if (!currentSource) return
+    toastSourceRouteImport(
+      addSourceRouteToTrip(tripId, currentSource),
+      "Todos los ítems de esta ruta ya están en tu viaje",
+    )
   }
 
   const handleAddBasic = (basic: SourceBasicItem) => {
@@ -611,6 +620,10 @@ export default function InspirationPanel({
   ]
 
   const rutaItemCount = groupedItems.reduce((n, g) => n + g.items.length, 0)
+  const pendingRouteCount = groupedItems.reduce(
+    (n, g) => n + g.items.filter((item) => !addedItemIds.has(item.id)).length,
+    0,
+  )
   const showRutaSearch = sourceTab === "itinerary" && rutaItemCount > 0
   const showCronicaSearch = sourceTab === "source" && !!currentSource
   const showSearchToggle = showCronicaSearch || showRutaSearch
@@ -1076,7 +1089,7 @@ export default function InspirationPanel({
                     isAdded={addedItemIds.has(item.id)}
                     addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
                     tripStartDate={trip?.startDate ?? null}
-                    onPick={() => setPicking({ kind: "item", item })}
+                    onPick={() => setPicking(item)}
                     thumbnailMode="transportIcon"
                     sourceTypeLabel="Desplazamiento"
                   />
@@ -1093,6 +1106,28 @@ export default function InspirationPanel({
                   query={sourceQuery}
                   virtualized={showRutaSearch}
                   onAddAllDay={handleAddAllForSourceDay}
+                  isDayComplete={(day, items) =>
+                    isSourceDayCompleteOnTrip(trip?.days ?? [], day, items)
+                  }
+                  toolbar={
+                    rutaItemCount > 0 ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full rounded-xl"
+                        disabled={pendingRouteCount === 0}
+                        onClick={handleAddSourceRoute}
+                        aria-label={
+                          pendingRouteCount === 0
+                            ? "Todos los ítems de esta ruta ya están en tu viaje"
+                            : "Añadir Ruta a Mi viaje"
+                        }
+                      >
+                        <ListPlus className="h-3.5 w-3.5" />
+                        Añadir Ruta a Mi viaje
+                      </Button>
+                    ) : null
+                  }
                   renderItem={(item) => (
                     <ItemRow
                       key={item.id}
@@ -1101,7 +1136,7 @@ export default function InspirationPanel({
                       isAdded={addedItemIds.has(item.id)}
                       addedDayNumbers={addedItemDaysBySourceItemId.get(item.id) ?? []}
                       tripStartDate={trip?.startDate ?? null}
-                      onPick={() => setPicking({ kind: "item", item })}
+                      onPick={() => setPicking(item)}
                       onFindInSource={() => openChronicleSearch(item.name)}
                     />
                   )}
@@ -1120,35 +1155,12 @@ export default function InspirationPanel({
           }}
           days={trip.days}
           tripStartDate={trip.startDate ?? null}
-          itemName={picking.kind === "item" ? picking.item.name : undefined}
-          itemType={picking.kind === "item" ? picking.item.type : undefined}
-          itemAffiliateUrl={picking.kind === "item" ? picking.item.affiliateUrl : undefined}
-          description={
-            picking.kind === "day"
-              ? picking.day == null
-                ? `Elige en qué día de tu viaje quieres colocar todos los sitios de ${
-                    currentSource?.author
-                      ? `@${currentSource.author.replace(/^@/, "")}`
-                      : "esta fuente"
-                  }.`
-                : `Elige en qué día de tu viaje quieres colocar todos los ítems del día ${picking.day} de la ruta de ${
-                    currentSource?.author
-                      ? `@${currentSource.author.replace(/^@/, "")}`
-                      : "esta fuente"
-                  }.`
-              : undefined
-          }
-          addedDayNumbers={
-            picking.kind === "item"
-              ? (addedItemDaysBySourceItemId.get(picking.item.id) ?? [])
-              : daysWhereAllSourceItemsPresent(
-                  trip.days,
-                  picking.items.map((i) => i.id),
-                )
-          }
+          itemName={picking.name}
+          itemType={picking.type}
+          itemAffiliateUrl={picking.affiliateUrl}
+          addedDayNumbers={addedItemDaysBySourceItemId.get(picking.id) ?? []}
           onSelect={(dayId) => {
-            if (picking.kind === "item") handleAddItem(picking.item, dayId)
-            else handleAddDayItems(picking.items, dayId)
+            handleAddItem(picking, dayId)
             setPicking(null)
           }}
           onAddDay={() => addDay(trip.id)}
@@ -1274,6 +1286,8 @@ function SourceGroupedList({
   query = "",
   virtualized = false,
   onAddAllDay,
+  isDayComplete,
+  toolbar = null,
 }: {
   groups: { day: number | null; items: SourceItem[] }[]
   emptyTitle: string
@@ -1283,8 +1297,12 @@ function SourceGroupedList({
   query?: string
   /** Lista virtualizada (Ruta). Independiente del buscador: Desplazamientos no virtualiza. */
   virtualized?: boolean
-  /** Ruta: añade todos los ítems de ese grupo de la guía. */
+  /** Ruta: añade los ítems de ese grupo al día correspondiente del viaje. */
   onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void
+  /** True si todos los ítems del grupo ya están en el día que les toca. */
+  isDayComplete?: (day: number | null, items: SourceItem[]) => boolean
+  /** CTA encima de los grupos (p. ej. copiar la ruta entera). */
+  toolbar?: ReactNode
 }) {
   const filteredGroups = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -1316,6 +1334,7 @@ function SourceGroupedList({
     return (
       <div className="space-y-5 px-4 pb-6 pt-4 max-md:pb-[var(--wp-nav-clearance)]">
         <div className="panel-column space-y-5">
+        {toolbar}
         {filteredGroups.map((group, gi) => (
           <div key={gi} className="space-y-2">
             {group.items.length > 0 && (onAddAllDay || group.day != null) ? (
@@ -1323,6 +1342,7 @@ function SourceGroupedList({
                 day={group.day}
                 items={group.items}
                 onAddAll={onAddAllDay}
+                complete={isDayComplete?.(group.day, group.items) ?? false}
               />
             ) : null}
             {group.items.map((item) => renderItem(item))}
@@ -1336,15 +1356,24 @@ function SourceGroupedList({
   return (
     <div className="flex flex-1 flex-col md:min-h-0 md:overflow-hidden">
       {hasFilter && filteredGroups.length === 0 ? (
-        <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-          Ningún ítem coincide con «{needle}».
-        </p>
+        <>
+          {toolbar ? (
+            <div className="px-4 pb-2 pt-3">
+              <div className="panel-column">{toolbar}</div>
+            </div>
+          ) : null}
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            Ningún ítem coincide con «{needle}».
+          </p>
+        </>
       ) : (
         <VirtualSourceRows
           groups={filteredGroups}
           renderItem={renderItem}
           resetKey={query}
           onAddAllDay={onAddAllDay}
+          isDayComplete={isDayComplete}
+          toolbar={toolbar}
         />
       )}
     </div>
@@ -1355,20 +1384,25 @@ function DayGroupHeading({
   day,
   items = [],
   onAddAll,
+  complete = false,
   compact = false,
 }: {
   day: number | null
   items?: SourceItem[]
   onAddAll?: (group: { day: number | null; items: SourceItem[] }) => void
+  complete?: boolean
   compact?: boolean
 }) {
   const labelClass =
     "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
   const label = day == null ? "Sitios de esta fuente" : `Día ${day}`
-  const addAllAria =
-    day == null
-      ? "Añadir todos los ítems de esta fuente"
-      : `Añadir todos los ítems del día ${day}`
+  const addDayAria = complete
+    ? day == null
+      ? "Todos los sitios de esta fuente ya están en tu viaje"
+      : `Todos los ítems del día ${day} ya están en tu viaje`
+    : day == null
+      ? "Añadir estos sitios al día 1"
+      : `Añadir el día ${day} a tu viaje`
 
   if (!onAddAll) {
     if (day == null) return null
@@ -1390,11 +1424,12 @@ function DayGroupHeading({
       <button
         type="button"
         onClick={() => onAddAll({ day, items })}
-        className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
-        aria-label={addAllAria}
+        disabled={complete}
+        className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground disabled:pointer-events-none disabled:opacity-50"
+        aria-label={addDayAria}
       >
         <Plus className="h-3.5 w-3.5 shrink-0" />
-        Añadir todo
+        Añadir día
       </button>
     </div>
   )
@@ -1436,6 +1471,8 @@ type VirtualSourceRowsProps = {
   renderItem: (item: SourceItem) => ReactNode
   resetKey: string
   onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void
+  isDayComplete?: (day: number | null, items: SourceItem[]) => boolean
+  toolbar?: ReactNode
 }
 
 type SourceRow = ReturnType<typeof flattenSourceGroups>[number]
@@ -1455,11 +1492,13 @@ function VirtualRowsBody({
   virtualizer,
   renderItem,
   onAddAllDay,
+  isDayComplete,
 }: {
   rows: SourceRow[]
   virtualizer: Virtualizer<HTMLDivElement, Element> | Virtualizer<Window, Element>
   renderItem: (item: SourceItem) => ReactNode
   onAddAllDay?: (group: { day: number | null; items: SourceItem[] }) => void
+  isDayComplete?: (day: number | null, items: SourceItem[]) => boolean
 }) {
   // Con scroller de ventana, `start` viene en coordenadas del documento:
   // `scrollMargin` lo devuelve al origen de la lista (0 en el otro caso).
@@ -1484,6 +1523,7 @@ function VirtualRowsBody({
                   day={row.day}
                   items={row.items}
                   onAddAll={onAddAllDay}
+                  complete={isDayComplete?.(row.day, row.items) ?? false}
                   compact
                 />
               ) : (
@@ -1505,6 +1545,8 @@ function ElementVirtualSourceRows({
   renderItem,
   resetKey,
   onAddAllDay,
+  isDayComplete,
+  toolbar,
 }: VirtualSourceRowsProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const rows = useMemo(() => flattenSourceGroups(groups), [groups])
@@ -1528,11 +1570,13 @@ function ElementVirtualSourceRows({
       ref={scrollRef}
       className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6"
     >
+      {toolbar ? <div className="panel-column pb-2 pt-3">{toolbar}</div> : null}
       <VirtualRowsBody
         rows={rows}
         virtualizer={virtualizer}
         renderItem={renderItem}
         onAddAllDay={onAddAllDay}
+        isDayComplete={isDayComplete}
       />
     </div>
   )
@@ -1544,6 +1588,8 @@ function WindowVirtualSourceRows({
   renderItem,
   resetKey,
   onAddAllDay,
+  isDayComplete,
+  toolbar,
 }: VirtualSourceRowsProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const rows = useMemo(() => flattenSourceGroups(groups), [groups])
@@ -1603,14 +1649,22 @@ function WindowVirtualSourceRows({
   }, [resetKey])
 
   return (
-    <div ref={listRef} className="px-4 pb-[var(--wp-nav-clearance)]">
-      <VirtualRowsBody
-        rows={rows}
-        virtualizer={virtualizer}
-        renderItem={renderItem}
-        onAddAllDay={onAddAllDay}
-      />
-    </div>
+    <>
+      {toolbar ? (
+        <div className="px-4 pb-2 pt-3">
+          <div className="panel-column">{toolbar}</div>
+        </div>
+      ) : null}
+      <div ref={listRef} className="px-4 pb-[var(--wp-nav-clearance)]">
+        <VirtualRowsBody
+          rows={rows}
+          virtualizer={virtualizer}
+          renderItem={renderItem}
+          onAddAllDay={onAddAllDay}
+          isDayComplete={isDayComplete}
+        />
+      </div>
+    </>
   )
 }
 
