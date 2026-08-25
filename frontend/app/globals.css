@@ -241,7 +241,8 @@ li[data-wp-draggable] {
 @layer components {
   /*
    * Superficie de cristal del dock móvil. No fija border-radius: el dock
-   * quiere `rounded-full`, el composer `rounded-2xl`. `::before` lo hereda.
+   * compacto quiere `rounded-full`, el grande y el composer `rounded-2xl`.
+   * `::before` lo hereda.
    * En `@layer components` a propósito: una utilidad de Tailwind puede
    * pisarla; por eso hay que quitar `bg-background` / `border` / `shadow-[…]`
    * de los sitios donde entre esta clase.
@@ -326,6 +327,15 @@ li[data-wp-draggable] {
       0 4px 10px hsl(0 0% 0% / 0.08),
       inset 0 1px 0 hsl(0 0% 100% / 0.9),
       0 0 0 1px hsl(0 0% 0% / 0.1);
+  }
+
+  /*
+   * Dock compacto: celdas 2.5×2.25rem (w-10 × h-9). Con inset 2px y
+   * padding-inline 4px la cápsula queda 32×32 — círculo, no huevo.
+   */
+  .wp-nav-pill--compact {
+    inset-block: 2px;
+    padding-inline: 4px;
   }
 
   .prose-article {

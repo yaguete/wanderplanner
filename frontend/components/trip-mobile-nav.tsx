@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react"
 import Link from "next/link"
 import { Compass, Newspaper, Route, Sparkles } from "lucide-react"
+import { BRAND_INK } from "@/components/brand-mark"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import { cn } from "@/lib/utils"
@@ -24,7 +25,7 @@ const TAB_FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
 
 const TAB_ITEM_CLASS =
-  "relative z-10 flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] font-medium leading-none transition-[color,min-height,width,padding,border-radius,gap] duration-200 ease-out " +
+  "relative z-10 flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10.5px] leading-none transition-[color,font-weight,min-height,width,padding,border-radius,gap] duration-200 ease-out " +
   TAB_FOCUS
 
 const TABS: {
@@ -66,22 +67,28 @@ function NavTabs({
 
   const itemClass = compact
     ? cn(
-        "relative z-10 flex size-9 items-center justify-center rounded-full p-0 text-[10.5px] font-medium leading-none transition-colors duration-200 ease-out",
+        "relative z-10 flex h-9 w-10 items-center justify-center rounded-full p-0 text-[10.5px] leading-none transition-[color,font-weight] duration-200 ease-out",
         TAB_FOCUS,
       )
     : TAB_ITEM_CLASS
 
   return (
-    <div className={cn(compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
+    <div className={cn(compact ? "px-1.5 py-0.5" : "px-1.5 py-1")}>
       <div
         className={cn("relative grid grid-cols-4", compact && "w-max")}
         style={
-          pillIndex != null
-            ? ({ "--wp-nav-index": pillIndex } as CSSProperties)
-            : undefined
+          {
+            color: BRAND_INK,
+            ...(pillIndex != null ? { "--wp-nav-index": pillIndex } : {}),
+          } as CSSProperties
         }
       >
-        {pillIndex != null ? <div aria-hidden className="wp-nav-pill" /> : null}
+        {pillIndex != null ? (
+          <div
+            aria-hidden
+            className={cn("wp-nav-pill", compact && "wp-nav-pill--compact")}
+          />
+        ) : null}
 
         <Link
           href="/trips"
@@ -89,13 +96,14 @@ function NavTabs({
           onClick={(e) => {
             if (!requireAccount("home")) e.preventDefault()
           }}
-          className={cn(itemClass, "wp-glass-muted")}
+          className={cn(itemClass, "font-light")}
         >
           <Compass
             className={cn(
-              "shrink-0 transition-[width,height] duration-200",
+              "shrink-0 transition-[width,height,stroke-width] duration-200",
               compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
             )}
+            strokeWidth={1.5}
             aria-hidden
           />
           {compact ? null : <span>Inicio</span>}
@@ -110,17 +118,14 @@ function NavTabs({
               aria-label={label}
               aria-current={selected ? "page" : undefined}
               onClick={() => onChange(id)}
-              className={cn(
-                itemClass,
-                selected ? "font-semibold text-primary" : "wp-glass-muted",
-              )}
+              className={cn(itemClass, selected ? "font-semibold" : "font-light")}
             >
               <Icon
                 className={cn(
-                  "shrink-0 transition-[width,height] duration-200",
+                  "shrink-0 transition-[width,height,stroke-width] duration-200",
                   compact ? "h-4 w-4" : "h-[1.125rem] w-[1.125rem]",
-                  selected && "stroke-[2.25]",
                 )}
+                strokeWidth={selected ? 2.25 : 1.5}
                 aria-hidden
               />
               {compact ? null : <span>{label}</span>}
@@ -172,9 +177,9 @@ export function TripMobileNav({
         className={cn(
           // Tab activo: cápsula `.wp-nav-pill` opaca (0.92), no `bg-muted`,
           // para que el blur no se tiña con Fuentes / Mi viaje / Asistente.
-          "wp-glass pointer-events-auto overflow-hidden rounded-full",
-          "transition-[width,margin] duration-200 ease-out",
-          compact ? "mx-auto w-max" : "w-full",
+          "wp-glass pointer-events-auto overflow-hidden",
+          "transition-[width,margin,border-radius] duration-200 ease-out",
+          compact ? "mx-auto w-max rounded-full" : "w-full rounded-2xl",
           isHidden && "pointer-events-none",
         )}
       >
