@@ -593,6 +593,11 @@ export default function ItineraryPanel({
   const categoryView = isRoute
     ? null
     : (viewMode as Exclude<ItineraryViewMode, "itinerary">)
+  // En Ruta, al bajar, las pestañas se van con el título y queda Lista /
+  // Calendario / Mapa. En el resto de pestañas el SegmentedControl se queda:
+  // sin él no hay forma de cambiar de categoría sin subir.
+  const collapseRouteTabs =
+    isMobile && headerCollapsed && isRoute && planSurface === "plan"
 
   const handleDayListAction = () => {
     if (canRemoveSelectedDays) {
@@ -642,10 +647,19 @@ export default function ItineraryPanel({
       <div
         className={cn(
           "relative shrink-0 border-b border-border/60 px-4",
-          isMobile && headerCollapsed ? "pb-2 pt-2" : "space-y-3 py-3.5",
+          isMobile && headerCollapsed
+            ? collapseRouteTabs
+              ? "border-b-0 py-0"
+              : "pb-2 pt-2"
+            : "space-y-3 py-3.5",
         )}
       >
-        <div className="panel-column space-y-3">
+        <div
+          className={cn(
+            "panel-column",
+            collapseRouteTabs ? "space-y-0" : "space-y-3",
+          )}
+        >
         {/* Fila 1+2: título / fecha / meta — se repliegan en móvil al bajar */}
         <div
           className={cn(
@@ -745,8 +759,22 @@ export default function ItineraryPanel({
           </div>
         </div>
 
-        {/* Fila 3: pestañas o barra de presupuesto — siempre visibles */}
-        <div className="min-h-8">
+        {/* Fila 3: pestañas o barra de presupuesto.
+            En Ruta móvil se repliegan con el título; en el resto se quedan. */}
+        <div
+          className={cn(
+            isMobile && isRoute && planSurface === "plan"
+              ? cn(
+                  "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
+                  collapseRouteTabs
+                    ? "max-h-0 min-h-0 opacity-0"
+                    : "max-h-10 min-h-8 opacity-100",
+                )
+              : "min-h-8",
+          )}
+          aria-hidden={collapseRouteTabs}
+          inert={collapseRouteTabs || undefined}
+        >
           {planSurface === "budget" ? (
             <div className="flex min-h-8 items-center gap-2">
               <button
@@ -768,12 +796,19 @@ export default function ItineraryPanel({
           )}
         </div>
 
-        {routeTaskTotals ? <TripTasksProgressHairline totals={routeTaskTotals} /> : null}
+        {routeTaskTotals && !collapseRouteTabs ? (
+          <TripTasksProgressHairline totals={routeTaskTotals} />
+        ) : null}
         </div>
       </div>
 
       {planSurface === "plan" && isRoute ? (
-          <div className="flex shrink-0 items-center gap-3 px-4 py-2.5">
+          <div
+            className={cn(
+              "flex shrink-0 items-center gap-3 px-4 py-2.5",
+              collapseRouteTabs && "border-b border-border/60",
+            )}
+          >
             <div className="panel-column flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <SegmentedControl
               items={[
