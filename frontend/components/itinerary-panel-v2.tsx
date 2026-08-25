@@ -57,10 +57,12 @@ import type { ItemType, RouteLeg, Trip, TripTaskCategory, TripTaskState, UserDay
 import { flightSearchHrefForItem } from "@/lib/flight-search"
 import { stayDayIndexesForItem } from "@/lib/booking-dates"
 import { stayReserveHref } from "@/lib/booking-search"
+import { BRAND_INK } from "@/components/brand-mark"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
   VIEW_MODE_DEFAULT_TASK_CATEGORY,
+  VIEW_MODE_LABELS,
   VIEW_MODE_TASK_CATEGORIES,
   type ItineraryViewMode,
 } from "@/components/itinerary-view-mode-tabs"
@@ -992,11 +994,27 @@ export default function ItineraryPanel({
         </>
       ) : categoryView ? (
         <>
-          <div className="flex shrink-0 justify-end px-4 py-2.5">
-            <TripTasksSummaryDetail
-              trip={trip}
-              categories={VIEW_MODE_TASK_CATEGORIES[categoryView]}
-            />
+          <div className="flex shrink-0 items-baseline justify-between gap-3 px-4 pt-3 pb-2">
+            {/*
+              Móvil + panel < @md (~448px): las pestañas pasan a solo icono
+              y este título (en flujo, no sticky) nombra la sección.
+            */}
+            <h2
+              className={cn(
+                "hidden min-w-0 truncate text-sm font-semibold",
+                "max-md:block max-md:text-lg max-md:tracking-tight",
+                "@md:!hidden",
+              )}
+              style={{ color: BRAND_INK }}
+            >
+              {VIEW_MODE_LABELS[categoryView]}
+            </h2>
+            <div className="ml-auto min-w-0 shrink-0">
+              <TripTasksSummaryDetail
+                trip={trip}
+                categories={VIEW_MODE_TASK_CATEGORIES[categoryView]}
+              />
+            </div>
           </div>
           <TripTasksPanel
             trip={trip}
