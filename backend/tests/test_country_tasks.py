@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from country_tasks import (
     DISCLAIMER,
+    _call_haiku_distill,
     normalize_tasks_payload,
     parse_country_codes,
     stable_task_id,
@@ -268,3 +270,22 @@ def test_thailand_fixture_mentions_tdac():
 
 def test_disclaimer_mentions_spanish_passport():
     assert "pasaporte español" in DISCLAIMER.lower() or "españoles" in DISCLAIMER.lower()
+
+
+def test_call_haiku_distill_does_not_pass_temperature(monkeypatch):
+    """Anthropic SDK 1.0: temperature= en messages.create() es TypeError."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    payload = '{"tasks": []}'
+    block = SimpleNamespace(type="text", text=payload)
+    usage = SimpleNamespace(output_tokens=3)
+    message = SimpleNamespace(content=[block], usage=usage)
+    client = MagicMock()
+    client.messages.create.return_value = message
+    with patch("country_tasks.anthropic.Anthropic", return_value=client):
+        data, tokens = _call_haiku_distill("ES", "brief")
+    assert data == {"tasks": []}
+    assert tokens == 3
+    kwargs = client.messages.create.call_args.kwargs
+    assert "temperature" not in kwargs
+    assert "top_p" not in kwargs
+    assert "top_k" not in kwargs

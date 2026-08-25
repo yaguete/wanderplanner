@@ -88,10 +88,10 @@ def _call_haiku(user_message: str) -> tuple[str, int | None]:
         raise HTTPException(status_code=503, detail="Falta ANTHROPIC_API_KEY")
 
     client = anthropic.Anthropic(api_key=api_key)
+    # SDK 1.0 quitó `temperature` de messages.create(); pasarlo es TypeError (502 en prod).
     message = client.messages.create(
         model=HAIKU_MODEL,
         max_tokens=64,
-        temperature=0.3,
         system=_load_prompt(),
         messages=[{"role": "user", "content": user_message}],
     )
@@ -120,6 +120,7 @@ async def post_day_summary(
             logger,
             event="day_summary_failed",
             error=type(e).__name__,
+            detail=str(e)[:240],
         )
         raise HTTPException(
             status_code=502,

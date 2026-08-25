@@ -137,10 +137,10 @@ def _call_haiku_distill(country_code: str, brief_text: str) -> tuple[dict[str, A
     )
 
     client = anthropic.Anthropic(api_key=api_key)
+    # SDK 1.0 quitó `temperature` de messages.create(); pasarlo es TypeError.
     message = client.messages.create(
         model=HAIKU_MODEL,
         max_tokens=1024,
-        temperature=0.1,
         system=_load_prompt(),
         messages=[{"role": "user", "content": user_message}],
     )
