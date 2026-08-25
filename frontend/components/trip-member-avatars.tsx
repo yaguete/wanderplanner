@@ -32,8 +32,10 @@ export function TripMemberAvatars({
   if (members.length < 2) return null
   const shown = members.slice(0, 4)
   const extra = members.length - shown.length
-  const box = size === "sm" ? "h-5 w-5" : "h-6 w-6"
-  const type = size === "sm" ? "text-[9px]" : "text-[10px]"
+  const box =
+    size === "sm" ? "h-5 w-5 md:h-7 md:w-7" : "h-6 w-6 md:h-8 md:w-8"
+  const type =
+    size === "sm" ? "text-[9px] md:text-[10px]" : "text-[10px] md:text-[11px]"
   const listed = [...members].sort((a, b) => Number(b.isOwner) - Number(a.isOwner))
   const names = listed.map(memberLabel)
   const label = `Editores: ${names.join(", ")}`
