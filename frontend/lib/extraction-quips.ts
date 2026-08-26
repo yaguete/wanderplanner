@@ -25,10 +25,12 @@ export type QuipTick = { phase: QuipPhase; index: number }
 
 /**
  * Curva de cadencia. No es constante a propósito: un reloj fijo se nota y
- * aburre, y las extracciones que salen de caché terminan antes de los 6 s, así
- * que el arranque va en silencio (una frase que no da tiempo a leer es ruido).
+ * aburre. El arranque casi no espera —el hueco de la frase está reservado
+ * desde el primer frame para que no salte el layout, y dejarlo en blanco varios
+ * segundos parece un fallo, no una pausa—, pero tampoco es cero: así una
+ * extracción que sale de caché termina sin llegar a pintar nada.
  */
-export const QUIP_SILENCE_MS = 6_000
+export const QUIP_SILENCE_MS = 1_000
 export const QUIP_LONG_AT_MS = 45_000
 export const QUIP_PATIENT_AT_MS = 90_000
 

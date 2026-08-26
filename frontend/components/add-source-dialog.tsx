@@ -123,9 +123,11 @@ export function AddSourceProgress({
         className="h-10 wp-squirrel-hop text-foreground"
       />
       <div className="space-y-1.5">
-        <p className="text-sm font-medium text-foreground">Analizando la fuente…</p>
-        {/* Estado real: es lo único que se anuncia. */}
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        {/*
+          El estado real hace de título: no había nada que ganar repitiendo
+          «Analizando la fuente…» encima de él. Es lo único que se anuncia.
+        */}
+        <p className="text-sm font-medium text-foreground" aria-live="polite">
           {stage === "extracting"
             ? "Destilando la ruta…"
             : stage === "resolving"
@@ -133,21 +135,20 @@ export function AddSourceProgress({
               : "Leyendo el artículo…"}
         </p>
         {/*
-          Voz de la ardilla, no progreso: va `aria-hidden` (un lector de
-          pantalla no quiere un chiste nuevo cada siete segundos) y el hueco
-          está reservado siempre, para que el botón Cancelar no baile cuando
-          la frase ocupa dos líneas.
+          Voz de la ardilla, no progreso: va `aria-hidden` porque un lector de
+          pantalla no quiere un chiste nuevo cada siete segundos.
+
+          `min-h-8` reserva las dos líneas del peor caso: sin eso, cada frase
+          que envuelve movería el botón Cancelar. `max-w-sm` marca dónde
+          envuelve; medido, ninguna frase del repertorio pasa de dos líneas ni
+          en un panel de 260 px.
         */}
         <p
           key={quip ?? "wp-quip-empty"}
           aria-hidden
-          className="wp-quip flex min-h-8 max-w-xs items-center justify-center text-balance text-xs italic text-muted-foreground/80"
+          className="wp-quip min-h-8 max-w-sm text-balance text-xs text-foreground"
         >
           {quip}
-        </p>
-        <p className="max-w-sm text-balance text-xs text-muted-foreground">
-          Puede tardar más de 30 segundos si el artículo es largo. Puedes seguir trabajando
-          en Mi viaje o el asistente.
         </p>
       </div>
       <Button type="button" variant="outline" size="sm" onClick={onCancel}>

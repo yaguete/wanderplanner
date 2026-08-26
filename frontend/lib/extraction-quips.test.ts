@@ -33,9 +33,12 @@ function seededRng(seed: number): () => number {
 assert.deepEqual(quipTickAt(0), { phase: "silent", index: -1 })
 assert.deepEqual(quipTickAt(QUIP_SILENCE_MS - 1), { phase: "silent", index: -1 })
 assert.deepEqual(quipTickAt(QUIP_SILENCE_MS), { phase: "working", index: 0 })
+// El hueco de la frase no puede quedarse en blanco más de un segundo: vacío y
+// reservado parece un fallo de pintado, no una pausa.
+assert.ok(QUIP_SILENCE_MS <= 1_000, "la primera frase tiene que entrar enseguida")
 assert.deepEqual(quipTickAt(QUIP_SILENCE_MS + 6_999), { phase: "working", index: 0 })
 assert.deepEqual(quipTickAt(QUIP_SILENCE_MS + 7_000), { phase: "working", index: 1 })
-assert.deepEqual(quipTickAt(QUIP_LONG_AT_MS - 1), { phase: "working", index: 5 })
+assert.deepEqual(quipTickAt(QUIP_LONG_AT_MS - 1), { phase: "working", index: 6 })
 assert.deepEqual(quipTickAt(QUIP_LONG_AT_MS), { phase: "long", index: 0 })
 assert.deepEqual(quipTickAt(QUIP_PATIENT_AT_MS - 1), { phase: "long", index: 4 })
 assert.deepEqual(quipTickAt(QUIP_PATIENT_AT_MS), { phase: "patient", index: 0 })
@@ -102,7 +105,7 @@ for (let e = 0; e < QUIP_LONG_AT_MS; e += 250) {
   const q = quipAt(decks, quipTickAt(e), "fetching")
   if (q && q !== shown[shown.length - 1]) shown.push(q)
 }
-assert.equal(shown.length, 6)
+assert.equal(shown.length, 7)
 assert.equal(new Set(shown).size, shown.length, "una misma espera no puede repetir frase")
 
 // ---------- Memoria corta entre extracciones ----------
