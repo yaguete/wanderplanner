@@ -10,7 +10,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const src = join(root, "node_modules/circle-flags/flags")
 const dest = join(root, "public/circle-flags")
 
-const KEEP = /^(?:[a-z]{2}|gb-sct|gb-eng|gb-wls|gb-nir|es-ct)\.svg$/
+const KEEP =
+  /^(?:[a-z]{2}|gb-sct|gb-eng|gb-wls|gb-nir|es-ar|es-cn|es-ct|es-ga|es-ib|es-pv|es-vc)\.svg$/
 
 const entries = readdirSync(src, { withFileTypes: true })
 const files = entries

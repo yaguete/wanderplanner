@@ -3,18 +3,139 @@ import { normalizeName } from "@/lib/trip-tasks"
 
 /**
  * Destinos que no son un país ISO (o que el catálogo rechaza a propósito).
- * Escocia → saltire (`gb-sct`), no Union Jack. Granada no es GD (Grenada).
+ * CCAA españolas: solo las que `circle-flags` dibuja; el resto de España → `es`.
+ * Escocia → saltire (`gb-sct`). Granada no es GD (Grenada).
  */
 const FLAG_OVERRIDES: { code: string; keys: readonly string[] }[] = [
+  {
+    code: "es-ct",
+    keys: [
+      "catalunya",
+      "cataluna",
+      "catalonia",
+      "barcelona",
+      "girona",
+      "gerona",
+      "tarragona",
+      "lleida",
+      "lerida",
+      "costa brava",
+    ],
+  },
+  {
+    code: "es-ga",
+    keys: [
+      "galicia",
+      "compostela",
+      "santiago de compostela",
+      "a coruna",
+      "coruna",
+      "vigo",
+      "pontevedra",
+      "ourense",
+      "orense",
+      "lugo",
+    ],
+  },
+  {
+    code: "es-pv",
+    keys: [
+      "euskadi",
+      "pais vasco",
+      "bilbao",
+      "donostia",
+      "san sebastian",
+      "vitoria",
+      "gasteiz",
+      "vizcaya",
+      "bizkaia",
+      "guipuzcoa",
+      "gipuzkoa",
+      "alava",
+      "araba",
+    ],
+  },
+  {
+    code: "es-vc",
+    keys: [
+      "valencia",
+      "comunitat valenciana",
+      "comunidad valenciana",
+      "alicante",
+      "castellon",
+      "castello",
+      "benidorm",
+    ],
+  },
+  {
+    code: "es-ib",
+    keys: [
+      "baleares",
+      "balears",
+      "mallorca",
+      "menorca",
+      "ibiza",
+      "eivissa",
+      "formentera",
+      "palma de mallorca",
+    ],
+  },
+  {
+    code: "es-cn",
+    keys: [
+      "canarias",
+      "tenerife",
+      "gran canaria",
+      "lanzarote",
+      "fuerteventura",
+      "las palmas",
+      "la palma",
+      "la gomera",
+    ],
+  },
+  { code: "es-ar", keys: ["aragon", "zaragoza", "huesca", "teruel"] },
   { code: "us", keys: ["alaska", "denali"] },
   {
     code: "gb-sct",
     keys: ["escocia", "scotland", "highland", "edimburgo", "edinburgh", "glasgow"],
   },
-  { code: "es", keys: ["granada", "alhambra"] },
+  {
+    code: "es",
+    keys: [
+      "andalucia",
+      "sevilla",
+      "malaga",
+      "cordoba",
+      "cadiz",
+      "granada",
+      "alhambra",
+      "jaen",
+      "huelva",
+      "almeria",
+      "madrid",
+      "asturias",
+      "oviedo",
+      "gijon",
+      "cantabria",
+      "santander",
+      "castilla y leon",
+      "castilla la mancha",
+      "toledo",
+      "valladolid",
+      "salamanca",
+      "extremadura",
+      "caceres",
+      "badajoz",
+      "murcia",
+      "navarra",
+      "pamplona",
+      "rioja",
+      "logrono",
+    ],
+  },
 ]
 
-/** Código de `circle-flags` (`np`, `gb-sct`). Nada de path traversal en el src. */
+/** Código de `circle-flags` (`np`, `gb-sct`, `es-ct`). Nada de path traversal en el src. */
 const FLAG_CODE_RE = /^[a-z]{2}(?:-[a-z]{2,4})?$/
 
 function blobOf(name: string, area?: string | null): string {
