@@ -951,6 +951,7 @@ export default function InspirationPanel({
               activePending.status === "loading" ? (
                 <AddSourceProgress
                   stage={activePending.stage}
+                  startedAt={activePending.startedAt}
                   onCancel={() => cancelPendingSource(activePending.id)}
                 />
               ) : (

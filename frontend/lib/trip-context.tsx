@@ -93,6 +93,10 @@ export type PendingSource = {
   errorKind?: PendingSourceErrorKind
   errorDestination?: string
   stage: ItineraryProgressStage | null
+  /** Arranque del intento en curso; lo reinicia cada reintento. Alimenta las
+   *  frases de espera de la ardilla, que no pueden reiniciarse porque el
+   *  usuario se vaya a Mi viaje y vuelva (el panel desmonta y remonta). */
+  startedAt: number
 }
 
 export type StartSourceExtractionResult =
@@ -1027,6 +1031,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
                 ...p,
                 status: "loading",
                 stage: isInstagramMediaUrl(url) ? "resolving" : "fetching",
+                startedAt: Date.now(),
                 errorMessage: undefined,
                 errorKind: undefined,
                 errorDestination: undefined,
@@ -1142,6 +1147,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         author: authorFromUrl(url.trim()),
         status: "loading",
         stage: isInstagramMediaUrl(url.trim()) ? "resolving" : "fetching",
+        startedAt: Date.now(),
       }
       setPendingSources((prev) => [...prev, pending])
       void runPendingExtraction(pendingId, tripId, url.trim())

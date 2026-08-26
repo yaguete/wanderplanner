@@ -658,6 +658,27 @@ li[data-wp-draggable] {
   transform-origin: 50% 100%;
 }
 
+/*
+ * Frases de espera de la ardilla (AddSourceProgress). El elemento se remonta
+ * con `key` en cada frase, así que la entrada se reproduce sola. El bloque
+ * global de prefers-reduced-motion la deja en 0.01ms; `both` conserva el
+ * estado final, que es lo que importa.
+ */
+@keyframes wp-quip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wp-quip {
+  animation: wp-quip-in 320ms ease-out both;
+}
+
 /* ===== Landing (/) — reveal por scroll sin JS y textura de grid ===== */
 
 /* Progressive enhancement: solo navegadores con scroll-driven animations. */

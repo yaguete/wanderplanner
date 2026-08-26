@@ -42,6 +42,7 @@ jobs:
       - run: npm run test:inspirational-source
       - run: npm run test:instagram-url
       - run: npm run test:extraction-toast
+      - run: npm run test:extraction-quips
       - run: npm run test:source-item-groups
       - run: npm run test:source-route-import
       - run: npm run test:map-day-scope

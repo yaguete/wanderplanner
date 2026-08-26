@@ -6,7 +6,7 @@
  * La extracción vive en trip-context (`startSourceExtraction`); el progreso/error
  * se muestran como chip pendiente en InspirationPanel.
  */
-import { useEffect, useId, useRef, useState, type FormEvent } from "react"
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react"
 import { track } from "@vercel/analytics"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { BrandMark } from "@/components/brand-mark"
@@ -26,6 +26,14 @@ import { SourceSuggestList } from "@/components/source-suggest-list"
 import { useTripSourceSuggestions } from "@/hooks/use-trip-source-suggestions"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import type { ItineraryProgressStage } from "@/lib/api"
+import {
+  buildQuipDecks,
+  msUntilNextQuip,
+  quipAt,
+  quipTickAt,
+  rememberQuips,
+  readSeenQuips,
+} from "@/lib/extraction-quips"
 import { isSourceSuggestEnabled, type SourceSuggestHit } from "@/lib/source-suggest"
 import {
   fetchTripSourceSuggestions,
@@ -53,13 +61,61 @@ export function validateSourceUrl(raw: string): string | null {
   return unsupportedSourceUrlMessage(trimmed)
 }
 
+/**
+ * Frase de la ardilla para la espera. La baraja se sortea una vez por intento
+ * (`startedAt`) y esquiva lo visto en extracciones recientes, para que nadie
+ * pueda anticipar cuál viene ahora. El temporizador se reprograma frase a
+ * frase porque la cadencia no es constante: ver `extraction-quips.ts`.
+ */
+function useSquirrelQuip(startedAt: number, stage: ItineraryProgressStage | null) {
+  const decks = useMemo(() => {
+    // `startedAt` no se usa dentro: está en las deps porque es justo lo que
+    // queremos que rebaraje (cada extracción y cada reintento son un sorteo
+    // nuevo). El barajado es Math.random a propósito, no una semilla derivada:
+    // si el orden se pudiera deducir, se podría anticipar la frase siguiente.
+    void startedAt
+    return buildQuipDecks({ rng: Math.random, avoid: readSeenQuips() })
+  }, [startedAt])
+  // Arranca en 0 (= sin frase) para que el primer render coincida con el del
+  // servidor; el efecto pone el tiempo real, que puede venir de lejos si el
+  // usuario se fue a Mi viaje y ha vuelto.
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const step = () => {
+      if (cancelled) return
+      const now = Date.now() - startedAt
+      setElapsed(now)
+      timer = setTimeout(step, Math.max(250, msUntilNextQuip(now)))
+    }
+    step()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [startedAt])
+
+  const quip = quipAt(decks, quipTickAt(elapsed), stage)
+
+  useEffect(() => {
+    if (quip) rememberQuips([quip])
+  }, [quip])
+
+  return quip
+}
+
 export function AddSourceProgress({
   stage,
+  startedAt,
   onCancel,
 }: {
   stage: ItineraryProgressStage | null
+  startedAt: number
   onCancel: () => void
 }) {
+  const quip = useSquirrelQuip(startedAt, stage)
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <BrandMark
@@ -68,12 +124,26 @@ export function AddSourceProgress({
       />
       <div className="space-y-1.5">
         <p className="text-sm font-medium text-foreground">Analizando la fuente…</p>
-        <p className="text-xs text-muted-foreground">
+        {/* Estado real: es lo único que se anuncia. */}
+        <p className="text-xs text-muted-foreground" aria-live="polite">
           {stage === "extracting"
             ? "Destilando la ruta…"
             : stage === "resolving"
               ? "Leyendo el post de Instagram…"
               : "Leyendo el artículo…"}
+        </p>
+        {/*
+          Voz de la ardilla, no progreso: va `aria-hidden` (un lector de
+          pantalla no quiere un chiste nuevo cada siete segundos) y el hueco
+          está reservado siempre, para que el botón Cancelar no baile cuando
+          la frase ocupa dos líneas.
+        */}
+        <p
+          key={quip ?? "wp-quip-empty"}
+          aria-hidden
+          className="wp-quip flex min-h-8 max-w-xs items-center justify-center text-balance text-xs italic text-muted-foreground/80"
+        >
+          {quip}
         </p>
         <p className="max-w-sm text-balance text-xs text-muted-foreground">
           Puede tardar más de 30 segundos si el artículo es largo. Puedes seguir trabajando
