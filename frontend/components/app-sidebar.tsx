@@ -13,12 +13,28 @@ import { SidebarAccountFooter } from "@/components/account-menu"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
+import { tripRailGlyph } from "@/lib/trip-rail-mark"
 
 /**
  * Lo que cuesta fijar el CTA encima de la cuenta, sin la fila de cuenta
  * (esa se mide). p-2 del scroll + pt-2.5 + botón ~32 + hueco pb-2 del CTA.
  */
 const PINNED_CHROME_PX = 74
+
+/** Pictograma del viaje en el rail plegado (emoji, no la portada Unsplash). */
+function TripRailMark({ glyph, dimmed }: { glyph: string; dimmed?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center text-[18px] leading-none transition-opacity",
+        dimmed ? "opacity-40 group-hover:opacity-90" : "opacity-100",
+      )}
+      aria-hidden
+    >
+      {glyph}
+    </span>
+  )
+}
 
 function NewTripButton({
   className,
@@ -74,7 +90,7 @@ export function AppSidebar({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { trips, createTrip } = useTrips()
+  const { trips, createTrip, getTripSources } = useTrips()
   const { requireAccount } = useRegistrationGate()
   const { beginOpenTrip, clearOpeningTrip } = useOpeningTrip()
   const rail = useSidebarRail()
@@ -202,15 +218,17 @@ export function AppSidebar({
                           beginOpenTrip({ id: t.id, name: t.name }, e)
                           onNavigate?.()
                         }}
-                        className={navLinkClass(isActive)}
+                        className={cn(navLinkClass(isActive), "group")}
                         aria-label={t.name}
                       >
-                        <span
-                          className={cn(
-                            "h-1.5 w-1.5 shrink-0 rounded-full",
-                            isActive ? "bg-primary" : "bg-sidebar-foreground/30",
-                          )}
-                          aria-hidden
+                        <TripRailMark
+                          dimmed={!isActive}
+                          glyph={tripRailGlyph({
+                            id: t.id,
+                            name: t.name,
+                            countries: t.countries,
+                            area: getTripSources(t.id)[0]?.area,
+                          })}
                         />
                       </Link>
                     </TooltipTrigger>
