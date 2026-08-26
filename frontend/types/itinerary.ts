@@ -127,8 +127,10 @@ export interface TripBudget {
 }
 
 /**
- * Texto de «Compartir» cacheado en el viaje. Derivado y regenerable: no es
- * texto del usuario. `signature` es `sharePlanSignature` del plan enviado.
+ * Texto de «Compartir» cacheado en el viaje. Lo escribe la IA y el usuario
+ * puede editarlo; `signature` es `sharePlanSignature` del plan que originó
+ * (o regeneró) el texto. Si el plan cambia, la firma queda vieja hasta
+ * «Regenerar»: no se pisa sola.
  */
 export interface ShareCard {
   text: string
@@ -234,8 +236,8 @@ export interface Trip {
    */
   budget: TripBudget | null
   /**
-   * Resumen generado para Compartir. Derivado y regenerable: no es texto del
-   * usuario. Null = nunca generado / viaje anterior a la columna.
+   * Resumen para Compartir. Lo escribe la IA; el usuario puede editarlo.
+   * Null = nunca generado / viaje anterior a la columna.
    */
   shareCard: ShareCard | null
   /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */

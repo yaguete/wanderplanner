@@ -331,7 +331,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No reutilices `buildTripBriefing` para compartir.** Lleva costes, estados de reserva, afiliados, coordenadas e HTML de artículos.
 - ❌ **No excluyas `share_card` de `bump_trip_version()`.** Ahorra un refetch y reabre la pérdida silenciosa entre coeditores.
 - ❌ **No calcules `sharePlanSignature` en `AppHeader`.** Consume `useTrips()` y se re-renderiza en cada mutación del viaje.
-- ❌ **No conviertas la tarjeta de Compartir en un campo editable.** Es solo lectura: si el texto puede llevar letra del usuario, regenerar pasa a ser pérdida de datos.
+- ❌ **No regeneres el resumen de Compartir en silencio.** Si el plan cambia, enseña «Regenerar»; no pises `share_card.text` (puede llevar letra del usuario). Editar solo persiste con «Guardar». «Regenerar» es la única vía que descarta esos cambios.
 - ❌ **No quites el aviso de una línea de la hoja de Compartir.** Es lo que informa del uso nuevo sin subir `AI_TRANSFER_CONSENT_VERSION`.
 - ❌ **No fijes la longitud del resumen en el prompt.** Sale de `share_length_target(num_days)` en el backend, con test en las fronteras.
 - ❌ **No dejes markdown en la salida del resumen.** El texto acaba en WhatsApp, Telegram y correo; solo uno entiende énfasis, y con otra sintaxis.

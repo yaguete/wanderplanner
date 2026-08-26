@@ -4,7 +4,7 @@
  * ❌ No reutilizar `buildTripBriefing`: ese briefing mete costes, presupuesto,
  * afiliados, coordenadas e HTML. La defensa de «cero dinero» es no enviarlo.
  */
-import type { ItemType, Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
+import type { ItemType, ShareCard, Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
 import { isSyntheticSourceId, itemProvenanceLabel } from "@/lib/item-provenance"
 
@@ -176,4 +176,14 @@ function fnv1aHex(input: string): string {
 
 export function sharePlanSignature(payload: SharePlanPayload): string {
   return fnv1aHex(stableStringify(payload))
+}
+
+/** Primera apertura: no hay tarjeta. Un resumen ya guardado no se regenera solo. */
+export function shareCardNeedsGenerate(card: ShareCard | null): card is null {
+  return card == null
+}
+
+/** El plan actual ya no es el que originó (o regeneró) el texto. */
+export function shareCardIsStale(card: ShareCard | null, planSignature: string): boolean {
+  return card != null && card.signature !== planSignature
 }

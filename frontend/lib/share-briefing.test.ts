@@ -6,6 +6,8 @@ import {
   SHARE_MAX_ITEMS_PER_DAY,
   SHARE_MAX_SOURCES,
   buildSharePlan,
+  shareCardIsStale,
+  shareCardNeedsGenerate,
   sharePlanSignature,
   tripHasShareablePlan,
 } from "./share-briefing"
@@ -316,6 +318,22 @@ function dumped(trip: Trip, sources: Source[] = [source({ id: "src-1" })]): stri
   const sig = sharePlanSignature(buildSharePlan(trip, sources))
   assert.ok(!sig.includes("\0"))
   assert.match(sig, /^[0-9a-f]+$/)
+}
+
+{
+  const card = {
+    text: "Mira lo que estoy montando para Kioto.",
+    signature: "aaaabbbb",
+    generatedAt: "2026-08-26T00:00:00.000Z",
+  }
+  assert.equal(shareCardNeedsGenerate(null), true)
+  assert.equal(shareCardNeedsGenerate(card), false)
+  assert.equal(shareCardIsStale(null, "aaaabbbb"), false)
+  assert.equal(shareCardIsStale(card, "aaaabbbb"), false)
+  assert.equal(shareCardIsStale(card, "ccccdddd"), true)
+  const edited = { ...card, text: "Texto del usuario" }
+  assert.equal(shareCardIsStale(edited, "aaaabbbb"), false)
+  assert.equal(shareCardIsStale(edited, "ccccdddd"), true)
 }
 
 console.log("share-briefing: ok")

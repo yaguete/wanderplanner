@@ -127,8 +127,7 @@ export function parseTripBudget(raw: unknown): TripBudget | null {
 
 /**
  * Lectura defensiva de `trips.share_card`. Cualquier forma inválida, texto
- * vacío o firma ausente → null. El resumen es derivado: un jsonb raro no
- * debe romper la carga.
+ * vacío o firma ausente → null. Un jsonb raro no debe romper la carga.
  */
 export function parseShareCard(raw: unknown): ShareCard | null {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null

@@ -23,7 +23,7 @@ import {
   rememberAiTransferConsent,
 } from "@/lib/ai-transfer-consent"
 import { ApiLimitError } from "@/lib/api"
-import { buildSharePlan, sharePlanSignature } from "@/lib/share-briefing"
+import { buildSharePlan, shareCardIsStale, shareCardNeedsGenerate, sharePlanSignature } from "@/lib/share-briefing"
 import { generateShareSummary } from "@/lib/share-summary"
 import {
   canNativeShare,
@@ -65,10 +65,14 @@ export function ShareRouteDialog({
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lineIndex, setLineIndex] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
   const copyRef = useRef<HTMLButtonElement>(null)
+  const editRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const startedRef = useRef(false)
   const noticeId = useId()
+  const stale = shareCardIsStale(card, signature)
 
   useEffect(() => {
     if (!open) {
@@ -78,6 +82,8 @@ export function ShareRouteDialog({
       setGenerating(false)
       setError(null)
       setLineIndex(0)
+      setEditing(false)
+      setDraft("")
       return
     }
     if (!userId) {
@@ -108,17 +114,18 @@ export function ShareRouteDialog({
       if (!trip || !plan) return
       const current = trip.shareCard
       const sig = sharePlanSignature(plan)
-      if (!force && current && current.signature === sig) {
-        track("share_sheet_open", { cached: true })
+      if (!force && !shareCardNeedsGenerate(current)) {
+        track("share_sheet_open", {
+          cached: true,
+          stale: current.signature !== sig,
+        })
         return
       }
-      if (!force && current && current.signature !== sig) {
-        track("share_sheet_open", { cached: false })
-      } else if (!current) {
-        track("share_sheet_open", { cached: false })
-      }
+      if (!force) track("share_sheet_open", { cached: false })
       if (force) track("share_summary_regenerated")
 
+      setEditing(false)
+      setDraft("")
       abortRef.current?.abort()
       const ac = new AbortController()
       abortRef.current = ac
@@ -183,6 +190,15 @@ export function ShareRouteDialog({
     return () => window.clearInterval(id)
   }, [generating])
 
+  useEffect(() => {
+    if (!editing) return
+    const el = editRef.current
+    if (!el) return
+    el.focus()
+    const end = el.value.length
+    el.setSelectionRange(end, end)
+  }, [editing])
+
   const acceptConsent = () => {
     if (!userId) return
     rememberAiTransferConsent(userId)
@@ -190,6 +206,27 @@ export function ShareRouteDialog({
     if (isSupabaseConfigured()) {
       void recordAiTransferConsent(createClient(), userId)
     }
+  }
+
+  const startEdit = () => {
+    setDraft(displayText)
+    setEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setEditing(false)
+    setDraft("")
+  }
+
+  const saveEdit = () => {
+    const text = draft.trim()
+    if (!trip || !card || !text) return
+    if (text !== card.text) {
+      setShareCard(trip.id, { ...card, text })
+      track("share_summary_edited")
+    }
+    setEditing(false)
+    setDraft("")
   }
 
   const copyText = async () => {
@@ -224,11 +261,19 @@ export function ShareRouteDialog({
   })
   const showCard = Boolean(displayText) && !generating
   const showSkeleton = generating
-  const actionsDisabled = generating || !displayText
+  const actionsDisabled = generating || !displayText || editing
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent fullscreenOnMobile className="sm:max-w-lg">
+      <DialogContent
+        fullscreenOnMobile
+        className="sm:max-w-lg"
+        onEscapeKeyDown={(e) => {
+          if (!editing) return
+          e.preventDefault()
+          cancelEdit()
+        }}
+      >
         <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
             Comparte tu ruta
@@ -249,31 +294,93 @@ export function ShareRouteDialog({
             <>
               <div
                 className={cn(
-                  "min-h-0 flex-1 overflow-y-auto rounded-lg bg-muted/40 p-4 text-sm leading-6",
-                  "whitespace-pre-wrap select-text",
+                  "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-muted/40",
                   "sm:min-h-[8rem] sm:max-h-[45svh] sm:flex-none",
                 )}
               >
-                {showSkeleton ? (
-                  <p className="text-muted-foreground" aria-live="polite">
-                    {GENERATING_LINES[lineIndex]}
-                  </p>
-                ) : showCard ? (
-                  <p className="m-0" style={{ color: BRAND_INK }}>
-                    {displayText}
-                  </p>
-                ) : error ? (
-                  <p className="text-muted-foreground">{error}</p>
-                ) : (
-                  <p className="text-muted-foreground">Preparando el resumen…</p>
-                )}
+                {showCard ? (
+                  <div className="flex shrink-0 items-center justify-end gap-0.5 px-1.5 pt-1.5">
+                    {stale ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        disabled={generating}
+                        title="El plan ha cambiado. Volver a escribir el resumen perderá tus cambios."
+                        onClick={() => void runGenerate(true)}
+                      >
+                        Regenerar
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className={cn(
+                        "h-7 px-2 text-xs",
+                        editing
+                          ? "font-medium text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      disabled={editing && !draft.trim()}
+                      onClick={() => {
+                        if (editing) saveEdit()
+                        else startEdit()
+                      }}
+                    >
+                      {editing ? "Guardar" : "Editar"}
+                    </Button>
+                  </div>
+                ) : null}
+                <div
+                  className={cn(
+                    "min-h-0 flex-1 overflow-y-auto px-4 pb-4 text-sm leading-6",
+                    showCard ? "pt-1" : "p-4",
+                    !editing && "whitespace-pre-wrap select-text",
+                  )}
+                >
+                  {showSkeleton ? (
+                    <p className="text-muted-foreground" aria-live="polite">
+                      {GENERATING_LINES[lineIndex]}
+                    </p>
+                  ) : showCard && editing ? (
+                    <textarea
+                      ref={editRef}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          cancelEdit()
+                        }
+                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                          e.preventDefault()
+                          saveEdit()
+                        }
+                      }}
+                      aria-label="Resumen para compartir"
+                      className="m-0 min-h-[12rem] w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 outline-none"
+                      style={{ color: BRAND_INK }}
+                    />
+                  ) : showCard ? (
+                    <p className="m-0" style={{ color: BRAND_INK }}>
+                      {displayText}
+                    </p>
+                  ) : error ? (
+                    <p className="text-muted-foreground">{error}</p>
+                  ) : (
+                    <p className="text-muted-foreground">Preparando el resumen…</p>
+                  )}
+                </div>
               </div>
 
               {error && displayText ? (
                 <p className="mt-2 text-xs text-destructive">{error}</p>
               ) : null}
 
-              {error ? (
+              {error && !displayText ? (
                 <button
                   type="button"
                   className="mt-2 self-start text-xs font-medium text-foreground underline underline-offset-4"
