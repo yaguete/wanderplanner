@@ -48,7 +48,8 @@ export type GateReason =
   | "home"
   | "source-limit"
   | "assistant-limit"
-  | "share"
+  | "invite"
+  | "share-plan"
 
 type GateMode = "signup" | "login"
 
@@ -78,10 +79,15 @@ const COPY: Record<GateReason, { title: string; description: string }> = {
     description:
       "El asistente te ayuda a afinar el plan. Con cuenta tienes más mensajes y tu viaje queda guardado.",
   },
-  share: {
+  invite: {
     title: "Crea tu cuenta para invitar a este viaje",
     description:
       "Las invitaciones van a un correo. Con cuenta puedes invitar a quien viaja contigo y editar el plan a la vez.",
+  },
+  "share-plan": {
+    title: "Crea tu cuenta para compartir tu ruta",
+    description:
+      "Guardamos el texto con tu viaje para que puedas volver a enviarlo sin escribirlo otra vez.",
   },
 }
 

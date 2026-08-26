@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import {
   isMissingBudgetColumnError,
+  isMissingOptionalColumnError,
+  isMissingShareCardColumnError,
   isMissingVersionColumnError,
   isSchemaCacheError,
 } from "./schema-column-errors"
@@ -19,6 +21,16 @@ const budgetPgrst = {
 }
 assert.equal(isMissingBudgetColumnError(budgetPgrst), true)
 assert.equal(isMissingVersionColumnError(budgetPgrst), false)
+
+const shareCardPgrst = {
+  code: "PGRST204",
+  message: "Could not find the 'share_card' column of 'trips' in the schema cache",
+}
+assert.equal(isMissingShareCardColumnError(shareCardPgrst), true)
+assert.equal(isMissingOptionalColumnError(shareCardPgrst), true)
+assert.equal(isMissingOptionalColumnError(budgetPgrst), true)
+assert.equal(isMissingOptionalColumnError(versionPgrst), false)
+assert.equal(isMissingShareCardColumnError(budgetPgrst), false)
 
 const codeOnly = { code: "PGRST204", message: "" }
 assert.equal(isMissingVersionColumnError(codeOnly), false)

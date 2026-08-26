@@ -57,6 +57,7 @@ function trip(partial: Partial<Trip> & { id: string }): Trip {
     currency: "EUR",
     origin: null,
     budget: null,
+    shareCard: null,
     archived: false,
     referrer: null,
     ownerId: "owner",
@@ -211,6 +212,39 @@ function names(result: TripMergeResult): string[] {
   const r = mergeTrips(base, local, remote)
   assert.equal(r.trip.days[0].label, "Remoto")
   assert.ok(r.notes.some((n) => n.field === "name" && n.takenFrom === "remote"))
+}
+
+{
+  const card = {
+    text: "Hola Kioto",
+    signature: "abc",
+    generatedAt: "2026-08-26T00:00:00.000Z",
+  }
+  const base = trip({ id: "t", shareCard: null, version: 1 })
+  const local = { ...base, shareCard: card }
+  const remote = { ...base, version: 2 }
+  const r = mergeTrips(base, local, remote)
+  assert.deepEqual(r.trip.shareCard, card)
+  assert.equal(r.notes.length, 0)
+}
+
+{
+  const localCard = {
+    text: "Local",
+    signature: "l",
+    generatedAt: "2026-08-26T00:00:00.000Z",
+  }
+  const remoteCard = {
+    text: "Remoto",
+    signature: "r",
+    generatedAt: "2026-08-26T01:00:00.000Z",
+  }
+  const base = trip({ id: "t", shareCard: null, version: 1 })
+  const local = { ...base, shareCard: localCard }
+  const remote = { ...base, version: 2, shareCard: remoteCard }
+  const r = mergeTrips(base, local, remote)
+  assert.deepEqual(r.trip.shareCard, remoteCard)
+  assert.ok(r.notes.some((n) => n.field === "share" && n.takenFrom === "remote"))
 }
 
 console.log("trip-merge: ok")

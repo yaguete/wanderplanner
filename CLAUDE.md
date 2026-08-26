@@ -45,6 +45,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     photo_lookup.py        # normalización, single-flight, tope durable photo_paid
     place_search.py        # GET /places/suggest + /transport-hubs (proxy Mapbox)
     day_summary.py         # POST /day-summary (Haiku; 1-4 palabras por día)
+    share_summary.py       # POST /share-summary (DeepSeek; resumen para Compartir)
     country_briefs.py      # Fichas país MAE (PDF) para el asistente
     travel_briefs.py       # Recomendaciones de viaje MAE (HTML) para trámites
     country_tasks.py       # GET /country-tasks (Haiku → trámites paperwork/health)
@@ -117,8 +118,10 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       trip-merge.ts        # fusión a 3 bandas OCC (numDays/endDate derivados)
       trip-share.ts        # tope 8, peers, emails (test:trip-share)
       trip-invite-url.ts   # /invite/{token} (test:trip-invite-url)
-      ai-transfer-consent.ts # Consentimiento art. 49.1.a del asistente: `wp-ai-transfer-consent:{userId}`
-      ai-transfer-consent.ts # Consentimiento art. 49.1.a del asistente: `wp-ai-transfer-consent:{userId}`
+      share-briefing.ts    # plan recortado para Compartir (sin dinero; test:share-briefing)
+      share-targets.ts     # wa.me / t.me / mailto / copiar (test:share-targets)
+      share-summary.ts     # POST /share-summary
+      ai-transfer-consent.ts # Consentimiento art. 49.1.a: `wp-ai-transfer-consent:{userId}`
                            # para la UI + `profiles.ai_transfer_consent_at/_version` como constancia
       db/                  # trips-repo, assistant-repo, profile-repo
       supabase/            # client, server, middleware helpers
@@ -222,7 +225,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/lib/route-legs.ts`](frontend/lib/route-legs.ts) / [`transport-routes.ts`](frontend/lib/transport-routes.ts) / [`transport-hubs.ts`](frontend/lib/transport-hubs.ts) — Tramos de ida/vuelta y traslados.
 - [`frontend/lib/mapbox.ts`](frontend/lib/mapbox.ts) / [`place-search-guardrails.ts`](frontend/lib/place-search-guardrails.ts) / [`map-route-geometry.ts`](frontend/lib/map-route-geometry.ts) — Búsqueda de lugares, licencia y geometría del mapa.
 - [`frontend/lib/item-provenance.ts`](frontend/lib/item-provenance.ts) — `MANUAL_SOURCE_ID` / `ASSISTANT_SOURCE_ID`; **única** ruta de atribución.
-- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`instagram.py`](backend/instagram.py), [`instagram_ocr.py`](backend/instagram_ocr.py), [`source_suggest.py`](backend/source_suggest.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`wikimedia_thumbs.py`](backend/wikimedia_thumbs.py), [`covers.py`](backend/covers.py), [`place_search.py`](backend/place_search.py), [`day_summary.py`](backend/day_summary.py), [`usage.py`](backend/usage.py), [`funnel.py`](backend/funnel.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country_tasks.py`](backend/country_tasks.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
+- [`backend/auth.py`](backend/auth.py), [`partners.py`](backend/partners.py), [`instagram.py`](backend/instagram.py), [`instagram_ocr.py`](backend/instagram_ocr.py), [`source_suggest.py`](backend/source_suggest.py), [`extraction_cache.py`](backend/extraction_cache.py), [`place_thumbs.py`](backend/place_thumbs.py), [`wikimedia_thumbs.py`](backend/wikimedia_thumbs.py), [`covers.py`](backend/covers.py), [`place_search.py`](backend/place_search.py), [`day_summary.py`](backend/day_summary.py), [`share_summary.py`](backend/share_summary.py), [`usage.py`](backend/usage.py), [`funnel.py`](backend/funnel.py), [`travel_briefs.py`](backend/travel_briefs.py), [`country_tasks.py`](backend/country_tasks.py), [`assistant.py`](backend/assistant.py), [`web_search.py`](backend/web_search.py).
 - Migraciones en [`supabase/migrations/`](supabase/migrations/) (`article_extractions`, `place_thumbs`, `destination_covers`, `country_task_suggestions`: solo service_role).
 
 ## Modelo de datos
@@ -324,6 +327,16 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No escribas en `/legal/*` nada que el código no haga.** La política describe el producto real: `usage_events` no guarda IPs, `funnel_events` guarda `name`/`ref`/`post_slug`/`meta` (sin URL completa, sin email, sin user_id; purga 90 días), Vercel Analytics y Speed Insights no ponen cookies, el fetcher no consulta `robots.txt`, `FLIGHT_SEARCH_AFFILIATE_ID` está vacío y el Booking del asistente sí usa `BOOKING_AFFILIATE_AID`.
 - ❌ **Los eventos del CTA de blogs van por `funnel()`, no por `track()`.** Ni URLs completas ni emails. `start_opened` se dispara **antes** del captcha de `/start`; si lo cuelgas de `start()` dejas de medir el abandono. Los `track()` del hero (`landing_start_*`) son otra cosa y se quedan.
 - ❌ **No nombres un modelo ni un proveedor de IA en la prosa legal.** El art. 13.1.e permite hablar por «categorías de destinatarios», y así el copy no caduca al rotar de modelo; los nombres se facilitan por correo. Lo que **sí** es obligatorio decir es el **país** y la **garantía**, escritos a mano en `#terceros` de [`/legal/privacidad`](frontend/app/legal/privacidad/page.tsx). Cambiar de proveedor a uno de un país nuevo obliga a repasar ese párrafo, el texto de [`ai-transfer-gate.tsx`](frontend/components/ai-transfer-gate.tsx) y a **subir `AI_TRANSFER_CONSENT_VERSION`**: un consentimiento informado solo cubre lo que el usuario llegó a leer.
+- ❌ **No metas dinero en el resumen de Compartir.** Ni costes, ni techo, ni divisa, ni viajeros. La defensa no es un filtro de salida: `buildSharePlan` no lo envía, y el test lo fija.
+- ❌ **No reutilices `buildTripBriefing` para compartir.** Lleva costes, estados de reserva, afiliados, coordenadas e HTML de artículos.
+- ❌ **No excluyas `share_card` de `bump_trip_version()`.** Ahorra un refetch y reabre la pérdida silenciosa entre coeditores.
+- ❌ **No calcules `sharePlanSignature` en `AppHeader`.** Consume `useTrips()` y se re-renderiza en cada mutación del viaje.
+- ❌ **No conviertas la tarjeta de Compartir en un campo editable.** Es solo lectura: si el texto puede llevar letra del usuario, regenerar pasa a ser pérdida de datos.
+- ❌ **No quites el aviso de una línea de la hoja de Compartir.** Es lo que informa del uso nuevo sin subir `AI_TRANSFER_CONSENT_VERSION`.
+- ❌ **No fijes la longitud del resumen en el prompt.** Sale de `share_length_target(num_days)` en el backend, con test en las fronteras.
+- ❌ **No dejes markdown en la salida del resumen.** El texto acaba en WhatsApp, Telegram y correo; solo uno entiende énfasis, y con otra sintaxis.
+- ❌ **No llames a `navigator.share()` después de un `await`.** Fuera del gesto del usuario, iOS lo rechaza.
+- ❌ **No uses `require_user` en endpoints de IA nuevos** mientras `REQUIRE_AUTH` sea `false` en producción: sin token devuelve `None` y `enforce_usage` no aplica ningún límite.
 
 ## Dependencias críticas
 
@@ -334,7 +347,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | `trip-context` / sync | [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), consumidores `useTrips()`, [`trip-dates.ts`](frontend/lib/trip-dates.ts) |
 | Auth / invitados | [`auth-context.tsx`](frontend/lib/auth-context.tsx), `RegistrationGate`, `/start`, [`start-session.ts`](frontend/lib/start-session.ts), [`guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts), [`auth-session-persist.ts`](frontend/lib/auth-session-persist.ts), [`auth-next.ts`](frontend/lib/auth-next.ts), [`auth-google.ts`](frontend/lib/auth-google.ts), [`20260816180000_guest_trip_claim.sql`](supabase/migrations/20260816180000_guest_trip_claim.sql), [`20260818120000_trip_seed_source_key.sql`](supabase/migrations/20260818120000_trip_seed_source_key.sql), [`20260818130000_cleanup_anonymous_users_v2.sql`](supabase/migrations/20260818130000_cleanup_anonymous_users_v2.sql), [`20260821120000_google_display_name.sql`](supabase/migrations/20260821120000_google_display_name.sql), [`account-security.ts`](frontend/lib/account-security.ts), [`20260817190000_delete_own_account.sql`](supabase/migrations/20260817190000_delete_own_account.sql) |
 | Asistente | [`use-assistant-chat.ts`](frontend/hooks/use-assistant-chat.ts), [`assistant-dock.tsx`](frontend/components/assistant-dock.tsx), [`assistant-actions.ts`](frontend/lib/assistant-actions.ts), [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts), [`assistant.py`](backend/assistant.py), [`travel_assistant.md`](backend/agents/travel_assistant.md), perfil. Propuestas: `propose_add_item` / `propose_add_source` / `propose_move_item` (esta última confirma vía `moveItemBetweenDays`). |
-| Compartir / invitaciones | [`trip_share.py`](backend/trip_share.py), [`emails.py`](backend/emails.py), [`invite-trip-button.tsx`](frontend/components/invite-trip-button.tsx), [`app-header.tsx`](frontend/components/app-header.tsx), [`share-trip-dialog.tsx`](frontend/components/share-trip-dialog.tsx), [`invite-accept.tsx`](frontend/components/invite-accept.tsx), [`use-trip-members.ts`](frontend/hooks/use-trip-members.ts), [`20260824120000_trip_sharing.sql`](supabase/migrations/20260824120000_trip_sharing.sql) + `…170000`, `RESEND_API_KEY` |
+| Compartir / invitaciones | [`trip_share.py`](backend/trip_share.py), [`emails.py`](backend/emails.py), [`invite-trip-button.tsx`](frontend/components/invite-trip-button.tsx), [`app-header.tsx`](frontend/components/app-header.tsx), [`invite-trip-dialog.tsx`](frontend/components/invite-trip-dialog.tsx), [`invite-accept.tsx`](frontend/components/invite-accept.tsx), [`use-trip-members.ts`](frontend/hooks/use-trip-members.ts), [`20260824120000_trip_sharing.sql`](supabase/migrations/20260824120000_trip_sharing.sql) + `…170000`, `RESEND_API_KEY` |
+| Compartir la ruta | [`share_summary.py`](backend/share_summary.py), [`share_summary.md`](backend/agents/share_summary.md), [`share-route-button.tsx`](frontend/components/share-route-button.tsx), [`share-route-dialog.tsx`](frontend/components/share-route-dialog.tsx), [`share-briefing.ts`](frontend/lib/share-briefing.ts), [`share-targets.ts`](frontend/lib/share-targets.ts), [`share-summary.ts`](frontend/lib/share-summary.ts), `trips.share_card`, kind `share_summary` |
 | Fusión OCC | [`trip-merge.ts`](frontend/lib/trip-merge.ts), [`trips-repo.ts`](frontend/lib/db/trips-repo.ts), `trips.version` |
 | Captcha (Turnstile) | [`turnstile.tsx`](frontend/components/auth/turnstile.tsx) (+ [test](frontend/components/auth/turnstile.test.ts)), sus 8 consumidores (`/login`, `/signup`, `/forgot-password`, `/start`, `account/settings`, `RegistrationGate`, `LandingStart`, `PartnerButtonBuilder`), `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, Hostname management de Cloudflare |
 | Kit partners / prewarm | [`/partners`](frontend/app/partners/page.tsx), [`partners.py`](backend/partners.py), [`partners-api.ts`](frontend/lib/partners-api.ts), `TURNSTILE_SECRET_KEY` |

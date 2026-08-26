@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { UserPlus } from "lucide-react"
-import { ShareTripDialog } from "@/components/share-trip-dialog"
+import { InviteTripDialog } from "@/components/invite-trip-dialog"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
@@ -23,7 +23,7 @@ export function InviteTripButton({
       <button
         type="button"
         onClick={() => {
-          if (isGuest && !requireAccount("share")) return
+          if (isGuest && !requireAccount("invite")) return
           setOpen(true)
         }}
         className={cn(
@@ -38,7 +38,7 @@ export function InviteTripButton({
         <UserPlus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
         <span className="hidden text-sm font-medium md:inline">Invitar</span>
       </button>
-      <ShareTripDialog tripId={tripId} isOwner={isOwner} open={open} onOpenChange={setOpen} />
+      <InviteTripDialog tripId={tripId} isOwner={isOwner} open={open} onOpenChange={setOpen} />
     </>
   )
 }

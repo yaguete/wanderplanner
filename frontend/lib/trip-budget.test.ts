@@ -102,6 +102,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     currency: "EUR",
     origin: null,
     budget: null,
+    shareCard: null,
     archived: false,
     ...overrides,
   }

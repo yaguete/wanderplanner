@@ -34,7 +34,7 @@ const DATA_ROWS: readonly (readonly string[])[] = [
   ],
   [
     "Tus viajes",
-    "Destinos, fechas, sitios, transportes, tareas, costes, presupuesto y los artículos que has guardado. Es lo que la app hace.",
+    "Destinos, fechas, sitios, transportes, tareas, costes, presupuesto, los artículos que has guardado y, si lo pides, un resumen de la ruta para compartir. Es lo que la app hace.",
     "Contrato",
   ],
   [
@@ -96,10 +96,12 @@ export default function PrivacidadPage() {
           sitios), Wikimedia (fotos de sitios) y Unsplash (portadas).
         </p>
         <p>
-          Si compartes un viaje, guardamos el correo de la persona invitada hasta que
+          Si invitas a alguien a un viaje, guardamos el correo de esa persona hasta que
           acepta o la invitación caduca (14 días; después se borra sola). Quien ya está en
           el viaje ve el nombre de los demás y el correo enmascarado. Las conversaciones
-          con el asistente no se comparten: cada uno tiene las suyas.
+          con el asistente no se comparten: cada uno tiene las suyas. Si en vez de invitar
+          pulsas «Compartir», solo se genera un texto de tu ruta que envías tú por tu
+          cuenta — WhatsApp, correo u otra app — y nosotros no enviamos nada a nadie.
         </p>
         <p>
           Para enviar esas invitaciones usamos un proveedor de correo transaccional con
@@ -110,13 +112,16 @@ export default function PrivacidadPage() {
           nombre, tu correo y tu foto de perfil; lo trata según su propia política.
         </p>
         <p>
-          Para convertir artículos y publicaciones en itinerarios y para el asistente usamos
-          proveedores de inteligencia artificial. <strong className="font-medium text-foreground">No les
-          enviamos tu nombre ni tu correo</strong>: solo el contenido del viaje, lo que le
-          escribes al asistente y, si pegas una publicación de Instagram, el texto y las
-          imágenes públicas de esa publicación. Las fotos no se guardan: se leen para
-          transcribir el texto superpuesto y se descartan. Si quieres saber cuáles usamos
-          ahora mismo, pídenoslo en{" "}
+          Para convertir artículos y publicaciones en itinerarios, para el asistente y para
+          escribir un resumen de tu ruta que puedas compartir usamos proveedores de
+          inteligencia artificial. <strong className="font-medium text-foreground">No les
+          enviamos tu nombre ni tu correo</strong>: solo el contenido del viaje (en el
+          resumen, sin costes ni presupuesto), lo que le escribes al asistente y, si pegas
+          una publicación de Instagram, el texto y las imágenes públicas de esa
+          publicación. Las fotos no se guardan: se leen para transcribir el texto
+          superpuesto y se descartan. El resumen para compartir se guarda con tu viaje
+          para no volver a escribirlo si el plan no ha cambiado. Si quieres saber cuáles
+          usamos ahora mismo, pídenoslo en{" "}
           <LegalMail />.
         </p>
         <p>

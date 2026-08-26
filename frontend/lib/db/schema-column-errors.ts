@@ -27,6 +27,15 @@ export function isMissingBudgetColumnError(error: PostgrestLikeError): boolean {
   return isMissingColumnError(error, "budget")
 }
 
+export function isMissingShareCardColumnError(error: PostgrestLikeError): boolean {
+  return isMissingColumnError(error, "share_card")
+}
+
+/** `budget` y `share_card` comparten pestillo de esquema (columnas jsonb opcionales). */
+export function isMissingOptionalColumnError(error: PostgrestLikeError): boolean {
+  return isMissingBudgetColumnError(error) || isMissingShareCardColumnError(error)
+}
+
 export function isMissingVersionColumnError(error: PostgrestLikeError): boolean {
   return isMissingColumnError(error, "version")
 }

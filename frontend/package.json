@@ -13,6 +13,8 @@
     "test:country-tasks": "tsx lib/country-tasks.test.ts",
     "test:task-labels": "tsx lib/task-labels.test.ts",
     "test:day-summary": "tsx lib/day-summary.test.ts",
+    "test:share-briefing": "tsx lib/share-briefing.test.ts",
+    "test:share-targets": "tsx lib/share-targets.test.ts",
     "test:assistant-context": "tsx lib/assistant-context.test.ts",
     "test:assistant-actions": "tsx lib/assistant-actions.test.ts",
     "test:assistant-suggestions": "tsx lib/assistant-suggestions.test.ts",

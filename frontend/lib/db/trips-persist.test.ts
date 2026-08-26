@@ -30,6 +30,7 @@ function trip(partial: Partial<Trip> & { id: string }): Trip {
     currency: "EUR",
     origin: null,
     budget: null,
+    shareCard: null,
     archived: false,
     referrer: null,
     ownerId: "owner",
@@ -67,6 +68,23 @@ function trip(partial: Partial<Trip> & { id: string }): Trip {
   assert.equal(kept.name, "Ana")
   const sameRef = keepSavedVersion(saved, saved)
   assert.equal(sameRef, saved)
+}
+
+{
+  const a = trip({ id: "t1" })
+  const row = tripToUpdateRow(a)
+  assert.equal(row.share_card, null)
+  const withCard = trip({
+    id: "t1",
+    shareCard: {
+      text: "Hola Kioto",
+      signature: "sig",
+      generatedAt: "2026-08-26T00:00:00.000Z",
+    },
+  })
+  assert.equal(tripUpdatePayloadsEqual(a, withCard), false)
+  const payload = tripToUpdateRow(withCard)
+  assert.equal((payload.share_card as { text: string }).text, "Hola Kioto")
 }
 
 console.log("trips-persist: ok")

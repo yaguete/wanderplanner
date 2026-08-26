@@ -81,6 +81,8 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 | --- | --- |
 | `SUPABASE_JWT_SECRET` | Si falta, valida por JWKS de `SUPABASE_URL`. Preferible **no** fijarlo si los tokens son asimétricos (ES256/RS256); un secreto HS256 desalineado provoca «Token de sesión inválido» |
 | `ASSISTANT_MODEL` | `deepseek-v4-flash` |
+| `SHARE_SUMMARY_MODEL` | vacío = el de `ASSISTANT_MODEL` (resumen de `/share-summary`) |
+| `USER_MAX_SHARE_SUMMARIES_DAY` | `15` (registrado; `usage_events.kind=share_summary`) |
 | `ITINERARY_MAX_OUTPUT_TOKENS` | `32000` (tope 64000) |
 | `EXTRACTION_CACHE_TTL_DAYS` | `30` |
 | `MAX_PHOTO_LOOKUPS_DAY` | `2000` (cinturón global durable de misses de pago `/thumb` Places + `/cover` Unsplash, vía `usage_events.kind=photo_paid`; Wikimedia no cuenta. Fail-closed si no se puede leer la DB) |
@@ -236,6 +238,7 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   32. `20260824150000_skip_noop_trip_version_bump.sql`
   33. `20260824160000_fix_sources_rls_recursion.sql`
   34. `20260824170000_fix_source_owner_claim.sql` (claim de `sources`, ocupación sin caducadas, `list_share_peers(p_trip_id)`)
+  35. `20260826120000_trip_share_card.sql` (`trips.share_card`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
 
 **Compartir viaje:** son ocho ficheros (`20260824120000_trip_sharing.sql` más los siete `fix` hasta `20260824170000`). Orden de despliegue: **1) las ocho migraciones**, **2) Realtime** publicación de `trips` y `trip_members` en el dashboard de Supabase, **3) backend Fly** (`RESEND_API_KEY`, `INVITE_EMAIL_FROM`, `SUPABASE_ANON_KEY`, `SITE_URL`, `GLOBAL_MAX_TRIP_INVITES_DAY`) + dominio verificado en Resend, **4) frontend Vercel**. El front pide `version` y `user_id` en `TRIP_COLUMNS`: si llega antes que la migración, PostgREST falla. `/invite/**` no pasa por GoTrue; no hace falta redirect URL nueva. Quien reconstruya la BD solo con `…120000` se come otra vez la recursión de RLS de `sources` y el INSERT de invitaciones roto.
 
@@ -252,6 +255,8 @@ supabase db push
 **⚠️ T4B.1 origen del viaje:** `20260808220000_trip_origin.sql` añade `trips.origin` (jsonb nullable). El frontend la incluye en `TRIP_COLUMNS`; si mergeas a `main` **antes** de aplicar la migración, PostgREST responde *column does not exist* y **`/trips` cae para todos los usuarios**. Orden obligatorio: **1) aplicar la migración en Supabase de producción, 2) verificar la columna, 3) solo entonces mergear**. Aditiva e idempotente: segura con el front viejo aún en producción.
 
 **⚠️ Vista de presupuesto:** `20260822120000_trip_budget.sql` añade `trips.budget` (jsonb nullable). El frontend la incluye en `TRIP_COLUMNS`; si mergeas a `main` **antes** de aplicar la migración, PostgREST responde *Could not find the 'budget' column* (`PGRST204`) y **falla cada escritura de viaje**, no solo las de presupuesto. Orden obligatorio: **1) aplicar la migración en Supabase de producción, 2) verificar la columna, 3) solo entonces mergear**. Aditiva e idempotente: segura con el front viejo aún en producción.
+
+**⚠️ Compartir ruta:** `20260826120000_trip_share_card.sql` añade `trips.share_card` (jsonb nullable). El frontend la pide junto a `budget`; el mismo orden: **migración primero**, luego merge. Sin ella, PostgREST falla cada escritura de viaje (`PGRST204`).
 
 **Google SSO:** orden **1) migración** `20260821120000_google_display_name.sql` (el trigger `handle_new_user` lee `full_name` / `name`), **2) dashboard** Auth → Google con Client ID/Secret y redirect de Google Cloud, **3) flag** `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true` en Vercel. Si el botón llega antes que 1+2, cada clic es un 400. Rollback: apagar el flag (email+contraseña siguen). Local: `[auth.external.google]` en `supabase/config.toml` va **`enabled = false`** en git; redirect de Google `http://127.0.0.1:54321/auth/v1/callback`.
 

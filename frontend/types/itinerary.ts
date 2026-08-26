@@ -127,6 +127,17 @@ export interface TripBudget {
 }
 
 /**
+ * Texto de «Compartir» cacheado en el viaje. Derivado y regenerable: no es
+ * texto del usuario. `signature` es `sharePlanSignature` del plan enviado.
+ */
+export interface ShareCard {
+  text: string
+  signature: string
+  /** ISO UTC; sirve para depurar. */
+  generatedAt: string
+}
+
+/**
  * Estado de una tarea. `notNeeded` = "esto no hay que reservarlo" (triaje);
  * `booked` = reservado (o «hecho» en trámites); `paid` = pagado.
  * Los valores son excluyentes. Ausencia en el mapa = nunca tocada.
@@ -222,6 +233,11 @@ export interface Trip {
    * a la vista de presupuesto. No es un coste: el dinero sigue en `tasks`.
    */
   budget: TripBudget | null
+  /**
+   * Resumen generado para Compartir. Derivado y regenerable: no es texto del
+   * usuario. Null = nunca generado / viaje anterior a la columna.
+   */
+  shareCard: ShareCard | null
   /** Viajes pasados u ocultos del listado activo; siguen accesibles en Archivados. */
   archived?: boolean
   /** Slug del partner cuyo CTA originó el viaje (`/start?ref=…`). */

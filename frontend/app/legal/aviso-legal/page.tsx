@@ -66,10 +66,10 @@ export default function AvisoLegalPage() {
 
       <LegalSection id="inteligencia-artificial" title="Inteligencia artificial">
         <p>
-          El itinerario y las respuestas del asistente los genera un sistema de
-          inteligencia artificial. Puede equivocarse: inventar un horario, colocar mal un
-          sitio u olvidar un trámite. Lo que ves es una propuesta que decides tú, nunca una
-          reserva ni un consejo profesional.
+          El itinerario, las respuestas del asistente y el resumen de la ruta para
+          compartir los genera un sistema de inteligencia artificial. Puede equivocarse:
+          inventar un horario, colocar mal un sitio u olvidar un trámite. Lo que ves es una
+          propuesta que decides tú, nunca una reserva ni un consejo profesional.
         </p>
         <p>
           Los trámites de país que sugerimos resumen las{" "}

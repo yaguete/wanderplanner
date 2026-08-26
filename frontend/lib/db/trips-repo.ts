@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { mergeTrips } from "@/lib/trip-merge"
 import type {
   ExtraTask,
+  ShareCard,
   Source,
   TaskGroupCategory,
   Trip,
@@ -24,7 +25,7 @@ import type {
 } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
 import {
-  isMissingBudgetColumnError,
+  isMissingOptionalColumnError,
   isMissingVersionColumnError,
   isSchemaCacheError,
   type PostgrestLikeError,
@@ -42,6 +43,8 @@ import {
 
 export {
   isMissingBudgetColumnError,
+  isMissingOptionalColumnError,
+  isMissingShareCardColumnError,
   isMissingVersionColumnError,
   isSchemaCacheError,
 } from "@/lib/db/schema-column-errors"
@@ -122,6 +125,24 @@ export function parseTripBudget(raw: unknown): TripBudget | null {
   return { total, byCategory }
 }
 
+/**
+ * Lectura defensiva de `trips.share_card`. Cualquier forma inválida, texto
+ * vacío o firma ausente → null. El resumen es derivado: un jsonb raro no
+ * debe romper la carga.
+ */
+export function parseShareCard(raw: unknown): ShareCard | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+  const text = typeof obj.text === "string" ? stripNullChars(obj.text).trim() : ""
+  const signature = typeof obj.signature === "string" ? stripNullChars(obj.signature) : ""
+  if (!text || !signature) return null
+  const generatedAt =
+    typeof obj.generatedAt === "string" && obj.generatedAt.trim()
+      ? stripNullChars(obj.generatedAt.trim())
+      : "1970-01-01T00:00:00.000Z"
+  return { text, signature, generatedAt }
+}
+
 /** Postgres rechaza \\u0000 en text/jsonb (error 22P05). También limpia `route` corrupto. */
 function sanitizeDaysForDb(days: UserDay[]): UserDay[] {
   return sanitizeUserDays(days).map((d) => {
@@ -162,6 +183,7 @@ export type TripRow = {
   currency: string | null
   origin: TripOrigin | null
   budget: TripBudget | null
+  share_card: ShareCard | null
 }
 
 type SourceRow = {
@@ -185,10 +207,10 @@ const TRIP_COLUMNS_WITH_VERSION = "id, user_id, version, name, countries, start_
 /**
  * Fallback solo en dev: el front local a veces apunta al proyecto gestionado
  * antes de aplicar la migración. En producción el fallo tiene que ser ruidoso
- * (DEPLOY.md: migrar `budget` / `version` antes de mergear); bajar el pestillo ahí haría
- * que el syncer diera éxito y el techo desapareciera al recargar.
+ * (DEPLOY.md: migrar `budget` / `share_card` / `version` antes de mergear); bajar
+ * el pestillo ahí haría que el syncer diera éxito y el jsonb desapareciera al recargar.
  */
-let budgetColumnLive = true
+let optionalColumnsLive = true
 let versionColumnLive = true
 
 function shouldRetryWithoutVersion(error: PostgrestLikeError): boolean {
@@ -200,19 +222,19 @@ function schemaFallbackAllowed(): boolean {
   return process.env.NEXT_PUBLIC_ALLOW_SCHEMA_FALLBACK === "1"
 }
 
-function noteBudgetColumnMissing(): void {
+function noteOptionalColumnsMissing(): void {
   if (!schemaFallbackAllowed()) {
     console.warn(
-      "[trips-repo] trips.budget missing; refusing to omit the column in production",
+      "[trips-repo] trips.budget/share_card missing; refusing to omit the columns in production",
     )
     return
   }
-  if (budgetColumnLive) {
+  if (optionalColumnsLive) {
     console.warn(
-      "[trips-repo] trips.budget missing; omitting it for the rest of this session (dev-only)",
+      "[trips-repo] trips.budget/share_card missing; omitting them for the rest of this session (dev-only)",
     )
   }
-  budgetColumnLive = false
+  optionalColumnsLive = false
 }
 
 function noteVersionColumnMissing(): void {
@@ -234,13 +256,14 @@ function noteVersionColumnMissing(): void {
 
 function tripSelectColumns(): string {
   const core = versionColumnLive ? TRIP_COLUMNS_WITH_VERSION : TRIP_COLUMNS_BASE
-  return budgetColumnLive ? `${core}, budget` : core
+  return optionalColumnsLive ? `${core}, budget, share_card` : core
 }
 
-function omitBudgetIfUnsupported<T extends { budget?: unknown }>(row: T): T {
-  if (budgetColumnLive) return row
+function omitOptionalColumns<T extends { budget?: unknown; share_card?: unknown }>(row: T): T {
+  if (optionalColumnsLive) return row
   const next = { ...row }
   delete next.budget
+  delete next.share_card
   return next
 }
 
@@ -328,6 +351,7 @@ export function rowToTrip(row: TripRow): Trip {
     currency: row.currency?.trim() ? row.currency.trim() : "EUR",
     origin: parseTripOrigin(row.origin),
     budget: parseTripBudget(row.budget),
+    shareCard: parseShareCard(row.share_card),
     archived: row.archived,
     referrer: row.referrer,
     ownerId: row.user_id,
@@ -360,8 +384,9 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
     currency: trip.currency?.trim() ? trip.currency.trim() : "EUR",
     origin: parseTripOrigin(trip.origin),
     budget: trip.budget,
+    share_card: trip.shareCard ?? null,
   }
-  return omitBudgetIfUnsupported(row)
+  return omitOptionalColumns(row)
 }
 
 /** Payload de UPDATE: sin `user_id` ni `version` (OCC va en el WHERE). */
@@ -370,7 +395,7 @@ export function tripToUpdateRow(trip: Trip): Record<string, unknown> {
   const { user_id: _uid, version: _v, ...rest } = full as TripRow & { version?: number }
   void _uid
   void _v
-  return omitBudgetIfUnsupported(rest)
+  return omitOptionalColumns(rest)
 }
 
 /**
@@ -455,9 +480,9 @@ export async function loadTripsState(
     noteVersionColumnMissing()
     if (!versionColumnLive) tripsData = await loadTrips()
   }
-  if (isMissingBudgetColumnError(tripsData.error) && budgetColumnLive) {
-    noteBudgetColumnMissing()
-    if (!budgetColumnLive) tripsData = await loadTrips()
+  if (isMissingOptionalColumnError(tripsData.error) && optionalColumnsLive) {
+    noteOptionalColumnsMissing()
+    if (!optionalColumnsLive) tripsData = await loadTrips()
   }
 
   if (tripsData.error) throw tripsData.error
@@ -543,9 +568,9 @@ export async function findReusableDraftTrip(
     noteVersionColumnMissing()
     ;({ data, error } = await loadDrafts())
   }
-  if (isMissingBudgetColumnError(error) && budgetColumnLive) {
-    noteBudgetColumnMissing()
-    if (!budgetColumnLive) ({ data, error } = await loadDrafts())
+  if (isMissingOptionalColumnError(error) && optionalColumnsLive) {
+    noteOptionalColumnsMissing()
+    if (!optionalColumnsLive) ({ data, error } = await loadDrafts())
   }
 
   if (error) throw error
@@ -623,7 +648,7 @@ export async function insertDraftTrip(
   const endDate =
     startDate && forcedDays != null ? endDateFromStartAndNumDays(startDate, forcedDays) : null
 
-  const payload = omitBudgetIfUnsupported({
+  const payload = omitOptionalColumns({
     id,
     user_id: userId,
     name: data.name,
@@ -639,15 +664,16 @@ export async function insertDraftTrip(
     currency: "EUR",
     origin: null,
     budget: null as TripBudget | null,
+    share_card: null as ShareCard | null,
     source_ids: [],
     referrer: data.referrer,
     seed_source_key: data.seedSourceKey || null,
   })
   let { error } = await supabase.from("trips").insert(payload)
-  if (isMissingBudgetColumnError(error) && budgetColumnLive) {
-    noteBudgetColumnMissing()
-    if (!budgetColumnLive) {
-      ;({ error } = await supabase.from("trips").insert(omitBudgetIfUnsupported(payload)))
+  if (isMissingOptionalColumnError(error) && optionalColumnsLive) {
+    noteOptionalColumnsMissing()
+    if (!optionalColumnsLive) {
+      ;({ error } = await supabase.from("trips").insert(omitOptionalColumns(payload)))
     }
   }
   if (error) throw error
@@ -876,6 +902,10 @@ export class TripsSyncer {
           if (retry.error) throw retry.error
           return current
         }
+        if (isMissingOptionalColumnError(error) && optionalColumnsLive) {
+          noteOptionalColumnsMissing()
+          if (!optionalColumnsLive) continue
+        }
         throw error
       }
       if (data) {
@@ -947,14 +977,14 @@ export class TripsSyncer {
     for (const trip of snapshot.trips) {
       const saved = this.savedTrips.get(trip.id)
       if (!saved) {
-        const row = omitBudgetIfUnsupported(tripToRow(trip, this.userId))
+        const row = omitOptionalColumns(tripToRow(trip, this.userId))
         let { error } = await this.supabase.from("trips").upsert(row, { onConflict: "id" })
-        if (isMissingBudgetColumnError(error) && budgetColumnLive) {
-          noteBudgetColumnMissing()
-          if (!budgetColumnLive) {
+        if (isMissingOptionalColumnError(error) && optionalColumnsLive) {
+          noteOptionalColumnsMissing()
+          if (!optionalColumnsLive) {
             ;({ error } = await this.supabase
               .from("trips")
-              .upsert(omitBudgetIfUnsupported(row), { onConflict: "id" }))
+              .upsert(omitOptionalColumns(row), { onConflict: "id" }))
           }
         }
         if (error) throw error

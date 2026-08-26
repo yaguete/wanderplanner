@@ -25,7 +25,7 @@ import {
 import { useTripMembers } from "@/hooks/use-trip-members"
 import { createClient } from "@/lib/supabase/client"
 
-export function ShareTripDialog({
+export function InviteTripDialog({
   tripId,
   isOwner,
   open,

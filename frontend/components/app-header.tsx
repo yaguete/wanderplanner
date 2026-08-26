@@ -14,6 +14,7 @@ import {
 } from "@/components/account-menu"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
 import { InviteTripButton } from "@/components/invite-trip-button"
+import { ShareRouteButton } from "@/components/share-route-button"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useTrips } from "@/lib/trip-context"
 import { useAuth } from "@/lib/auth-context"
@@ -134,7 +135,12 @@ export function AppHeader({ leading }: AppHeaderProps) {
       <div className="flex-1" />
 
       <div className="flex items-center gap-1.5">
-        {openTrip ? <InviteTripButton tripId={openTrip.id} isOwner={isTripOwner} /> : null}
+        {openTrip ? (
+          <>
+            <ShareRouteButton trip={openTrip} />
+            <InviteTripButton tripId={openTrip.id} isOwner={isTripOwner} />
+          </>
+        ) : null}
 
         {/* md:hidden: media query, no useIsMobile() — el hook es false al hidratar y el avatar parpadearía. */}
         <div className="flex items-center gap-2.5 md:hidden">

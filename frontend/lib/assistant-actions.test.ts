@@ -331,6 +331,7 @@ const days: UserDay[] = daysOf(
     currency: "EUR",
     origin: null,
     budget: null,
+    shareCard: null,
     archived: false,
   }
   const live = resolveSetTaskCost(trip, "activity:palacio de mirabell", 90)
@@ -365,6 +366,7 @@ const days: UserDay[] = daysOf(
     currency: "EUR",
     origin: null,
     budget: null,
+    shareCard: null,
     archived: false,
   }
   assert.equal(

@@ -19,6 +19,7 @@ export type TripMergeField =
   | "expectations"
   | "cover"
   | "budget"
+  | "share"
   | "origin"
   | "travelers"
   | "currency"
@@ -220,6 +221,13 @@ export function mergeTrips(base: Trip | null, local: Trip, remote: Trip): TripMe
   const cover = pickScalar(base.cover, local.cover, remote.cover, "cover", notes)
   const coverUrl = pickScalar(base.coverUrl, local.coverUrl, remote.coverUrl, "cover", notes)
   const budget = pickScalar(base.budget, local.budget, remote.budget, "budget", notes)
+  const shareCard = pickScalar(
+    base.shareCard ?? null,
+    local.shareCard ?? null,
+    remote.shareCard ?? null,
+    "share",
+    notes,
+  )
   const origin = pickScalar(base.origin, local.origin, remote.origin, "origin", notes)
   const numTravelers = pickScalar(
     base.numTravelers,
@@ -263,6 +271,7 @@ export function mergeTrips(base: Trip | null, local: Trip, remote: Trip): TripMe
     cover,
     coverUrl,
     budget,
+    shareCard,
     origin,
     numTravelers,
     currency,

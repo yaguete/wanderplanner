@@ -56,7 +56,7 @@ export const LEGAL = {
    */
   nif: "78726138J",
   address: "",
-  updatedAt: "2026-08-24",
+  updatedAt: "2026-08-26",
 } as const
 
 export const MAE_TRAVEL_ADVICE_URL =
@@ -99,7 +99,7 @@ export const STORAGE_INVENTORY: readonly StorageRow[] = [
     name: "wp-ai-transfer-consent:…",
     kind: "Almacenamiento local",
     purpose:
-      "Recordar que aceptaste usar el asistente, sin volver a preguntártelo en cada visita",
+      "Recordar que aceptaste enviar el contenido del viaje a proveedores de IA fuera de la UE (asistente y resúmenes para compartir), sin volver a preguntártelo en cada visita",
     duration: "Hasta que lo borres",
   },
   {

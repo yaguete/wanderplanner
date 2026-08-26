@@ -24,6 +24,7 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
     currency: "EUR",
     origin: null,
     budget: null,
+    shareCard: null,
     archived: false,
     ...overrides,
   }
@@ -261,6 +262,20 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   assert.match(md, /ref=`activity:osos`/)
   assert.match(md, /sin valorar/)
   assert.doesNotMatch(md, /sin asignar/)
+}
+
+{
+  const md = buildTripBriefing(
+    baseTrip({
+      shareCard: {
+        text: "TEXTO_SHARE_NO_DEBE_IR_AL_ASISTENTE",
+        signature: "sig",
+        generatedAt: "2026-08-26T00:00:00.000Z",
+      },
+    }),
+    [],
+  )
+  assert.doesNotMatch(md, /TEXTO_SHARE_NO_DEBE_IR_AL_ASISTENTE/)
 }
 
 console.log("assistant-context + mapbox country: ok")

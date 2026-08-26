@@ -17,6 +17,8 @@ Kinds:
   - maps_resolve: unfurl de short links de Maps (POST /maps/resolve); no cuenta un hit de caché
   - extraction_instagram: tope diario de registrados al resolver un post/reel (no invitados).
     `cost_hint` = tokens visuales del OCR (0 si no hubo visión).
+  - share_summary: resumen de ruta para Compartir (registrado; no invitados).
+    `cost_hint` = tokens de salida.
 """
 from __future__ import annotations
 
@@ -52,6 +54,7 @@ Kind = Literal[
     "maps_resolve",
     "extraction_instagram",
     "trip_invite",
+    "share_summary",
 ]
 _USERLESS_KINDS = frozenset(
     {
@@ -148,6 +151,9 @@ _MESSAGES: dict[tuple[str, LimitKind], str] = {
     ),
     ("trip_invite", "daily"): (
         "Has enviado muchas invitaciones hoy. Prueba mañana."
+    ),
+    ("share_summary", "daily"): (
+        "Has generado muchos resúmenes para compartir hoy. Vuelve mañana."
     ),
 }
 
@@ -436,6 +442,12 @@ async def enforce_usage(user: AuthUser | None, kind: Kind) -> None:
         global_used = await count_kind_events_strict(kind, since=day_ago)
         cap = _env_int("GLOBAL_MAX_TRIP_INVITES_DAY", 200)
         if global_used is not None and cap > 0 and global_used >= cap:
+            _raise_limit(user, kind, "daily")
+        return
+
+    if kind == "share_summary":
+        used = await count_events(user.id, kind, since=day_ago)
+        if used >= _env_int("USER_MAX_SHARE_SUMMARIES_DAY", 15):
             _raise_limit(user, kind, "daily")
         return
 

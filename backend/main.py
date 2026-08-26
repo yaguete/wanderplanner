@@ -68,6 +68,7 @@ from trip_share import router as trip_share_router  # noqa: E402
 from covers import router as covers_router  # noqa: E402
 from country_tasks import router as country_tasks_router  # noqa: E402
 from day_summary import router as day_summary_router  # noqa: E402
+from share_summary import router as share_summary_router  # noqa: E402
 from extraction_cache import (  # noqa: E402
     CacheEntry,
     get_cached_extraction,
@@ -140,6 +141,7 @@ app.include_router(assistant_router)
 app.include_router(thumbs_router)
 app.include_router(covers_router)
 app.include_router(day_summary_router)
+app.include_router(share_summary_router)
 app.include_router(country_tasks_router)
 app.include_router(place_search_router)
 app.include_router(source_suggest_router)
