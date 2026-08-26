@@ -6,6 +6,7 @@ import { Copy, Mail, Share2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { AiTransferGate } from "@/components/ai-transfer-gate"
+import { BRAND_INK } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -258,7 +259,9 @@ export function ShareRouteDialog({
                     {GENERATING_LINES[lineIndex]}
                   </p>
                 ) : showCard ? (
-                  displayText
+                  <p className="m-0" style={{ color: BRAND_INK }}>
+                    {displayText}
+                  </p>
                 ) : error ? (
                   <p className="text-muted-foreground">{error}</p>
                 ) : (
@@ -313,7 +316,10 @@ export function ShareRouteDialog({
                   href={targets.email.href}
                   reason={targets.email.reason}
                   disabled={actionsDisabled}
-                  className="max-sm:order-3 sm:order-2"
+                  className={cn(
+                    "max-sm:order-3 sm:order-2",
+                    targets.native && "max-sm:hidden",
+                  )}
                   onClick={() => trackLink("email")}
                 />
                 <ShareLinkButton
@@ -322,7 +328,10 @@ export function ShareRouteDialog({
                   href={targets.whatsapp.href}
                   reason={targets.whatsapp.reason}
                   disabled={actionsDisabled}
-                  className="max-sm:order-4 sm:order-3"
+                  className={cn(
+                    "max-sm:order-4 sm:order-3",
+                    targets.native && "max-sm:hidden",
+                  )}
                   onClick={() => trackLink("whatsapp")}
                 />
                 <ShareLinkButton
@@ -331,7 +340,10 @@ export function ShareRouteDialog({
                   href={targets.telegram.href}
                   reason={targets.telegram.reason}
                   disabled={actionsDisabled}
-                  className="max-sm:order-5 sm:order-4"
+                  className={cn(
+                    "max-sm:order-5 sm:order-4",
+                    targets.native && "max-sm:hidden",
+                  )}
                   onClick={() => trackLink("telegram")}
                 />
               </div>
