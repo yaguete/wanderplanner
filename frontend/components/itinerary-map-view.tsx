@@ -65,12 +65,20 @@ import { AdjustLocationDialog } from "@/components/adjust-location-dialog"
 mapboxgl.accessToken = MAPBOX_TOKEN
 
 const MAP_MODE_KEY = "wp-map-mode"
+/** Recorrido: geodésica vs Directions. */
+const PLACES_LINE_STYLE_KEY = "wp-map-places-line"
 
 export type MapViewMode = "transport" | "places"
+export type PlacesLineStyle = "straight" | "road"
 
 const MAP_MODE_LABELS: Record<MapViewMode, string> = {
   places: "Recorrido",
   transport: "Desplazamientos",
+}
+
+const PLACES_LINE_STYLE_LABELS: Record<PlacesLineStyle, string> = {
+  straight: "Línea recta",
+  road: "Ajustar a carretera",
 }
 
 /** Preferencia guardada; por defecto Recorrido. Seguro en SSR (sin localStorage). */
@@ -92,6 +100,71 @@ export function persistMapMode(mode: MapViewMode): void {
   } catch {
     // ignore
   }
+}
+
+export function readStoredPlacesLineStyle(): PlacesLineStyle {
+  if (typeof window === "undefined") return "straight"
+  try {
+    return localStorage.getItem(PLACES_LINE_STYLE_KEY) === "road" ? "road" : "straight"
+  } catch {
+    return "straight"
+  }
+}
+
+export function persistPlacesLineStyle(style: PlacesLineStyle): void {
+  try {
+    localStorage.setItem(PLACES_LINE_STYLE_KEY, style)
+  } catch {
+    // ignore
+  }
+}
+
+/** Trazado del recorrido: línea recta o carretera. Mismo cromo que Recorrido. */
+export function PlacesLineStyleDropdown({
+  value,
+  loading = false,
+  title,
+  onChange,
+}: {
+  value: PlacesLineStyle
+  loading?: boolean
+  title?: string
+  onChange: (next: PlacesLineStyle) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
+            "text-muted-foreground hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+          aria-label="Trazado del recorrido"
+          title={title}
+        >
+          {loading ? "Calculando…" : PLACES_LINE_STYLE_LABELS[value]}
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[10.5rem]">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(v) => {
+            if (v === "straight" || v === "road") onChange(v)
+          }}
+        >
+          <DropdownMenuRadioItem value="straight" className="text-xs">
+            {PLACES_LINE_STYLE_LABELS.straight}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="road" className="text-xs">
+            {PLACES_LINE_STYLE_LABELS.road}
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 /** Dropdown de modo del mapa (mismo cromo que Cancelabilidad). */
@@ -440,6 +513,9 @@ export function ItineraryMapView({
   onPersistItemCoords,
   incompleteTransports = [],
   onFixTransport,
+  placesLineStyle = "straight",
+  onPlacesLineStyleChange,
+  onPlacesLineLoadingChange,
 }: {
   /** Lugares del recorrido: stay / food / activity (sin hubs). Viaje entero. */
   places: ItineraryMapPoint[]
@@ -460,6 +536,10 @@ export function ItineraryMapView({
   onPersistItemCoords?: (itemId: string, coords: LngLat) => void
   incompleteTransports?: IncompleteMapTransport[]
   onFixTransport?: (item: IncompleteMapTransport) => void
+  /** Trazado del recorrido (controlado desde el panel). */
+  placesLineStyle?: PlacesLineStyle
+  onPlacesLineStyleChange?: (next: PlacesLineStyle) => void
+  onPlacesLineLoadingChange?: (loading: boolean) => void
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null)
@@ -539,6 +619,7 @@ export function ItineraryMapView({
   const [placesRoadComplete, setPlacesRoadComplete] = useState(false)
   const [placesRoadLoading, setPlacesRoadLoading] = useState(false)
   const [placesRoadKey, setPlacesRoadKey] = useState(placesKey)
+  const placesLineGenRef = useRef(0)
   const describeId = useId()
   const describeLabelId = `${describeId}-label`
 
@@ -558,9 +639,11 @@ export function ItineraryMapView({
 
   if (placesRoadKey !== placesKey) {
     setPlacesRoadKey(placesKey)
+    placesLineGenRef.current += 1
     setPlacesRoadGeometry(null)
     setPlacesRoadKm(null)
     setPlacesRoadComplete(false)
+    setPlacesRoadLoading(false)
   }
 
   const transportKmSummary = useMemo(
@@ -871,10 +954,9 @@ export function ItineraryMapView({
   )
 
   const adjustPlacesToRoad = useCallback(async () => {
-    if (placesRoadLoading) return
     const subsequences = groupRoadCandidateSubsequences(placesRoute.legs)
     if (subsequences.length === 0) return
-
+    const gen = ++placesLineGenRef.current
     setPlacesRoadLoading(true)
     try {
       const features: GeoJSON.Feature<GeoJSON.LineString>[] = []
@@ -884,6 +966,7 @@ export function ItineraryMapView({
 
       for (const sub of subsequences) {
         const dir = await getDirections(sub.coords, { profile: "driving" })
+        if (gen !== placesLineGenRef.current) return
         if (!dir?.geometry) {
           allComplete = false
           for (const idx of sub.legIndices) {
@@ -931,14 +1014,26 @@ export function ItineraryMapView({
         }
       }
 
-      if (!anyGeometry) return
+      if (gen !== placesLineGenRef.current) return
+      if (!anyGeometry) {
+        onPlacesLineStyleChange?.("straight")
+        return
+      }
       setPlacesRoadGeometry({ type: "FeatureCollection", features })
       setPlacesRoadKm(roadKm)
       setPlacesRoadComplete(allComplete)
     } finally {
-      setPlacesRoadLoading(false)
+      if (gen === placesLineGenRef.current) setPlacesRoadLoading(false)
     }
-  }, [placesRoadLoading, placesRoute.legs])
+  }, [onPlacesLineStyleChange, placesRoute.legs])
+
+  const clearPlacesRoad = useCallback(() => {
+    placesLineGenRef.current += 1
+    setPlacesRoadGeometry(null)
+    setPlacesRoadKm(null)
+    setPlacesRoadComplete(false)
+    setPlacesRoadLoading(false)
+  }, [])
 
   const closeHoverPopup = useCallback(() => {
     if (hoverCloseTimerRef.current != null) {
@@ -1478,6 +1573,33 @@ export function ItineraryMapView({
     .filter(Boolean)
     .join(". ")
 
+  const canAdjustPlacesToRoad =
+    showMapMetrics &&
+    mapMode === "places" &&
+    placesRoute.legs.some((l: PlacesRouteLeg) => l.kind === "road-candidate")
+
+  useEffect(() => {
+    onPlacesLineLoadingChange?.(placesRoadLoading)
+  }, [onPlacesLineLoadingChange, placesRoadLoading])
+
+  useEffect(() => {
+    if (placesLineStyle === "straight") clearPlacesRoad()
+  }, [clearPlacesRoad, placesLineStyle])
+
+  useEffect(() => {
+    if (placesLineStyle !== "road") return
+    if (!canAdjustPlacesToRoad) return
+    if (placesRoadGeometry || placesRoadLoading) return
+    void adjustPlacesToRoad()
+  }, [
+    placesKey,
+    placesLineStyle,
+    canAdjustPlacesToRoad,
+    placesRoadGeometry,
+    placesRoadLoading,
+    adjustPlacesToRoad,
+  ])
+
   const isGeocoding =
     geocode.status === "loading" || geocode.status === "idle" || geocode.status === "refreshing"
 
@@ -1570,23 +1692,9 @@ export function ItineraryMapView({
                 </p>
               )
             })()}
-            {placesRoute.legs.some((l: PlacesRouteLeg) => l.kind === "road-candidate") ? (
-              <button
-                type="button"
-                className="rounded-md border border-border/80 bg-card px-2.5 py-1 font-medium text-foreground hover:bg-muted disabled:opacity-60"
-                disabled={placesRoadLoading || placesRoadComplete}
-                onClick={() => void adjustPlacesToRoad()}
-                title={placesRoadTitle || undefined}
-              >
-                {placesRoadLoading
-                  ? "Calculando…"
-                  : placesRoadGeometry
-                    ? placesRoadComplete
-                      ? "Ajustado a carretera"
-                      : "Reintentar carretera"
-                    : "Ajustar a carretera"}
-              </button>
-            ) : visibleResolved.length >= 2 ? (
+            {!canAdjustPlacesToRoad &&
+            placesLineStyle !== "road" &&
+            visibleResolved.length >= 2 ? (
               <span>Ajusta las ubicaciones para trazar la ruta por carretera</span>
             ) : null}
             {placesRouteIncomplete ? (

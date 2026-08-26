@@ -68,7 +68,7 @@ import {
   VIEW_MODE_TASK_CATEGORIES,
   type ItineraryViewMode,
 } from "@/components/itinerary-view-mode-tabs"
-import { ItineraryMapView, MapDayDropdown, MapModeDropdown, persistMapMode, readStoredMapMode, type ItineraryMapPoint, type MapViewMode } from "@/components/itinerary-map-view"
+import { ItineraryMapView, MapDayDropdown, MapModeDropdown, persistMapMode, persistPlacesLineStyle, PlacesLineStyleDropdown, readStoredMapMode, readStoredPlacesLineStyle, type ItineraryMapPoint, type MapViewMode, type PlacesLineStyle } from "@/components/itinerary-map-view"
 import {
   ItineraryCalendarView,
   persistRouteView,
@@ -262,12 +262,21 @@ export default function ItineraryPanel({
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
   const [mapMode, setMapMode] = useState<MapViewMode>("places")
   const [focusDayId, setFocusDayId] = useState<string | null>(null)
+  const [placesLineStyle, setPlacesLineStyle] = useState<PlacesLineStyle>("straight")
+  const [placesLineLoading, setPlacesLineLoading] = useState(false)
   const pendingScrollDayIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const stored = readStoredMapMode()
     queueMicrotask(() => {
       if (stored !== "places") setMapMode(stored)
+    })
+  }, [])
+
+  useEffect(() => {
+    const stored = readStoredPlacesLineStyle()
+    queueMicrotask(() => {
+      if (stored !== "straight") setPlacesLineStyle(stored)
     })
   }, [])
 
@@ -295,9 +304,15 @@ export default function ItineraryPanel({
     persistMapMode(next)
   }, [])
 
+  const handlePlacesLineStyleChange = useCallback((next: PlacesLineStyle) => {
+    setPlacesLineStyle(next)
+    persistPlacesLineStyle(next)
+  }, [])
+
   const handleListModeChange = useCallback((next: RouteViewMode) => {
     setListMode(next)
     persistRouteView(next)
+    if (next !== "map") setPlacesLineLoading(false)
   }, [])
 
   const handleWideCanvasToggle = useCallback(() => {
@@ -863,6 +878,13 @@ export default function ItineraryPanel({
             {listMode === "map" ? (
               <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
             ) : null}
+            {listMode === "map" && mapMode === "places" ? (
+              <PlacesLineStyleDropdown
+                value={placesLineStyle}
+                loading={placesLineLoading}
+                onChange={handlePlacesLineStyleChange}
+              />
+            ) : null}
             {canvasWideToggle ? (
               <button
                 type="button"
@@ -1046,6 +1068,9 @@ export default function ItineraryPanel({
                 onPersistItemCoords={(itemId, coords) => {
                   setDayItemCoords(tripId, itemId, coords)
                 }}
+                placesLineStyle={placesLineStyle}
+                onPlacesLineStyleChange={handlePlacesLineStyleChange}
+                onPlacesLineLoadingChange={setPlacesLineLoading}
               />
               </div>
             </div>
