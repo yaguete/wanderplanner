@@ -1519,6 +1519,34 @@ export function ItineraryMapView({
     })
   }, [mapReady, mapError, mapMode, fitContentKey, hubs, segments, visibleResolved, focusDayNumber])
 
+  const showMapMetrics = mapReady && !mapError
+  const canAdjustPlacesToRoad =
+    showMapMetrics &&
+    mapMode === "places" &&
+    placesRoute.legs.some((l: PlacesRouteLeg) => l.kind === "road-candidate")
+
+  useEffect(() => {
+    onPlacesLineLoadingChange?.(placesRoadLoading)
+  }, [onPlacesLineLoadingChange, placesRoadLoading])
+
+  useEffect(() => {
+    if (placesLineStyle === "straight") clearPlacesRoad()
+  }, [clearPlacesRoad, placesLineStyle])
+
+  useEffect(() => {
+    if (placesLineStyle !== "road") return
+    if (!canAdjustPlacesToRoad) return
+    if (placesRoadGeometry || placesRoadLoading) return
+    void adjustPlacesToRoad()
+  }, [
+    placesKey,
+    placesLineStyle,
+    canAdjustPlacesToRoad,
+    placesRoadGeometry,
+    placesRoadLoading,
+    adjustPlacesToRoad,
+  ])
+
   if (!MAPBOX_TOKEN?.trim()) {
     return (
       <div className="flex min-h-[200px] flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
@@ -1547,8 +1575,6 @@ export function ItineraryMapView({
     mapMode === "places" &&
     (placesRoute.skipped.length > 0 || failed.length > 0)
 
-  const showMapMetrics = mapReady && !mapError
-
   const placesTotalLabel = (() => {
     if (!showMapMetrics) return null
     if (placesRoadKm != null) {
@@ -1572,33 +1598,6 @@ export function ItineraryMapView({
   ]
     .filter(Boolean)
     .join(". ")
-
-  const canAdjustPlacesToRoad =
-    showMapMetrics &&
-    mapMode === "places" &&
-    placesRoute.legs.some((l: PlacesRouteLeg) => l.kind === "road-candidate")
-
-  useEffect(() => {
-    onPlacesLineLoadingChange?.(placesRoadLoading)
-  }, [onPlacesLineLoadingChange, placesRoadLoading])
-
-  useEffect(() => {
-    if (placesLineStyle === "straight") clearPlacesRoad()
-  }, [clearPlacesRoad, placesLineStyle])
-
-  useEffect(() => {
-    if (placesLineStyle !== "road") return
-    if (!canAdjustPlacesToRoad) return
-    if (placesRoadGeometry || placesRoadLoading) return
-    void adjustPlacesToRoad()
-  }, [
-    placesKey,
-    placesLineStyle,
-    canAdjustPlacesToRoad,
-    placesRoadGeometry,
-    placesRoadLoading,
-    adjustPlacesToRoad,
-  ])
 
   const isGeocoding =
     geocode.status === "loading" || geocode.status === "idle" || geocode.status === "refreshing"
