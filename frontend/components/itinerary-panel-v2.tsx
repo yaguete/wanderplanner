@@ -21,6 +21,8 @@ import {
   List,
   Loader2,
   Map as MapIcon,
+  Maximize2,
+  Minimize2,
   Pencil,
   Plus,
   RotateCcw,
@@ -70,7 +72,9 @@ import { ItineraryMapView, MapDayDropdown, MapModeDropdown, persistMapMode, read
 import {
   ItineraryCalendarView,
   persistRouteView,
+  persistRouteWide,
   readStoredRouteView,
+  readStoredRouteWide,
   type RouteViewMode,
 } from "@/components/itinerary-calendar-view"
 import {
@@ -156,6 +160,7 @@ export default function ItineraryPanel({
   onEditTrip,
   onHeaderCollapsedChange,
   activeOnMobile = true,
+  desktopSolo = false,
 }: {
   tripId: string
   onClose?: () => void
@@ -165,6 +170,11 @@ export default function ItineraryPanel({
   onHeaderCollapsedChange?: (collapsed: boolean) => void
   /** Móvil: true mientras esta sección está visible. */
   activeOnMobile?: boolean
+  /**
+   * Desktop: el panel Viaje es el único abierto. Calendario y mapa caben en la
+   * columna de lectura; el botón agrandar/encoger los lleva a sangre.
+   */
+  desktopSolo?: boolean
 }) {
   const {
     getTrip,
@@ -247,6 +257,8 @@ export default function ItineraryPanel({
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [planSurface, setPlanSurface] = useState<"plan" | "budget">("plan")
   const [listMode, setListMode] = useState<RouteViewMode>("list")
+  /** Lienzo de Calendario/Mapa a sangre. Solo aplica con `desktopSolo`. */
+  const [wideCanvas, setWideCanvas] = useState(false)
   // Recorrido por defecto; preferencia de localStorage tras hidratar.
   const [mapMode, setMapMode] = useState<MapViewMode>("places")
   const [focusDayId, setFocusDayId] = useState<string | null>(null)
@@ -256,6 +268,13 @@ export default function ItineraryPanel({
     const stored = readStoredMapMode()
     queueMicrotask(() => {
       if (stored !== "places") setMapMode(stored)
+    })
+  }, [])
+
+  useEffect(() => {
+    const stored = readStoredRouteWide()
+    queueMicrotask(() => {
+      if (stored) setWideCanvas(true)
     })
   }, [])
 
@@ -279,6 +298,14 @@ export default function ItineraryPanel({
   const handleListModeChange = useCallback((next: RouteViewMode) => {
     setListMode(next)
     persistRouteView(next)
+  }, [])
+
+  const handleWideCanvasToggle = useCallback(() => {
+    setWideCanvas((prev) => {
+      const next = !prev
+      persistRouteWide(next)
+      return next
+    })
   }, [])
 
   const openDayFromCalendar = useCallback((dayId: string) => {
@@ -600,6 +627,9 @@ export default function ItineraryPanel({
   // sin él no hay forma de cambiar de categoría sin subir.
   const collapseRouteTabs =
     isMobile && headerCollapsed && isRoute && planSurface === "plan"
+  const canvasWideToggle =
+    desktopSolo && isRoute && (listMode === "calendar" || listMode === "map")
+  const constrainCanvas = canvasWideToggle && !wideCanvas
 
   const handleDayListAction = () => {
     if (canRemoveSelectedDays) {
@@ -833,6 +863,21 @@ export default function ItineraryPanel({
             {listMode === "map" ? (
               <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
             ) : null}
+            {canvasWideToggle ? (
+              <button
+                type="button"
+                onClick={handleWideCanvasToggle}
+                className="ml-auto hidden size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:inline-flex"
+                aria-label={wideCanvas ? "Encoger" : "Agrandar"}
+                title={wideCanvas ? "Encoger" : "Agrandar"}
+              >
+                {wideCanvas ? (
+                  <Minimize2 className="size-4" aria-hidden />
+                ) : (
+                  <Maximize2 className="size-4" aria-hidden />
+                )}
+              </button>
+            ) : null}
             {listMode === "list" ? (
               <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
                 <button
@@ -952,6 +997,12 @@ export default function ItineraryPanel({
             // Móvil: alto propio, porque el panel ya no acota (el documento
             // scrollea). El `flex-1` de dentro necesita una caja real.
             <div className="flex flex-col overflow-hidden px-4 pb-4 pt-1 max-md:h-[70svh] max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1">
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col overflow-hidden",
+                  constrainCanvas && "panel-column",
+                )}
+              >
               <ItineraryCalendarView
                 key={trip.startDate ?? "nodates"}
                 startDate={trip.startDate}
@@ -960,11 +1011,18 @@ export default function ItineraryPanel({
                 onEditTrip={onEditTrip}
                 onOpenDay={openDayFromCalendar}
               />
+              </div>
             </div>
           ) : (
             // Ídem Calendario: el mapa necesita alto explícito o Mapbox
             // se queda en el `min-h-[280px]` de su contenedor.
             <div className="flex flex-col overflow-hidden px-4 pb-4 pt-1 max-md:h-[70svh] max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1">
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col overflow-hidden",
+                  constrainCanvas && "panel-column",
+                )}
+              >
               <ItineraryMapView
                 places={mapPlaces}
                 hubs={mapHubs}
@@ -989,6 +1047,7 @@ export default function ItineraryPanel({
                   setDayItemCoords(tripId, itemId, coords)
                 }}
               />
+              </div>
             </div>
           )}
         </>

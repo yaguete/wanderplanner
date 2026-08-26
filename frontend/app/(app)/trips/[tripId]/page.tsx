@@ -324,9 +324,26 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         onEditTrip={openEditTrip}
         onHeaderCollapsedChange={onPlanHeaderCollapsed}
         activeOnMobile={mobileSection === "plan"}
+        desktopSolo={
+          !isMobile &&
+          panelsHydrated &&
+          panels.plan &&
+          !panels.sources &&
+          !panels.assistant
+        }
       />
     ),
-    [tripId, openEditTrip, onPlanHeaderCollapsed, mobileSection],
+    [
+      tripId,
+      openEditTrip,
+      onPlanHeaderCollapsed,
+      mobileSection,
+      isMobile,
+      panelsHydrated,
+      panels.plan,
+      panels.sources,
+      panels.assistant,
+    ],
   )
 
   const assistantOpen = panels.assistant

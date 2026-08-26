@@ -36,6 +36,8 @@ export type RouteViewMode = "list" | "calendar" | "map"
 
 const ROUTE_VIEW_KEY = "wp-route-view"
 const CALENDAR_SCALE_KEY = "wp-calendar-scale"
+/** Desktop, panel Viaje a pantalla: calendario/mapa a columna (`0`) o a sangre (`1`). */
+const ROUTE_WIDE_KEY = "wp-route-wide"
 
 const SCALE_ITEMS = [
   { id: "month" as const, label: "Mes" },
@@ -59,6 +61,24 @@ export function readStoredRouteView(): RouteViewMode {
 export function persistRouteView(mode: RouteViewMode): void {
   try {
     localStorage.setItem(ROUTE_VIEW_KEY, mode)
+  } catch {
+    // ignore
+  }
+}
+
+/** Preferencia agrandar/encoger el lienzo de Calendario y Mapa. Seguro en SSR. */
+export function readStoredRouteWide(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return localStorage.getItem(ROUTE_WIDE_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+export function persistRouteWide(wide: boolean): void {
+  try {
+    localStorage.setItem(ROUTE_WIDE_KEY, wide ? "1" : "0")
   } catch {
     // ignore
   }
