@@ -28,6 +28,7 @@ jobs:
       - run: npm run test:task-labels
       - run: npm run test:day-summary
       - run: npm run test:share-briefing
+      - run: npm run test:share-summary
       - run: npm run test:share-targets
       - run: npm run test:assistant-context
       - run: npm run test:assistant-actions

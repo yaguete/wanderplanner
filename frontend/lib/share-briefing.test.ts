@@ -1,14 +1,15 @@
 import assert from "node:assert/strict"
 import type { Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import {
-  SHARE_MAX_DAYS,
+  SHARE_GROUP_FROM,
+  SHARE_GROUP_SIZE,
   SHARE_MAX_ITEMS_PER_DAY,
   SHARE_MAX_SOURCES,
   buildSharePlan,
   sharePlanSignature,
   tripHasShareablePlan,
 } from "./share-briefing"
-import { MANUAL_SOURCE_ID } from "./item-provenance"
+import { ASSISTANT_SOURCE_ID, MANUAL_SOURCE_ID } from "./item-provenance"
 
 function item(
   overrides: Partial<UserDayItem> & Pick<UserDayItem, "id" | "type" | "name">,
@@ -224,13 +225,23 @@ function dumped(trip: Trip, sources: Source[] = [source({ id: "src-1" })]): stri
 }
 
 {
+  const ten: UserDay[] = Array.from({ length: SHARE_GROUP_FROM }, (_, i) =>
+    day(`t${i}`, [item({ id: `t${i}`, type: "activity", name: `Sitio ${i + 1}` })]),
+  )
+  const tenPayload = buildSharePlan(makeTrip({ days: ten, numDays: ten.length }), [])
+  assert.equal(tenPayload.days.length, Math.ceil(SHARE_GROUP_FROM / SHARE_GROUP_SIZE))
+  assert.equal(tenPayload.days[0]!.label, "Días 1-3")
+
   const manyDays: UserDay[] = Array.from({ length: 40 }, (_, i) =>
     day(`d${i}`, [item({ id: `i${i}`, type: "activity", name: `Sitio ${i + 1}` })]),
   )
-  const payload = buildSharePlan(makeTrip({ days: manyDays, numDays: 40 }), [])
-  assert.equal(payload.days.length, SHARE_MAX_DAYS)
-  assert.equal(payload.days[SHARE_MAX_DAYS - 1]!.label, "Días 30-40")
-  assert.ok((payload.days[SHARE_MAX_DAYS - 1]!.items.length) <= SHARE_MAX_ITEMS_PER_DAY)
+  const payload = buildSharePlan(makeTrip({ days: manyDays, numDays: 40 }), [source({ id: "src-1" })])
+  const expectedGroups = Math.ceil(40 / SHARE_GROUP_SIZE)
+  assert.equal(payload.days.length, expectedGroups)
+  assert.equal(payload.days[0]!.label, "Días 1-3")
+  assert.equal(payload.days[expectedGroups - 1]!.label, "Día 40")
+  assert.ok(payload.days.every((d) => d.items.length <= SHARE_MAX_ITEMS_PER_DAY))
+  assert.equal(payload.sources.length, 1)
 }
 
 {
@@ -245,10 +256,52 @@ function dumped(trip: Trip, sources: Source[] = [source({ id: "src-1" })]): stri
 }
 
 {
+  const used = source({ id: "src-1", title: "Tokio en 7 días" })
+  const unused = source({ id: "src-unused", title: "QUÉ VER en GRANADA", author: "sinmapa" })
+  const payload = buildSharePlan(makeTrip(), [used, unused])
+  assert.equal(payload.sources.length, 1)
+  assert.equal(payload.sources[0]!.title, "Tokio en 7 días")
+  assert.ok(!JSON.stringify(payload).includes("sinmapa"))
+}
+
+{
+  const payload = buildSharePlan(
+    makeTrip({
+      days: [
+        day("d1", [
+          item({
+            id: "a1",
+            type: "activity",
+            name: "Mirador",
+            sourceId: ASSISTANT_SOURCE_ID,
+            sourceAuthor: "sinmapa",
+          }),
+        ]),
+      ],
+      numDays: 1,
+    }),
+    [source({ id: "src-unused", title: "QUÉ VER en GRANADA", author: "sinmapa" })],
+  )
+  assert.equal(payload.sources.length, 0)
+  assert.ok(!JSON.stringify(payload).includes("sinmapa"))
+}
+
+{
+  const stuffed = day(
+    "d1",
+    Array.from({ length: 8 }, (_, i) =>
+      item({
+        id: `i${i}`,
+        type: "activity",
+        name: `Parada ${i + 1}`,
+        sourceId: `src-${i}`,
+      }),
+    ),
+  )
   const sources = Array.from({ length: 8 }, (_, i) =>
     source({ id: `src-${i}`, title: `Guía ${i}` }),
   )
-  const payload = buildSharePlan(makeTrip(), sources)
+  const payload = buildSharePlan(makeTrip({ days: [stuffed], numDays: 1 }), sources)
   assert.equal(payload.sources.length, SHARE_MAX_SOURCES)
 }
 

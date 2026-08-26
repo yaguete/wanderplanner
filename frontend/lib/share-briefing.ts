@@ -6,11 +6,14 @@
  */
 import type { ItemType, Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
-import { MANUAL_SOURCE_ID, itemProvenanceLabel } from "@/lib/item-provenance"
+import { isSyntheticSourceId, itemProvenanceLabel } from "@/lib/item-provenance"
 
 export const SHARE_MAX_DAYS = 30
 export const SHARE_MAX_ITEMS_PER_DAY = 8
 export const SHARE_MAX_SOURCES = 5
+/** A partir de aquí el JSON va en tramos, no día a día: si no, el modelo corta a mitad. */
+export const SHARE_GROUP_FROM = 10
+export const SHARE_GROUP_SIZE = 3
 const FIELD_MAX = 120
 
 export type SharePlanItem = {
@@ -69,12 +72,13 @@ function itemRoute(item: UserDayItem): SharePlanItem["route"] {
 }
 
 function itemVia(item: UserDayItem): string | null {
-  if (item.sourceId === MANUAL_SOURCE_ID) return null
+  if (isSyntheticSourceId(item.sourceId)) return null
   const label = itemProvenanceLabel(item)
   return clipOrNull(label)
 }
 
-function mapItem(item: UserDayItem): SharePlanItem {
+function mapItem(item: UserDayItem, cited: Set<string>): SharePlanItem {
+  if (!isSyntheticSourceId(item.sourceId)) cited.add(item.sourceId)
   return {
     type: item.type,
     name: clip(item.name) || "Sin nombre",
@@ -84,29 +88,40 @@ function mapItem(item: UserDayItem): SharePlanItem {
   }
 }
 
-function mapDay(day: UserDay, index: number): SharePlanDay {
+function mapDay(day: UserDay, index: number, cited: Set<string>): SharePlanDay {
   return {
     index,
     label: clipOrNull(day.label),
-    items: day.items.slice(0, SHARE_MAX_ITEMS_PER_DAY).map(mapItem),
+    items: day.items.slice(0, SHARE_MAX_ITEMS_PER_DAY).map((it) => mapItem(it, cited)),
   }
 }
 
-function groupedTail(days: UserDay[], fromIndex: number): SharePlanDay {
-  const start = fromIndex + 1
-  const end = days.length
+function mapChunk(chunk: UserDay[], startIndex: number, cited: Set<string>): SharePlanDay {
+  const start = startIndex + 1
+  const end = startIndex + chunk.length
   const items: SharePlanItem[] = []
-  for (let i = fromIndex; i < days.length && items.length < SHARE_MAX_ITEMS_PER_DAY; i++) {
-    for (const item of days[i]!.items) {
+  for (const day of chunk) {
+    for (const item of day.items) {
       if (items.length >= SHARE_MAX_ITEMS_PER_DAY) break
-      items.push(mapItem(item))
+      items.push(mapItem(item, cited))
     }
+    if (items.length >= SHARE_MAX_ITEMS_PER_DAY) break
   }
+  const ranged = chunk.length === 1 ? `Día ${start}` : `Días ${start}-${end}`
   return {
     index: start,
-    label: `Días ${start}-${end}`,
+    label: chunk.length === 1 ? clipOrNull(chunk[0]!.label) ?? ranged : ranged,
     items,
   }
+}
+
+function groupedDays(days: UserDay[], cited: Set<string>): SharePlanDay[] {
+  const out: SharePlanDay[] = []
+  for (let i = 0; i < days.length; i += SHARE_GROUP_SIZE) {
+    out.push(mapChunk(days.slice(i, i + SHARE_GROUP_SIZE), i, cited))
+    if (out.length >= SHARE_MAX_DAYS) break
+  }
+  return out
 }
 
 export function tripHasShareablePlan(trip: Trip): boolean {
@@ -116,19 +131,20 @@ export function tripHasShareablePlan(trip: Trip): boolean {
 export function buildSharePlan(trip: Trip, sources: Source[]): SharePlanPayload {
   const numDays = trip.days.length > 0 ? trip.days.length : Math.max(1, trip.numDays ?? 1)
   const rawDays = trip.days
-  let days: SharePlanDay[]
-  if (rawDays.length <= SHARE_MAX_DAYS) {
-    days = rawDays.map((d, i) => mapDay(d, i + 1))
-  } else {
-    const head = rawDays.slice(0, SHARE_MAX_DAYS - 1).map((d, i) => mapDay(d, i + 1))
-    days = [...head, groupedTail(rawDays, SHARE_MAX_DAYS - 1)]
-  }
+  const cited = new Set<string>()
+  const days =
+    rawDays.length < SHARE_GROUP_FROM
+      ? rawDays.map((d, i) => mapDay(d, i + 1, cited))
+      : groupedDays(rawDays, cited)
 
-  const planSources: SharePlanSource[] = sources.slice(0, SHARE_MAX_SOURCES).map((s) => ({
-    title: clip(s.title) || clip(s.url) || "Fuente",
-    author: clip(s.author) || "autor",
-    url: clip(s.url, 500),
-  }))
+  const planSources: SharePlanSource[] = sources
+    .filter((s) => cited.has(s.id))
+    .slice(0, SHARE_MAX_SOURCES)
+    .map((s) => ({
+      title: clip(s.title) || clip(s.url) || "Fuente",
+      author: clip(s.author) || "autor",
+      url: clip(s.url, 500),
+    }))
 
   return {
     trip_name: clip(trip.name) || "Viaje",

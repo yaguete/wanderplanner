@@ -71,27 +71,67 @@ class ShareSummaryResponse(BaseModel):
 
 
 def share_length_target(num_days: int) -> tuple[int, int, int]:
-    """(min_chars, max_chars, max_tokens) según la duración del viaje."""
+    """(min_chars, max_chars, max_tokens) según la duración del viaje.
+
+    max_tokens lleva holgura sobre el techo de caracteres: si coinciden,
+    el modelo corta a mitad de titular (finish_reason=length).
+    """
     n = max(1, int(num_days))
     if n <= 4:
-        return 350, 600, 320
+        return 350, 600, 500
     if n <= 9:
-        return 700, 1100, 520
-    return 1200, 1800, 800
+        return 700, 1100, 900
+    return 1200, 1800, 1400
 
 
-def _load_prompt() -> str:
-    return PROMPT_PATH.read_text(encoding="utf-8")
+_DAY_HEADING = re.compile(r"^Días?\s+\d+\b", re.IGNORECASE)
+_BARE_DAY = re.compile(
+    r"^Días?\s+\d+(?:\s*[-–—]\s*\d+)?(?:\s*[·.:\-–—])?\s*$",
+    re.IGNORECASE,
+)
+_HANGING_TAIL = re.compile(
+    r"(?:\b(?:y|e|o|de|del|con|en|por|para|las?|los?|una?)\s*|[,(,:])$",
+    re.IGNORECASE,
+)
+_SENTENCE_END = (".", "!", "?", "…", "»", '"', ")")
 
 
-def _model() -> str:
-    return (
-        os.getenv("SHARE_SUMMARY_MODEL") or os.getenv("ASSISTANT_MODEL") or "deepseek-v4-flash"
-    ).strip()
+def _is_orphan_day_heading(lines: list[str], last: str) -> bool:
+    if not _DAY_HEADING.match(last):
+        return False
+    if last.endswith((".", "!", "?", "…")):
+        return False
+    if _BARE_DAY.match(last):
+        return True
+    if len(lines) >= 2:
+        prev = lines[-2].strip()
+        if prev.startswith(("-", "·")) or _DAY_HEADING.match(prev):
+            return True
+    return False
 
 
-def _as_usage_user(user: VerifiedUser) -> AuthUser:
-    return AuthUser(id=user.id, email=user.email, is_anonymous=False)
+def _drop_incomplete_tail(text: str) -> str:
+    """Quita titular huérfano o frase colgando; no corta a mitad de bloque."""
+    lines = text.split("\n")
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if not lines:
+        return ""
+    last = lines[-1].strip()
+    if _is_orphan_day_heading(lines, last):
+        lines.pop()
+        return _drop_incomplete_tail("\n".join(lines).strip())
+    lowered = last.lower()
+    credits_broken = lowered.startswith("ideas sacadas") and (
+        lowered.endswith(" y")
+        or last.endswith(",")
+        or last.count("(") > last.count(")")
+    )
+    hanging = bool(_HANGING_TAIL.search(last)) and not last.endswith(_SENTENCE_END)
+    if credits_broken or hanging:
+        lines.pop()
+        return _drop_incomplete_tail("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
 def sanitize_share_summary(raw: str) -> str:
@@ -109,22 +149,54 @@ def sanitize_share_summary(raw: str) -> str:
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = text.strip()
-    if len(text) <= SHARE_TEXT_MAX:
-        return text
-    cut = text[:SHARE_TEXT_MAX]
-    nl = cut.rfind("\n")
-    if nl >= int(SHARE_TEXT_MAX * 0.6):
-        cut = cut[:nl]
-    else:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut.strip()
+    if len(text) > SHARE_TEXT_MAX:
+        cut = text[:SHARE_TEXT_MAX]
+        para = cut.rfind("\n\n")
+        if para >= int(SHARE_TEXT_MAX * 0.5):
+            cut = cut[:para]
+        else:
+            nl = cut.rfind("\n")
+            if nl >= int(SHARE_TEXT_MAX * 0.6):
+                cut = cut[:nl]
+            else:
+                sentence = max(cut.rfind(p) for p in (". ", ".\n", "! ", "? ", "…"))
+                if sentence >= int(SHARE_TEXT_MAX * 0.5):
+                    cut = cut[: sentence + 1]
+                else:
+                    cut = cut.rsplit(" ", 1)[0]
+        text = cut.strip()
+    return _drop_incomplete_tail(text)
+
+
+def _load_prompt() -> str:
+    return PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _model() -> str:
+    return (
+        os.getenv("SHARE_SUMMARY_MODEL") or os.getenv("ASSISTANT_MODEL") or "deepseek-v4-flash"
+    ).strip()
+
+
+def _as_usage_user(user: VerifiedUser) -> AuthUser:
+    return AuthUser(id=user.id, email=user.email, is_anonymous=False)
 
 
 def _build_user_message(body: ShareSummaryRequest) -> str:
     min_c, max_c, _tokens = share_length_target(body.num_days)
     payload = body.model_dump(by_alias=True)
+    grouping = ""
+    if body.num_days >= 10:
+        grouping = (
+            "Este viaje es largo: agrupa por tramos o zonas, no un bloque por día. "
+            "Si no caben los últimos días, ciérralos en una frase; nunca un titular sin cuerpo.\n\n"
+        )
     return (
-        f"Escribe entre {min_c} y {max_c} caracteres. Nunca pases de {SHARE_TEXT_MAX}.\n\n"
+        f"Escribe entre {min_c} y {max_c} caracteres. Nunca pases de {SHARE_TEXT_MAX}. "
+        "Termina siempre en frase completa.\n\n"
+        f"{grouping}"
+        "En los créditos, cita solo las entradas de sources[]. "
+        "Si sources está vacío, no escribas «Ideas sacadas de».\n\n"
         f"Plan del viaje (JSON):\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
@@ -147,7 +219,7 @@ async def _call_deepseek(user_message: str, max_tokens: int) -> tuple[str, int |
             {"role": "user", "content": user_message},
         ],
         # v4-flash piensa por defecto y el razonamiento consume max_tokens:
-        # 320/520/800 se iban enteros en CoT y content quedaba vacío (502).
+        # sin esto, content queda vacío (502) aunque max_tokens tenga holgura.
         extra_body={"thinking": {"type": "disabled"}},
     )
     choice = completion.choices[0] if completion.choices else None

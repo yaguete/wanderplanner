@@ -38,16 +38,55 @@ def test_sanitize_empty_after_strip():
 
 
 def test_share_length_target_boundaries():
-    assert share_length_target(1) == (350, 600, 320)
-    assert share_length_target(4) == (350, 600, 320)
-    assert share_length_target(5) == (700, 1100, 520)
-    assert share_length_target(9) == (700, 1100, 520)
-    assert share_length_target(10) == (1200, 1800, 800)
+    assert share_length_target(1) == (350, 600, 500)
+    assert share_length_target(4) == (350, 600, 500)
+    assert share_length_target(5) == (700, 1100, 900)
+    assert share_length_target(9) == (700, 1100, 900)
+    assert share_length_target(10) == (1200, 1800, 1400)
     assert share_length_target(60)[1] <= 1800
     for n in (1, 4, 5, 9, 10, 21):
         _mn, mx, tokens = share_length_target(n)
         assert mx <= 1800
-        assert tokens in (320, 520, 800)
+        assert tokens in (500, 900, 1400)
+
+
+def test_sanitize_drops_orphan_day_heading():
+    raw = (
+        "Mira el road trip de Alaska.\n"
+        "Día 12 · Denali\n"
+        "- Vuelo interior y un rato en el parque.\n"
+        "Día 13 · Fairbanks y Chena"
+    )
+    out = sanitize_share_summary(raw)
+    assert "Denali" in out
+    assert "Fairbanks y Chena" not in out
+
+
+def test_sanitize_keeps_transfer_day_with_period():
+    raw = (
+        "Día 4 · Albaycín sin prisa\n"
+        "- Tapeo y baños árabes.\n"
+        "Día 5 · Vuelta a casa."
+    )
+    out = sanitize_share_summary(raw)
+    assert "Día 5 · Vuelta a casa." in out
+
+
+def test_sanitize_drops_hanging_credits():
+    raw = (
+        "Granada en un finde.\n\n"
+        "Ideas sacadas de: Guía de tapas (@lacosmopolilla), QUÉ VER (@sinmapa) y"
+    )
+    out = sanitize_share_summary(raw)
+    assert "Granada en un finde." in out
+    assert "sinmapa" not in out
+    assert not out.endswith(" y")
+
+
+def test_sanitize_keeps_complete_credits():
+    raw = "Granada en un finde.\n\nIdeas sacadas de: Guía de tapas (@lacosmopolilla)"
+    out = sanitize_share_summary(raw)
+    assert "Ideas sacadas de: Guía de tapas (@lacosmopolilla)" in out
 
 
 @pytest.mark.asyncio
