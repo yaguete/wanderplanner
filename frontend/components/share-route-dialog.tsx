@@ -392,7 +392,12 @@ export function ShareRouteDialog({
                 </button>
               ) : null}
 
-              <div className="mt-4 flex shrink-0 flex-wrap gap-2">
+              <div
+                className={cn(
+                  "mt-4 flex shrink-0 flex-wrap gap-2",
+                  editing && "max-sm:hidden",
+                )}
+              >
                 {targets.native ? (
                   <Button
                     type="button"
@@ -457,7 +462,10 @@ export function ShareRouteDialog({
 
               <p
                 id={noticeId}
-                className="mt-4 shrink-0 text-pretty text-xs leading-5 text-muted-foreground"
+                className={cn(
+                  "mt-4 shrink-0 text-pretty text-xs leading-5 text-muted-foreground",
+                  editing && "max-sm:hidden",
+                )}
               >
                 El resumen lo escribe una IA fuera de la UE. No enviamos tu nombre ni tu correo.{" "}
                 <Link
