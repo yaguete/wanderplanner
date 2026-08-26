@@ -5,13 +5,19 @@ import {
   MockOnboardingFuentes,
   MockOnboardingMecanismo,
   MockOnboardingMiViaje,
+  MockOnboardingInvitar,
 } from "./onboarding-mocks"
 
-export type OnboardingSlideId = "mecanismo" | "fuentes" | "viaje" | "asistente"
+export type OnboardingSlideId =
+  | "mecanismo"
+  | "fuentes"
+  | "viaje"
+  | "asistente"
+  | "invitar"
 
 export type OnboardingSlide = {
   id: OnboardingSlideId
-  /** Nombre del panel junto a la ardilla (slides 2–4). Mismo lockup que el wordmark. */
+  /** Nombre junto a la ardilla (slides 2–5). Mismo lockup que el wordmark. */
   kicker?: string
   title: ReactNode
   body: ReactNode
@@ -69,5 +75,25 @@ export const ONBOARDING_SLIDES: readonly OnboardingSlide[] = [
     body: "El asistente revisa fuentes oficiales para anticipar trámites recomendados para tu destino (como vacunas o visados). Pero también te avisa si el museo cierra justo tu día, o si ese plan es adecuado para hacer con niños.",
     footer: "Tiene en cuenta qué tipo de viajero/a eres, qué esperas de tu viaje, y las fuentes que has añadido. No inventa: cita de dónde saca la información, y si no sabe, lo dice.",
     Mock: MockOnboardingAssistant,
+  },
+  {
+    id: "invitar",
+    kicker: "Invitar · Compartir",
+    title: (
+      <>
+        Invita a quien planifica contigo.
+        <br />
+        Comparte la ruta con el resto.
+      </>
+    ),
+    body: (
+      <>
+        Con <PanelName>Invitar</PanelName>, añades a otras personas a tu plan para construirlo conjuntamente. Con{" "}
+        <PanelName>Compartir</PanelName>, obtienes un resumen para pegar en WhatsApp, email o Telegram (es para contar qué vais a hacer, no para que lo toquen).
+      </>
+    ),
+    footer:
+      "El asistente de cada uno sigue siendo privado. El resumen no habla de lo que cuesta: es el recado del plan, no la cuenta.",
+    Mock: MockOnboardingInvitar,
   },
 ]
