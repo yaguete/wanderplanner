@@ -13,7 +13,7 @@ import { SidebarAccountFooter } from "@/components/account-menu"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
-import { tripRailGlyph } from "@/lib/trip-rail-mark"
+import { tripRailFlagCode, tripRailFlagSrc, tripRailLetter } from "@/lib/trip-rail-mark"
 
 /**
  * Lo que cuesta fijar el CTA encima de la cuenta, sin la fila de cuenta
@@ -21,17 +21,43 @@ import { tripRailGlyph } from "@/lib/trip-rail-mark"
  */
 const PINNED_CHROME_PX = 74
 
-/** Pictograma del viaje en el rail plegado (emoji, no la portada Unsplash). */
-function TripRailMark({ glyph, dimmed }: { glyph: string; dimmed?: boolean }) {
+/** Bandera circular del viaje en el rail plegado (`circle-flags`). */
+function TripRailMark({
+  flagCode,
+  name,
+  dimmed,
+}: {
+  flagCode: string | null
+  name: string
+  dimmed?: boolean
+}) {
+  const [broken, setBroken] = useState(false)
+  const src = flagCode && !broken ? tripRailFlagSrc(flagCode) : null
+
   return (
     <span
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center text-[18px] leading-none transition-opacity",
+        "relative flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-inset ring-foreground/10 transition-opacity",
         dimmed ? "opacity-40 group-hover:opacity-90" : "opacity-100",
       )}
       aria-hidden
     >
-      {glyph}
+      {src ? (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          width={20}
+          height={20}
+          className="size-full object-cover"
+          draggable={false}
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <span className="text-[10px] font-medium leading-none text-muted-foreground">
+          {tripRailLetter(name)}
+        </span>
+      )}
     </span>
   )
 }
@@ -223,8 +249,8 @@ export function AppSidebar({
                       >
                         <TripRailMark
                           dimmed={!isActive}
-                          glyph={tripRailGlyph({
-                            id: t.id,
+                          name={t.name}
+                          flagCode={tripRailFlagCode({
                             name: t.name,
                             countries: t.countries,
                             area: getTripSources(t.id)[0]?.area,

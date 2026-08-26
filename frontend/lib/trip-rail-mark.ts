@@ -1,103 +1,76 @@
-import { hasWordBoundaryMatch } from "@/lib/countries"
+import { collectCountryCodesFromHint, hasWordBoundaryMatch } from "@/lib/countries"
 import { normalizeName } from "@/lib/trip-tasks"
 
 /**
- * Pictograma del rail plegado (no la portada Unsplash).
- * No es un atlas: destino concreto > país con imagen fuerte > marca estable por id.
- * Las reglas van de más específicas a más genéricas; la primera gana.
+ * Destinos que no son un país ISO (o que el catálogo rechaza a propósito).
+ * Escocia → saltire (`gb-sct`), no Union Jack. Granada no es GD (Grenada).
  */
-const RULES: { glyph: string; keys: readonly string[] }[] = [
-  { glyph: "🏔️", keys: ["alaska", "denali", "pirineos", "alpes", "andes", "himalaya", "dolomitas", "patagonia"] },
-  { glyph: "🏰", keys: ["escocia", "scotland", "highland", "edimburgo", "edinburgh", "glasgow"] },
-  { glyph: "🕌", keys: ["granada", "alhambra"] },
-  { glyph: "🌋", keys: ["islandia", "iceland", "reikiavik", "reykjavik"] },
-  { glyph: "🌸", keys: ["japon", "japan", "tokio", "tokyo", "kioto", "kyoto", "osaka"] },
-  { glyph: "🗼", keys: ["paris"] },
-  { glyph: "🗽", keys: ["nueva york", "new york"] },
-  { glyph: "🎡", keys: ["londres", "london"] },
-  { glyph: "🛶", keys: ["venecia", "venice"] },
-  { glyph: "🏛️", keys: ["roma", "rome", "atenas", "athens", "grecia", "greece"] },
-  { glyph: "🦙", keys: ["peru", "machu", "cusco", "cuzco"] },
-  { glyph: "🐘", keys: ["tailandia", "thailand", "bangkok"] },
-  { glyph: "🦘", keys: ["australia", "sydney"] },
-  { glyph: "🦁", keys: ["safari", "kenia", "kenya", "tanzania"] },
-  { glyph: "🌴", keys: ["bali", "caribe", "cancun"] },
-  { glyph: "🏝️", keys: ["maldivas", "maldives", "ibiza", "mallorca", "menorca", "canarias", "hawaii", "hawai"] },
-  { glyph: "🏜️", keys: ["marruecos", "morocco", "marrakech", "desierto", "sahara"] },
-  { glyph: "🌲", keys: ["noruega", "norway", "suecia", "sweden", "finlandia", "finland", "laponia"] },
-  { glyph: "☘️", keys: ["irlanda", "ireland", "dublin"] },
-  { glyph: "🍋", keys: ["amalfi", "sicilia", "sicily", "capri"] },
-  { glyph: "🌌", keys: ["aurora"] },
-  { glyph: "🏖️", keys: ["playa"] },
-  { glyph: "🎄", keys: ["navidad", "christmas"] },
+const FLAG_OVERRIDES: { code: string; keys: readonly string[] }[] = [
+  { code: "us", keys: ["alaska", "denali"] },
+  {
+    code: "gb-sct",
+    keys: ["escocia", "scotland", "highland", "edimburgo", "edinburgh", "glasgow"],
+  },
+  { code: "es", keys: ["granada", "alhambra"] },
 ]
 
-/** Solo países con un pictograma inequívoco. ES/US/FR/IT/GB no: demasiados viajes distintos. */
-const COUNTRY_GLYPHS: Record<string, string> = {
-  IS: "🌋",
-  JP: "🌸",
-  EG: "🌅",
-  TH: "🐘",
-  KE: "🦁",
-  TZ: "🦁",
-  AU: "🦘",
-  NZ: "🥝",
-  PE: "🦙",
-  IE: "☘️",
-  GR: "🏛️",
-  MA: "🏜️",
-  ID: "🌴",
-  MV: "🏝️",
+/** Código de `circle-flags` (`np`, `gb-sct`). Nada de path traversal en el src. */
+const FLAG_CODE_RE = /^[a-z]{2}(?:-[a-z]{2,4})?$/
+
+function blobOf(name: string, area?: string | null): string {
+  return normalizeName([name, area ?? ""].filter(Boolean).join(" "))
 }
 
-const FALLBACK_GLYPHS = [
-  "🗺️",
-  "🧳",
-  "⛺️",
-  "🌄",
-  "🌊",
-  "🚂",
-  "🚲",
-  "🎒",
-  "⛲️",
-  "🌉",
-  "🌙",
-  "🌻",
-] as const
-
-function hashString(value: string): number {
-  let hash = 5381
-  for (let i = 0; i < value.length; i++) {
-    hash = ((hash << 5) + hash) ^ value.charCodeAt(i)
-  }
-  return hash >>> 0
-}
-
-function glyphFromText(text: string): string | null {
-  if (!text) return null
-  for (const rule of RULES) {
+function overrideFlag(blob: string): string | null {
+  if (!blob) return null
+  for (const rule of FLAG_OVERRIDES) {
     for (const key of rule.keys) {
-      if (hasWordBoundaryMatch(text, key)) return rule.glyph
+      if (hasWordBoundaryMatch(blob, key)) return rule.code
     }
   }
   return null
 }
 
-export function tripRailGlyph(input: {
+function firstIsoFromHint(hint: string | null | undefined): string | null {
+  const code = collectCountryCodesFromHint(hint)[0]
+  return code ? code.toLowerCase() : null
+}
+
+/**
+ * Bandera del rail plegado. No usa `resolveTripCountryCodes`: esa función
+ * escanea ítems/días y en el sidebar se pagaría en cada mutación.
+ */
+export function tripRailFlagCode(input: {
   name: string
   countries?: readonly string[]
   area?: string | null
-  id?: string
-}): string {
-  const blob = normalizeName([input.name, input.area ?? ""].filter(Boolean).join(" "))
-  const fromText = glyphFromText(blob)
-  if (fromText) return fromText
+}): string | null {
+  const blob = blobOf(input.name, input.area)
+  const overridden = overrideFlag(blob)
+  if (overridden) return overridden
 
-  for (const code of input.countries ?? []) {
-    const glyph = COUNTRY_GLYPHS[code.toUpperCase()]
-    if (glyph) return glyph
+  for (const raw of input.countries ?? []) {
+    const code = raw.trim().toLowerCase()
+    if (FLAG_CODE_RE.test(code)) return code
   }
 
-  const seed = input.id || blob || "viaje"
-  return FALLBACK_GLYPHS[hashString(seed) % FALLBACK_GLYPHS.length]
+  return firstIsoFromHint(input.name) ?? firstIsoFromHint(input.area)
+}
+
+export function isTripRailFlagCode(code: string): boolean {
+  return FLAG_CODE_RE.test(code)
+}
+
+export function tripRailFlagSrc(code: string): string | null {
+  const normalized = code.trim().toLowerCase()
+  if (!FLAG_CODE_RE.test(normalized)) return null
+  return `/circle-flags/${normalized}.svg`
+}
+
+export function tripRailLetter(name: string): string {
+  const ch = name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .match(/[a-zA-Z0-9]/)
+  return (ch?.[0] ?? "?").toUpperCase()
 }

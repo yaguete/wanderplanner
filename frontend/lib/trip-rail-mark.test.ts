@@ -1,38 +1,47 @@
 import assert from "node:assert/strict"
-import { tripRailGlyph } from "./trip-rail-mark"
+import {
+  isTripRailFlagCode,
+  tripRailFlagCode,
+  tripRailFlagSrc,
+  tripRailLetter,
+} from "./trip-rail-mark"
 
 {
-  assert.equal(tripRailGlyph({ name: "Alaska" }), "🏔️")
-  assert.equal(tripRailGlyph({ name: "Granada — 1 días" }), "🕌")
-  assert.equal(tripRailGlyph({ name: "Escocia en Navidades" }), "🏰")
+  assert.equal(tripRailFlagCode({ name: "Nepal" }), "np")
+  assert.equal(tripRailFlagCode({ name: "Alaska" }), "us")
+  assert.equal(tripRailFlagCode({ name: "Granada — 1 días" }), "es")
+  assert.equal(tripRailFlagCode({ name: "Escocia en Navidades" }), "gb-sct")
 }
 
 {
-  assert.equal(tripRailGlyph({ name: "Vacaciones", area: "Alaska, USA" }), "🏔️")
-  assert.equal(tripRailGlyph({ name: "Guía de la Alhambra" }), "🕌")
+  assert.equal(tripRailFlagCode({ name: "Vacaciones", area: "Kathmandu, Nepal" }), "np")
+  assert.equal(tripRailFlagCode({ name: "Guía de la Alhambra" }), "es")
+  assert.equal(tripRailFlagCode({ name: "Japón" }), "jp")
+  assert.equal(tripRailFlagCode({ name: "Tailandia" }), "th")
 }
 
 {
-  assert.equal(tripRailGlyph({ name: "Navidad en casa" }), "🎄")
-  assert.notEqual(tripRailGlyph({ name: "Escocia en Navidades" }), "🎄")
+  assert.equal(tripRailFlagCode({ name: "Roadtrip", countries: ["NP"] }), "np")
+  assert.equal(tripRailFlagCode({ name: "Roadtrip", countries: ["jp"] }), "jp")
+  assert.equal(tripRailFlagCode({ name: "Escocia", countries: ["GB"] }), "gb-sct")
 }
 
 {
-  assert.equal(tripRailGlyph({ name: "Roadtrip", countries: ["JP"] }), "🌸")
-  assert.equal(tripRailGlyph({ name: "Granada", countries: ["ES"] }), "🕌")
+  assert.equal(tripRailFlagCode({ name: "Roadtrip con Marta" }), null)
+  assert.equal(tripRailFlagCode({ name: "Navidad en casa" }), null)
 }
 
 {
-  const a = tripRailGlyph({ name: "Roadtrip con Marta", id: "aaa" })
-  const b = tripRailGlyph({ name: "Roadtrip con Marta", id: "aaa" })
-  assert.equal(a, b)
-  assert.match(a, /\p{Extended_Pictographic}/u)
-  assert.notEqual(a, "🏔️")
+  assert.equal(tripRailFlagSrc("NP"), "/circle-flags/np.svg")
+  assert.equal(tripRailFlagSrc("gb-sct"), "/circle-flags/gb-sct.svg")
+  assert.equal(tripRailFlagSrc("../etc/passwd"), null)
+  assert.equal(isTripRailFlagCode("gb-sct"), true)
+  assert.equal(isTripRailFlagCode("np"), true)
+  assert.equal(isTripRailFlagCode("GB-SCT"), false)
 }
 
 {
-  assert.equal(
-    tripRailGlyph({ name: "Sin nombre útil", countries: ["ES", "US"], id: "same" }),
-    tripRailGlyph({ name: "Sin nombre útil", countries: ["ES"], id: "same" }),
-  )
+  assert.equal(tripRailLetter("Nepal"), "N")
+  assert.equal(tripRailLetter("  ártica"), "A")
+  assert.equal(tripRailLetter(""), "?")
 }
