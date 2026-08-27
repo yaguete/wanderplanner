@@ -37,7 +37,7 @@ function TripRailMark({
   return (
     <span
       className={cn(
-        "relative flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-inset ring-foreground/10 transition-opacity",
+        "relative flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-inset ring-foreground/10 transition-opacity",
         dimmed ? "opacity-40 group-hover:opacity-90" : "opacity-100",
       )}
       aria-hidden
@@ -47,14 +47,14 @@ function TripRailMark({
           key={src}
           src={src}
           alt=""
-          width={20}
-          height={20}
+          width={16}
+          height={16}
           className="size-full object-cover"
           draggable={false}
           onError={() => setBroken(true)}
         />
       ) : (
-        <span className="text-[10px] font-medium leading-none text-muted-foreground">
+        <span className="text-[9px] font-medium leading-none text-muted-foreground">
           {tripRailLetter(name)}
         </span>
       )}
