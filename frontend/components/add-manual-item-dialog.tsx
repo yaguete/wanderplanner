@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -552,11 +553,13 @@ export function AddManualItemDialog({
 
           <div className="space-y-2">
             <Label htmlFor={detailId}>Nota (opcional)</Label>
-            <Input
+            <Textarea
               id={detailId}
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
               placeholder="Horario, reserva, tip…"
+              rows={3}
+              className="min-h-[80px] resize-y text-sm"
             />
           </div>
             </>

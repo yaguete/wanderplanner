@@ -1,6 +1,6 @@
 "use client"
 
-import { createElement, type ReactNode } from "react"
+import { createElement, useEffect, useState, type ReactNode } from "react"
 import {
   Car,
   Check,
@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Lightbulb,
   Search,
   Ticket,
   Trash2,
@@ -25,11 +26,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS } from "@/lib/item-styles"
-import { itemProvenanceLabel, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
+import { itemProvenanceLabel } from "@/lib/item-provenance"
 import type { FlightSearchHit } from "@/lib/flight-search"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
@@ -222,6 +225,62 @@ function ItemOverflowMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function useFinePointer(): boolean {
+  const [fine, setFine] = useState(false)
+  useEffect(() => {
+    const mql = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const sync = () => setFine(mql.matches)
+    sync()
+    mql.addEventListener("change", sync)
+    return () => mql.removeEventListener("change", sync)
+  }, [])
+  return fine
+}
+
+/** Nota en ficha de Ruta: tooltip al hover, popover al tap (como el calendario). */
+function ItemNoteHint({ note }: { note: string }) {
+  const finePointer = useFinePointer()
+  const trigger = (
+    <button
+      type="button"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted"
+      aria-label="Ver nota"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+    </button>
+  )
+  const body = (
+    <p className="m-0 whitespace-pre-wrap break-words">{note}</p>
+  )
+
+  if (finePointer) {
+    return (
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+        <TooltipContent side="top" className="max-h-64 max-w-xs overflow-y-auto text-xs">
+          {body}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="end"
+        className="max-h-64 w-auto max-w-xs overflow-y-auto p-3 text-xs"
+        collisionPadding={{ bottom: 80, top: 8, left: 8, right: 8 }}
+      >
+        {body}
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -505,9 +564,6 @@ export function TravelItemCard(props: TravelItemCardProps) {
           ) : null}
         </p>
       )}
-      {props.sourceId === MANUAL_SOURCE_ID && props.detail?.trim() ? (
-        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail.trim()}</p>
-      ) : null}
     </div>
   )
 
@@ -553,6 +609,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
         )}
         <div className="flex shrink-0 items-center gap-1 pr-1">
           {props.taskIndicator}
+          {props.detail?.trim() ? <ItemNoteHint note={props.detail.trim()} /> : null}
           {props.onEdit ? (
             <ItemOverflowMenu
               onEdit={props.onEdit}

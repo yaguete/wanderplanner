@@ -15,6 +15,7 @@ import { Loader2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import {
   resolvePermanentCoords,
@@ -479,11 +480,13 @@ export function TransportRouteForm({
 
       <div className="space-y-2">
         <Label htmlFor={`${id}-detail`}>Referencia o nota (opcional)</Label>
-        <Input
+        <Textarea
           id={`${id}-detail`}
           value={detail}
           onChange={(e) => setDetail(e.target.value)}
           placeholder="Número de reserva, horario…"
+          rows={3}
+          className="min-h-[80px] resize-y text-sm"
         />
       </div>
 
