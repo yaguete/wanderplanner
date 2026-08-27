@@ -166,4 +166,20 @@ const dLegs = day("d1", [
   assert.equal(resolveDropTarget([], 0), null)
 }
 
+// ── Eco no medido: soltar sobre su franja cae en ESE día, no en el anterior ─
+
+{
+  // Día 1 acaba en y=80. Día 2 tiene un eco visual 80–250 que NO se mide;
+  // el primer ítem medido está en 250. Sin acotar por día, y=120 elige el
+  // hueco final de d1 (distancia 40 vs 125).
+  const d1echo = day("d1", [item("a", 0, 60)], 0, 80)
+  const d2echo = day("d2", [item("b", 250, 60)], 80, 320)
+  const slots = buildSlots([d1echo, d2echo], "z")
+  const unscoped = resolveDropTarget(slots, 120)
+  assert.equal(unscoped?.dayId, "d1", "sin days, el eco 'pertenece' al día anterior")
+  const scoped = resolveDropTarget(slots, 120, [d1echo, d2echo])
+  assert.equal(scoped?.dayId, "d2")
+  assert.equal(scoped?.index, 0)
+}
+
 console.log("itinerary-dnd: ok")

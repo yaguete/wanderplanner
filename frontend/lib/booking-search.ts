@@ -1,19 +1,18 @@
 /**
- * Enlace de búsqueda de Booking para alojamientos del asistente.
- *
- * Analogía de [`flight-search.ts`](./flight-search.ts): búsqueda prerellenada,
- * sin API ni precios. El `aid` es el identificador de afiliado propio
- * (Partner Hub). Nunca pisa el `affiliateUrl` de una fuente: el bloguero
- * conserva el suyo.
+ * Enlace de búsqueda de Booking para alojamientos propios (asistente o
+ * alta a mano). Analogía de [`flight-search.ts`](./flight-search.ts):
+ * búsqueda prerellenada, sin API ni precios. El `aid` es el identificador
+ * de afiliado propio (Partner Hub). Nunca pisa el `affiliateUrl` de una
+ * fuente: el bloguero conserva el suyo.
  *
  * Las fechas (`checkin`/`checkout`) y el número de viajeros se añaden al
  * pintar, no se persisten — ver [`booking-dates.ts`](./booking-dates.ts).
  */
-import { ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
+import { isSyntheticSourceId } from "@/lib/item-provenance"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { bookingStayHref, isBookingStayUrl } from "@/lib/booking-dates"
 
-/** Enganche de afiliación PROPIO: solo stays vía asistente, nunca fuentes. */
+/** Enganche de afiliación PROPIO: stays del asistente o a mano, nunca fuentes. */
 export const BOOKING_AFFILIATE_AID = "1607597"
 
 /** Label de campaña del Partner Hub (va junto al aid). */
@@ -72,11 +71,21 @@ export function buildAssistantBookingSearchUrl(params: {
   return url.toString()
 }
 
-/** Base persistible: el afiliado del ítem, o Booking nuestro si es del asistente. */
+/** Base persistible: el afiliado del ítem, o Booking nuestro si es propio.
+ *
+ * Fuente → el selector ya propaga `affiliateUrl` del bloguero; no sustituir.
+ * Asistente / manual → mismo `aid` (el del Partner Hub). Canibalizar al
+ * partner rompe el canal de distribución: un stay de fuente nunca debe
+ * caer al aid propio aunque el manual/asistente sí lo use.
+ */
 export function resolveStayAffiliateUrl(item: StayReserveInput): string | null {
   const stored = sanitizeAffiliateUrl(item.affiliateUrl)
   if (stored) return stored
-  if (item.type === "stay" && item.sourceId === ASSISTANT_SOURCE_ID) {
+  if (
+    item.type === "stay" &&
+    item.sourceId &&
+    isSyntheticSourceId(item.sourceId)
+  ) {
     return buildAssistantBookingSearchUrl({ name: item.name, region: item.region })
   }
   return null

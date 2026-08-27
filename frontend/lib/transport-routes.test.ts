@@ -579,6 +579,65 @@ describe("mapa recorrido de lugares", () => {
     assert.equal(places[2]!.dayNumber, 2)
   })
 
+  it("stay con spanDays: cierre último del día, apertura primero del siguiente", () => {
+    const hotel = baseItem("full-moon", "stay", "Full Moon", { lng: 19.06, lat: 47.5 })
+    hotel.spanDays = 3
+    hotel.region = "Király utca 15"
+    const days: UserDay[] = [
+      {
+        id: "d1",
+        label: "",
+        items: [baseItem("a1", "activity", "Ruin pub", { lng: 19.07, lat: 47.5 }), hotel],
+      },
+      {
+        id: "d2",
+        label: "",
+        items: [baseItem("a2", "activity", "Parlamento", { lng: 19.05, lat: 47.51 })],
+      },
+      {
+        id: "d3",
+        label: "",
+        items: [baseItem("a3", "activity", "Termas", { lng: 19.04, lat: 47.49 })],
+      },
+      {
+        id: "d4",
+        label: "",
+        items: [baseItem("a4", "activity", "Mercado", { lng: 19.06, lat: 47.48 })],
+      },
+    ]
+    const places = collectItineraryPlaces(days)
+    const ids = places.map((p) => p.id)
+    // Día 1: activity, hotel (ya cierra) — sin close sintético.
+    assert.deepEqual(ids.slice(0, 2), ["a1", "full-moon"])
+    // Día 2: open, activity, close
+    assert.equal(ids[2], "full-moon::open::2")
+    assert.equal(ids[3], "a2")
+    assert.equal(ids[4], "full-moon::close::2")
+    // Día 3: open, activity, close
+    assert.equal(ids[5], "full-moon::open::3")
+    assert.equal(ids[7], "full-moon::close::3")
+    // Día 4 checkout: open, activity (sin close)
+    assert.equal(ids[8], "full-moon::open::4")
+    assert.equal(ids[9], "a4")
+    assert.equal(places.some((p) => p.id === "full-moon::close::4"), false)
+    assert.equal(places.find((p) => p.id === "full-moon::open::2")!.region, "Király utca 15")
+  })
+
+  it("stay con spanDays y sin coords: no inyecta anclas", () => {
+    const hotel = baseItem("h", "stay", "Hotel")
+    hotel.spanDays = 3
+    const days: UserDay[] = [
+      { id: "d1", label: "", items: [hotel] },
+      { id: "d2", label: "", items: [baseItem("a2", "activity", "X")] },
+      { id: "d3", label: "", items: [] },
+    ]
+    const places = collectItineraryPlaces(days)
+    assert.deepEqual(
+      places.map((p) => p.id),
+      ["h", "a2"],
+    )
+  })
+
   it("punto sin coords se salta; une vecinos y aparece en skipped", () => {
     const places = [
       {

@@ -92,11 +92,11 @@ export default function AvisoLegalPage() {
           las añadimos al mismo enlace; el afiliado del autor no cambia.
         </p>
         <p>
-          Si el asistente te recomienda un alojamiento que no venía de una fuente, el
-          enlace de reserva va a Booking con nuestro identificador de afiliado: el nombre
-          del hotel, el destino, las fechas y el número de viajeros viajan en la dirección.
-          Si reservas por ahí, Booking puede pagarnos una comisión. Eso no sustituye nunca
-          el enlace de un bloguero.
+          Si un alojamiento no venía de una fuente —te lo recomienda el asistente o lo
+          añades tú—, el enlace de reserva va a Booking con nuestro identificador de
+          afiliado: el nombre del hotel, el destino, las fechas y el número de viajeros
+          viajan en la dirección. Si reservas por ahí, Booking puede pagarnos una
+          comisión. Eso no sustituye nunca el enlace de un bloguero.
         </p>
         <p>
           «Buscar vuelos» te lleva a Skyscanner con el origen, el destino, las fechas y el

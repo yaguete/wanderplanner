@@ -7,6 +7,7 @@
 import type { ItemType, ShareCard, Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import { stripNullChars } from "@/lib/day-summary"
 import { isSyntheticSourceId, itemProvenanceLabel } from "@/lib/item-provenance"
+import { parseSpanDays } from "@/lib/item-span"
 
 export const SHARE_MAX_DAYS = 30
 export const SHARE_MAX_ITEMS_PER_DAY = 8
@@ -20,6 +21,10 @@ export type SharePlanItem = {
   type: ItemType
   name: string
   region: string | null
+  /** Noches del stay si `spanDays` ≥ 2. Noches sí, dinero no. */
+  nights?: number
+  /** Días de una activity con `spanDays` ≥ 2. */
+  days?: number
   route: { from: string; to: string; mode: string | null } | null
   via: string | null
 }
@@ -79,10 +84,13 @@ function itemVia(item: UserDayItem): string | null {
 
 function mapItem(item: UserDayItem, cited: Set<string>): SharePlanItem {
   if (!isSyntheticSourceId(item.sourceId)) cited.add(item.sourceId)
+  const span = parseSpanDays(item.spanDays)
   return {
     type: item.type,
     name: clip(item.name) || "Sin nombre",
     region: clipOrNull(item.region),
+    ...(item.type === "stay" && span != null ? { nights: span } : {}),
+    ...(item.type === "activity" && span != null ? { days: span } : {}),
     route: itemRoute(item),
     via: itemVia(item),
   }

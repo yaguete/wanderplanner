@@ -42,7 +42,7 @@ import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
 import { mapCountryCodes, mapDestinationHint } from "@/lib/map-destination"
 import { dateISOForDayIndex, formatDayDate, formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
-import { ITEM_DOT_COLORS, itemTypeLabel, transportIconForItem } from "@/lib/item-styles"
+import { ITEM_DOT_COLORS, itemEditAriaLabel, itemTypeLabel, transportIconForItem } from "@/lib/item-styles"
 import { TASK_STATUS_LABELS } from "@/lib/task-labels"
 import { dayItemsSignature, generateDaySummary } from "@/lib/day-summary"
 import { ApiLimitError } from "@/lib/api"
@@ -59,6 +59,14 @@ import type { ItemType, RouteLeg, Trip, TripTaskCategory, TripTaskState, UserDay
 import { flightSearchHrefForItem } from "@/lib/flight-search"
 import { stayDayIndexesForItem } from "@/lib/booking-dates"
 import { stayReserveHref } from "@/lib/booking-search"
+import {
+  expandSpannedItems,
+  spanAnchorLabel,
+  spanDaysAfterDroppingEcho,
+  spanEchoLabel,
+  spanEchoRemoveLabel,
+  type SpannedSlot,
+} from "@/lib/item-span"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
@@ -141,6 +149,8 @@ const CATEGORY_EMPTY: Record<
   },
 }
 
+const EMPTY_SLOTS: SpannedSlot[] = []
+
 const EMPTY_TRANSPORT_DISTANCES: TransportDistances = {
   byMode: {},
   drawnKm: 0,
@@ -197,6 +207,8 @@ export default function ItineraryPanel({
     updateDayLabel,
     applyDaySummary,
     setDayItemCoords,
+    setItemSpanDays,
+    updateDayItem,
   } = useTrips()
   const trip = getTrip(tripId)
   const isMobile = useIsMobile()
@@ -382,6 +394,7 @@ export default function ItineraryPanel({
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [manualDialogDayId, setManualDialogDayId] = useState<string | null>(null)
   const [manualDialogInitialType, setManualDialogInitialType] = useState<ItemType | null>(null)
+  const [manualDialogExisting, setManualDialogExisting] = useState<UserDayItem | null>(null)
   const [extraTaskDialogOpen, setExtraTaskDialogOpen] = useState(false)
   const [routeLegDialog, setRouteLegDialog] = useState<{
     leg: RouteLeg
@@ -450,11 +463,15 @@ export default function ItineraryPanel({
     [removeBasicFromTrip, tripId],
   )
 
-  const openManualDialog = useCallback((dayId?: string | null, type?: ItemType | null) => {
-    setManualDialogDayId(dayId ?? null)
-    setManualDialogInitialType(type ?? null)
-    setManualDialogOpen(true)
-  }, [])
+  const openManualDialog = useCallback(
+    (dayId?: string | null, type?: ItemType | null, existing?: UserDayItem | null) => {
+      setManualDialogDayId(dayId ?? null)
+      setManualDialogInitialType(type ?? existing?.type ?? null)
+      setManualDialogExisting(existing ?? null)
+      setManualDialogOpen(true)
+    },
+    [],
+  )
 
   const openRouteLegDialog = useCallback(
     (leg: RouteLeg, existingItem?: UserDayItem | null) => {
@@ -494,8 +511,12 @@ export default function ItineraryPanel({
   // Lugares del recorrido (stay/food/activity) en orden de introducción.
   const mapPlaces: ItineraryMapPoint[] = useMemo(() => {
     if (!trip || listMode !== "map") return []
+    const byId = new Map<string, UserDayItem>()
+    for (const d of trip.days) {
+      for (const it of d.items) byId.set(it.id, it)
+    }
     return collectItineraryPlaces(trip.days).map((p) => {
-      const item = trip.days[p.dayNumber - 1]?.items.find((it) => it.id === p.id)
+      const item = byId.get(p.spanAnchorId ?? p.id)
       return {
         id: p.id,
         name: p.name,
@@ -503,6 +524,8 @@ export default function ItineraryPanel({
         dayNumber: p.dayNumber,
         region: item ? resolveRegion(item) : p.region,
         coords: p.coords ?? null,
+        spanRole: p.spanRole,
+        spanAnchorId: p.spanAnchorId,
       }
     })
   }, [trip, resolveRegion, listMode])
@@ -545,7 +568,9 @@ export default function ItineraryPanel({
     if (!trip) return []
     let counts: Map<number, number>
     if (listMode === "map") {
-      const placeCounts = mappableCountsByDay(collectItineraryPlaces(trip.days))
+      const placeCounts = mappableCountsByDay(
+        collectItineraryPlaces(trip.days).filter((p) => !p.spanRole),
+      )
       const transportCounts = mappableCountsByDay([
         ...collectMapSegments(trip.days),
         ...collectMapGatewayAnchors(trip.days),
@@ -568,6 +593,11 @@ export default function ItineraryPanel({
       mappableCount: counts.get(index + 1) ?? 0,
     }))
   }, [trip, mapMode, listMode])
+
+  const spannedByDay = useMemo(
+    () => (trip ? expandSpannedItems(trip.days) : []),
+    [trip?.days],
+  )
 
   const onDragMoveItem = useCallback(
     (params: MoveParams) => {
@@ -607,6 +637,13 @@ export default function ItineraryPanel({
       removeItemFromDay(tripId, dayId, itemId)
     },
     [removeItemFromDay, tripId],
+  )
+
+  const handleShortenStay = useCallback(
+    (itemId: string, spanIndex: number) => {
+      setItemSpanDays(tripId, itemId, spanDaysAfterDroppingEcho(spanIndex))
+    },
+    [setItemSpanDays, tripId],
   )
 
   const handleResetDay = useCallback((dayId: string) => {
@@ -991,11 +1028,13 @@ export default function ItineraryPanel({
                     summarySignature={day.summarySignature ?? null}
                     countryCodes={trip.countries}
                     items={day.items}
+                    slots={spannedByDay[dayIndex] ?? EMPTY_SLOTS}
                     resolveRegion={resolveRegion}
                     isDaySelected={selectedDayIds.has(day.id)}
                     onDaySelectChange={setDaySelected}
                     onResetDay={handleResetDay}
                     onRemoveItem={handleRemoveItem}
+                    onShortenStay={handleShortenStay}
                     onAddManualItem={openManualDialog}
                     onSetTaskState={handleSetTaskState}
                     taskStates={trip.tasks}
@@ -1007,6 +1046,7 @@ export default function ItineraryPanel({
                     }
                     onOpenRouteLeg={openRouteLegDialog}
                     onEditTransport={handleEditTransport}
+                    onEditItem={(dayId, item) => openManualDialog(dayId, item.type, item)}
                     updateDayLabel={updateDayLabel}
                     applyDaySummary={applyDaySummary}
                   />
@@ -1117,20 +1157,20 @@ export default function ItineraryPanel({
                     ? () => openManualDialog(null, "stay")
                     : undefined
             }
-            onEditTransportItem={
-              categoryView === "transport"
-                ? ({ dayId, item }) => {
-                    if (isRouteLegItem(item)) {
-                      const leg = item.route?.leg
-                      if (leg === "outbound" || leg === "return") {
-                        openRouteLegDialog(leg, item)
-                        return
-                      }
-                    }
-                    openTransportDialog(dayId, item)
-                  }
-                : undefined
-            }
+            onEditTransportItem={({ dayId, item }) => {
+              if (isRouteLegItem(item)) {
+                const leg = item.route?.leg
+                if (leg === "outbound" || leg === "return") {
+                  openRouteLegDialog(leg, item)
+                  return
+                }
+              }
+              if (item.type === "transport") {
+                openTransportDialog(dayId, item)
+                return
+              }
+              openManualDialog(dayId, item.type, item)
+            }}
             onSetTaskState={handleSetTaskState}
             onAddExtraTask={handleAddExtraTask}
             onRemoveExtraTask={handleRemoveExtraTask}
@@ -1156,6 +1196,7 @@ export default function ItineraryPanel({
           if (!next) {
             setManualDialogDayId(null)
             setManualDialogInitialType(null)
+            setManualDialogExisting(null)
           }
         }}
         days={trip.days}
@@ -1163,7 +1204,14 @@ export default function ItineraryPanel({
         initialType={manualDialogInitialType}
         countryCodes={mapCountries}
         destinationHint={mapDestHint}
+        existingItem={manualDialogExisting}
+        existingDayId={manualDialogExisting ? manualDialogDayId : null}
         onSubmit={(item, dayId) => {
+          if (manualDialogExisting) {
+            const result = updateDayItem(tripId, { dayId, item })
+            if (!result.ok) toast.error(result.error)
+            return
+          }
           addItemToDay(tripId, dayId, item)
         }}
         onRequestTransport={(dayId) => {
@@ -1224,28 +1272,32 @@ export default function ItineraryPanel({
 }
 
 function DayItineraryTimeline({
-  items,
+  slots,
   dayIndex,
   days,
   flightSearchTrip,
   resolveRegion,
   onRemoveItem,
+  onShortenStay,
   taskStates,
   onSetTaskState,
   onEditRouteLeg,
   onEditTransport,
+  onEditItem,
   emphasized = false,
 }: {
-  items: UserDayItem[]
+  slots: SpannedSlot[]
   dayIndex: number
   days: UserDay[]
   flightSearchTrip: Pick<Trip, "startDate" | "numDays" | "numTravelers" | "currency">
   resolveRegion: (item: UserDayItem) => string | null
   onRemoveItem: (itemId: string) => void
+  onShortenStay: (itemId: string, spanIndex: number) => void
   taskStates: Record<string, TripTaskState>
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
   onEditRouteLeg?: (item: UserDayItem) => void
   onEditTransport?: (item: UserDayItem) => void
+  onEditItem?: (item: UserDayItem) => void
   /** Día marcado en el checkbox: resalta las cards del día. */
   emphasized?: boolean
 }) {
@@ -1254,7 +1306,7 @@ function DayItineraryTimeline({
   const lastLiRef = useRef<HTMLLIElement | null>(null)
   const [line, setLine] = useState({ top: 0, height: 0 })
 
-  const itemIds = useMemo(() => items.map((i) => i.id).join("\0"), [items])
+  const itemIds = useMemo(() => slots.map((s) => s.item.id).join("\0"), [slots])
 
   // Altura de la línea vertical entre el centro del primer y último punto; depende de layout y de ResizeObserver.
   const measure = useCallback(() => {
@@ -1287,7 +1339,7 @@ function DayItineraryTimeline({
     }
   }, [measure])
 
-  const n = items.length
+  const n = slots.length
   const showLine = n > 1 && line.height > 0.5
 
   return (
@@ -1300,7 +1352,8 @@ function DayItineraryTimeline({
         />
       )}
       <ul className="relative z-[1] m-0 list-none space-y-2.5 p-0">
-        {items.map((item, index) => {
+        {slots.map((slot, index) => {
+          const { item, isEcho, spanIndex, spanTotal } = slot
           const taskKey = taskKeyForItem(item)
           const state = taskStates[taskKey] ?? null
           const status = resolveTaskStatus(state)
@@ -1309,11 +1362,11 @@ function DayItineraryTimeline({
             hasAffiliate: Boolean(item.affiliateUrl?.trim()),
           })
           const titleAdornment =
-            bucket === "triage" || bucket === "dismissed" ? null : (
+            isEcho || bucket === "triage" || bucket === "dismissed" ? null : (
               <RouteTaskIndicator bucket={bucket} status={status} />
             )
           const taskIndicator =
-            bucket === "dismissed" ? (
+            !isEcho && bucket === "dismissed" ? (
               <RouteTaskIndicator
                 bucket={bucket}
                 status={status}
@@ -1331,22 +1384,33 @@ function DayItineraryTimeline({
               : null
           const transportVisual =
             item.type === "transport" ? transportIconForItem(item) : null
+          const spanLabel =
+            !isEcho ? spanAnchorLabel(item.type, spanTotal) : null
           return (
             <li
-              key={item.id}
-              data-flip-id={item.id}
-              {...(!isLeg ? { "data-wp-draggable": "1" } : {})}
+              key={isEcho ? `echo:${item.id}` : item.id}
+              {...(!isEcho ? { "data-flip-id": item.id } : {})}
+              {...(!isEcho && !isLeg ? { "data-wp-draggable": "1" } : {})}
               ref={(el) => {
                 if (index === 0) firstLiRef.current = el
                 if (index === n - 1) lastLiRef.current = el
               }}
-              className="relative flex min-h-0 items-center gap-0 @md:gap-3 [@media(hover:hover)_and_(pointer:fine)]:hover:z-[2]"
+              className={cn(
+                "relative flex min-h-0 items-center gap-0 @md:gap-3 [@media(hover:hover)_and_(pointer:fine)]:hover:z-[2]",
+                isEcho && "opacity-70",
+              )}
             >
+              {/*
+                Eco: <li> en el mismo ul, SIN data-flip-id ni data-wp-draggable.
+                measureDays / originFromLi miran [data-flip-id] en toda la
+                <section data-day-id>, no el ul. No "arreglarlo" como los legs
+                (esos sí llevan flip-id y no son arrastrables).
+              */}
               <div className="z-10 hidden w-5 shrink-0 items-center justify-center @md:flex" aria-hidden>
                 <div
                   className={cn(
                     "h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-card",
-                    ITEM_DOT_COLORS[item.type],
+                    isEcho ? "bg-muted-foreground/40" : ITEM_DOT_COLORS[item.type],
                   )}
                 />
               </div>
@@ -1354,6 +1418,7 @@ function DayItineraryTimeline({
                 className={cn(
                   "min-w-0 flex-1 transition-[border-color,box-shadow,background-color,transform]",
                   emphasized && "border-foreground/25 bg-muted/40 shadow-md",
+                  isEcho && "bg-muted/40",
                 )}
                 variant="planned"
                 title={item.name}
@@ -1362,7 +1427,12 @@ function DayItineraryTimeline({
                 sourceAuthor={item.sourceAuthor}
                 detail={item.detail}
                 regionLabel={resolveRegion(item)}
-                typeLabel={itemTypeLabel(item.type, item)}
+                typeLabel={
+                  isEcho
+                    ? spanEchoLabel(item.type, spanIndex, spanTotal)
+                    : itemTypeLabel(item.type, item)
+                }
+                spanLabel={spanLabel}
                 href={
                   item.type === "stay"
                     ? stayReserveHref({
@@ -1381,36 +1451,45 @@ function DayItineraryTimeline({
                 outboundSurface="route_card"
                 outboundAffiliate={item.affiliateUrl ? "partner" : "auto"}
                 flightSearch={
-                  item.route
-                    ? flightSearchHrefForItem({
-                        route: item.route,
-                        dayIndex,
-                        trip: flightSearchTrip,
-                        days,
-                      })
-                    : null
+                  isEcho
+                    ? null
+                    : item.route
+                      ? flightSearchHrefForItem({
+                          route: item.route,
+                          dayIndex,
+                          trip: flightSearchTrip,
+                          days,
+                        })
+                      : null
                 }
                 routeSummary={routeSummary}
                 transportIcon={transportVisual?.Icon}
                 transportIconLabel={transportVisual?.label}
-                onRemove={() => onRemoveItem(item.id)}
+                onRemove={() =>
+                  isEcho ? onShortenStay(item.id, spanIndex) : onRemoveItem(item.id)
+                }
+                removeAriaLabel={isEcho ? spanEchoRemoveLabel(item.type) : "Quitar ítem"}
                 onEdit={
-                  isLeg && onEditRouteLeg
-                    ? () => onEditRouteLeg(item)
-                    : item.type === "transport" && onEditTransport
-                      ? () => onEditTransport(item)
-                      : undefined
+                  isEcho
+                    ? undefined
+                    : isLeg && onEditRouteLeg
+                      ? () => onEditRouteLeg(item)
+                      : item.type === "transport" && onEditTransport
+                        ? () => onEditTransport(item)
+                        : onEditItem
+                          ? () => onEditItem(item)
+                          : undefined
                 }
                 editAriaLabel={
                   isLeg
                     ? item.route?.leg === "outbound"
                       ? "Editar viaje de ida"
                       : "Editar viaje de vuelta"
-                    : "Editar traslado"
+                    : itemEditAriaLabel(item.type)
                 }
                 titleAdornment={titleAdornment}
                 taskIndicator={taskIndicator}
-                moveControls={isLeg ? undefined : <DragHandle />}
+                moveControls={isEcho || isLeg ? undefined : <DragHandle />}
               />
             </li>
           )
@@ -1427,6 +1506,7 @@ function DragHandle() {
       role="button"
       tabIndex={0}
       aria-label="Reordenar ítem"
+      title="Reordenar"
       className="inline-flex h-8 w-7 items-center justify-center rounded-lg text-foreground/40 transition-colors hover:bg-muted/60 hover:text-foreground/70"
     >
       <GripVertical className="h-4 w-4" strokeWidth={1.8} aria-hidden />
@@ -1523,11 +1603,13 @@ const DaySection = memo(function DaySection({
   summarySignature,
   countryCodes,
   items,
+  slots,
   resolveRegion,
   isDaySelected,
   onDaySelectChange,
   onResetDay,
   onRemoveItem,
+  onShortenStay,
   onAddManualItem,
   taskStates,
   onSetTaskState,
@@ -1535,6 +1617,7 @@ const DaySection = memo(function DaySection({
   showReturnPlaceholder,
   onOpenRouteLeg,
   onEditTransport,
+  onEditItem,
   updateDayLabel,
   applyDaySummary,
 }: {
@@ -1548,11 +1631,13 @@ const DaySection = memo(function DaySection({
   summarySignature: string | null
   countryCodes: string[]
   items: UserDayItem[]
+  slots: SpannedSlot[]
   resolveRegion: (item: UserDayItem) => string | null
   isDaySelected: boolean
   onDaySelectChange: (dayId: string, checked: boolean) => void
   onResetDay: (dayId: string) => void
   onRemoveItem: (dayId: string, itemId: string) => void
+  onShortenStay: (itemId: string, spanIndex: number) => void
   onAddManualItem: (dayId?: string | null) => void
   taskStates: Record<string, TripTaskState>
   onSetTaskState: (taskKey: string, patch: Partial<TripTaskState>) => void
@@ -1560,6 +1645,7 @@ const DaySection = memo(function DaySection({
   showReturnPlaceholder: boolean
   onOpenRouteLeg: (leg: RouteLeg, existingItem?: UserDayItem | null) => void
   onEditTransport: (dayId: string, item: UserDayItem) => void
+  onEditItem: (dayId: string, item: UserDayItem) => void
   updateDayLabel: (tripId: string, dayId: string, label: string) => void
   applyDaySummary: (
     tripId: string,
@@ -1838,7 +1924,7 @@ const DaySection = memo(function DaySection({
         </div>
       ) : null}
 
-      {items.length === 0 && !showOutboundPlaceholder && !showReturnPlaceholder ? (
+      {items.length === 0 && slots.length === 0 && !showOutboundPlaceholder && !showReturnPlaceholder ? (
         <div
           className={cn(
             "rounded-2xl border-2 border-dashed px-4 py-5 text-center text-sm text-muted-foreground transition-colors",
@@ -1859,14 +1945,15 @@ const DaySection = memo(function DaySection({
             .
           </p>
         </div>
-      ) : items.length > 0 ? (
+      ) : slots.length > 0 ? (
         <DayItineraryTimeline
-          items={items}
+          slots={slots}
           dayIndex={dayIndex}
           days={days}
           flightSearchTrip={flightSearchTrip}
           resolveRegion={resolveRegion}
           onRemoveItem={(itemId) => onRemoveItem(dayId, itemId)}
+          onShortenStay={onShortenStay}
           taskStates={taskStates}
           onSetTaskState={onSetTaskState}
           emphasized={isDaySelected}
@@ -1875,11 +1962,12 @@ const DaySection = memo(function DaySection({
             if (leg === "outbound" || leg === "return") onOpenRouteLeg(leg, item)
           }}
           onEditTransport={(item) => onEditTransport(dayId, item)}
+          onEditItem={(item) => onEditItem(dayId, item)}
         />
       ) : null}
 
       {showReturnPlaceholder ? (
-        <div className={cn("space-y-1.5", items.length > 0 || showOutboundPlaceholder ? "mt-2.5" : "")}>
+        <div className={cn("space-y-1.5", slots.length > 0 || items.length > 0 || showOutboundPlaceholder ? "mt-2.5" : "")}>
           <RouteLegPlaceholder
             leg="return"
             onClick={() => onOpenRouteLeg("return")}

@@ -64,6 +64,7 @@ import {
   type PlacesRouteLeg,
   type TransportDistances,
 } from "@/lib/map-route-geometry"
+import { filterStaySpanPins } from "@/lib/item-span"
 import { routeModeLabel } from "@/lib/route-legs"
 import type { RouteMode } from "@/types/itinerary"
 import { AdjustLocationDialog } from "@/components/adjust-location-dialog"
@@ -313,6 +314,9 @@ export type ItineraryMapPoint = {
   coords?: { lng: number; lat: number } | null
   /** Solo hubs: llegada (fin de ida) o salida (inicio de vuelta). */
   hubRole?: "arrival" | "departure"
+  /** Vértices de apertura/cierre de un stay con spanDays. */
+  spanRole?: "open" | "close"
+  spanAnchorId?: string
 }
 
 export type { ItineraryMapSegment }
@@ -484,6 +488,8 @@ function asGeocodePoint(p: ItineraryMapPoint): GeocodePoint {
     region: p.region,
     coords: p.coords,
     hubRole: p.hubRole,
+    spanRole: p.spanRole,
+    spanAnchorId: p.spanAnchorId,
   }
 }
 
@@ -876,6 +882,15 @@ export function ItineraryMapView({
         : [],
     [geocodeResult, focusDayNumber],
   )
+  const pinResolved = useMemo(() => {
+    const kept = new Set(
+      filterStaySpanPins(
+        visibleResolved.map((r) => r.point),
+        focusDayNumber,
+      ).map((p) => p.id),
+    )
+    return visibleResolved.filter((r) => kept.has(r.point.id))
+  }, [visibleResolved, focusDayNumber])
   const visibleFailed = useMemo(
     () =>
       geocodeResult
@@ -893,6 +908,8 @@ export function ItineraryMapView({
         dayNumber: p.dayNumber,
         region: p.region,
         coords: p.coords ?? null,
+        spanAnchorId: p.spanAnchorId,
+        spanRole: p.spanRole,
       }))
     }
     const failedIds = new Set(geocodeResult.failed.map((f) => f.point.id))
@@ -906,6 +923,8 @@ export function ItineraryMapView({
         dayNumber: p.dayNumber,
         region: p.region,
         coords: hit ?? (failedIds.has(p.id) ? null : (p.coords ?? null)),
+        spanAnchorId: p.spanAnchorId,
+        spanRole: p.spanRole,
       }
     })
   }, [geocodeResult, visiblePlaces])
@@ -918,11 +937,11 @@ export function ItineraryMapView({
   /** Numeración sobre la secuencia dibujada (solo localizados del ámbito). */
   const drawnStopNumberById = useMemo(() => {
     const map = new Map<string, number>()
-    visibleResolved.forEach((r, i) => {
+    pinResolved.forEach((r, i) => {
       map.set(r.point.id, i + 1)
     })
     return map
-  }, [visibleResolved])
+  }, [pinResolved])
 
   /** Posición en el itinerario completo (para popup). */
   const itineraryOrderById = useMemo(() => {
@@ -1359,7 +1378,7 @@ export function ItineraryMapView({
         }
       }
     } else {
-      for (const r of visibleResolved) {
+      for (const r of pinResolved) {
         const drawn = drawnStopNumberById.get(r.point.id)
         const order = itineraryOrderById.get(r.point.id)
         const approximate = r.precision === "approximate"
@@ -1443,7 +1462,7 @@ export function ItineraryMapView({
       popupDataByIdRef.current.set(v.id, {
         name: v.point.name,
         label: v.label,
-        adjustable: Boolean(onPersistItemCoords) && mappableItemType(v.point.type) != null,
+        adjustable: Boolean(onPersistItemCoords) && mappableItemType(v.point.type) != null && !v.point.spanRole,
         itemType: mappableItemType(v.point.type) ?? undefined,
       })
       const existing = markersByIdRef.current.get(v.id)
@@ -1481,6 +1500,7 @@ export function ItineraryMapView({
     segments,
     segmentsKey,
     visibleResolved,
+    pinResolved,
     drawnStopNumberById,
     itineraryOrderById,
     showHoverPopup,
@@ -1699,8 +1719,8 @@ export function ItineraryMapView({
           <>
             {(() => {
               const parts: string[] = []
-              if (visibleResolved.length > 0) {
-                const n = visibleResolved.length
+              if (pinResolved.length > 0) {
+                const n = pinResolved.length
                 parts.push(`${n} parada${n === 1 ? "" : "s"}`)
               }
               if (placesTotalLabel) parts.push(placesTotalLabel)

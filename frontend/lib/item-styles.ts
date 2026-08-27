@@ -68,6 +68,11 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   activity: "Actividad",
 }
 
+export function itemEditAriaLabel(type: ItemType): string {
+  if (type === "transport") return "Editar traslado"
+  return `Editar ${ITEM_LABELS[type].toLowerCase()}`
+}
+
 /**
  * Etiqueta visible de un ítem. Una activity sin enlace de reserva es un «Lugar».
  * `ITEM_LABELS` sigue siendo el diccionario del tipo (selector de alta, etc.).

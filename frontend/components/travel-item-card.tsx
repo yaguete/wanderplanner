@@ -1,9 +1,30 @@
 "use client"
 
 import { createElement, type ReactNode } from "react"
-import { Car, Check, ExternalLink, Home, MapPin, Pencil, Plus, Search, Ticket, UtensilsCrossed, X, type LucideIcon } from "lucide-react"
+import {
+  Car,
+  Check,
+  ExternalLink,
+  Home,
+  MapPin,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Search,
+  Ticket,
+  Trash2,
+  UtensilsCrossed,
+  X,
+  type LucideIcon,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
@@ -75,12 +96,16 @@ type PlannedCardProps = {
   /** Override del badge (p. ej. «Lugar» vs «Actividad»). */
   typeLabel?: string
   onRemove: () => void
+  /** Etiqueta accesible del botón quitar (eco: «Acortar la estancia»). */
+  removeAriaLabel?: string
   /** Editar tramo de ida/vuelta o traslado (T4B.3). */
   onEdit?: () => void
   /** Etiqueta accesible del botón editar. */
   editAriaLabel?: string
   /** Subtítulo extra bajo el título (p. ej. «Avión · Ida»). */
   routeSummary?: string | null
+  /** Meta de estancia (p. ej. «3 noches»). No reutiliza `routeSummary`. */
+  spanLabel?: string | null
   /** Icono/etiqueta específicos de medio de transporte. */
   transportIcon?: LucideIcon
   transportIconLabel?: string
@@ -143,6 +168,61 @@ function trackCardOutbound(
 ) {
   if (!href || !surface) return
   outbound(href, { surface, affiliate: affiliate ?? "auto" })
+}
+
+/**
+ * Overflow de Editar/Eliminar. El trigger es una elipsis horizontal
+ * (`···`), no el kebab vertical: el asa de arrastre ya es un grid de
+ * puntos y juntos se leían como el mismo control.
+ */
+function ItemOverflowMenu({
+  onEdit,
+  editAriaLabel,
+  onRemove,
+  removeLabel,
+}: {
+  onEdit?: () => void
+  editAriaLabel?: string
+  onRemove: () => void
+  removeLabel: string
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted"
+          aria-label="Más acciones"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[10.5rem]"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        {onEdit ? (
+          <DropdownMenuItem
+            aria-label={editAriaLabel}
+            onSelect={() => onEdit()}
+          >
+            Editar
+            <Pencil className="ml-auto" strokeWidth={1.8} aria-hidden />
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem
+          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+          onSelect={() => onRemove()}
+        >
+          {onEdit ? "Eliminar" : removeLabel}
+          <Trash2 className="ml-auto" strokeWidth={1.8} aria-hidden />
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 export function TravelItemCard(props: TravelItemCardProps) {
@@ -365,6 +445,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
   const iconA11y = props.transportIconLabel ?? typeLabel
   const region = props.regionLabel?.trim() ? props.regionLabel.trim() : null
   const routeSummary = props.routeSummary?.trim() ? props.routeSummary.trim() : null
+  const spanLabel = props.spanLabel?.trim() ? props.spanLabel.trim() : null
   const provenance = itemProvenanceLabel({
     sourceId: props.sourceId,
     sourceAuthor: props.sourceAuthor,
@@ -415,6 +496,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
         <p className="mt-1 flex items-center gap-1 text-xs leading-snug text-muted-foreground">
           <span className="truncate">
             <span className="mr-1 font-medium">{typeLabel}</span>
+            {spanLabel ? <span> {spanLabel} </span> : null}
             {region ? <span title={region}>{region} </span> : null}
             {provenance}
           </span>
@@ -429,6 +511,8 @@ export function TravelItemCard(props: TravelItemCardProps) {
     </div>
   )
 
+  const bodyPad = props.moveControls ? "py-3 pl-1 pr-3" : "px-3 py-3"
+
   return (
     <div
       className={cn(
@@ -439,13 +523,21 @@ export function TravelItemCard(props: TravelItemCardProps) {
       data-wp-drag-card=""
     >
       <div className="flex min-h-0 items-stretch">
+        {props.moveControls ? (
+          <div className="flex shrink-0 items-center self-stretch pl-0.5">
+            {props.moveControls}
+          </div>
+        ) : null}
         {href ? (
           <a
             href={href}
             target="_blank"
             rel="noreferrer noopener"
             draggable={false}
-            className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-3 outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
+              bodyPad,
+            )}
             onClick={() =>
               trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
             }
@@ -454,7 +546,7 @@ export function TravelItemCard(props: TravelItemCardProps) {
             {titleAndMeta}
           </a>
         ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3">
+          <div className={cn("flex min-w-0 flex-1 items-center gap-3", bodyPad)}>
             {icon}
             {titleAndMeta}
           </div>
@@ -462,32 +554,26 @@ export function TravelItemCard(props: TravelItemCardProps) {
         <div className="flex shrink-0 items-center gap-1 pr-1">
           {props.taskIndicator}
           {props.onEdit ? (
+            <ItemOverflowMenu
+              onEdit={props.onEdit}
+              editAriaLabel={props.editAriaLabel}
+              onRemove={props.onRemove}
+              removeLabel={props.removeAriaLabel ?? "Quitar ítem"}
+            />
+          ) : (
             <button
               type="button"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                props.onEdit?.()
+                props.onRemove()
               }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-              aria-label={props.editAriaLabel ?? "Editar traslado"}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-destructive"
+              aria-label={props.removeAriaLabel ?? "Quitar ítem"}
             >
-              <Pencil className="h-3.5 w-3.5" strokeWidth={1.8} />
+              <X className="h-4 w-4" strokeWidth={1.8} />
             </button>
-          ) : null}
-          {props.moveControls}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              props.onRemove()
-            }}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-destructive"
-            aria-label="Quitar ítem"
-          >
-            <X className="h-4 w-4" strokeWidth={1.8} />
-          </button>
+          )}
         </div>
       </div>
       {props.flightSearch ? (

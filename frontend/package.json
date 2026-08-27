@@ -59,6 +59,7 @@
     "test:itinerary-utils": "tsx lib/itinerary-utils.test.ts",
     "test:maps-links": "tsx lib/maps-links.test.ts",
     "test:itinerary-dnd": "tsx lib/itinerary-dnd.test.ts",
+    "test:item-span": "tsx lib/item-span.test.ts",
     "test:guest-trip-claim": "tsx lib/guest-trip-claim.test.ts",
     "test:account-security": "tsx lib/account-security.test.ts",
     "test:auth-errors": "tsx lib/auth-errors.test.ts",

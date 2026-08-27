@@ -31,6 +31,7 @@ type DragSession = {
   ul: HTMLElement | null
   origin: DragOrigin
   slots: Slot[]
+  days: MeasuredDay[]
   snapshotScroll: number
   activated: boolean
   longPressTimer: number | null
@@ -281,7 +282,11 @@ export function useItineraryDnd({
       applyLift(session.li, dx, dy)
       const scrollDelta =
         scrollTopOf(scrollRef.current) - session.snapshotScroll
-      const target = resolveDropTarget(session.slots, session.lastY + scrollDelta)
+      const target = resolveDropTarget(
+        session.slots,
+        session.lastY + scrollDelta,
+        session.days,
+      )
       const line = lineRef.current
       if (!target || !line) {
         hideLine(line)
@@ -311,7 +316,9 @@ export function useItineraryDnd({
 
     const activate = () => {
       if (!session || session.activated) return
-      session.slots = buildSlots(measureDays(root), session.origin.itemId)
+      const measured = measureDays(root)
+      session.days = measured
+      session.slots = buildSlots(measured, session.origin.itemId)
       session.snapshotScroll = scrollTopOf(scrollRef.current)
       session.activated = true
       session.longPressTimer = null
@@ -349,7 +356,11 @@ export function useItineraryDnd({
       }
       const scrollDelta =
         scrollTopOf(scrollRef.current) - session.snapshotScroll
-      const target = resolveDropTarget(session.slots, session.lastY + scrollDelta)
+      const target = resolveDropTarget(
+        session.slots,
+        session.lastY + scrollDelta,
+        session.days,
+      )
       const from = session.origin
       const li = session.li
       if (!target) {
@@ -410,6 +421,7 @@ export function useItineraryDnd({
         ul: li.closest("ul"),
         origin,
         slots: [],
+        days: [],
         snapshotScroll: 0,
         activated: false,
         longPressTimer: null,

@@ -12,6 +12,8 @@ export type GeocodePoint = {
   region?: string | null
   coords?: { lng: number; lat: number } | null
   hubRole?: "arrival" | "departure"
+  spanRole?: "open" | "close"
+  spanAnchorId?: string
 }
 
 export type GeocodeResolved = {

@@ -97,13 +97,18 @@ export function buildSlots(days: MeasuredDay[], draggingId: string): Slot[] {
 export function resolveDropTarget(
   slots: Slot[],
   clientY: number,
+  days?: readonly MeasuredDay[],
 ): DropTarget | null {
   if (slots.length === 0) return null
 
-  let best = slots[0]!
+  const containing = days?.find((d) => clientY >= d.top && clientY <= d.bottom)
+  const pool = containing ? slots.filter((s) => s.dayId === containing.dayId) : slots
+  const search = pool.length > 0 ? pool : slots
+
+  let best = search[0]!
   let bestDist = Math.abs(best.y - clientY)
-  for (let i = 1; i < slots.length; i++) {
-    const slot = slots[i]!
+  for (let i = 1; i < search.length; i++) {
+    const slot = search[i]!
     const dist = Math.abs(slot.y - clientY)
     if (dist < bestDist) {
       best = slot

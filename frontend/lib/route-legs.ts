@@ -14,6 +14,7 @@ import type {
   UserDayItem,
 } from "@/types/itinerary"
 import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
+import { parseSpanDays } from "@/lib/item-span"
 
 export const ROUTE_MODES: readonly RouteMode[] = [
   "car",
@@ -146,19 +147,32 @@ export function parseTransportRoute(raw: unknown): TransportRoute | null {
 }
 
 /**
- * Limpia un ítem cargado del jsonb: si `route` está corrupto, lo elimina
- * sin tumbar el resto del viaje.
+ * Limpia un ítem cargado del jsonb: `route` corrupto se elimina; `spanDays`
+ * inválido o 1 se omite. Parsea los dos campos por separado — un stay no
+ * lleva `route`, y un early-return por `route === undefined` dejaría el
+ * saneado de `spanDays` muerto.
  */
 export function sanitizeUserDayItem(item: UserDayItem): UserDayItem {
-  if (item.route === undefined) return item
-  const route = parseTransportRoute(item.route)
-  if (!route) {
-    const rest = { ...item }
-    delete rest.route
-    return rest
+  let next = item
+
+  if (item.route !== undefined) {
+    const route = parseTransportRoute(item.route)
+    if (!route) {
+      next = { ...next }
+      delete next.route
+    } else if (item.route !== route) {
+      next = { ...next, route }
+    }
   }
-  if (item.route === route) return item
-  return { ...item, route }
+
+  const parsed = parseSpanDays(item.spanDays)
+  if (item.spanDays !== parsed) {
+    if (next === item) next = { ...item }
+    if (parsed == null) delete next.spanDays
+    else next.spanDays = parsed
+  }
+
+  return next
 }
 
 export function sanitizeUserDays(days: UserDay[]): UserDay[] {

@@ -34,6 +34,12 @@ import {
 } from "@/lib/mapbox"
 import type { ItemType, UserDay, UserDayItem } from "@/types/itinerary"
 import { getDayUserDescription } from "@/lib/day-heading"
+import {
+  hasFiniteLngLat,
+  itemTakesCalendarSpan,
+  parseSpanDays,
+  spanDaysForWrite,
+} from "@/lib/item-span"
 
 const ITEM_TYPES: ItemType[] = ["activity", "stay", "food", "transport"]
 
@@ -61,6 +67,9 @@ export type AddManualItemDialogProps = {
   onSubmit: (item: UserDayItem, dayId: string) => void
   /** Transporte delega al diálogo de ruta estructurada (T4B.3 §9.6). */
   onRequestTransport?: (dayId: string) => void
+  /** Si está, el formulario edita este ítem (conserva id y procedencia). */
+  existingItem?: UserDayItem | null
+  existingDayId?: string | null
 }
 
 export function AddManualItemDialog({
@@ -73,6 +82,8 @@ export function AddManualItemDialog({
   destinationHint = null,
   onSubmit,
   onRequestTransport,
+  existingItem = null,
+  existingDayId = null,
 }: AddManualItemDialogProps) {
   const id = useId()
   const [type, setType] = useState<ItemType>("activity")
@@ -87,6 +98,7 @@ export function AddManualItemDialog({
     coords: LngLat
   } | null>(null)
   const [listOpen, setListOpen] = useState(false)
+  const [nights, setNights] = useState(1)
 
   const proximityRef = useRef<[number, number] | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -96,18 +108,34 @@ export function AddManualItemDialog({
   const dayFieldId = `${id}-day`
   const placeId = `${id}-place`
   const detailId = `${id}-detail`
+  const nightsId = `${id}-nights`
+
+  const selectedDayIndex = Math.max(0, days.findIndex((d) => d.id === dayId))
+  const maxNights = Math.max(1, days.length - selectedDayIndex)
+  const editing = existingItem != null
+  const durationKind = itemTakesCalendarSpan(type)
 
   useEffect(() => {
     if (!open) return
-    setType(initialType ?? "activity")
-    setName("")
-    setDetail("")
-    setPlaceQuery("")
+    const seed = existingItem
+    setType(seed?.type ?? initialType ?? "activity")
+    setName(seed?.name ?? "")
+    setDetail(seed?.detail?.trim() ?? "")
+    setPlaceQuery(seed?.region?.trim() ?? "")
     setSuggestions([])
-    setSelectedPlace(null)
+    setSelectedPlace(
+      seed && hasFiniteLngLat(seed.coords)
+        ? {
+            label: seed.region?.trim() || seed.name,
+            coords: seed.coords,
+          }
+        : null,
+    )
     setListOpen(false)
     setSuggestLoading(false)
+    setNights(parseSpanDays(seed?.spanDays) ?? 1)
     const preferred =
+      (seed && existingDayId && days.some((d) => d.id === existingDayId) && existingDayId) ||
       (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
       days[0]?.id ||
       ""
@@ -172,6 +200,11 @@ export function AddManualItemDialog({
     }
   }, [placeQuery, open, countryCodes, selectedPlace])
 
+  useEffect(() => {
+    if (!durationKind) return
+    setNights((n) => Math.min(Math.max(1, n), maxNights))
+  }, [durationKind, maxNights])
+
   const canSubmit = name.trim().length > 0 && dayId.length > 0 && days.some((d) => d.id === dayId)
 
   const handleSelectSuggestion = (s: GeocodeSuggestion) => {
@@ -196,16 +229,31 @@ export function AddManualItemDialog({
 
   const handleSubmit = () => {
     if (!canSubmit) return
-    const item: UserDayItem = {
-      id: crypto.randomUUID(),
-      sourceItemId: `manual-${crypto.randomUUID()}`,
-      sourceId: MANUAL_SOURCE_ID,
-      type,
-      name: name.trim(),
-      detail: detail.trim() ? detail.trim() : null,
-      sourceAuthor: "Tú",
-      region: selectedPlace?.label ?? (placeQuery.trim() || null),
-      coords: selectedPlace?.coords ?? null,
+    const item: UserDayItem = existingItem
+      ? {
+          ...existingItem,
+          name: name.trim(),
+          detail: detail.trim() ? detail.trim() : null,
+          region: selectedPlace?.label ?? (placeQuery.trim() || null),
+          coords: selectedPlace?.coords ?? null,
+        }
+      : {
+          id: crypto.randomUUID(),
+          sourceItemId: `manual-${crypto.randomUUID()}`,
+          sourceId: MANUAL_SOURCE_ID,
+          type,
+          name: name.trim(),
+          detail: detail.trim() ? detail.trim() : null,
+          sourceAuthor: "Tú",
+          region: selectedPlace?.label ?? (placeQuery.trim() || null),
+          coords: selectedPlace?.coords ?? null,
+        }
+    if (itemTakesCalendarSpan(item.type)) {
+      const span = spanDaysForWrite(nights, selectedDayIndex, days.length)
+      if (span != null) item.spanDays = span
+      else delete item.spanDays
+    } else {
+      delete item.spanDays
     }
     onSubmit(item, dayId)
     onOpenChange(false)
@@ -216,14 +264,27 @@ export function AddManualItemDialog({
       <DialogContent fullscreenOnMobile hideClose className="sm:max-w-md">
         <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
-            Añadir ítem
+            {editing
+              ? `Editar ${ITEM_LABELS[type].toLowerCase()}`
+              : initialType === "stay"
+                ? "Añadir alojamiento"
+                : initialType === "activity"
+                  ? "Añadir actividad"
+                  : initialType === "food"
+                    ? "Añadir restaurante"
+                    : "Añadir ítem"}
           </DialogTitle>
           <DialogDescription>
-            Añade a tu viaje elementos que no encuentras en tus fuentes.
+            {editing
+              ? durationKind
+                ? "Cambia el nombre, el día, el lugar o la duración."
+                : "Cambia el nombre, el día o el lugar."
+              : "Añade a tu viaje elementos que no encuentras en tus fuentes."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 pb-10">
+          {!editing ? (
           <div className="space-y-2">
             <Label>Tipo</Label>
             <div
@@ -271,6 +332,7 @@ export function AddManualItemDialog({
               })}
             </div>
           </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor={nameId}>Nombre</Label>
@@ -301,7 +363,7 @@ export function AddManualItemDialog({
                   // Delay so click on suggestion registers.
                   window.setTimeout(() => setListOpen(false), 150)
                 }}
-                placeholder="p. ej. Budapest"
+                placeholder={type === "stay" ? "Király utca 15, Budapest" : "p. ej. Budapest"}
                 className="pl-8"
                 autoComplete="off"
                 aria-autocomplete="list"
@@ -344,6 +406,10 @@ export function AddManualItemDialog({
                   ? "Ubicación fijada en el mapa."
                   : "Ubicación guardada."}
               </p>
+            ) : durationKind && nights >= 2 ? (
+              <p className="text-xs text-muted-foreground">
+                Sin una dirección concreta no ancla la jornada en el mapa.
+              </p>
             ) : null}
           </div>
 
@@ -367,6 +433,37 @@ export function AddManualItemDialog({
             </Select>
           </div>
 
+          {durationKind ? (
+            <div className="space-y-2">
+              <Label htmlFor={nightsId}>{type === "stay" ? "Noches" : "Días"}</Label>
+              <Input
+                id={nightsId}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={maxNights}
+                value={nights}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10)
+                  if (!Number.isFinite(n)) {
+                    setNights(1)
+                    return
+                  }
+                  setNights(Math.min(Math.max(1, n), maxNights))
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {maxNights === 1
+                  ? type === "stay"
+                    ? "El viaje acaba este día: 1 noche."
+                    : "El viaje acaba este día: 1 día."
+                  : type === "stay"
+                    ? `Hasta ${maxNights} desde el día de entrada.`
+                    : `Hasta ${maxNights} desde el día de inicio. Se muestra esos días en la Ruta.`}
+              </p>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor={detailId}>Nota (opcional)</Label>
             <Input
@@ -383,7 +480,7 @@ export function AddManualItemDialog({
             Cancelar
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
-            Añadir al plan
+            {editing ? "Guardar" : "Añadir al plan"}
           </Button>
         </DialogFooter>
       </DialogContent>

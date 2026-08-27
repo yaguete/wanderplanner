@@ -278,4 +278,35 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   assert.doesNotMatch(md, /TEXTO_SHARE_NO_DEBE_IR_AL_ASISTENTE/)
 }
 
+{
+  const md = buildTripBriefing(
+    baseTrip({
+      days: [
+        {
+          id: "d1",
+          label: "",
+          items: [
+            {
+              id: "stay-1",
+              sourceItemId: "s",
+              sourceId: "manual",
+              type: "stay",
+              name: "Full Moon Budapest",
+              detail: null,
+              sourceAuthor: "Tú",
+              spanDays: 3,
+            },
+          ],
+        },
+        { id: "d2", label: "", items: [] },
+        { id: "d3", label: "", items: [] },
+      ],
+    }),
+    [],
+  )
+  assert.match(md, /Full Moon Budapest/)
+  assert.match(md, /3 noches/)
+  assert.doesNotMatch(md, /Noche 2 de 3/)
+}
+
 console.log("assistant-context + mapbox country: ok")

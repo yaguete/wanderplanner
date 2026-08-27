@@ -4,6 +4,11 @@
  * Formulario compartido de extremos + medio + hubs (T4B.3 §9.2).
  * No conoce Trip, legs ni tareas: solo datos de formulario.
  * Hubs por extremo: loading/resultados independientes; solo tras acción explícita.
+ *
+ * Duración / `spanDays`: un tramo A→B no dura noches. El campo Noches del
+ * alta manual es solo stay. Enganche futuro (coche de alquiler): un tramo
+ * no modela «tengo el coche N días»; eso sería otro tipo de ítem, no
+ * alargar este formulario.
  */
 import { useEffect, useId, useRef, useState } from "react"
 import { Loader2, MapPin } from "lucide-react"

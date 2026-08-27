@@ -136,7 +136,8 @@ export default function PrivacidadPage() {
           La IA propone y tú decides: no tomamos decisiones automatizadas que te afecten
           legalmente. Y si pulsas «Buscar vuelos», sales a Skyscanner con los datos del vuelo
           en la dirección; si el enlace de un alojamiento es de Booking —el del bloguero o
-          el que genera el asistente— y el viaje tiene fechas, van en ese mismo enlace,
+          el que generamos para el asistente y para los que añades tú— y el viaje tiene
+          fechas, van en ese mismo enlace,
           como cuenta el{" "}
           <Link href="/legal/aviso-legal#enlaces-comerciales" className="font-medium text-foreground underline underline-offset-4">
             aviso legal

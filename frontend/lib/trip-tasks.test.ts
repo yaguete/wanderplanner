@@ -7,6 +7,7 @@ import type {
   UserDayItem,
 } from "@/types/itinerary"
 import { parseTripBudget, parseTripOrigin, rowToTrip, tripToRow, type TripRow } from "./db/trips-repo"
+import { reanchorSpannedStays } from "./item-span"
 import {
   buildTripTasks,
   cancellableApplies,
@@ -1008,6 +1009,167 @@ assert.equal(isBookableTransportMode(null), false)
   })
   const splitJaw = buildTripTasks(openJaw).filter((t) => t.category === "transport")
   assert.equal(splitJaw.length, 2)
+}
+
+// ── Stay manual con spanDays: 1 ocurrencia, 3 noches ─────────────────────────
+
+{
+  const hotel = dayItem({
+    id: "full-moon",
+    type: "stay",
+    name: "Full Moon Budapest",
+    spanDays: 3,
+  })
+  const trip = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [hotel] },
+      { id: "day-2", label: "", items: [] },
+      { id: "day-3", label: "", items: [] },
+      { id: "day-4", label: "", items: [] },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: {},
+  })
+  const tasks = buildTripTasks(trip)
+  const stay = tasks.find((t) => t.sourceKind === "stay")
+  assert.ok(stay)
+  assert.equal(stay!.occurrences, 1)
+  assert.equal(stay!.nights, 3)
+  assert.deepEqual(stay!.dayIndexes, [0, 1, 2])
+  assert.notEqual(stay!.occurrences, stay!.nights)
+}
+
+{
+  // Mixto: dos copias de fuente + un spanDays. dayIndexes ordenado, sin duplicados.
+  const trip = makeTrip({
+    days: [
+      {
+        id: "day-1",
+        label: "",
+        items: [
+          dayItem({ id: "src-a", type: "stay", name: "Hotel Mix" }),
+          dayItem({
+            id: "manual",
+            type: "stay",
+            name: "Hotel Mix",
+            spanDays: 3,
+            sourceId: "manual",
+          }),
+        ],
+      },
+      {
+        id: "day-2",
+        label: "",
+        items: [dayItem({ id: "src-b", type: "stay", name: "Hotel Mix" })],
+      },
+      { id: "day-3", label: "", items: [] },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: {},
+  })
+  const stay = buildTripTasks(trip).find((t) => t.sourceKind === "stay")
+  assert.ok(stay)
+  assert.equal(stay!.occurrences, 3)
+  assert.equal(stay!.nights, 3)
+  assert.deepEqual(stay!.dayIndexes, [0, 1, 2])
+  const sorted = [...stay!.dayIndexes].sort((a, b) => a - b)
+  assert.deepEqual(stay!.dayIndexes, sorted)
+  assert.equal(new Set(stay!.dayIndexes).size, stay!.dayIndexes.length)
+}
+
+{
+  // Tramos: spanDays en un transport NO crea nights.
+  const outbound = dayItem({
+    id: "leg-out",
+    type: "transport",
+    name: "BCN → BUD",
+    spanDays: 5,
+    route: {
+      from: { label: "BCN", coords: { lng: 2, lat: 41 }, kind: "airport" },
+      to: { label: "BUD", coords: { lng: 19, lat: 47 }, kind: "airport" },
+      mode: "flight",
+      leg: "outbound",
+    },
+  })
+  const trip = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [outbound] },
+      { id: "day-2", label: "", items: [] },
+      { id: "day-3", label: "", items: [] },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: {},
+  })
+  const t = buildTripTasks(trip).find((x) => x.id === "leg:outbound")
+  assert.ok(t)
+  assert.equal(t!.nights, undefined)
+}
+
+{
+  // Activity con spanDays: cubre los días, sin nights (eso es de stay).
+  const trek = dayItem({
+    id: "bhutan",
+    type: "activity",
+    name: "Excursión a Bután",
+    spanDays: 5,
+  })
+  const trip = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [trek] },
+      { id: "day-2", label: "", items: [] },
+      { id: "day-3", label: "", items: [] },
+      { id: "day-4", label: "", items: [] },
+      { id: "day-5", label: "", items: [] },
+      { id: "day-6", label: "", items: [] },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: {},
+  })
+  const t = buildTripTasks(trip).find((x) => x.sourceKind === "activity")
+  assert.ok(t)
+  assert.equal(t!.occurrences, 1)
+  assert.equal(t!.nights, undefined)
+  assert.deepEqual(t!.dayIndexes, [0, 1, 2, 3, 4])
+}
+
+{
+  // Borrar el día ancla: el stay y su coste sobreviven reanclados.
+  const hotel = dayItem({
+    id: "full-moon",
+    type: "stay",
+    name: "Full Moon Budapest",
+    spanDays: 3,
+    sourceId: "manual",
+  })
+  const trip = makeTrip({
+    days: [
+      { id: "day-1", label: "", items: [hotel] },
+      { id: "day-2", label: "", items: [] },
+      { id: "day-3", label: "", items: [] },
+      { id: "day-4", label: "", items: [] },
+    ],
+    basics: [],
+    extraTasks: [],
+    tasks: {
+      "stay:full moon budapest": {
+        status: "paid",
+        cost: 240,
+        cancellable: null,
+        notes: null,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    },
+  })
+  const after = [trip.days[1]!, trip.days[2]!, trip.days[3]!]
+  const rescued = reanchorSpannedStays(trip.days, after)
+  assert.ok(rescued[0]!.items.some((i) => i.id === "full-moon"))
+  assert.equal(rescued[0]!.items.find((i) => i.id === "full-moon")!.spanDays, 2)
+  const pruned = withPrunedTasks({ ...trip, days: rescued, numDays: rescued.length })
+  assert.equal(pruned.tasks["stay:full moon budapest"]?.cost, 240)
 }
 
 console.log("trip-tasks: ok")

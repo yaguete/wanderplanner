@@ -59,6 +59,14 @@ import { draftTripNameFor, MAX_AUTO_DAYS } from "@/lib/partner-trip"
 import { createExtraTaskState, foldMirroredFlightReturnCost, mergeTaskState, normalizeName, taskKeyForItem, withPrunedTasks } from "@/lib/trip-tasks"
 import { countryCodeFromTaskId, isCountryTaskId } from "@/lib/country-tasks"
 import {
+  applySpanDays,
+  clipSpanDaysInDays,
+  itemTakesCalendarSpan,
+  parseSpanDays,
+  reanchorSpannedStays,
+  spanClipNotice,
+} from "@/lib/item-span"
+import {
   buildRouteLegItem,
   dayHasNonLegContent,
   findLegItem,
@@ -280,6 +288,16 @@ interface TripContextValue {
     coords: { lng: number; lat: number },
     region?: string | null,
   ) => void
+  /** Recorta o amplía `spanDays` del ancla. `undefined` omite el campo (solo su día). */
+  setItemSpanDays: (tripId: string, itemId: string, spanDays: number | undefined) => void
+  /**
+   * Edita un stay / activity / food (nombre, lugar, día, nota, duración).
+   * Conserva id, procedencia y afiliado. Los transportes van por su diálogo.
+   */
+  updateDayItem: (
+    tripId: string,
+    params: { dayId: string; item: UserDayItem },
+  ) => { ok: true } | { ok: false; error: string }
   moveItemBetweenDays: (
     tripId: string,
     params: { fromDayId: string; toDayId: string; itemId: string; toIndex: number },
@@ -605,6 +623,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setTrips((prev) => {
       const current = prev.find((t) => t.id === tripId)
       if (!current || current.coverUrl === url) return prev
+      // /cover puede fallar en local (API apagada, sin Unsplash) o devolver
+      // vacío. No pises una portada que ya estaba: el syncer lo persistiría.
+      if (!url && current.coverUrl) return prev
       return prev.map((t) => (t.id === tripId ? { ...t, coverUrl: url } : t))
     })
   }, [])
@@ -1314,7 +1335,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         if (t.id !== tripId) return t
         const filtered = t.days.filter((d) => d.id !== dayId)
         if (filtered.length === 0) return t
-        const days = rescueLegsFromRemovedDays(t.days, filtered)
+        const days = clipSpanDaysInDays(
+          reanchorSpannedStays(t.days, rescueLegsFromRemovedDays(t.days, filtered)),
+        )
         return withPrunedTasks(syncTripSchedule(t, days))
       }),
     )
@@ -1335,7 +1358,9 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           if (filtered.length <= 1) break
           filtered = filtered.filter((x) => x.id !== d.id)
         }
-        const days = rescueLegsFromRemovedDays(t.days, filtered)
+        const days = clipSpanDaysInDays(
+          reanchorSpannedStays(t.days, rescueLegsFromRemovedDays(t.days, filtered)),
+        )
         return withPrunedTasks(syncTripSchedule(t, days))
       }),
     )
@@ -1483,11 +1508,135 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     [],
   )
 
+  const setItemSpanDays = useCallback(
+    (tripId: string, itemId: string, spanDays: number | undefined) => {
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+          let found = false
+          const days = t.days.map((d, dayIndex) => {
+            const idx = d.items.findIndex((i) => i.id === itemId)
+            if (idx < 0) return d
+            found = true
+            const items = [...d.items]
+            const prevItem = items[idx]!
+            const nights = spanDays ?? 1
+            items[idx] = applySpanDays(prevItem, nights, dayIndex, t.days.length)
+            return { ...d, items }
+          })
+          return found ? { ...t, days } : t
+        }),
+      )
+    },
+    [],
+  )
+
+  const updateDayItem = useCallback(
+    (
+      tripId: string,
+      params: { dayId: string; item: UserDayItem },
+    ): { ok: true } | { ok: false; error: string } => {
+      const trip = tripsRef.current.find((t) => t.id === tripId)
+      if (!trip) return { ok: false, error: "Viaje no encontrado." }
+      if (!trip.days.some((d) => d.id === params.dayId)) {
+        return { ok: false, error: "Día no encontrado." }
+      }
+      if (params.item.type === "transport") {
+        return { ok: false, error: "Los traslados se editan en su propio formulario." }
+      }
+
+      let existing: UserDayItem | null = null
+      let oldDayId: string | null = null
+      let oldIndex = -1
+      for (const day of trip.days) {
+        const idx = day.items.findIndex((i) => i.id === params.item.id)
+        if (idx >= 0) {
+          existing = day.items[idx]!
+          oldDayId = day.id
+          oldIndex = idx
+          break
+        }
+      }
+      if (!existing || oldDayId == null) {
+        return { ok: false, error: "Ítem no encontrado." }
+      }
+      if (existing.type !== params.item.type) {
+        return { ok: false, error: "No se puede cambiar el tipo." }
+      }
+      if (existing.route?.leg) {
+        return { ok: false, error: "Los tramos de ida/vuelta se editan aparte." }
+      }
+
+      const targetDayIndex = trip.days.findIndex((d) => d.id === params.dayId)
+      let nextItem: UserDayItem = {
+        ...existing,
+        name: params.item.name.trim(),
+        detail: params.item.detail ?? null,
+        region: params.item.region ?? null,
+        coords: params.item.coords ?? null,
+      }
+      if (itemTakesCalendarSpan(existing.type)) {
+        nextItem = applySpanDays(
+          nextItem,
+          parseSpanDays(params.item.spanDays) ?? 1,
+          targetDayIndex,
+          trip.days.length,
+        )
+      } else if (nextItem.spanDays !== undefined) {
+        const rest = { ...nextItem }
+        delete rest.spanDays
+        nextItem = rest
+      }
+
+      const oldKey = taskKeyForItem(existing)
+      const newKey = taskKeyForItem(nextItem)
+      const requested = parseSpanDays(params.item.spanDays)
+      const nextSpan = parseSpanDays(nextItem.spanDays) ?? 1
+      let clipNotice: string | null = null
+      if (requested != null && nextSpan < requested) {
+        clipNotice = spanClipNotice(existing.type, nextSpan, trip.days.length)
+      }
+
+      setTrips((prev) =>
+        prev.map((t) => {
+          if (t.id !== tripId) return t
+
+          const days = t.days.map((d) => {
+            let items = d.items
+            if (d.id === oldDayId) {
+              items = items.filter((i) => i.id !== existing!.id)
+            }
+            if (d.id === params.dayId) {
+              if (oldDayId === params.dayId && oldIndex >= 0) {
+                const next = [...items]
+                const insertAt = Math.min(oldIndex, next.length)
+                next.splice(insertAt, 0, nextItem)
+                return { ...d, items: next }
+              }
+              return { ...d, items: [...items, nextItem] }
+            }
+            return items === d.items ? d : { ...d, items }
+          })
+
+          let tasks = t.tasks
+          if (oldKey !== newKey) {
+            tasks = migrateTaskKeyOnStructure({ tasks, oldKey, newKey })
+          }
+          return withPrunedTasks({ ...t, tasks, days })
+        }),
+      )
+      if (clipNotice) toast.message(clipNotice)
+      return { ok: true }
+    },
+    [],
+  )
+
   const moveItemBetweenDays = useCallback((
     tripId: string,
     params: { fromDayId: string; toDayId: string; itemId: string; toIndex: number },
   ) => {
     const { fromDayId, toDayId, itemId, toIndex } = params
+    let clipNotice: string | null = null
     setTrips((prev) =>
       prev.map((t) => {
         if (t.id !== tripId) return t
@@ -1506,8 +1655,20 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         const sameDay = fromDayId === toDayId
         const targetBase = sameDay ? sourceItems : [...toDay.items]
         const safeIndex = Math.max(0, Math.min(toIndex, targetBase.length))
+        const toDayIndex = t.days.findIndex((d) => d.id === toDayId)
+        const requested = parseSpanDays(movingItem.spanDays)
+        const placed =
+          !sameDay && itemTakesCalendarSpan(movingItem.type) && requested != null
+            ? applySpanDays(movingItem, requested, toDayIndex, t.days.length)
+            : movingItem
+        if (placed !== movingItem && requested != null) {
+          const nextSpan = parseSpanDays(placed.spanDays) ?? 1
+          if (nextSpan < requested) {
+            clipNotice = spanClipNotice(movingItem.type, nextSpan, t.days.length)
+          }
+        }
         const targetItems = [...targetBase]
-        targetItems.splice(safeIndex, 0, movingItem)
+        targetItems.splice(safeIndex, 0, placed)
 
         return {
           ...t,
@@ -1527,6 +1688,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         }
       }),
     )
+    if (clipNotice) toast.message(clipNotice)
   }, [])
 
   const addBasicToTrip = useCallback((tripId: string, basic: UserBasicItem) => {
@@ -1974,6 +2136,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       removeItemFromDay,
       clearDayItems,
       setDayItemCoords,
+      setItemSpanDays,
+      updateDayItem,
       moveItemBetweenDays,
       addBasicToTrip,
       removeBasicFromTrip,
@@ -1991,7 +2155,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, addSourceRouteToTrip, removeItemFromDay, clearDayItems, setDayItemCoords, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, setShareCard, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, addSourceRouteToTrip, removeItemFromDay, clearDayItems, setDayItemCoords, setItemSpanDays, updateDayItem, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, setShareCard, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

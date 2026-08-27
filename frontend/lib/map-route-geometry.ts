@@ -4,6 +4,12 @@
  */
 import type { RouteLeg, RouteMode, UserDay, UserDayItem } from "@/types/itinerary"
 import {
+  listStaySpanMapAnchors,
+  staySpanClosesDay,
+  staySpanOpensDay,
+  staySpanPlaceId,
+} from "@/lib/item-span"
+import {
   modeLineStyle,
   placesLongHopColor,
   placesRouteColor,
@@ -362,6 +368,10 @@ export type ItineraryPlace = {
   dayNumber: number
   region?: string | null
   coords?: { lng: number; lat: number } | null
+  /** Id del stay ancla cuando este punto es apertura/cierre derivado. */
+  spanAnchorId?: string
+  /** Vértices de ruta; no cuentan en el desplegable de días. */
+  spanRole?: "open" | "close"
 }
 
 export type PlacesRouteLegKind = "road-candidate" | "long-hop" | "zero"
@@ -384,21 +394,68 @@ export type PlacesRoute = {
 
 /** Lugares del itinerario en orden de introducción (excluye transportes). */
 export function collectItineraryPlaces(days: UserDay[]): ItineraryPlace[] {
+  const spans = listStaySpanMapAnchors(days)
   const out: ItineraryPlace[] = []
+
   days.forEach((day, dayIndex) => {
+    const dayNumber = dayIndex + 1
+
+    for (const span of spans) {
+      if (!staySpanOpensDay(span, dayIndex)) continue
+      out.push({
+        id: staySpanPlaceId(span.item.id, "open", dayNumber),
+        name: span.item.name,
+        type: "stay",
+        dayNumber,
+        region: span.item.region ?? null,
+        coords: span.coords,
+        spanAnchorId: span.item.id,
+        spanRole: "open",
+      })
+    }
+
     for (const item of day.items) {
       if (item.type !== "stay" && item.type !== "food" && item.type !== "activity") continue
       out.push({
         id: item.id,
         name: item.name,
         type: item.type,
-        dayNumber: dayIndex + 1,
+        dayNumber,
         region: item.region ?? null,
         coords: item.coords ?? null,
       })
     }
+
+    for (const span of spans) {
+      if (!staySpanClosesDay(span, dayIndex)) continue
+      const lastOfDay = lastPlaceOfDay(out, dayNumber)
+      if (
+        lastOfDay &&
+        lastOfDay.type === "stay" &&
+        (lastOfDay.id === span.item.id || lastOfDay.spanAnchorId === span.item.id)
+      ) {
+        continue
+      }
+      out.push({
+        id: staySpanPlaceId(span.item.id, "close", dayNumber),
+        name: span.item.name,
+        type: "stay",
+        dayNumber,
+        region: span.item.region ?? null,
+        coords: span.coords,
+        spanAnchorId: span.item.id,
+        spanRole: "close",
+      })
+    }
   })
   return out
+}
+
+function lastPlaceOfDay(places: ItineraryPlace[], dayNumber: number): ItineraryPlace | undefined {
+  for (let i = places.length - 1; i >= 0; i--) {
+    if (places[i]!.dayNumber === dayNumber) return places[i]
+  }
+  return undefined
 }
 
 function hasFiniteCoords(

@@ -70,14 +70,14 @@ function params(href: string | null): URLSearchParams {
   })
   assert.equal(params(synthesized).get("ss"), "Hotel Nuevo Hallstatt")
   assert.equal(params(synthesized).get("aid"), BOOKING_AFFILIATE_AID)
-  assert.equal(
-    resolveStayAffiliateUrl({
-      type: "stay",
-      name: "Hotel Manual",
-      sourceId: MANUAL_SOURCE_ID,
-    }),
-    null,
-  )
+  const manual = resolveStayAffiliateUrl({
+    type: "stay",
+    name: "Hotel Manual",
+    region: "Budapest",
+    sourceId: MANUAL_SOURCE_ID,
+  })
+  assert.equal(params(manual).get("ss"), "Hotel Manual Budapest")
+  assert.equal(params(manual).get("aid"), BOOKING_AFFILIATE_AID)
   assert.equal(
     resolveStayAffiliateUrl({
       type: "stay",
@@ -114,6 +114,26 @@ function params(href: string | null): URLSearchParams {
   assert.equal(q.get("checkout"), "2027-09-16")
   assert.equal(q.get("selected_currency"), "EUR")
   assert.equal(q.get("group_adults"), "3")
+}
+
+{
+  const href = stayReserveHref({
+    type: "stay",
+    name: "Full Moon Budapest",
+    region: "Budapest",
+    sourceId: MANUAL_SOURCE_ID,
+    startDate: "2026-08-28",
+    dayIndexes: [0, 1, 2],
+    currency: "EUR",
+    numTravelers: 2,
+  })
+  const q = params(href)
+  assert.equal(q.get("aid"), BOOKING_AFFILIATE_AID)
+  assert.equal(q.get("ss"), "Full Moon Budapest")
+  assert.equal(q.get("checkin"), "2026-08-28")
+  assert.equal(q.get("checkout"), "2026-08-31")
+  assert.equal(q.get("selected_currency"), "EUR")
+  assert.equal(q.get("group_adults"), "2")
 }
 
 {

@@ -388,6 +388,14 @@ export interface UserDayItem {
    * La UI/tareas usan `route` cuando existe; el hint solo precarga el formulario.
    */
   sourceRouteHint?: SourceRouteHint
+  /**
+   * Días de calendario que cubre el ítem, contando el de inicio (T4B.2b).
+   * Ausente o 1 = solo su día. Solo se persiste si es un entero ≥ 2.
+   * Stay = noches; activity = duración de la actividad. Food/transport no.
+   * El ítem vive UNA vez, en su día de entrada; los días cubiertos muestran
+   * un eco derivado en render (`expandSpannedItems`). No replicar en jsonb.
+   */
+  spanDays?: number
 }
 
 export interface SourceBasicItem {

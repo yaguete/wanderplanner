@@ -8,6 +8,7 @@
  * al serializar y al mutar en memoria ("borrar es olvidar").
  */
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
+import { itemTakesCalendarSpan, parseSpanDays, unionStayDayIndexes } from "@/lib/item-span"
 import type {
   BasicCategory,
   ExtraTask,
@@ -83,9 +84,10 @@ export type DerivedTripTask = {
   itemIds: string[]
   /** Índices de día (0-based), ordenados y sin repetir. Vacío en básicos/extras. */
   dayIndexes: number[]
-  /** Número de ocurrencias (= `itemIds.length`). */
+  /** Número de ocurrencias persistidas (= `itemIds.length`). En stays
+   *  manuales con `spanDays`, `nights` puede ser mayor: no confundir. */
   occurrences: number
-  /** Solo alojamiento: noches = días distintos en los que aparece. */
+  /** Solo alojamiento: noches = días cubiertos (apariciones o `spanDays`). */
   nights?: number
   sourceId?: string
   affiliateUrl?: string | null
@@ -315,6 +317,7 @@ type DayItemGroup = {
 function aggregateDayItems(trip: Trip): DerivedTripTask[] {
   const groups = new Map<string, DayItemGroup>()
   const order: string[] = []
+  const numDays = trip.days.length
 
   trip.days.forEach((day, dayIndex) => {
     for (const item of day.items) {
@@ -347,6 +350,17 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
         group.dayIndexSet.add(dayIndex)
         group.dayIndexes.push(dayIndex)
       }
+      if (itemTakesCalendarSpan(item.type)) {
+        const span = parseSpanDays(item.spanDays)
+        if (span != null) {
+          for (const idx of unionStayDayIndexes([], dayIndex, span, numDays)) {
+            if (!group.dayIndexSet.has(idx)) {
+              group.dayIndexSet.add(idx)
+              group.dayIndexes.push(idx)
+            }
+          }
+        }
+      }
       if (!group.affiliateUrl && item.affiliateUrl) {
         group.affiliateUrl = item.affiliateUrl
       }
@@ -361,6 +375,7 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
     const g = groups.get(key)!
     const state = trip.tasks[key] ?? null
     const origin: DerivedTaskOrigin = "dayItem"
+    const dayIndexes = [...g.dayIndexes].sort((a, b) => a - b)
     return {
       id: key,
       origin,
@@ -373,9 +388,9 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
         hasAffiliate: Boolean(g.affiliateUrl),
       }),
       itemIds: g.itemIds,
-      dayIndexes: g.dayIndexes,
+      dayIndexes,
       occurrences: g.itemIds.length,
-      nights: g.type === "stay" ? g.dayIndexes.length : undefined,
+      nights: g.type === "stay" ? dayIndexes.length : undefined,
       sourceId: g.sourceId,
       affiliateUrl: g.affiliateUrl,
       vendor: g.vendor,

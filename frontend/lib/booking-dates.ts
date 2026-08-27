@@ -3,6 +3,7 @@
  * no toca el aid ni otros params, no aplica a otros hosts.
  */
 import { dateISOForDayIndex, toISODate } from "@/lib/trip-dates"
+import { clipSpanToTrip, parseSpanDays } from "@/lib/item-span"
 import { taskKeyForItem } from "@/lib/trip-tasks"
 import type { UserDay, UserDayItem } from "@/types/itinerary"
 
@@ -29,20 +30,29 @@ export function isBookingStayUrl(href: string | null | undefined): boolean {
   }
 }
 
-/** Días distintos en los que aparece el mismo alojamiento (clave de tarea). */
+/** Días cubiertos por el alojamiento (apariciones reales + `spanDays`). */
 export function stayDayIndexesForItem(
   days: UserDay[],
-  item: Pick<UserDayItem, "type" | "name" | "route">,
+  item: Pick<UserDayItem, "type" | "name" | "route" | "spanDays" | "id">,
 ): number[] {
   if (item.type !== "stay") return []
   const key = taskKeyForItem(item)
-  const out: number[] = []
+  const numDays = days.length
+  const set = new Set<number>()
   for (let i = 0; i < days.length; i++) {
-    if (days[i]!.items.some((it) => it.type === "stay" && taskKeyForItem(it) === key)) {
-      out.push(i)
+    for (const it of days[i]!.items) {
+      if (it.type !== "stay" || taskKeyForItem(it) !== key) continue
+      set.add(i)
+      const span = parseSpanDays(it.spanDays)
+      if (span == null) continue
+      const total = clipSpanToTrip(i, span, numDays)
+      for (let k = 1; k < total; k++) {
+        const idx = i + k
+        if (idx < numDays) set.add(idx)
+      }
     }
   }
-  return out
+  return [...set].sort((a, b) => a - b)
 }
 
 export function stayDatesFromDayIndexes(

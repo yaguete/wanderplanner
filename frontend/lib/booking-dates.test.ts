@@ -90,6 +90,18 @@ assert.deepEqual(stayDayIndexesForItem(days, stay("Hotel Foo")), [0, 1])
 assert.deepEqual(stayDayIndexesForItem(days, { ...stay("X"), type: "activity" }), [])
 
 {
+  const spanned = stay("Full Moon")
+  spanned.spanDays = 3
+  const oneDay: UserDay[] = [
+    { id: "d0", label: "", items: [spanned] },
+    { id: "d1", label: "", items: [] },
+    { id: "d2", label: "", items: [] },
+    { id: "d3", label: "", items: [] },
+  ]
+  assert.deepEqual(stayDayIndexesForItem(oneDay, spanned), [0, 1, 2])
+}
+
+{
   const href = bookingStayHref({
     href: BOOKING,
     startDate: "2027-09-14",

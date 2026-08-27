@@ -29,6 +29,7 @@ import {
 } from "@/lib/itinerary-calendar"
 import { ITEM_DOT_COLORS, itemTypeLabel } from "@/lib/item-styles"
 import { formatDayDate, toISODate } from "@/lib/trip-dates"
+import { expandSpannedItems } from "@/lib/item-span"
 import { cn } from "@/lib/utils"
 import type { UserDay, UserDayItem } from "@/types/itinerary"
 
@@ -145,9 +146,19 @@ function useCalendarDensity() {
 
 const DENSITY_FALLBACK = 800
 
+const spannedCache = new WeakMap<UserDay[], ReturnType<typeof expandSpannedItems>>()
+
+function spannedForDays(days: UserDay[]) {
+  const hit = spannedCache.get(days)
+  if (hit) return hit
+  const next = expandSpannedItems(days)
+  spannedCache.set(days, next)
+  return next
+}
+
 function itemsForCell(days: UserDay[], cell: CalendarCell): UserDayItem[] {
   if (cell.dayIndex == null) return []
-  return days[cell.dayIndex]?.items ?? []
+  return spannedForDays(days)[cell.dayIndex]?.map((s) => s.item) ?? []
 }
 
 function dayIdForCell(days: UserDay[], cell: CalendarCell): string | null {

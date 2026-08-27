@@ -85,6 +85,7 @@ jobs:
       - run: npm run test:itinerary-utils
       - run: npm run test:maps-links
       - run: npm run test:itinerary-dnd
+      - run: npm run test:item-span
       - run: npm run test:route-legs
       - run: npm run test:transport-routes
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React

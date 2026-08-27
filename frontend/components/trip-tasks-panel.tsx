@@ -82,7 +82,7 @@ export type TripTasksPanelProps = {
    */
   onAddAction?: () => void
   /**
-   * Editar un traslado desde la fila de tarea (abre la modal de transporte / ida-vuelta).
+   * Editar un ítem de día (traslado, alojamiento, actividad, restaurante).
    */
   onEditTransportItem?: (payload: { dayId: string; item: UserDayItem }) => void
   /** Copy del empty state. */
@@ -241,15 +241,13 @@ function matchesCategories(
   return categories.has(task.category) || categories.has(taskGroupKey(task.category))
 }
 
-function findTransportItem(
+function findTaskDayItem(
   trip: Pick<Trip, "days">,
   task: DerivedTripTask,
 ): { dayId: string; item: UserDayItem } | null {
-  for (const dayIndex of task.dayIndexes) {
-    const day = trip.days[dayIndex]
-    if (!day) continue
+  for (const day of trip.days) {
     const item = day.items.find((i) => {
-      if (i.type !== "transport" || !task.itemIds.includes(i.id)) return false
+      if (!task.itemIds.includes(i.id)) return false
       if (task.roundtripFlight && i.route?.leg === "return") return false
       return true
     })
@@ -391,9 +389,12 @@ export function TripTasksPanel({
                           onEditTransport={
                             onEditTransportItem &&
                             task.origin === "dayItem" &&
-                            task.category === "transport"
+                            (task.category === "transport" ||
+                              task.category === "accommodation" ||
+                              task.category === "activity" ||
+                              task.category === "food")
                               ? () => {
-                                  const found = findTransportItem(trip, task)
+                                  const found = findTaskDayItem(trip, task)
                                   if (found) onEditTransportItem(found)
                                 }
                               : undefined

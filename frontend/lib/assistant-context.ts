@@ -5,6 +5,7 @@
 import type { Source, Trip } from "@/types/itinerary"
 import { BASIC_LABELS, itemTypeLabel } from "@/lib/item-styles"
 import { itemProvenanceLabel } from "@/lib/item-provenance"
+import { itemTakesCalendarSpan, parseSpanDays } from "@/lib/item-span"
 import { countriesPlainList } from "@/lib/countries"
 import { travelerTypeLabels } from "@/lib/traveler-profile"
 import { TASK_CATEGORY_LABELS } from "@/lib/task-labels"
@@ -131,8 +132,14 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
         const typeLabel = itemTypeLabel(item.type, item)
         const region = item.region ? ` · ${item.region}` : ""
         const detail = item.detail ? ` — ${item.detail}` : ""
+        const span = itemTakesCalendarSpan(item.type) ? parseSpanDays(item.spanDays) : undefined
+        const duration = !span
+          ? ""
+          : item.type === "stay"
+            ? ` · ${span} noches`
+            : ` · ${span} días`
         lines.push(
-          `- id=\`${item.id}\` [${typeLabel}] **${item.name}**${region}${detail} (${itemProvenanceLabel(item)}; sourceId=${item.sourceId})`,
+          `- id=\`${item.id}\` [${typeLabel}] **${item.name}**${region}${duration}${detail} (${itemProvenanceLabel(item)}; sourceId=${item.sourceId})`,
         )
       }
     }

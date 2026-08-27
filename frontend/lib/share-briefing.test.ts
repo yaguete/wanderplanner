@@ -336,4 +336,63 @@ function dumped(trip: Trip, sources: Source[] = [source({ id: "src-1" })]): stri
   assert.equal(shareCardIsStale(edited, "ccccdddd"), true)
 }
 
+{
+  const trip = makeTrip({
+    days: [
+      day("d1", [
+        item({
+          id: "stay-1",
+          type: "stay",
+          name: "Full Moon Budapest",
+          region: "Király utca 15",
+          sourceId: MANUAL_SOURCE_ID,
+          spanDays: 3,
+        }),
+      ]),
+      day("d2", []),
+      day("d3", []),
+    ],
+    numDays: 3,
+    tasks: {
+      "stay:full moon budapest": {
+        status: "paid",
+        cost: 240,
+        cancellable: null,
+        notes: null,
+        updatedAt: "2026-08-01T00:00:00.000Z",
+      },
+    },
+  })
+  const payload = buildSharePlan(trip, [])
+  assert.equal(payload.days[0]!.items[0]!.nights, 3)
+  const blob = JSON.stringify(payload)
+  assert.ok(!blob.includes("240"), "share plan leaked stay cost")
+  assert.ok(!blob.includes("cost"))
+  assert.ok(!blob.includes("paid"))
+}
+
+{
+  const trip = makeTrip({
+    days: [
+      day("d1", [
+        item({
+          id: "trek-1",
+          type: "activity",
+          name: "Excursión a Bután",
+          sourceId: MANUAL_SOURCE_ID,
+          spanDays: 5,
+        }),
+      ]),
+      day("d2", []),
+      day("d3", []),
+      day("d4", []),
+      day("d5", []),
+    ],
+    numDays: 5,
+  })
+  const payload = buildSharePlan(trip, [])
+  assert.equal(payload.days[0]!.items[0]!.days, 5)
+  assert.equal(payload.days[0]!.items[0]!.nights, undefined)
+}
+
 console.log("share-briefing: ok")
