@@ -40,3 +40,18 @@ export function formatDayHeadingLine(
   if (!d) return `Día ${n}`
   return `Día ${n} · ${d}`
 }
+
+/**
+ * Opción de un selector de día (alta/edición): "Día 1 (29 ago)",
+ * o "Día 1" si el viaje no tiene fechas. Sin descripción del día.
+ *
+ * `dateLabel` es el compacto (`formatDayDateShort`), no el de cabecera.
+ */
+export function formatDayPickerLabel(
+  dayIndex0: number,
+  dateLabel?: string | null,
+): string {
+  const n = dayIndex0 + 1
+  const date = dateLabel?.trim() || null
+  return date ? `Día ${n} (${date})` : `Día ${n}`
+}

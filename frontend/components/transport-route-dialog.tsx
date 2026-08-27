@@ -27,7 +27,8 @@ import {
   TransportRouteForm,
   type TransportRouteFormValue,
 } from "@/components/transport-route-form"
-import { getDayUserDescription } from "@/lib/day-heading"
+import { formatDayPickerLabel } from "@/lib/day-heading"
+import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
 import { seedTransportForm } from "@/lib/transport-routes"
 import type { TransportRoute, UserDay, UserDayItem } from "@/types/itinerary"
 
@@ -35,6 +36,8 @@ export type TransportRouteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   days: UserDay[]
+  /** Fecha de inicio del viaje; sin ella el selector no muestra el paréntesis. */
+  startDate?: string | null
   /** Día preseleccionado (creación) o día actual del ítem (edición). */
   initialDayId?: string | null
   existingItem?: UserDayItem | null
@@ -51,6 +54,7 @@ export function TransportRouteDialog({
   open,
   onOpenChange,
   days,
+  startDate = null,
   initialDayId = null,
   existingItem = null,
   onSubmit,
@@ -117,8 +121,10 @@ export function TransportRouteDialog({
               <SelectContent>
                 {days.map((d, i) => (
                   <SelectItem key={d.id} value={d.id}>
-                    Día {i + 1}
-                    {getDayUserDescription(d.label) ? ` · ${getDayUserDescription(d.label)}` : ""}
+                    {formatDayPickerLabel(
+                      i,
+                      formatDayDateShort(dateISOForDayIndex(startDate, i)),
+                    )}
                   </SelectItem>
                 ))}
               </SelectContent>

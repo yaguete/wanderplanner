@@ -1200,6 +1200,7 @@ export default function ItineraryPanel({
           }
         }}
         days={trip.days}
+        startDate={trip.startDate}
         initialDayId={manualDialogDayId}
         initialType={manualDialogInitialType}
         countryCodes={mapCountries}
@@ -1250,6 +1251,7 @@ export default function ItineraryPanel({
             if (!next) setTransportDialog(null)
           }}
           days={trip.days}
+          startDate={trip.startDate}
           initialDayId={transportDialog.dayId}
           existingItem={transportDialog.existingItem}
           onSubmit={(data) => {

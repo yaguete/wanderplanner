@@ -4,6 +4,7 @@ import {
   daysBetweenInclusive,
   endDateFromStartAndNumDays,
   formatDayDate,
+  formatDayDateShort,
   formatTripDates,
 } from "./trip-dates"
 
@@ -30,6 +31,11 @@ assert.equal(dateISOForDayIndex("2026-10-24", 2), "2026-10-26")
 // Formato de cabecera de día (weekday + día + mes, sin año).
 assert.equal(formatDayDate("2026-09-14"), "lun 14 sept") // lunes
 assert.equal(formatDayDate("2026-08-09"), "dom 9 ago")
+
+// Selector de día: sin weekday, para caber en el combobox.
+assert.equal(formatDayDateShort("2026-08-29"), "29 ago")
+assert.equal(formatDayDateShort("2026-09-14"), "14 sept")
+assert.equal(formatDayDateShort(null), null)
 
 // Añadir un día al viaje de aceptación: 14–20 → 14–21.
 assert.equal(endDateFromStartAndNumDays("2026-09-14", 8), "2026-09-21")

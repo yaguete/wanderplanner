@@ -33,7 +33,8 @@ import {
   type LngLat,
 } from "@/lib/mapbox"
 import type { ItemType, UserDay, UserDayItem } from "@/types/itinerary"
-import { getDayUserDescription } from "@/lib/day-heading"
+import { formatDayPickerLabel } from "@/lib/day-heading"
+import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
 import {
   hasFiniteLngLat,
   itemTakesCalendarSpan,
@@ -64,6 +65,8 @@ export type AddManualItemDialogProps = {
   countryCodes?: string[]
   /** Texto libre del destino del viaje para proximity / bias. */
   destinationHint?: string | null
+  /** Fecha de inicio del viaje; sin ella el selector no muestra el paréntesis. */
+  startDate?: string | null
   onSubmit: (item: UserDayItem, dayId: string) => void
   /** Transporte delega al diálogo de ruta estructurada (T4B.3 §9.6). */
   onRequestTransport?: (dayId: string) => void
@@ -80,6 +83,7 @@ export function AddManualItemDialog({
   initialType = null,
   countryCodes = [],
   destinationHint = null,
+  startDate = null,
   onSubmit,
   onRequestTransport,
   existingItem = null,
@@ -98,11 +102,14 @@ export function AddManualItemDialog({
     coords: LngLat
   } | null>(null)
   const [listOpen, setListOpen] = useState(false)
+  /** El autocompletado solo busca si el usuario ha tocado el campo. */
+  const [placeFieldActive, setPlaceFieldActive] = useState(false)
   const [nights, setNights] = useState(1)
 
   const proximityRef = useRef<[number, number] | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const placeBlurRef = useRef<number | null>(null)
 
   const nameId = `${id}-name`
   const dayFieldId = `${id}-day`
@@ -132,7 +139,12 @@ export function AddManualItemDialog({
         : null,
     )
     setListOpen(false)
+    setPlaceFieldActive(false)
     setSuggestLoading(false)
+    if (placeBlurRef.current != null) {
+      window.clearTimeout(placeBlurRef.current)
+      placeBlurRef.current = null
+    }
     setNights(parseSpanDays(seed?.spanDays) ?? 1)
     const preferred =
       (seed && existingDayId && days.some((d) => d.id === existingDayId) && existingDayId) ||
@@ -156,6 +168,11 @@ export function AddManualItemDialog({
     if (!open) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     abortRef.current?.abort()
+
+    if (!placeFieldActive) {
+      setSuggestLoading(false)
+      return
+    }
 
     const q = placeQuery.trim()
     if (selectedPlace && q === selectedPlace.label) {
@@ -198,7 +215,7 @@ export function AddManualItemDialog({
       if (debounceRef.current) clearTimeout(debounceRef.current)
       abortRef.current?.abort()
     }
-  }, [placeQuery, open, countryCodes, selectedPlace])
+  }, [placeQuery, open, countryCodes, selectedPlace, placeFieldActive])
 
   useEffect(() => {
     if (!durationKind) return
@@ -222,6 +239,7 @@ export function AddManualItemDialog({
   }
 
   const handlePlaceChange = (value: string) => {
+    setPlaceFieldActive(true)
     setPlaceQuery(value)
     setSelectedPlace(null)
     setListOpen(true)
@@ -357,11 +375,19 @@ export function AddManualItemDialog({
                 value={placeQuery}
                 onChange={(e) => handlePlaceChange(e.target.value)}
                 onFocus={() => {
-                  if (suggestions.length > 0) setListOpen(true)
+                  if (placeBlurRef.current != null) {
+                    window.clearTimeout(placeBlurRef.current)
+                    placeBlurRef.current = null
+                  }
+                  setPlaceFieldActive(true)
                 }}
                 onBlur={() => {
                   // Delay so click on suggestion registers.
-                  window.setTimeout(() => setListOpen(false), 150)
+                  placeBlurRef.current = window.setTimeout(() => {
+                    placeBlurRef.current = null
+                    setListOpen(false)
+                    setPlaceFieldActive(false)
+                  }, 150)
                 }}
                 placeholder={type === "stay" ? "Király utca 15, Budapest" : "p. ej. Budapest"}
                 className="pl-8"
@@ -420,15 +446,14 @@ export function AddManualItemDialog({
                 <SelectValue placeholder="Elige un día" />
               </SelectTrigger>
               <SelectContent>
-                {days.map((day, index) => {
-                  const desc = getDayUserDescription(day.label)
-                  const label = desc ? `Día ${index + 1} · ${desc}` : `Día ${index + 1}`
-                  return (
-                    <SelectItem key={day.id} value={day.id}>
-                      {label}
-                    </SelectItem>
-                  )
-                })}
+                {days.map((day, index) => (
+                  <SelectItem key={day.id} value={day.id}>
+                    {formatDayPickerLabel(
+                      index,
+                      formatDayDateShort(dateISOForDayIndex(startDate, index)),
+                    )}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

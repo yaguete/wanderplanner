@@ -11,6 +11,7 @@
     "predev": "node scripts/copy-circle-flags.mjs",
     "prebuild": "node scripts/copy-circle-flags.mjs",
     "test:trip-dates": "tsx lib/trip-dates.test.ts",
+    "test:day-heading": "tsx lib/day-heading.test.ts",
     "test:trip-tasks": "tsx lib/trip-tasks.test.ts",
     "test:trip-budget": "tsx lib/trip-budget.test.ts",
     "test:country-tasks": "tsx lib/country-tasks.test.ts",

@@ -62,6 +62,13 @@ export function formatDayDate(iso: string | null): string | null {
   return `${WEEKDAYS_SHORT[a.getDay()]} ${a.getDate()} ${shortMonth(a)}`
 }
 
+/** Día+mes corto, sin weekday: "29 ago"; null si falta o es inválida. */
+export function formatDayDateShort(iso: string | null): string | null {
+  const a = parseYMD(iso)
+  if (!a) return null
+  return `${a.getDate()} ${shortMonth(a)}`
+}
+
 /** Días de calendario del rango inclusive; null si faltan fechas o rango inválido. */
 export function daysBetweenInclusive(
   startISO: string | null,
