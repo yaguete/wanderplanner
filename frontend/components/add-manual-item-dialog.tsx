@@ -32,9 +32,14 @@ import {
   type GeocodeSuggestion,
   type LngLat,
 } from "@/lib/mapbox"
-import type { ItemType, UserDay, UserDayItem } from "@/types/itinerary"
+import type { ItemType, TransportRoute, UserDay, UserDayItem } from "@/types/itinerary"
 import { formatDayPickerLabel } from "@/lib/day-heading"
 import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
+import {
+  emptyEndpoint,
+  TransportRouteForm,
+  type TransportRouteFormValue,
+} from "@/components/transport-route-form"
 import {
   hasFiniteLngLat,
   itemTakesCalendarSpan,
@@ -75,8 +80,16 @@ export type AddManualItemDialogProps = {
   /** Fecha de inicio del viaje; sin ella el selector no muestra el paréntesis. */
   startDate?: string | null
   onSubmit: (item: UserDayItem, dayId: string) => void
-  /** Transporte delega al diálogo de ruta estructurada (T4B.3 §9.6). */
-  onRequestTransport?: (dayId: string) => void
+  /** Alta de traslado desde el mismo diálogo (el tipo sigue visible). */
+  onSubmitTransport?: (data: {
+    dayId: string
+    route: Omit<TransportRoute, "leg"> & {
+      from: TransportRoute["from"]
+      to: TransportRoute["to"]
+    }
+    detail: string | null
+    vendor: string | null
+  }) => void
   /** Si está, el formulario edita este ítem (conserva id y procedencia). */
   existingItem?: UserDayItem | null
   existingDayId?: string | null
@@ -92,7 +105,7 @@ export function AddManualItemDialog({
   destinationHint = null,
   startDate = null,
   onSubmit,
-  onRequestTransport,
+  onSubmitTransport,
   existingItem = null,
   existingDayId = null,
 }: AddManualItemDialogProps) {
@@ -112,6 +125,7 @@ export function AddManualItemDialog({
   /** El autocompletado solo busca si el usuario ha tocado el campo. */
   const [placeFieldActive, setPlaceFieldActive] = useState(false)
   const [nights, setNights] = useState(1)
+  const [transportCanSubmit, setTransportCanSubmit] = useState(false)
 
   const proximityRef = useRef<[number, number] | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -123,10 +137,12 @@ export function AddManualItemDialog({
   const placeId = `${id}-place`
   const detailId = `${id}-detail`
   const nightsId = `${id}-nights`
+  const transportFormId = `${id}-transport`
 
   const selectedDayIndex = Math.max(0, days.findIndex((d) => d.id === dayId))
   const maxNights = Math.max(1, days.length - selectedDayIndex)
   const editing = existingItem != null
+  const addingTransport = type === "transport" && !editing
   const durationKind = itemTakesCalendarSpan(type)
 
   useEffect(() => {
@@ -153,6 +169,7 @@ export function AddManualItemDialog({
       placeBlurRef.current = null
     }
     setNights(parseSpanDays(seed?.spanDays) ?? 1)
+    setTransportCanSubmit(false)
     const preferred =
       (seed && existingDayId && days.some((d) => d.id === existingDayId) && existingDayId) ||
       (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
@@ -284,27 +301,75 @@ export function AddManualItemDialog({
     onOpenChange(false)
   }
 
+  const handleTransportSubmit = (value: TransportRouteFormValue) => {
+    if (!dayId || !onSubmitTransport) return
+    onSubmitTransport({
+      dayId,
+      route: {
+        from: value.from,
+        to: value.to,
+        mode: value.mode,
+      },
+      detail: value.detail,
+      vendor: value.vendor,
+    })
+    onOpenChange(false)
+  }
+
+  const title = editing
+    ? `Editar ${ITEM_LABELS[type].toLowerCase()}`
+    : type === "stay"
+      ? "Añadir alojamiento"
+      : type === "activity"
+        ? "Añadir actividad"
+        : type === "food"
+          ? "Añadir restaurante"
+          : type === "transport"
+            ? "Añadir traslado"
+            : "Añadir ítem"
+
+  const dayField = (
+    <div className="space-y-2">
+      <Label htmlFor={dayFieldId}>
+        {addingTransport ? "Día del traslado" : DAY_FIELD_LABELS[type]}
+      </Label>
+      <Select value={dayId} onValueChange={setDayId}>
+        <SelectTrigger id={dayFieldId} className="w-full">
+          <SelectValue placeholder="Elige un día" />
+        </SelectTrigger>
+        <SelectContent>
+          {days.map((day, index) => (
+            <SelectItem key={day.id} value={day.id}>
+              {formatDayPickerLabel(
+                index,
+                formatDayDateShort(dateISOForDayIndex(startDate, index)),
+              )}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent fullscreenOnMobile hideClose className="sm:max-w-md">
+      <DialogContent
+        fullscreenOnMobile
+        hideClose
+        className={addingTransport ? "sm:max-w-lg" : "sm:max-w-md"}
+      >
         <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
-            {editing
-              ? `Editar ${ITEM_LABELS[type].toLowerCase()}`
-              : initialType === "stay"
-                ? "Añadir alojamiento"
-                : initialType === "activity"
-                  ? "Añadir actividad"
-                  : initialType === "food"
-                    ? "Añadir restaurante"
-                    : "Añadir ítem"}
+            {title}
           </DialogTitle>
           <DialogDescription>
             {editing
               ? durationKind
                 ? "Cambia el nombre, el día, el lugar o la duración."
                 : "Cambia el nombre, el día o el lugar."
-              : "Añade a tu viaje elementos que no encuentras en tus fuentes."}
+              : addingTransport
+                ? "Define origen, destino y medio de transporte si lo sabes."
+                : "Añade a tu viaje elementos que no encuentras en tus fuentes."}
           </DialogDescription>
         </DialogHeader>
 
@@ -326,21 +391,7 @@ export function AddManualItemDialog({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => {
-                      if (t === "transport" && onRequestTransport) {
-                        const targetDay =
-                          dayId ||
-                          (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
-                          days[0]?.id ||
-                          ""
-                        if (targetDay) {
-                          onRequestTransport(targetDay)
-                          onOpenChange(false)
-                          return
-                        }
-                      }
-                      setType(t)
-                    }}
+                    onClick={() => setType(t)}
                     className={cn(
                       "inline-flex min-w-0 flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-center transition-colors sm:px-2 sm:py-2",
                       selected
@@ -359,6 +410,26 @@ export function AddManualItemDialog({
           </div>
           ) : null}
 
+          {addingTransport ? (
+            <>
+              {dayField}
+              <TransportRouteForm
+                formId={transportFormId}
+                initial={{
+                  from: emptyEndpoint(),
+                  to: emptyEndpoint(),
+                  mode: "undecided",
+                  vendor: "",
+                  detail: "",
+                }}
+                fromLabel="Origen"
+                toLabel="Destino"
+                onValidityChange={setTransportCanSubmit}
+                onSubmit={handleTransportSubmit}
+              />
+            </>
+          ) : (
+            <>
           <div className="space-y-2">
             <Label htmlFor={nameId}>Nombre</Label>
             <Input
@@ -446,24 +517,7 @@ export function AddManualItemDialog({
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor={dayFieldId}>{DAY_FIELD_LABELS[type]}</Label>
-            <Select value={dayId} onValueChange={setDayId}>
-              <SelectTrigger id={dayFieldId} className="w-full">
-                <SelectValue placeholder="Elige un día" />
-              </SelectTrigger>
-              <SelectContent>
-                {days.map((day, index) => (
-                  <SelectItem key={day.id} value={day.id}>
-                    {formatDayPickerLabel(
-                      index,
-                      formatDayDateShort(dateISOForDayIndex(startDate, index)),
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {dayField}
 
           {durationKind ? (
             <div className="space-y-2">
@@ -505,15 +559,27 @@ export function AddManualItemDialog({
               placeholder="Horario, reserva, tip…"
             />
           </div>
+            </>
+          )}
         </div>
 
         <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
-            {editing ? "Guardar" : "Añadir al plan"}
-          </Button>
+          {addingTransport ? (
+            <Button
+              type="submit"
+              form={transportFormId}
+              disabled={!transportCanSubmit || !dayId}
+            >
+              Añadir al plan
+            </Button>
+          ) : (
+            <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
+              {editing ? "Guardar" : "Añadir al plan"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

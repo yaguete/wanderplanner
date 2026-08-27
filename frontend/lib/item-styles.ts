@@ -2,7 +2,6 @@ import {
   Bed,
   Bus,
   Car,
-  Caravan,
   CircleEllipsis,
   CircleHelp,
   Home,
@@ -16,6 +15,7 @@ import {
   Train,
   UtensilsCrossed,
   Wifi,
+  createLucideIcon,
   type LucideIcon,
 } from "lucide-react"
 import { ITEM_TYPE_PAINT } from "@/lib/item-paint"
@@ -28,6 +28,21 @@ import type {
   TaskGroupCategory,
   UserDayItem,
 } from "@/types/itinerary"
+
+/**
+ * Cabeza de caballo (lucide-lab `horse-head`, ISC). Lucide 0.454 no trae
+ * caballo/camello/burro; las etiquetas del lab incluyen donkey.
+ */
+const HorseHead = createLucideIcon("horse-head", [
+  ["path", { d: "M11.5 12H11" }],
+  [
+    "path",
+    {
+      d: "M5 15a4 4 0 0 0 4 4h7.8l.3.3a3 3 0 0 0 4-4.46L12 7c0-3-1-5-1-5S8 3 8 7c-4 1-6 3-6 3",
+    },
+  ],
+  ["path", { d: "M6.14 17.8S4 19 2 22" }],
+])
 
 /** Chip con borde neutro; el color de tipo va en el texto (y en iconos de Mi viaje). */
 export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: string }> = {
@@ -126,7 +141,7 @@ export const TRANSPORT_MODE_ICONS: Record<TransportModeVisualKey, LucideIcon> = 
   bus: Bus,
   ferry: Ship,
   car: Car,
-  other: Caravan,
+  other: HorseHead,
   undecided: CircleHelp,
 }
 
@@ -139,6 +154,20 @@ export const TRANSPORT_MODE_A11Y: Record<TransportModeVisualKey, string> = {
   other: "Otro",
   undecided: "Medio por decidir",
 }
+
+/** Orden y copy del selector de medio (formulario de traslado). */
+export const TRANSPORT_MODE_OPTIONS: {
+  value: TransportModeVisualKey
+  label: string
+}[] = [
+  { value: "undecided", label: "Aún no lo sé" },
+  { value: "car", label: "Coche" },
+  { value: "flight", label: "Avión" },
+  { value: "train", label: "Tren" },
+  { value: "bus", label: "Autobús" },
+  { value: "ferry", label: "Ferry" },
+  { value: "other", label: "Otro" },
+]
 
 /** Inferencia legacy por texto (fuentes cacheadas sin hint). */
 export function inferTransportModeFromText(label: string): TransportModeVisualKey {

@@ -48,19 +48,13 @@ import {
 } from "@/lib/transport-hubs"
 import type { RouteMode, RoutePlace } from "@/types/itinerary"
 import { isBookableTransportMode } from "@/lib/trip-tasks"
+import {
+  TRANSPORT_MODE_ICONS,
+  TRANSPORT_MODE_OPTIONS,
+} from "@/lib/item-styles"
 
 const SUGGEST_DEBOUNCE_MS = 450
 const SUGGEST_MIN_CHARS = 3
-
-export const MODE_OPTIONS: { value: RouteMode | "undecided"; label: string }[] = [
-  { value: "undecided", label: "Aún no lo sé" },
-  { value: "car", label: "Coche" },
-  { value: "train", label: "Tren" },
-  { value: "bus", label: "Autobús" },
-  { value: "flight", label: "Avión" },
-  { value: "ferry", label: "Ferry" },
-  { value: "other", label: "Otro" },
-]
 
 export type EndpointState = {
   query: string
@@ -379,8 +373,9 @@ export function TransportRouteForm({
       <div className="space-y-2">
         <Label>Medio de transporte</Label>
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
-          {MODE_OPTIONS.map((opt) => {
+          {TRANSPORT_MODE_OPTIONS.map((opt) => {
             const selected = mode === opt.value
+            const Icon = TRANSPORT_MODE_ICONS[opt.value]
             return (
               <button
                 key={opt.value}
@@ -389,12 +384,13 @@ export function TransportRouteForm({
                 aria-checked={selected}
                 onClick={() => handleModeChange(opt.value)}
                 className={cn(
-                  "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
                   selected
                     ? "border-primary bg-primary/5 text-foreground"
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
+                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 {opt.label}
               </button>
             )

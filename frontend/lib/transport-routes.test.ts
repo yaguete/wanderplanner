@@ -20,6 +20,7 @@ import { taskKeyForItem } from "./trip-tasks"
 import { taskActionTitle } from "./task-labels"
 import {
   TRANSPORT_MODE_ICONS,
+  TRANSPORT_MODE_OPTIONS,
   resolveTransportModeVisual,
 } from "./item-styles"
 import {
@@ -336,6 +337,20 @@ describe("iconos por medio", () => {
   it("cubre todos los modos", () => {
     for (const key of Object.keys(TRANSPORT_MODE_ICONS)) {
       assert.ok(TRANSPORT_MODE_ICONS[key as keyof typeof TRANSPORT_MODE_ICONS])
+    }
+  })
+
+  it("selector de medio: orden Aún no lo sé · Coche · Avión · Tren · Autobús · Ferry · Otro", () => {
+    assert.deepEqual(
+      TRANSPORT_MODE_OPTIONS.map((o) => o.value),
+      ["undecided", "car", "flight", "train", "bus", "ferry", "other"],
+    )
+    assert.deepEqual(
+      TRANSPORT_MODE_OPTIONS.map((o) => o.label),
+      ["Aún no lo sé", "Coche", "Avión", "Tren", "Autobús", "Ferry", "Otro"],
+    )
+    for (const opt of TRANSPORT_MODE_OPTIONS) {
+      assert.ok(TRANSPORT_MODE_ICONS[opt.value])
     }
   })
 

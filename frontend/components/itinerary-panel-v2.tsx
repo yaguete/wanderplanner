@@ -1215,9 +1215,9 @@ export default function ItineraryPanel({
           }
           addItemToDay(tripId, dayId, item)
         }}
-        onRequestTransport={(dayId) => {
-          setManualDialogOpen(false)
-          openTransportDialog(dayId)
+        onSubmitTransport={(data) => {
+          const result = upsertTransportRouteItem(tripId, data)
+          if (!result.ok) toast.error(result.error)
         }}
       />
 
