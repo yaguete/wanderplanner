@@ -51,6 +51,13 @@ const NAME_PLACEHOLDERS: Record<ItemType, string> = {
   transport: "p. ej. Tren a Viena",
 }
 
+const DAY_FIELD_LABELS: Record<ItemType, string> = {
+  activity: "Día / comienzo",
+  stay: "Entrada / Check-in",
+  food: "Día",
+  transport: "Día",
+}
+
 const SUGGEST_DEBOUNCE_MS = 300
 const SUGGEST_MIN_CHARS = 3
 
@@ -440,7 +447,7 @@ export function AddManualItemDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={dayFieldId}>Día</Label>
+            <Label htmlFor={dayFieldId}>{DAY_FIELD_LABELS[type]}</Label>
             <Select value={dayId} onValueChange={setDayId}>
               <SelectTrigger id={dayFieldId} className="w-full">
                 <SelectValue placeholder="Elige un día" />
