@@ -145,7 +145,23 @@ export function AppHeader({ leading }: AppHeaderProps) {
             alignToSidebar && !rail && "px-2.5",
           )}
         >
-          {!alignToSidebar || !rail ? <BrandWordmark /> : <BrandMark />}
+          {alignToSidebar && rail ? (
+            <BrandMark />
+          ) : alignToSidebar ? (
+            <BrandWordmark />
+          ) : (
+            <>
+              {/* Listado/cuenta: ardilla + wordmark solo en desktop. `items-baseline`
+                  pone las patas en la línea base; el BrandLockup de landing no, porque
+                  el nombre apoya en la base del logo (`items-end` + dip del wordmark). */}
+              <span className="hidden min-w-0 items-baseline gap-2 md:flex">
+                {/* 1px óptico: el trazo de las patas si no se come medio píxel por debajo de la línea. */}
+                <BrandMark className="-translate-y-px" />
+                <BrandWordmark />
+              </span>
+              <BrandWordmark className="md:hidden" />
+            </>
+          )}
         </Link>
         {alignToSidebar ? <SidebarCollapseControl /> : null}
       </div>
