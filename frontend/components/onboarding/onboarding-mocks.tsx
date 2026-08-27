@@ -19,16 +19,9 @@ import {
   UtensilsCrossed,
 } from "lucide-react"
 import { LandingArticlePhoto } from "@/components/landing/landing-mocks"
-import { BRAND_INK } from "@/components/brand-mark"
 import { ITEM_COLORS, ITEM_DOT_COLORS, ITEM_LABELS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import type { ItemType } from "@/types/itinerary"
-
-const ITEM_GLOW =
-  "radial-gradient(42% 55% at 16% 12%, hsl(199 89% 48% / 0.28), transparent 68%)," +
-  "radial-gradient(42% 55% at 84% 10%, hsl(262 83% 58% / 0.26), transparent 68%)," +
-  "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
-  "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)"
 
 /**
  * Móvil: apaisado, llena el hueco (el retrato se quedaba en miniatura).
@@ -42,10 +35,9 @@ function OnboardingWell({ children }: { children: ReactNode }) {
     <div className={ONBOARDING_MOCK_FRAME}>
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-2 -z-10 rounded-[2rem] blur-xl"
-        style={{ background: ITEM_GLOW }}
+        className="landing-item-glow pointer-events-none absolute -inset-2 -z-10 rounded-[2rem] blur-xl"
       />
-      <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-12px_rgb(0_0_0/0.16)]">
+      <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_16px_40px_-12px_rgb(0_0_0/0.16)] dark:bg-background dark:shadow-[0_0_0_1px_hsl(var(--border))]">
         {children}
       </div>
     </div>
@@ -57,8 +49,10 @@ function InkMark({ tone, children }: { tone: "food" | "activity"; children: Reac
     <span
       className={cn(
         "font-semibold",
-        tone === "food" && "shadow-[inset_0_-0.35em_0_hsl(160_84%_39%/0.16)]",
-        tone === "activity" && "shadow-[inset_0_-0.35em_0_hsl(263_70%_50%/0.16)]",
+        tone === "food" &&
+          "shadow-[inset_0_-0.35em_0_hsl(160_84%_39%/0.16)] dark:shadow-[inset_0_-0.35em_0_hsl(160_84%_50%/0.4)]",
+        tone === "activity" &&
+          "shadow-[inset_0_-0.35em_0_hsl(263_70%_50%/0.16)] dark:shadow-[inset_0_-0.35em_0_hsl(263_70%_62%/0.4)]",
       )}
     >
       {children}
@@ -509,10 +503,7 @@ export function MockOnboardingInvitar() {
               Un resumen listo para pegar.
             </p>
             <div className="mt-2 min-h-0 flex-1 overflow-hidden rounded-md bg-muted/40 px-2.5 py-2">
-              <p
-                className="line-clamp-4 text-[11px] leading-4 sm:line-clamp-5"
-                style={{ color: BRAND_INK }}
-              >
+              <p className="line-clamp-4 text-[11px] leading-4 text-muted-foreground sm:line-clamp-5">
                 Mira lo que estoy montando: Bali y Java, 12 días, del 14 al 25 de marzo. Ubud, un
                 nasi campur que no sale en la guía, y el día 5 madrugón para el Bromo. ¿Qué le
                 quitarías?

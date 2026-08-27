@@ -13,7 +13,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       <div className="legal-shell relative min-h-screen bg-canvas">
         <div
           aria-hidden
-          className="legal-veil pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(50%_60%_at_50%_0%,#9F817314,transparent_70%)]"
+          className="legal-veil landing-brand-veil pointer-events-none absolute inset-x-0 top-0 h-[420px]"
         />
         <LandingHeader showSignup />
         <div className="relative">{children}</div>

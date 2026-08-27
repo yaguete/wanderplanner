@@ -123,7 +123,7 @@ export function ActionCard({
   }
   if (action.status === "accepted") {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+      <div className="rounded-lg border border-success-border bg-success-surface px-3 py-2 text-xs text-success-foreground">
         <p>{ACCEPTED_LABEL[action.kind]}</p>
         {canUndo ? (
           <button type="button" className="mt-1 text-[11px] underline-offset-2 hover:underline" onClick={onUndo}>

@@ -1333,7 +1333,7 @@ export function AssistantPanelLayer({
 
               {/* Nav incrustado: composer + pestañas como un único elemento flotante. */}
               {isSection && bottomNav && !keyboardOpen ? (
-                <div className="border-t border-[hsl(var(--wp-glass-rim)/0.35)]">
+                <div className="border-t border-[hsl(var(--wp-glass-rim)/0.35)] dark:border-[hsl(var(--wp-glass-rim)/0.06)]">
                   {bottomNav}
                 </div>
               ) : null}

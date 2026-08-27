@@ -25,7 +25,7 @@ export function AuthShell({
       <div aria-hidden className="landing-grid-texture pointer-events-none absolute inset-0 -z-10 overflow-hidden" />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] overflow-hidden bg-[radial-gradient(50%_60%_at_50%_0%,#9F817314,transparent_70%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[420px] overflow-hidden landing-brand-veil"
       />
       <Link href="/" className="outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring">
         <BrandLockup />

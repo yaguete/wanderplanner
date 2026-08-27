@@ -319,17 +319,10 @@ export function ProductFrame({ scene = "vietnam" }: { scene?: ProductFrameSceneI
     >
       {/* Glow con las 4 tintas de ítem, difuso pero visible, detrás del marco. */}
       <div
-        className="pointer-events-none absolute inset-x-0 -top-1 -bottom-1 -z-10 rounded-[5rem] blur-xl"
-        style={{
-          background:
-            "radial-gradient(42% 55% at 16% 12%, hsl(199 89% 48% / 0.28), transparent 68%)," +
-            "radial-gradient(42% 55% at 84% 10%, hsl(262 83% 58% / 0.26), transparent 68%)," +
-            "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
-            "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)",
-        }}
+        className="landing-item-glow pointer-events-none absolute inset-x-0 -top-1 -bottom-1 -z-10 rounded-[5rem] blur-xl"
       />
 
-      <div className="overflow-hidden rounded-xl border border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.22)]">
+      <div className="overflow-hidden rounded-xl border border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.22)] dark:bg-background dark:shadow-[0_0_0_1px_hsl(var(--border))]">
         <div className="pointer-events-none flex items-center gap-3 border-b border-border bg-background px-4 py-2.5">
           <div className="flex gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-border" />

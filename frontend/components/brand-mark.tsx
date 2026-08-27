@@ -25,10 +25,10 @@ export type BrandMarkVariant = "color" | "mono" | "negative"
 function paintFor(variant: BrandMarkVariant): string {
   if (variant === "negative") return "#fff"
   if (variant === "mono") return "currentColor"
-  return BRAND_INK
+  return "hsl(var(--brand-ink))"
 }
 
-/** Ardilla de WanderPlanner. `color` en cromo claro; `negative` sobre fondo oscuro. */
+/** Ardilla de WanderPlanner. `color` sigue `--brand-ink` (marrón en claro, blanco en oscuro). */
 export function BrandMark({
   className,
   variant = "color",
@@ -51,7 +51,7 @@ export function BrandMark({
   )
 }
 
-/** Wordmark en `BRAND_INK` (claro) o blanco (`negative`). Sin el isotipo: el header expandido lo usa solo. */
+/** Wordmark en `--brand-ink` (marrón en claro, blanco en oscuro) o blanco literal (`negative`). */
 export function BrandWordmark({
   className,
   variant = "color",
@@ -68,8 +68,6 @@ export function BrandWordmark({
   /** Letra manuscrita (Caveat / similar a Martie Regular). Sin faux-bold. */
   hand?: boolean
 }) {
-  const paint =
-    variant === "negative" ? undefined : ink === "black" ? "#000" : BRAND_INK
   return (
     <span
       className={cn(
@@ -77,10 +75,13 @@ export function BrandWordmark({
         hand
           ? "font-normal font-synthesis-none text-[1.375rem] tracking-normal"
           : "font-normal text-xl tracking-tight",
-        variant === "negative" && "text-white",
+        variant === "negative"
+          ? "text-white"
+          : ink === "black"
+            ? "text-black dark:text-foreground"
+            : "text-[hsl(var(--brand-ink))]",
         className,
       )}
-      style={paint ? { color: paint } : undefined}
     >
       {label ? (
         <span className={hand ? "font-normal font-synthesis-none" : "font-bold"}>{label}</span>

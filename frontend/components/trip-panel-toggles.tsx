@@ -60,15 +60,15 @@ export function TripPanelToggles({ panels, onToggle, className }: TripPanelToggl
             aria-label={pressed ? `Ocultar ${label}` : `Mostrar ${label}`}
             onClick={() => onToggle(id)}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium text-foreground",
+              "inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium",
               "transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out",
               "active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-              // Independientes, no radio: el panel visible se hunde (gris,
-              // plano); el oculto se eleva (blanco, borde, sombra) para que
-              // se lea como un botón que lo vuelve a abrir.
+              // Independientes, no radio. En claro el visible es la píldora
+              // blanca sobre el lienzo; el oculto va sin relleno. En oscuro
+              // el lleno es `muted` (el blanco invertiría el gesto).
               pressed
-                ? "border-transparent bg-foreground/[0.08] shadow-none"
-                : "border-border bg-background shadow-[0_1px_2px_rgba(0,0,0,0.05)] hover:border-foreground/20",
+                ? "border-transparent bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] dark:bg-muted dark:shadow-none"
+                : "border-border bg-transparent text-muted-foreground hover:border-foreground/25 hover:text-foreground",
             )}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden strokeWidth={2} />

@@ -18,6 +18,7 @@ import {
   Wifi,
   type LucideIcon,
 } from "lucide-react"
+import { ITEM_TYPE_PAINT } from "@/lib/item-paint"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import type {
   BasicCategory,
@@ -33,31 +34,31 @@ export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: s
   transport: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-sky-600",
+    text: ITEM_TYPE_PAINT.transport.textClass,
   },
   stay: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-orange-600",
+    text: ITEM_TYPE_PAINT.stay.textClass,
   },
   food: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-emerald-600",
+    text: ITEM_TYPE_PAINT.food.textClass,
   },
   activity: {
     bg: "bg-muted",
     border: "border-border",
-    text: "text-violet-600",
+    text: ITEM_TYPE_PAINT.activity.textClass,
   },
 }
 
 /** Punto de timeline en la lista de Ruta: opaco, alineado con el color de categoría. */
 export const ITEM_DOT_COLORS: Record<ItemType, string> = {
-  transport: "bg-sky-600",
-  stay: "bg-orange-600",
-  food: "bg-emerald-600",
-  activity: "bg-violet-600",
+  transport: ITEM_TYPE_PAINT.transport.dotClass,
+  stay: ITEM_TYPE_PAINT.stay.dotClass,
+  food: ITEM_TYPE_PAINT.food.dotClass,
+  activity: ITEM_TYPE_PAINT.activity.dotClass,
 }
 
 export const ITEM_LABELS: Record<ItemType, string> = {

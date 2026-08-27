@@ -193,7 +193,7 @@ export function TripTasksSummaryDetail({
       ) : null}
       {booked > 0 && paid > 0 ? " · " : null}
       {paid > 0 ? (
-        <span className="text-emerald-700">
+        <span className="text-success">
           Pagado {formatTripCurrency(paid, currency)}
         </span>
       ) : null}
@@ -485,7 +485,7 @@ function BookingStatusToggle({
         )}
       >
         {value === "paid" ? (
-          <Check className="h-3 w-3 shrink-0 text-emerald-600" strokeWidth={2.4} aria-hidden />
+          <Check className="h-3 w-3 shrink-0 text-success" strokeWidth={2.4} aria-hidden />
         ) : (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
         )}
@@ -516,7 +516,7 @@ function DoneChip({
       )}
     >
       {active ? (
-        <Check className="h-3 w-3 shrink-0 text-emerald-600" strokeWidth={2.4} aria-hidden />
+        <Check className="h-3 w-3 shrink-0 text-success" strokeWidth={2.4} aria-hidden />
       ) : (
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
       )}

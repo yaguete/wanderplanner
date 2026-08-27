@@ -13,7 +13,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { BrandLockup } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import {
@@ -325,7 +326,7 @@ function StartFlow() {
           <p className="max-w-sm text-sm text-muted-foreground">
             Un segundo: confirma que no eres un robot y preparamos tu viaje.
           </p>
-          <Turnstile onToken={setCaptchaToken} />
+          <ThemedTurnstile onToken={setCaptchaToken} />
         </>
       ) : (
         <>

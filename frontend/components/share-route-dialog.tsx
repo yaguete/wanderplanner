@@ -6,7 +6,6 @@ import { Copy, Mail, Share2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { AiTransferGate } from "@/components/ai-transfer-gate"
-import { BRAND_INK } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -361,11 +360,10 @@ export function ShareRouteDialog({
                         }
                       }}
                       aria-label="Resumen para compartir"
-                      className="m-0 min-h-[12rem] w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 outline-none"
-                      style={{ color: BRAND_INK }}
+                      className="m-0 min-h-[12rem] w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-muted-foreground outline-none"
                     />
                   ) : showCard ? (
-                    <p className="m-0" style={{ color: BRAND_INK }}>
+                    <p className="m-0 text-muted-foreground">
                       {displayText}
                     </p>
                   ) : error ? (

@@ -15,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { TravelerProfileFields } from "@/components/auth/traveler-profile-fields"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 import { persistModeFromRemember } from "@/lib/auth-session-persist"
@@ -247,7 +248,7 @@ export function SignupForm({
       />
 
       {captchaEnabled ? (
-        <Turnstile
+        <ThemedTurnstile
           key={captchaKey}
           onToken={setCaptchaToken}
           appearance={compact ? "interaction-only" : "always"}
@@ -255,7 +256,7 @@ export function SignupForm({
       ) : null}
 
       {error ? <p className="text-left text-sm text-destructive">{error}</p> : null}
-      {notice ? <p className="text-left text-sm text-emerald-700">{notice}</p> : null}
+      {notice ? <p className="text-left text-sm text-success">{notice}</p> : null}
 
       <Button
         type="submit"

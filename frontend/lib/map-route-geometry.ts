@@ -3,6 +3,17 @@
  * 0 llamadas a Directions por defecto; arco geodésico / línea.
  */
 import type { RouteLeg, RouteMode, UserDay, UserDayItem } from "@/types/itinerary"
+import {
+  modeLineStyle,
+  placesLongHopColor,
+  placesRouteColor,
+  type PaintTheme,
+} from "@/lib/item-paint"
+
+export {
+  PLACES_ROUTE_COLOR,
+  PLACES_LONG_HOP_COLOR,
+} from "@/lib/item-paint"
 
 export type ItineraryMapSegment = {
   itemId: string
@@ -101,23 +112,11 @@ export type SegmentLineStyle = {
   width: number
 }
 
-export function segmentStyleForMode(mode: RouteMode | null | undefined): SegmentLineStyle {
-  switch (mode) {
-    case "flight":
-      return { color: "#0ea5e9", dashArray: [2, 2], width: 2.5 }
-    case "train":
-      return { color: "#7c3aed", dashArray: [4, 2], width: 2.5 }
-    case "bus":
-      return { color: "#ea580c", dashArray: [1.5, 1.5], width: 2 }
-    case "ferry":
-      return { color: "#2563eb", dashArray: [3, 2], width: 2.5 }
-    case "car":
-      return { color: "#475569", dashArray: null, width: 2.5 }
-    case "other":
-      return { color: "#a16207", dashArray: [2, 3], width: 2 }
-    default:
-      return { color: "#94a3b8", dashArray: [1, 2], width: 2 }
-  }
+export function segmentStyleForMode(
+  mode: RouteMode | null | undefined,
+  theme: PaintTheme = "light",
+): SegmentLineStyle {
+  return modeLineStyle(mode, theme)
 }
 
 /** ¿Directions por carretera tiene sentido? Solo coche (bus opcional lazy). */
@@ -279,13 +278,14 @@ export function segmentFromItem(
 
 export function segmentToGeoJsonFeature(
   segment: ItineraryMapSegment,
+  theme: PaintTheme = "light",
 ): GeoJSON.Feature<GeoJSON.LineString> {
   const coords = geodesicLine(
     { lng: segment.from.lng, lat: segment.from.lat },
     { lng: segment.to.lng, lat: segment.to.lat },
     segment.mode === "flight" ? 80 : 32,
   )
-  const style = segmentStyleForMode(segment.mode)
+  const style = segmentStyleForMode(segment.mode, theme)
   return {
     type: "Feature",
     properties: {
@@ -307,10 +307,11 @@ export function segmentToGeoJsonFeature(
 
 export function segmentsToFeatureCollection(
   segments: ItineraryMapSegment[],
+  theme: PaintTheme = "light",
 ): GeoJSON.FeatureCollection<GeoJSON.LineString> {
   return {
     type: "FeatureCollection",
-    features: segments.map(segmentToGeoJsonFeature),
+    features: segments.map((segment) => segmentToGeoJsonFeature(segment, theme)),
   }
 }
 
@@ -353,17 +354,6 @@ export const PLACES_ROAD_MAX_KM = 300
 
 /** Pares con distancia por debajo se colapsan (mismo alojamiento días seguidos). */
 export const PLACES_ZERO_KM_EPSILON = 0.05
-
-/**
- * Color de la línea del recorrido. Negro a propósito: no puede coincidir con ningún
- * color de `PIN` (el violeta anterior era el mismo `#7c3aed` de las actividades y los
- * pines se camuflaban sobre su propia línea). El estilo del mapa es siempre claro
- * (`streets-v12`), así que no depende del tema de la app.
- */
-export const PLACES_ROUTE_COLOR = "#171717"
-
-/** Saltos largos: gris, secundarios respecto a la línea del recorrido. */
-export const PLACES_LONG_HOP_COLOR = "#94a3b8"
 
 export type ItineraryPlace = {
   id: string
@@ -538,6 +528,7 @@ export function groupRoadCandidateSubsequences(
 
 export function placesRouteToFeatureCollections(
   legs: PlacesRouteLeg[],
+  theme: PaintTheme = "light",
 ): {
   road: GeoJSON.FeatureCollection<GeoJSON.LineString>
   longHop: GeoJSON.FeatureCollection<GeoJSON.LineString>
@@ -555,7 +546,7 @@ export function placesRouteToFeatureCollections(
         toId: leg.toId,
         kind: leg.kind,
         km: leg.km,
-        color: leg.kind === "long-hop" ? PLACES_LONG_HOP_COLOR : PLACES_ROUTE_COLOR,
+        color: leg.kind === "long-hop" ? placesLongHopColor(theme) : placesRouteColor(theme),
         width: leg.kind === "long-hop" ? 2 : 2.5,
       },
       geometry: { type: "LineString", coordinates: coords },

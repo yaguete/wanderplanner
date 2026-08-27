@@ -85,7 +85,7 @@ export function MockTab({
 /** Miniatura OG inventada: bahía de Ha Long, sin raster. */
 export function LandingOgThumb({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 80 56" className={cn("block", className)} aria-hidden>
+    <svg viewBox="0 0 80 56" className={cn("landing-mock-photo block", className)} aria-hidden>
       <rect width="80" height="56" fill="#c9dce6" />
       <rect y="34" width="80" height="22" fill="#6a9aaa" />
       <path d="M6 40 L22 12 L38 40Z" fill="#3f5c4c" />
@@ -100,7 +100,7 @@ export function LandingArticlePhoto({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 320 168"
-      className={cn("block", className)}
+      className={cn("landing-mock-photo block", className)}
       preserveAspectRatio="xMidYMid slice"
       aria-hidden
     >
@@ -118,7 +118,7 @@ export function LandingArticlePhoto({ className }: { className?: string }) {
 /** Miniatura OG: Catedral de Granada, sin raster. Distinta de la Alhambra de la crónica. */
 export function LandingAlhambraThumb({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 80 56" className={cn("block", className)} aria-hidden>
+    <svg viewBox="0 0 80 56" className={cn("landing-mock-photo block", className)} aria-hidden>
       <rect width="80" height="56" fill="#cfdce8" />
       <rect y="44" width="80" height="12" fill="#c4b49a" />
       <path d="M10 44 L40 10 L70 44Z" fill="#d9c4a0" />
@@ -143,7 +143,7 @@ export function LandingAlhambraPhoto({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 320 168"
-      className={cn("block", className)}
+      className={cn("landing-mock-photo block", className)}
       preserveAspectRatio="xMidYMid slice"
       aria-hidden
     >
@@ -171,7 +171,7 @@ export function LandingStreetPhoto({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 320 168"
-      className={cn("block", className)}
+      className={cn("landing-mock-photo block", className)}
       preserveAspectRatio="xMidYMid slice"
       aria-hidden
     >

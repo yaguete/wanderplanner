@@ -385,7 +385,7 @@ function Verdict({
               {view.split.paid > 0 ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="text-emerald-700">
+                    <span className="text-success">
                       Pagado {formatTripCurrency(view.split.paid, currency)}
                     </span>
                   </TooltipTrigger>
@@ -406,7 +406,7 @@ function Verdict({
           </p>
         ) : null}
         {over ? (
-          <p className="mt-1 text-sm text-amber-900">
+          <p className="mt-1 text-sm text-warning-foreground">
             Te pasas{" "}
             <span className="font-medium">
               {formatTripCurrency(Math.abs(verdict.delta), currency)}
@@ -430,7 +430,7 @@ function Verdict({
           className="h-1.5 overflow-hidden rounded-full bg-muted"
         >
           <div
-            className={cn("h-full rounded-full", over ? "bg-amber-500" : "bg-foreground/70")}
+            className={cn("h-full rounded-full", over ? "bg-warning" : "bg-foreground/70")}
             style={{ width: `${fill}%` }}
           />
         </div>
@@ -562,7 +562,7 @@ function BillGroup({
       <CollapsibleTrigger
         className={cn(
           "flex w-full items-center gap-2 py-1 text-left text-xs",
-          over ? "text-amber-900" : "text-muted-foreground",
+          over ? "text-warning-foreground" : "text-muted-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
       >
@@ -700,7 +700,7 @@ function BillRow({
           <span
             className={cn(
               "tabular-nums",
-              line.status === "paid" && "text-emerald-700",
+              line.status === "paid" && "text-success",
             )}
           >
             {STATUS_LABEL[line.status]}

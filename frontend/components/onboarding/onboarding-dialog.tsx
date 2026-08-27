@@ -10,7 +10,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { BRAND_INK, BrandMark, BrandWordmark } from "@/components/brand-mark"
+import { BrandMark, BrandWordmark } from "@/components/brand-mark"
 import {
   type OnboardingCtaAction,
   type OnboardingMode,
@@ -180,10 +180,7 @@ export function OnboardingDialog({
                         {item.id === "mecanismo" ? (
                           <BrandWordmark className="-mb-[0.12em]" />
                         ) : item.kicker ? (
-                          <span
-                            className="-mb-[0.12em] truncate text-xl font-light leading-none tracking-tight"
-                            style={{ color: BRAND_INK }}
-                          >
+                          <span className="-mb-[0.12em] truncate text-xl font-light leading-none tracking-tight text-[hsl(var(--brand-ink))]">
                             {item.kicker}
                           </span>
                         ) : null}
@@ -309,9 +306,10 @@ export function OnboardingDialog({
                       aria-current={i === index ? "true" : undefined}
                       className={cn(
                         "h-2 rounded-full transition-all",
-                        i === index ? "w-5" : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50",
+                        i === index
+                          ? "w-5 bg-[hsl(var(--brand-ink))]"
+                          : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50",
                       )}
-                      style={i === index ? { backgroundColor: BRAND_INK } : undefined}
                       onClick={() => goTo(i)}
                     />
                   ))}

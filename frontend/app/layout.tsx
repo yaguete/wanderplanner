@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { AnalyticsGate } from "@/components/analytics-gate"
 import { CookieBanner } from "@/components/cookie-banner"
 import { Toaster } from "@/components/ui/sonner"
+import { AppThemeProvider } from "@/components/app-theme-provider"
 import { SITE_URL } from "@/lib/site"
 import "./globals.css"
 
@@ -44,14 +45,16 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body className={`${inter.variable} ${newsreader.variable} font-sans antialiased`}>
-        <AuthProvider>
-          {children}
-          <Toaster />
-          <CookieBanner />
-        </AuthProvider>
-        <AnalyticsGate />
+        <AppThemeProvider>
+          <AuthProvider>
+            {children}
+            <Toaster />
+            <CookieBanner />
+          </AuthProvider>
+          <AnalyticsGate />
+        </AppThemeProvider>
       </body>
     </html>
   )

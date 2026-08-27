@@ -3,12 +3,6 @@ import { ITEM_DOT_COLORS } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
 import { LandingItemRow, LandingStreetPhoto, MockTab } from "./landing-mocks"
 
-const ITEM_GLOW =
-  "radial-gradient(42% 55% at 16% 12%, hsl(199 89% 48% / 0.28), transparent 68%)," +
-  "radial-gradient(42% 55% at 84% 10%, hsl(262 83% 58% / 0.26), transparent 68%)," +
-  "radial-gradient(48% 50% at 68% 90%, hsl(21 90% 48% / 0.20), transparent 70%)," +
-  "radial-gradient(45% 50% at 30% 92%, hsl(152 69% 31% / 0.20), transparent 70%)"
-
 /** Halo más contenido: marca al centro, un susurro de las tintas de ítem. */
 const NEGATIVE_GLOW =
   "radial-gradient(55% 50% at 50% 0%, #9F817340, transparent 72%)," +
@@ -29,15 +23,18 @@ export function MockupWell({
     <div className={cn("relative isolate", className)}>
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-1 -z-10 rounded-[2.5rem] blur-xl"
-        style={{ background: negative ? NEGATIVE_GLOW : ITEM_GLOW }}
+        className={cn(
+          "pointer-events-none absolute -inset-1 -z-10 rounded-[2.5rem] blur-xl",
+          !negative && "landing-item-glow",
+        )}
+        style={negative ? { background: NEGATIVE_GLOW } : undefined}
       />
       <div
         className={cn(
           "flex flex-col overflow-hidden rounded-xl",
           negative
             ? "h-auto border-white/10 bg-[hsl(20_8%_14%)] shadow-[0_1px_2px_rgb(0_0_0/0.35),0_28px_64px_-18px_rgb(0_0_0/0.55)] sm:h-[34rem]"
-            : "h-[34rem] border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.18)]",
+            : "h-[34rem] border-border bg-canvas shadow-[0_1px_2px_rgb(0_0_0/0.05),0_24px_64px_-16px_rgb(0_0_0/0.18)] dark:bg-background dark:shadow-[0_0_0_1px_hsl(var(--border))]",
         )}
       >
         {children}
@@ -52,8 +49,10 @@ function InkMark({ tone, children }: { tone: "food" | "activity"; children: Reac
     <span
       className={cn(
         "font-semibold",
-        tone === "food" && "shadow-[inset_0_-0.35em_0_hsl(160_84%_39%/0.16)]",
-        tone === "activity" && "shadow-[inset_0_-0.35em_0_hsl(263_70%_50%/0.16)]",
+        tone === "food" &&
+          "shadow-[inset_0_-0.35em_0_hsl(160_84%_39%/0.16)] dark:shadow-[inset_0_-0.35em_0_hsl(160_84%_50%/0.4)]",
+        tone === "activity" &&
+          "shadow-[inset_0_-0.35em_0_hsl(263_70%_50%/0.16)] dark:shadow-[inset_0_-0.35em_0_hsl(263_70%_62%/0.4)]",
       )}
     >
       {children}

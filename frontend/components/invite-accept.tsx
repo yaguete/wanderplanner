@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { lookupInvite, completeInviteSignup, type InviteLookup } from "@/lib/trip-share-api"
 import {
@@ -153,7 +154,7 @@ export function InviteAccept({ token }: { token: string }) {
           />
         </div>
         {isTurnstileEnabled() ? (
-          <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptcha} />
+          <ThemedTurnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptcha} />
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <Button type="submit" className="w-full" disabled={busy}>
@@ -363,7 +364,7 @@ export function InviteAccept({ token }: { token: string }) {
           <Input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
         </div>
         {isTurnstileEnabled() ? (
-          <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptcha} />
+          <ThemedTurnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptcha} />
         ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <Button type="submit" className="w-full" disabled={busy}>

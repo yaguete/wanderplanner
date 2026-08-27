@@ -3,7 +3,6 @@
 import type { CSSProperties } from "react"
 import Link from "next/link"
 import { Compass, Newspaper, Route, Sparkles } from "lucide-react"
-import { BRAND_INK } from "@/components/brand-mark"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard"
 import { cn } from "@/lib/utils"
@@ -75,13 +74,15 @@ function NavTabs({
   return (
     <div className={cn(compact ? "px-1.5 py-0.5" : "px-1.5 py-1")}>
       <div
-        className={cn("relative grid grid-cols-4", compact && "w-max")}
         style={
           {
-            color: BRAND_INK,
             ...(pillIndex != null ? { "--wp-nav-index": pillIndex } : {}),
           } as CSSProperties
         }
+        className={cn(
+          "relative grid grid-cols-4 text-[hsl(var(--wp-nav-ink))]",
+          compact && "w-max",
+        )}
       >
         {pillIndex != null ? (
           <div
@@ -96,7 +97,7 @@ function NavTabs({
           onClick={(e) => {
             if (!requireAccount("home")) e.preventDefault()
           }}
-          className={cn(itemClass, "font-light")}
+          className={cn(itemClass, "font-light text-[hsl(var(--wp-nav-ink))]")}
         >
           <Compass
             className={cn(
@@ -118,7 +119,12 @@ function NavTabs({
               aria-label={label}
               aria-current={selected ? "page" : undefined}
               onClick={() => onChange(id)}
-              className={cn(itemClass, selected ? "font-semibold" : "font-light")}
+              className={cn(
+                itemClass,
+                selected
+                  ? "font-semibold text-foreground"
+                  : "font-light text-[hsl(var(--wp-nav-ink))]",
+              )}
             >
               <Icon
                 className={cn(

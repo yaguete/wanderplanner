@@ -11,6 +11,13 @@ import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import { ChevronDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { usePaintTheme } from "@/hooks/use-resolved-theme"
+import {
+  MAP_STYLE_URL,
+  pinPaint,
+  placesRouteColor,
+  type PaintTheme,
+} from "@/lib/item-paint"
 import { collectCountryCodesFromHint, getCountryByCode } from "@/lib/countries"
 import {
   DropdownMenu,
@@ -48,7 +55,6 @@ import {
   groupRoadCandidateSubsequences,
   modeAllowsRoadDirections,
   placesRouteToFeatureCollections,
-  PLACES_ROUTE_COLOR,
   segmentsToFeatureCollection,
   summarizeTransportKm,
   summarizeUndrawnTransports,
@@ -311,14 +317,6 @@ export type ItineraryMapPoint = {
 
 export type { ItineraryMapSegment }
 
-const PIN: Record<ItineraryMapPoint["type"], { fill: string; border: string }> = {
-  stay: { fill: "#f97316", border: "#c2410c" },
-  activity: { fill: "#7c3aed", border: "#5b21b6" },
-  food: { fill: "#10b981", border: "#047857" },
-  hub: { fill: "#0ea5e9", border: "#0369a1" },
-  endpoint: { fill: "#64748b", border: "#334155" },
-}
-
 function pinShapeSvg(type: ItineraryMapPoint["type"], fill: string, stroke: string, dashed: boolean): string {
   const dash = dashed ? ` stroke-dasharray="3 2"` : ""
   const opacity = dashed ? ` fill-opacity="0.7"` : ""
@@ -337,11 +335,12 @@ function renderPinInto(
   type: ItineraryMapPoint["type"],
   pinText: string,
   approximate: boolean,
+  theme: PaintTheme,
 ): void {
-  const sig = `${type}|${pinText}|${approximate ? "a" : "e"}`
+  const sig = `${type}|${pinText}|${approximate ? "a" : "e"}|${theme}`
   if (el.dataset.pinSig === sig) return
   el.dataset.pinSig = sig
-  const colors = PIN[type] ?? PIN.endpoint
+  const colors = pinPaint(type, theme)
   const isEndpoint = type === "endpoint"
   el.className = cn(
     "wp-map-pin relative flex items-center justify-center font-bold text-white",
@@ -541,6 +540,8 @@ export function ItineraryMapView({
   onPlacesLineStyleChange?: (next: PlacesLineStyle) => void
   onPlacesLineLoadingChange?: (loading: boolean) => void
 }) {
+  const mapTheme = usePaintTheme()
+  const mapStyleRef = useRef<string>(MAP_STYLE_URL[mapTheme])
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null)
   const markersByIdRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
@@ -978,7 +979,7 @@ export function ItineraryMapView({
                 toId: leg.toId,
                 kind: "road-candidate",
                 km: leg.km,
-                color: PLACES_ROUTE_COLOR,
+                color: placesRouteColor(mapTheme),
                 width: 2.5,
                 fallback: true,
               },
@@ -1000,7 +1001,7 @@ export function ItineraryMapView({
           type: "Feature",
           properties: {
             kind: "road",
-            color: PLACES_ROUTE_COLOR,
+            color: placesRouteColor(mapTheme),
             width: 2.5,
           },
           geometry: dir.geometry,
@@ -1025,7 +1026,7 @@ export function ItineraryMapView({
     } finally {
       if (gen === placesLineGenRef.current) setPlacesRoadLoading(false)
     }
-  }, [onPlacesLineStyleChange, placesRoute.legs])
+  }, [onPlacesLineStyleChange, placesRoute.legs, mapTheme])
 
   const clearPlacesRoad = useCallback(() => {
     placesLineGenRef.current += 1
@@ -1140,11 +1141,12 @@ export function ItineraryMapView({
 
     const map = new mapboxgl.Map({
       container,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: MAP_STYLE_URL[mapTheme],
       center: [0, 20],
       zoom: 1.5,
     })
     mapInstanceRef.current = map
+    mapStyleRef.current = MAP_STYLE_URL[mapTheme]
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right")
 
     const onResize = () => {
@@ -1236,6 +1238,26 @@ export function ItineraryMapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map) return
+    const wanted = MAP_STYLE_URL[mapTheme]
+    if (mapStyleRef.current === wanted) return
+    mapStyleRef.current = wanted
+    mapReadyRef.current = false
+    setMapReady(false)
+    map.setStyle(wanted)
+    const onStyle = () => {
+      ensureMapLayers(map)
+      mapReadyRef.current = true
+      setMapReady(true)
+    }
+    map.once("style.load", onStyle)
+    return () => {
+      map.off("style.load", onStyle)
+    }
+  }, [mapTheme])
+
   // Visibilidad por modo.
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -1257,23 +1279,23 @@ export function ItineraryMapView({
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady) return
-    const collection = segmentsToFeatureCollection(segments)
+    const collection = segmentsToFeatureCollection(segments, mapTheme)
     for (const f of collection.features) {
       const id = String(f.properties?.itemId ?? "")
       const override = roadOverride[id]
       if (override) f.geometry = override
     }
     setSourceData(map, "transport-segments", collection)
-  }, [mapReady, segments, segmentsKey, roadOverride])
+  }, [mapReady, segments, segmentsKey, roadOverride, mapTheme])
 
   // Fuentes del recorrido de lugares.
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady) return
-    const base = placesRouteToFeatureCollections(placesRoute.legs)
+    const base = placesRouteToFeatureCollections(placesRoute.legs, mapTheme)
     setSourceData(map, "places-route", placesRoadGeometry ?? base.road)
     setSourceData(map, "places-route-long", base.longHop)
-  }, [mapReady, placesRoute, placesRoadGeometry])
+  }, [mapReady, placesRoute, placesRoadGeometry, mapTheme])
 
   // Marcadores: diff por id; en Recorrido usa ready|refreshing (nunca vaciar en loading).
   useEffect(() => {
@@ -1430,7 +1452,7 @@ export function ItineraryMapView({
         existing.setLngLat([v.coord.lng, v.coord.lat])
         const root = existing.getElement()
         const pin = root.firstElementChild as HTMLElement | null
-        if (pin) renderPinInto(pin, v.point.type, v.pinText, v.approximate)
+        if (pin) renderPinInto(pin, v.point.type, v.pinText, v.approximate, mapTheme)
         root.setAttribute("aria-label", pinAriaLabel(v.point.name, v.point.dayNumber))
         continue
       }
@@ -1440,7 +1462,7 @@ export function ItineraryMapView({
       root.setAttribute("aria-label", pinAriaLabel(v.point.name, v.point.dayNumber))
       const pin = document.createElement("div")
       root.appendChild(pin)
-      renderPinInto(pin, v.point.type, v.pinText, v.approximate)
+      renderPinInto(pin, v.point.type, v.pinText, v.approximate, mapTheme)
       bindPinChrome(root, v.id)
       const marker = new mapboxgl.Marker({
         element: root,
@@ -1465,6 +1487,7 @@ export function ItineraryMapView({
     closeHoverPopup,
     scheduleHoverClose,
     onPersistItemCoords,
+    mapTheme,
   ])
 
   // fitBounds: una vez por modo + conjunto de contenido (no en cada refresh de geocode).
@@ -1697,7 +1720,7 @@ export function ItineraryMapView({
               <span>Ajusta las ubicaciones para trazar la ruta por carretera</span>
             ) : null}
             {placesRouteIncomplete ? (
-              <span className="text-amber-800 dark:text-amber-200/90">
+              <span className="text-warning-foreground">
                 Total incompleto: faltan lugares sin localizar
               </span>
             ) : null}
@@ -1706,7 +1729,7 @@ export function ItineraryMapView({
 
         {mapMode === "places" && failed.length > 0 && (
           <details
-            className="rounded-md border border-amber-200/80 bg-amber-50/90 px-2.5 py-1.5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100/90"
+            className="rounded-md border border-warning-border bg-warning-surface px-2.5 py-1.5 text-warning-foreground"
             id={describeId}
           >
             <summary

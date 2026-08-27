@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { safeNext } from "@/lib/auth-next"
 import { useAuth } from "@/lib/auth-context"
 import { authCallbackErrorMessage } from "@/lib/auth-errors"
@@ -194,7 +195,7 @@ function LoginForm() {
           </label>
         ) : null}
 
-        {captchaEnabled ? <Turnstile key={captchaKey} onToken={setCaptchaToken} /> : null}
+        {captchaEnabled ? <ThemedTurnstile key={captchaKey} onToken={setCaptchaToken} /> : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

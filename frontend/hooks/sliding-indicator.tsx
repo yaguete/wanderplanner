@@ -9,7 +9,7 @@ export function SlidingIndicator({
 }: {
   box: { x: number; y: number; w: number; h: number }
   ready: boolean
-  variant: "pill" | "underline"
+  variant: "pill" | "underline" | "circle"
 }) {
   if (!ready || box.w < 1) return null
 
@@ -23,11 +23,14 @@ export function SlidingIndicator({
     )
   }
 
+  const rounded = variant === "circle" ? "rounded-full bg-accent" : "rounded-md bg-background shadow-sm"
+
   return (
     <span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute left-0 top-0 z-0 rounded-md bg-background shadow-sm",
+        "pointer-events-none absolute left-0 top-0 z-0",
+        rounded,
         "transition-[transform,width,height] duration-200 ease-out",
       )}
       style={{

@@ -215,7 +215,7 @@ export function AddToDayDialog({
                     </span>
                   </span>
                   {row.alreadyHere ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-success-border bg-success-surface px-1.5 py-0.5 text-[10px] font-semibold text-success-foreground">
                       <Check className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
                       Ya está
                     </span>

@@ -366,7 +366,7 @@ export function TransportRouteForm({
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-4">
       {searchNotice ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+        <p className="rounded-md border border-warning-border bg-warning-surface px-2.5 py-2 text-xs text-warning-foreground">
           {searchNotice}
         </p>
       ) : null}

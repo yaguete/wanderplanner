@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { createClient } from "@/lib/supabase/client"
 import { prepareGuestTripClaim } from "@/lib/guest-trip-claim"
@@ -94,7 +95,7 @@ function ForgotPasswordForm() {
         </div>
 
         {captchaEnabled ? (
-          <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptchaToken} />
+          <ThemedTurnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptchaToken} />
         ) : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}

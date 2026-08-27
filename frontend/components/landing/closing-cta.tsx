@@ -11,7 +11,7 @@ export function ClosingCta() {
       />
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-[360px] bg-[radial-gradient(50%_60%_at_50%_100%,#9F817314,transparent_70%)]"
+        className="absolute inset-x-0 bottom-0 h-[360px] landing-brand-veil landing-brand-veil--flip"
       />
       <div className="landing-reveal relative mx-auto w-full max-w-6xl px-6 text-center">
         <h2 className="text-balance text-3xl font-semibold tracking-[-0.03em] sm:text-4xl lg:text-5xl">

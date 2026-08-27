@@ -59,7 +59,6 @@ import type { ItemType, RouteLeg, Trip, TripTaskCategory, TripTaskState, UserDay
 import { flightSearchHrefForItem } from "@/lib/flight-search"
 import { stayDayIndexesForItem } from "@/lib/booking-dates"
 import { stayReserveHref } from "@/lib/booking-search"
-import { BRAND_INK } from "@/components/brand-mark"
 import {
   ItineraryViewModeTabs,
   VIEW_MODE_ADD_ACTION_LABEL,
@@ -1085,11 +1084,10 @@ export default function ItineraryPanel({
             */}
             <h2
               className={cn(
-                "hidden min-w-0 truncate text-sm font-semibold",
+                "hidden min-w-0 truncate text-sm font-semibold text-[hsl(var(--brand-ink))]",
                 "max-md:block max-md:text-lg max-md:tracking-tight",
                 "@md:!hidden",
               )}
-              style={{ color: BRAND_INK }}
             >
               {VIEW_MODE_LABELS[categoryView]}
             </h2>
@@ -1469,7 +1467,7 @@ function RouteTaskIndicator({
       <Tooltip>
         <TooltipTrigger asChild>
           <span
-            className="mt-[3px] inline-flex shrink-0 items-center text-emerald-700"
+            className="mt-[3px] inline-flex shrink-0 items-center text-success"
             aria-label={label}
           >
             <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />

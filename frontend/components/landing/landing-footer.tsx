@@ -1,6 +1,8 @@
 import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 import { CookieSettingsButton } from "@/components/cookie-settings-button"
+import { ThemeModeToggle } from "@/components/theme-mode-toggle"
+import { showsThemeToggle } from "@/lib/theme-scope"
 import { cn } from "@/lib/utils"
 import { LandingFooterAuthLinks } from "./landing-nav"
 import type { LandingTone } from "./landing-tone"
@@ -78,6 +80,9 @@ export function LandingFooter({
                 hola@wanderplanner.ai
               </a>
             </nav>
+            {showsThemeToggle(undefined, tone) ? (
+              <ThemeModeToggle className="mt-5" />
+            ) : null}
           </div>
         </div>
       </div>

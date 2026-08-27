@@ -533,7 +533,7 @@ function DayCell({
   const numberClass = cn(
     "inline-flex size-6 shrink-0 items-center justify-center text-xs tabular-nums",
     cell.isToday
-      ? "rounded-full bg-pink-500 font-medium text-white"
+      ? "rounded-full bg-[hsl(var(--today))] font-medium text-white"
       : inTrip
         ? "font-medium text-foreground"
         : cell.inMonth
@@ -547,7 +547,7 @@ function DayCell({
         {dateNum}
       </span>
       {cell.isToday ? (
-        <span className="hidden text-[10px] font-medium leading-none text-pink-500 md:inline">Hoy</span>
+        <span className="hidden text-[10px] font-medium leading-none text-[hsl(var(--today))] md:inline">Hoy</span>
       ) : null}
     </span>
   )

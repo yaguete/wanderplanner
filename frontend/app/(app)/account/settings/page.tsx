@@ -19,7 +19,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { hasPasswordIdentity } from "@/lib/auth-google"
 import {
@@ -204,7 +205,7 @@ export default function AccountSettingsPage() {
                       </div>
 
                       {captchaEnabled ? (
-                        <Turnstile
+                        <ThemedTurnstile
                           key={captchaKey}
                           resetKey={captchaKey}
                           appearance="interaction-only"

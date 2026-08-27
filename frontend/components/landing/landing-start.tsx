@@ -10,7 +10,8 @@ import { useRouter } from "next/navigation"
 import { track } from "@vercel/analytics"
 import { ArrowRight, Globe, Instagram } from "lucide-react"
 import { SignupForm } from "@/components/auth/signup-form"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { DestinationSearchField } from "@/components/destination-search-field"
 import { SourceSuggestList } from "@/components/source-suggest-list"
 import { isBlogLandingEnabled, getBlogLanding } from "@/lib/blog-landings"
@@ -235,7 +236,7 @@ export function LandingStart({
       <div
         role="tablist"
         aria-label="Cómo quieres empezar"
-        className="flex w-full rounded-full bg-background p-1 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.04)]"
+        className="flex w-full rounded-full bg-background p-1 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.04)] dark:shadow-none dark:ring-1 dark:ring-border"
       >
         {tabs.map((item, index) => {
           const selected = tab === item.id
@@ -362,7 +363,7 @@ export function LandingStart({
                 ) : null}
                 {showWebCaptcha ? (
                   <div className="mt-3 flex justify-center">
-                    <Turnstile
+                    <ThemedTurnstile
                       key={captchaKey}
                       onToken={setCaptchaToken}
                       appearance="interaction-only"

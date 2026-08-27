@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useTrips } from "@/lib/trip-context"
 import { displayNameFor, initialsFor } from "@/lib/user-display"
 import { openOnboarding } from "@/lib/onboarding"
+import { AppearanceMenuSub } from "@/components/theme-mode-toggle"
 import { cn } from "@/lib/utils"
 import {
   AlertDialog,
@@ -152,6 +153,7 @@ export function AccountMenu({
           </>
         )}
         <DropdownMenuSeparator />
+        <AppearanceMenuSub />
         <DropdownMenuItem onSelect={() => openOnboarding()}>
           <Info className="h-4 w-4" />
           Cómo funciona

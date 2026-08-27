@@ -27,7 +27,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Turnstile, isTurnstileEnabled } from "@/components/auth/turnstile"
+import { isTurnstileEnabled } from "@/components/auth/turnstile"
+import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { useAuth } from "@/lib/auth-context"
@@ -427,7 +428,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                 />
 
                 {captchaEnabled ? (
-                  <Turnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptchaToken} />
+                  <ThemedTurnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptchaToken} />
                 ) : null}
 
                 {error ? <p className="text-sm text-destructive">{error}</p> : null}

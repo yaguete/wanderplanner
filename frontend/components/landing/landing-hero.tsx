@@ -9,7 +9,7 @@ export function LandingHero() {
       <div aria-hidden className="landing-grid-texture absolute inset-0" />
       <div
         aria-hidden
-        className="absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(50%_60%_at_50%_0%,#9F817314,transparent_70%)]"
+        className="absolute inset-x-0 top-0 h-[480px] landing-brand-veil"
       />
 
       <div className="relative mx-auto w-full max-w-6xl px-6 text-center">
