@@ -33,6 +33,7 @@ import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { useMyTripInvites, useMyTripOccupants } from "@/hooks/use-trip-members"
 import { TripMemberAvatars } from "@/components/trip-member-avatars"
+import { InviteTripDialog } from "@/components/invite-trip-dialog"
 import { createClient } from "@/lib/supabase/client"
 import {
   acceptStatusFromPayload,
@@ -183,13 +184,14 @@ function TripActions({
 export default function TripsHomePage() {
   const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, reloadTrips } =
     useTrips()
-  const { user } = useAuth()
+  const { user, isGuest } = useAuth()
   const router = useRouter()
   const { openingTrip, beginOpenTrip } = useOpeningTrip()
   const { requireAccount } = useRegistrationGate()
   const { invites, reload: reloadInvites } = useMyTripInvites()
-  const occupantsByTrip = useMyTripOccupants()
+  const { byTripId: occupantsByTrip, reload: reloadOccupants } = useMyTripOccupants()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [inviteTripId, setInviteTripId] = useState<string | null>(null)
   const openNewTripDialog = () => {
     if (requireAccount("new-trip")) setDialogOpen(true)
   }
@@ -207,8 +209,14 @@ export default function TripsHomePage() {
 
   const tripToDelete = deletingTripId ? trips.find((t) => t.id === deletingTripId) : null
   const tripToLeave = leavingTripId ? trips.find((t) => t.id === leavingTripId) : null
+  const tripToInvite = inviteTripId ? trips.find((t) => t.id === inviteTripId) : null
   const editingTrip = editingTripId ? trips.find((t) => t.id === editingTripId) : null
   const formOpen = dialogOpen || !!editingTrip
+
+  const openInvite = (trip: Trip) => {
+    if (isGuest && !requireAccount("invite")) return
+    setInviteTripId(trip.id)
+  }
 
   const activeTrips = useMemo(() => trips.filter((t) => !t.archived), [trips])
   const archivedTrips = useMemo(() => trips.filter((t) => t.archived), [trips])
@@ -453,6 +461,7 @@ export default function TripsHomePage() {
                           members={occupantsByTrip[trip.id] ?? []}
                           size="sm"
                           className="shrink-0"
+                          onOpenInvite={() => openInvite(trip)}
                         />
                       </div>
                       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -510,7 +519,6 @@ export default function TripsHomePage() {
             <ul className="divide-y divide-border">
               {visibleTrips.map((trip) => {
                 const itemCount = tripItemCount(trip)
-                const shared = (occupantsByTrip[trip.id] ?? []).length >= 2
                 return (
                   <li
                     key={trip.id}
@@ -521,8 +529,7 @@ export default function TripsHomePage() {
                       onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       aria-busy={openingTrip?.id === trip.id || undefined}
                       className={cn(
-                        "flex w-full items-center gap-3 py-3 pl-3 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4",
-                        shared ? "pr-40 sm:pr-48" : "pr-28 sm:pr-32",
+                        "flex w-full items-center gap-3 py-3 pl-3 pr-40 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4 sm:pr-48",
                         openingTrip?.id === trip.id && "bg-muted/40",
                       )}
                     >
@@ -558,6 +565,7 @@ export default function TripsHomePage() {
                         <TripMemberAvatars
                           members={occupantsByTrip[trip.id] ?? []}
                           size="sm"
+                          onOpenInvite={() => openInvite(trip)}
                         />
                         <TripActions
                           trip={trip}
@@ -595,6 +603,20 @@ export default function TripsHomePage() {
           </div>
         )}
       </div>
+
+      {tripToInvite ? (
+        <InviteTripDialog
+          tripId={tripToInvite.id}
+          isOwner={isOwnerOf(tripToInvite)}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setInviteTripId(null)
+              void reloadOccupants()
+            }
+          }}
+        />
+      ) : null}
 
       <NewTripDialog
         open={formOpen}

@@ -170,5 +170,5 @@ export function useMyTripOccupants() {
     void reload()
   }, [reload])
 
-  return byTripId
+  return { byTripId, reload }
 }

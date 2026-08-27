@@ -1,10 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import type { MouseEvent, PointerEvent } from "react"
+import { UserPlus } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { TripMember } from "@/hooks/use-trip-members"
+
+function stopCardNavigation(e: MouseEvent | PointerEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -22,14 +28,41 @@ export function TripMemberAvatars({
   members,
   className,
   size = "md",
+  onOpenInvite,
 }: {
   members: TripMember[]
   className?: string
   /** `sm` encaja en las filas de Inicio (junto a la fecha o a las acciones). */
   size?: "sm" | "md"
+  /** Abre la hoja de Invitar de ese viaje (añadir / quitar). */
+  onOpenInvite: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  if (members.length < 2) return null
+  const openInvite = (e: MouseEvent | PointerEvent) => {
+    stopCardNavigation(e)
+    onOpenInvite()
+  }
+
+  if (members.length < 2) {
+    return (
+      <button
+        type="button"
+        aria-label="Invitar"
+        title="Invitar"
+        className={cn(
+          "relative z-[1] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+          "text-muted-foreground transition-colors",
+          "hover:bg-muted hover:text-foreground",
+          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className,
+        )}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={openInvite}
+      >
+        <UserPlus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+      </button>
+    )
+  }
+
   const shown = members.slice(0, 4)
   const extra = members.length - shown.length
   const box =
@@ -38,23 +71,22 @@ export function TripMemberAvatars({
     size === "sm" ? "text-[9px] md:text-[10px]" : "text-[10px] md:text-[11px]"
   const listed = [...members].sort((a, b) => Number(b.isOwner) - Number(a.isOwner))
   const names = listed.map(memberLabel)
-  const label = `Editores: ${names.join(", ")}`
+  const label = `Invitar o gestionar editores: ${names.join(", ")}`
 
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           aria-label={label}
           className={cn("relative z-[1] flex -space-x-2 rounded-full", className)}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.preventDefault()
+          onPointerDown={(e) => {
             e.stopPropagation()
-            if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) {
-              setOpen((v) => !v)
-            }
+            // En táctil el tooltip (delay 0) se come el primer tap; abrimos ya.
+            if (e.pointerType === "mouse") return
+            openInvite(e)
           }}
+          onClick={openInvite}
         >
           {shown.map((m) => (
             <Avatar key={m.userId} className={cn(box, "border-2 border-background")}>
