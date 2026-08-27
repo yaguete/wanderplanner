@@ -8,11 +8,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { BrandMark, BrandWordmark } from "@/components/brand-mark"
 import { TripPanelToggles } from "@/components/trip-panel-toggles"
 import {
-  AccountAvatar,
+  AccountIdentityButton,
   AccountMenu,
   useAccountIdentity,
 } from "@/components/account-menu"
 import { useSidebarRail, useTripChrome } from "@/lib/trip-chrome-context"
+import { tripIdFromPath } from "@/lib/trip-paths"
 import { InviteTripButton } from "@/components/invite-trip-button"
 import { ShareRouteButton } from "@/components/share-route-button"
 import { useOpeningTrip } from "@/components/opening-trip"
@@ -21,9 +22,17 @@ import { useAuth } from "@/lib/auth-context"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
-function tripIdFromPath(pathname: string): string | null {
-  const match = pathname.match(/^\/trips\/([^/]+)$/)
-  return match?.[1] ?? null
+function HeaderAccountMenu({ className }: { className?: string }) {
+  const { name } = useAccountIdentity()
+  return (
+    <div className={cn("flex items-center gap-2.5", className)}>
+      {/* Móvil: el nombre queda fuera del botón (el chip de dos líneas es de desktop). */}
+      <span className="hidden text-sm text-muted-foreground sm:inline md:hidden">{name}</span>
+      <AccountMenu side="bottom" align="end">
+        <AccountIdentityButton details="desktop" />
+      </AccountMenu>
+    </div>
+  )
 }
 
 function SidebarCollapseControl() {
@@ -68,7 +77,6 @@ type AppHeaderProps = {
 
 export function AppHeader({ leading }: AppHeaderProps) {
   const pathname = usePathname()
-  const { name } = useAccountIdentity()
   const { user } = useAuth()
   const { getTrip } = useTrips()
   const isMobile = useIsMobile()
@@ -81,30 +89,48 @@ export function AppHeader({ leading }: AppHeaderProps) {
   const onTripDetail = Boolean(tripId)
   const openTrip = tripId ? getTrip(tripId) : undefined
   const isTripOwner = Boolean(openTrip && (!openTrip.ownerId || openTrip.ownerId === user?.id))
+  // Desktop en detalle: la marca ocupa el ancho del sidebar. En listado/cuenta no hay aside.
+  const alignToSidebar = !isMobile && onTripDetail
+  // Listado y cuenta: misma columna que el canvas (`max-w-5xl` + px de la página).
+  const insetToContent = !onTripDetail
+  const accountInset = pathname.startsWith("/account")
 
   return (
     <header
       className={cn(
-        "flex h-12 shrink-0 items-center gap-2.5 bg-canvas",
+        "shrink-0 bg-canvas",
         // Móvil: el documento scrollea bajo el header (ver `trips-shell`), así
         // que se queda pegado arriba. El alto sale de `--wp-header-height`,
-        // que es de donde cuelgan las cabeceras de panel.
+        // que es de donde cuelgan las cabeceras de panel. El padding extra
+        // de listado/cuenta es solo desktop: no toca esa variable.
         "max-md:sticky max-md:top-0 max-md:z-30",
+        insetToContent && "md:pt-6",
         // Detalle del viaje: el panel es blanco; listado, perfil y configuración comparten el canvas.
         isMobile && onTripDetail && "bg-background",
-        // Desktop: sin padding izquierdo — la marca ocupa exactamente el ancho del sidebar.
-        isMobile ? "px-3 sm:px-4" : "pr-3 sm:pr-4",
       )}
     >
+      <div
+        className={cn(
+          "flex h-12 w-full items-center gap-2.5",
+          insetToContent
+            ? cn(
+                "mx-auto max-w-5xl",
+                accountInset ? "px-6 sm:px-8" : "px-4 sm:px-8",
+              )
+            : alignToSidebar
+              ? "pr-3 sm:pr-4"
+              : "px-3 sm:px-4",
+        )}
+      >
       {leading}
 
-      {/* Marca al rincón. Expandido: w-56 (columna del aside) + colapso a la derecha del wordmark. Rail: ardilla en w-14 y el botón a su derecha. */}
+      {/* Detalle: w-56 / rail alineados al aside. Listado y cuenta: wordmark al rincón del canvas, sin colapso. */}
       <div
         className={cn(
           "flex shrink-0 items-center",
-          !isMobile && (rail ? undefined : "w-56 px-2"),
-          isMobile && "min-w-0",
-          !isMobile && !chromeHydrated && "invisible",
+          alignToSidebar && (rail ? undefined : "w-56 px-2"),
+          !alignToSidebar && "min-w-0",
+          alignToSidebar && !chromeHydrated && "invisible",
         )}
       >
         <Link
@@ -114,14 +140,14 @@ export function AppHeader({ leading }: AppHeaderProps) {
           className={cn(
             "flex min-w-0 items-center outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
             // Rail: la ardilla sigue centrada en w-14 (eje de los iconos del aside).
-            !isMobile && rail && "w-14 justify-center",
+            alignToSidebar && rail && "w-14 justify-center",
             // Expandido: mismo inset que Inicio / Tus viajes (px-2.5 dentro del p-2 del aside).
-            !isMobile && !rail && "px-2.5",
+            alignToSidebar && !rail && "px-2.5",
           )}
         >
-          {isMobile || !rail ? <BrandWordmark /> : <BrandMark />}
+          {!alignToSidebar || !rail ? <BrandWordmark /> : <BrandMark />}
         </Link>
-        {!isMobile ? <SidebarCollapseControl /> : null}
+        {alignToSidebar ? <SidebarCollapseControl /> : null}
       </div>
 
       {showPanelToggles && chrome ? (
@@ -142,19 +168,10 @@ export function AppHeader({ leading }: AppHeaderProps) {
           </>
         ) : null}
 
-        {/* md:hidden: media query, no useIsMobile() — el hook es false al hidratar y el avatar parpadearía. */}
-        <div className="flex items-center gap-2.5 md:hidden">
-          <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
-          <AccountMenu side="bottom" align="end">
-            <button
-              type="button"
-              className="rounded-full outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Abrir menú de cuenta"
-            >
-              <AccountAvatar />
-            </button>
-          </AccountMenu>
-        </div>
+        {/* Detalle desktop: el avatar vive en el pie del sidebar. En el resto, cabecera.
+            md:hidden en detalle: media query, no useIsMobile() — el hook es false al hidratar. */}
+        <HeaderAccountMenu className={onTripDetail ? "md:hidden" : undefined} />
+      </div>
       </div>
     </header>
   )

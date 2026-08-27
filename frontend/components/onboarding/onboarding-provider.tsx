@@ -16,14 +16,9 @@ import {
   type OnboardingOutcome,
   type OnboardingTrigger,
 } from "@/lib/onboarding"
+import { tripIdFromPath } from "@/lib/trip-paths"
 import { useTrips } from "@/lib/trip-context"
 import { OnboardingDialog } from "./onboarding-dialog"
-
-function tripIdFromPath(pathname: string | null): string | null {
-  if (!pathname) return null
-  const match = pathname.match(/^\/trips\/([^/]+)\/?$/)
-  return match?.[1] ?? null
-}
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()

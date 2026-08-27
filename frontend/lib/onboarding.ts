@@ -76,11 +76,7 @@ export function onboardingSeenKey(userId: string): string {
   return `${ONBOARDING_SEEN_PREFIX}:${userId}`
 }
 
-/** `/trips/{id}` (con o sin slash final). No el listado ni `/account`. */
-export function isTripDetailPath(pathname: string | null | undefined): boolean {
-  if (!pathname) return false
-  return /^\/trips\/[^/]+\/?$/.test(pathname)
-}
+export { isTripDetailPath } from "./trip-paths"
 
 export function parseRecentStamp(raw: string | null, now: number): number | null {
   if (!raw) return null

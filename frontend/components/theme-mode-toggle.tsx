@@ -1,17 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Monitor, Moon, Sun } from "lucide-react"
+import { ChevronDown, ChevronUp, Monitor, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import { SlidingIndicator } from "@/hooks/sliding-indicator"
 import { useSlidingIndicator } from "@/hooks/use-sliding-indicator"
 import { cn } from "@/lib/utils"
 import {
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu"
 
 export const THEME_MODES = [
@@ -69,28 +67,59 @@ export function ThemeModeToggle({ className }: { className?: string }) {
   )
 }
 
-export function AppearanceMenuSub() {
+export function AppearanceMenuFold({
+  expand,
+  open,
+  onOpenChange,
+}: {
+  expand: "down" | "up"
+  open: boolean
+  onOpenChange: (open: boolean | ((prev: boolean) => boolean)) => void
+}) {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const value = mounted && theme && THEME_MODES.some((m) => m.id === theme) ? theme : "system"
   const ActiveIcon = THEME_MODES.find((m) => m.id === value)?.Icon ?? Monitor
+  const Chevron = expand === "up" ? ChevronUp : ChevronDown
+
+  const trigger = (
+    <DropdownMenuItem
+      aria-expanded={open}
+      onSelect={(event) => event.preventDefault()}
+      onClick={() => onOpenChange((prev) => !prev)}
+    >
+      <ActiveIcon className="h-4 w-4" aria-hidden />
+      Apariencia
+      <Chevron
+        className={cn(
+          "ml-auto h-4 w-4 text-muted-foreground transition-transform",
+          open && "rotate-180",
+        )}
+        aria-hidden
+      />
+    </DropdownMenuItem>
+  )
+
+  const options = open ? (
+    <DropdownMenuRadioGroup value={value} onValueChange={setTheme}>
+      {THEME_MODES.map(({ id, label }) => (
+        <DropdownMenuRadioItem
+          key={id}
+          value={id}
+          className="text-[11px] leading-snug text-muted-foreground data-[state=checked]:text-foreground"
+        >
+          {label}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
+  ) : null
 
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        <ActiveIcon className="h-4 w-4" />
-        Apariencia
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        <DropdownMenuRadioGroup value={value} onValueChange={setTheme}>
-          {THEME_MODES.map(({ id, label }) => (
-            <DropdownMenuRadioItem key={id} value={id}>
-              {label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
+    <>
+      {expand === "up" ? options : null}
+      {trigger}
+      {expand === "down" ? options : null}
+    </>
   )
 }

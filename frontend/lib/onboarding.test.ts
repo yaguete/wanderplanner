@@ -16,6 +16,7 @@ import {
   shouldAutoShow,
   type StorageLike,
 } from "./onboarding"
+import { tripIdFromPath } from "./trip-paths"
 
 const NOW = Date.parse("2026-08-21T12:00:00Z")
 const USER = "user-abc"
@@ -87,6 +88,10 @@ assert.equal(isTripDetailPath("/trips/"), false)
 assert.equal(isTripDetailPath("/account"), false)
 assert.equal(isTripDetailPath("/trips/abc/edit"), false)
 assert.equal(isTripDetailPath(null), false)
+assert.equal(tripIdFromPath("/trips/abc"), "abc")
+assert.equal(tripIdFromPath("/trips/abc/"), "abc")
+assert.equal(tripIdFromPath("/trips"), null)
+assert.equal(tripIdFromPath("/account"), null)
 
 {
   // 1. Invitado, pestaña limpia, sin sello reciente → abre.
