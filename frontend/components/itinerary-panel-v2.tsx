@@ -32,6 +32,8 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { CollapsedChromeReveal } from "@/components/collapsed-chrome-reveal"
+import { RouteViewRail } from "@/components/route-view-rail"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { SegmentedControl } from "@/components/segmented-control"
@@ -216,7 +218,12 @@ export default function ItineraryPanel({
     containerRef: panelRef,
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
-  } = useCollapsingHeader(isMobile, onHeaderCollapsedChange, activeOnMobile)
+  } = useCollapsingHeader(
+    isMobile,
+    onHeaderCollapsedChange,
+    activeOnMobile,
+    false,
+  )
   const dateSub = useMemo(
     () => (trip ? formatTripDates(trip.startDate, trip.endDate) : null),
     [trip],
@@ -673,11 +680,19 @@ export default function ItineraryPanel({
   const categoryView = isRoute
     ? null
     : (viewMode as Exclude<ItineraryViewMode, "itinerary">)
-  // En Ruta, al bajar, las pestañas se van con el título y queda Lista /
-  // Calendario / Mapa. En el resto de pestañas el SegmentedControl se queda:
-  // sin él no hay forma de cambiar de categoría sin subir.
-  const collapseRouteTabs =
+  // En Ruta, al bajar, se van título, pestañas de categoría y Lista /
+  // Calendario / Mapa. El filtro de día y el alta (Añadir ítem / día) se
+  // quedan, como las pestañas de Fuentes. El rail flotante sustituye al
+  // SegmentedControl para no dejar Calendario/Mapa sin forma de volver a
+  // Lista. En el resto de pestañas las categorías se quedan: sin ellas no
+  // hay forma de cambiar sin subir.
+  const collapseRouteChrome =
     isMobile && headerCollapsed && isRoute && planSurface === "plan"
+  // Calendario y Mapa: al replegar la barra sticky se oculta entera (el
+  // rail cubre el cambio de vista). Los filtros del mapa (día / recorrido /
+  // línea) bajan al cuerpo, debajo de la burbuja, como el mes del calendario.
+  const collapseRouteToolbar =
+    collapseRouteChrome && (listMode === "calendar" || listMode === "map")
   const canvasWideToggle =
     desktopSolo && isRoute && (listMode === "calendar" || listMode === "map")
   const constrainCanvas = canvasWideToggle && !wideCanvas
@@ -716,9 +731,9 @@ export default function ItineraryPanel({
     >
       {/*
         Móvil: cabecera + barra de vista de Ruta forman UN bloque sticky bajo
-        el header del shell. La barra tiene que ir dentro: si scrollea con el
-        contenido, entrar en Calendario o Mapa —que no scrollean— deja al
-        usuario sin forma de volver a Lista.
+        el header del shell. Al replegarse, Lista / Calendario / Mapa pasan al
+        rail flotante (`RouteViewRail`, overlay abajo a la derecha); el filtro
+        de día y Añadir ítem / día se quedan, como las pestañas de Fuentes.
       */}
       <div
         ref={listChromeRef}
@@ -731,7 +746,7 @@ export default function ItineraryPanel({
         className={cn(
           "relative shrink-0 border-b border-border/60 px-4",
           isMobile && headerCollapsed
-            ? collapseRouteTabs
+            ? collapseRouteChrome
               ? "border-b-0 py-0"
               : "pb-2 pt-2"
             : "space-y-3 py-3.5",
@@ -740,7 +755,7 @@ export default function ItineraryPanel({
         <div
           className={cn(
             "panel-column",
-            collapseRouteTabs ? "space-y-0" : "space-y-3",
+            collapseRouteChrome ? "space-y-0" : "space-y-3",
           )}
         >
         {/* Fila 1+2: título / fecha / meta — se repliegan en móvil al bajar */}
@@ -752,6 +767,8 @@ export default function ItineraryPanel({
                 headerCollapsed ? "max-h-0 opacity-0" : "max-h-28 opacity-100",
               ),
           )}
+          aria-hidden={isMobile && headerCollapsed}
+          inert={isMobile && headerCollapsed ? true : undefined}
         >
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
@@ -849,14 +866,14 @@ export default function ItineraryPanel({
             isMobile && isRoute && planSurface === "plan"
               ? cn(
                   "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
-                  collapseRouteTabs
+                  collapseRouteChrome
                     ? "max-h-0 min-h-0 opacity-0"
                     : "max-h-10 min-h-8 opacity-100",
                 )
               : "min-h-8",
           )}
-          aria-hidden={collapseRouteTabs}
-          inert={collapseRouteTabs || undefined}
+          aria-hidden={collapseRouteChrome}
+          inert={collapseRouteChrome || undefined}
         >
           {planSurface === "budget" ? (
             <div className="flex min-h-8 items-center gap-2">
@@ -879,7 +896,7 @@ export default function ItineraryPanel({
           )}
         </div>
 
-        {routeTaskTotals && !collapseRouteTabs ? (
+        {routeTaskTotals && !collapseRouteChrome ? (
           <TripTasksProgressHairline totals={routeTaskTotals} />
         ) : null}
         </div>
@@ -888,11 +905,21 @@ export default function ItineraryPanel({
       {planSurface === "plan" && isRoute ? (
           <div
             className={cn(
-              "flex shrink-0 items-center gap-3 px-4 py-2.5",
-              collapseRouteTabs && "border-b border-border/60",
+              "flex shrink-0 items-center gap-3 px-4",
+              "overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out",
+              collapseRouteToolbar
+                ? "max-h-0 py-0 opacity-0"
+                : "max-h-48 py-2.5 opacity-100",
             )}
+            aria-hidden={collapseRouteToolbar}
+            inert={collapseRouteToolbar || undefined}
           >
             <div className="panel-column flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <div
+              className={cn(collapseRouteChrome ? "hidden" : "contents")}
+              aria-hidden={collapseRouteChrome}
+              inert={collapseRouteChrome || undefined}
+            >
             <SegmentedControl
               items={[
                 { id: "list" as const, label: "Lista", icon: List },
@@ -904,17 +931,18 @@ export default function ItineraryPanel({
               ariaLabel="Vista de ruta"
               size="compact"
             />
-            {trip.days.length > 1 && listMode !== "calendar" ? (
+            </div>
+            {trip.days.length > 1 && listMode !== "calendar" && !collapseRouteToolbar ? (
               <MapDayDropdown
                 days={mapDayOptions}
                 value={focusDayNumber == null ? null : focusDayId}
                 onChange={handleFocusDayChange}
               />
             ) : null}
-            {listMode === "map" ? (
+            {listMode === "map" && !collapseRouteToolbar ? (
               <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
             ) : null}
-            {listMode === "map" && mapMode === "places" ? (
+            {listMode === "map" && mapMode === "places" && !collapseRouteToolbar ? (
               <PlacesLineStyleDropdown
                 value={placesLineStyle}
                 loading={placesLineLoading}
@@ -983,8 +1011,24 @@ export default function ItineraryPanel({
             </div>
           </div>
       ) : null}
+          <CollapsedChromeReveal
+            show={isMobile && headerCollapsed}
+            onReveal={() => setHeaderCollapsed(false)}
+          />
       </div>
 
+      {collapseRouteChrome && activeOnMobile ? (
+        <RouteViewRail value={listMode} onChange={handleListModeChange} />
+      ) : null}
+
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col md:min-h-0",
+          isMobile &&
+            headerCollapsed &&
+            "pt-[var(--wp-chrome-reveal-clearance)]",
+        )}
+      >
       {planSurface === "budget" && budgetView ? (
         <div
           ref={budgetScrollRef}
@@ -1078,6 +1122,25 @@ export default function ItineraryPanel({
             // Ídem Calendario: el mapa necesita alto explícito o Mapbox
             // se queda en el `min-h-[280px]` de su contenedor.
             <div className="flex flex-col overflow-hidden px-4 pb-4 pt-1 max-md:h-[70svh] max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1">
+              {collapseRouteChrome ? (
+                <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 pb-2">
+                  {trip.days.length > 1 ? (
+                    <MapDayDropdown
+                      days={mapDayOptions}
+                      value={focusDayNumber == null ? null : focusDayId}
+                      onChange={handleFocusDayChange}
+                    />
+                  ) : null}
+                  <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
+                  {mapMode === "places" ? (
+                    <PlacesLineStyleDropdown
+                      value={placesLineStyle}
+                      loading={placesLineLoading}
+                      onChange={handlePlacesLineStyleChange}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 className={cn(
                   "flex min-h-0 flex-1 flex-col overflow-hidden",
@@ -1188,6 +1251,7 @@ export default function ItineraryPanel({
           />
         </>
       ) : null}
+      </div>
 
       <AddManualItemDialog
         open={manualDialogOpen}

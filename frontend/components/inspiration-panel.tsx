@@ -36,6 +36,7 @@ import {
 } from "@/components/add-source-dialog"
 import { AddToDayDialog } from "@/components/add-to-day-dialog"
 import { PanelTabs } from "@/components/panel-tabs"
+import { CollapsedChromeReveal } from "@/components/collapsed-chrome-reveal"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useStableList } from "@/hooks/use-stable-list"
@@ -188,8 +189,8 @@ export default function InspirationPanel({
   const lastScrolledIndexRef = useRef<number | null>(null)
   const activeSourceIdRef = useRef(activeSourceId)
   const seenExtractionSeqRef = useRef(0)
-  // Móvil: repliega chips + cabecera (y compacta la navbar). Desktop: el
-  // titular del artículo en cualquier pestaña, para ganar espacio de lectura.
+  // Móvil: repliega chips + cabecera (y compacta la navbar); no vuelve solo
+  // al subir — el chevron lo recupera. Desktop: el titular del artículo.
   const {
     containerRef: panelRef,
     collapsed: headerCollapsed,
@@ -198,6 +199,7 @@ export default function InspirationPanel({
     true,
     isMobile ? onHeaderCollapsedChange : undefined,
     isMobile ? activeOnMobile : true,
+    !isMobile,
   )
 
   useEffect(() => {
@@ -664,7 +666,11 @@ export default function InspirationPanel({
           "max-md:sticky max-md:top-[var(--wp-header-height)] max-md:z-20 max-md:bg-background",
         )}
       >
-      <div className={cn("shrink-0", collapsibleClass("max-h-40"))}>
+      <div
+        className={cn("shrink-0", collapsibleClass("max-h-40"))}
+        aria-hidden={isMobile && headerCollapsed}
+        inert={isMobile && headerCollapsed ? true : undefined}
+      >
         {isMobile ? (
           <div className="flex items-baseline gap-1.5 px-4 pb-1 pt-3.5">
             <h2 className="min-w-0 truncate text-lg font-semibold tracking-tight text-foreground">
@@ -930,9 +936,20 @@ export default function InspirationPanel({
               }
             />
           ) : null}
+          <CollapsedChromeReveal
+            show={isMobile && headerCollapsed}
+            onReveal={() => setHeaderCollapsed(false)}
+          />
       </div>
 
-      <div className="relative flex min-w-0 flex-1 flex-col md:min-h-0 md:overflow-hidden">
+      <div
+        className={cn(
+          "relative flex min-w-0 flex-1 flex-col md:min-h-0 md:overflow-hidden",
+          isMobile &&
+            headerCollapsed &&
+            "pt-[var(--wp-chrome-reveal-clearance)]",
+        )}
+      >
         <div className="flex min-w-0 flex-1 flex-col md:min-h-0">
           <div
             className={cn(

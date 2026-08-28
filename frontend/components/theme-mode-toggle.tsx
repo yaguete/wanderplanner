@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronUp, Monitor, Moon, Sun } from "lucide-react"
+import { ChevronDown, ChevronUp, Monitor, Moon, Smartphone, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import { SlidingIndicator } from "@/hooks/sliding-indicator"
 import { useSlidingIndicator } from "@/hooks/use-sliding-indicator"
@@ -13,12 +13,30 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export const THEME_MODES = [
-  { id: "system", label: "Sistema", Icon: Monitor },
-  { id: "light", label: "Claro", Icon: Sun },
-  { id: "dark", label: "Oscuro", Icon: Moon },
+  { id: "system", label: "Sistema" },
+  { id: "light", label: "Claro" },
+  { id: "dark", label: "Oscuro" },
 ] as const
 
 export type ThemeModeId = (typeof THEME_MODES)[number]["id"]
+
+/** Sistema: teléfono en viewport móvil, monitor en desktop. */
+function AppearanceGlyph({
+  id,
+  className,
+}: {
+  id: ThemeModeId
+  className?: string
+}) {
+  if (id === "light") return <Sun className={className} aria-hidden />
+  if (id === "dark") return <Moon className={className} aria-hidden />
+  return (
+    <>
+      <Smartphone className={cn(className, "md:hidden")} aria-hidden />
+      <Monitor className={cn(className, "hidden md:block")} aria-hidden />
+    </>
+  )
+}
 
 export function ThemeModeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme()
@@ -40,7 +58,7 @@ export function ThemeModeToggle({ className }: { className?: string }) {
       {mounted && ready ? (
         <SlidingIndicator box={box} ready={ready} variant="circle" />
       ) : null}
-      {THEME_MODES.map(({ id, label, Icon }) => {
+      {THEME_MODES.map(({ id, label }) => {
         const checked = active === id
         return (
           <button
@@ -59,7 +77,7 @@ export function ThemeModeToggle({ className }: { className?: string }) {
               checked && "text-foreground",
             )}
           >
-            <Icon className="size-3.5" aria-hidden />
+            <AppearanceGlyph id={id} className="size-3.5" />
           </button>
         )
       })}
@@ -80,7 +98,6 @@ export function AppearanceMenuFold({
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   const value = mounted && theme && THEME_MODES.some((m) => m.id === theme) ? theme : "system"
-  const ActiveIcon = THEME_MODES.find((m) => m.id === value)?.Icon ?? Monitor
   const Chevron = expand === "up" ? ChevronUp : ChevronDown
 
   const trigger = (
@@ -89,7 +106,7 @@ export function AppearanceMenuFold({
       onSelect={(event) => event.preventDefault()}
       onClick={() => onOpenChange((prev) => !prev)}
     >
-      <ActiveIcon className="h-4 w-4" aria-hidden />
+      <AppearanceGlyph id={value} className="h-4 w-4" />
       Apariencia
       <Chevron
         className={cn(

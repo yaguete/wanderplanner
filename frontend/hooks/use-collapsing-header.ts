@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { collapsingHeaderIntent } from "@/lib/collapsing-header"
 
 /**
  * Margen sordo tras cada cambio de estado, algo mayor que los 200 ms de la
@@ -12,7 +13,10 @@ import { useCallback, useEffect, useRef, useState } from "react"
 const SETTLE_MS = 260
 
 /**
- * Móvil: la cabecera se repliega al bajar y vuelve al subir.
+ * Móvil: la cabecera se repliega al bajar. Con `expandOnScrollUp` (asistente,
+ * desktop de Fuentes) vuelve al subir; Fuentes / Mi viaje en móvil lo apagan
+ * y recuperan el cromo con el chevron (`CollapsedChromeReveal`).
+ *
  * El listener va en captura porque cada pestaña puede montar su propio scroller
  * (los eventos `scroll` no burbujean).
  *
@@ -32,12 +36,15 @@ export function useCollapsingHeader(
   enabled: boolean,
   onCollapsedChange?: (collapsed: boolean) => void,
   active = true,
+  expandOnScrollUp = true,
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [collapsed, setCollapsedState] = useState(false)
   const collapsedRef = useRef(false)
   const onCollapsedChangeRef = useRef(onCollapsedChange)
   onCollapsedChangeRef.current = onCollapsedChange
+  const expandOnScrollUpRef = useRef(expandOnScrollUp)
+  expandOnScrollUpRef.current = expandOnScrollUp
   const prevActiveRef = useRef(active)
   const settleUntilRef = useRef(0)
 
@@ -84,22 +91,24 @@ export function useCollapsingHeader(
       // como gesto o la cabecera se repliega y caduca el snapshot de rects.
       if (document.documentElement.dataset.wpDragging === "1") return
 
-      // Volver arriba expande: es una condición absoluta, no un delta, así que
-      // no puede realimentarse (expandir con `top <= 8` no mueve el scroll).
-      if (top <= 8) {
+      const expandOnUp = expandOnScrollUpRef.current
+      // Volver arriba expande solo si el modo lo permite: es una condición
+      // absoluta, no un delta, así que no puede realimentarse (expandir con
+      // `top <= 8` no mueve el scroll).
+      if (top <= 8 && expandOnUp) {
         setCollapsed(false)
         return
       }
 
       if (performance.now() < settleUntilRef.current) return
 
-      const delta = top - previous
-      if (Math.abs(delta) < 6) return
-      if (delta > 0) {
-        if (top > 64) setCollapsed(true)
-      } else {
-        setCollapsed(false)
-      }
+      const intent = collapsingHeaderIntent({
+        top,
+        delta: top - previous,
+        expandOnScrollUp: expandOnUp,
+      })
+      if (intent === "collapse") setCollapsed(true)
+      else if (intent === "expand") setCollapsed(false)
     }
 
     // `scroll` dispara muchas veces por frame; decidir una sola vez por frame

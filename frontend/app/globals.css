@@ -104,6 +104,13 @@
      */
     --wp-header-height: 3rem;
 
+    /*
+     * Cuelgue de la burbuja de despliegue (`mt-2` + `size-8`). El contenido
+     * reserva este hueco al replegar para no nacer tapado; al scrollear
+     * pasa por detrás del círculo (el cromo sticky no se pinta ahí).
+     */
+    --wp-chrome-reveal-clearance: 2.5rem;
+
     /* Tinta del lockup: BRAND_INK en claro, blanco en oscuro (negativo). No es cromo. */
     --brand-ink: 17 19% 44%;
 
@@ -410,6 +417,23 @@ li[data-wp-draggable] {
   .wp-nav-pill--compact {
     inset-block: 2px;
     padding-inline: 4px;
+  }
+
+  /*
+   * Rail vertical de Ruta (3 filas w-10 × h-9). `--wp-nav-index` es 0-based
+   * (Lista = 0). Padding 4×2 px deja la cápsula en 32×32, círculo como el
+   * dock compacto.
+   */
+  .wp-nav-pill--vertical {
+    inset-block: auto;
+    inset-inline: 0;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: calc(100% / 3);
+    padding-inline: 4px;
+    padding-block: 2px;
+    transform: translateY(calc(var(--wp-nav-index, 0) * 100%));
   }
 
   .prose-article {
