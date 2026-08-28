@@ -32,6 +32,7 @@
     "test:chronicle-search": "tsx lib/chronicle-search.test.ts",
     "test:chronicle-html": "tsx lib/chronicle-html.test.ts",
     "test:collapsing-header": "tsx lib/collapsing-header.test.ts",
+    "test:tab-swipe": "tsx lib/tab-swipe.test.ts",
     "test:trip-sources": "tsx lib/trip-sources.test.ts",
     "test:inspirational-source": "tsx lib/inspirational-source.test.ts",
     "test:instagram-url": "tsx lib/instagram-url.test.ts",

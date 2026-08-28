@@ -82,6 +82,7 @@ jobs:
       - run: npm run test:visual-viewport
       - run: npm run test:mobile-browser-chrome
       - run: npm run test:collapsing-header
+      - run: npm run test:tab-swipe
       - run: npm run test:trip-merge
       - run: npm run test:trip-share
       - run: npm run test:trip-invite-url

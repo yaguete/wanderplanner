@@ -39,6 +39,8 @@ import { PanelTabs } from "@/components/panel-tabs"
 import { CollapsedChromeReveal } from "@/components/collapsed-chrome-reveal"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useTabSwipe } from "@/hooks/use-tab-swipe"
+import { tabAfterSwipe } from "@/lib/tab-swipe"
 import { useStableList } from "@/hooks/use-stable-list"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
@@ -623,6 +625,23 @@ export default function InspirationPanel({
       : []),
   ]
 
+  // Móvil + Fuentes: swipe horizontal cambia de pestaña (además del tap).
+  // Sin carrusel overflow-x: el scroller sigue siendo el documento.
+  useTabSwipe(panelRef, {
+    enabled: Boolean(
+      isMobile &&
+        activeOnMobile &&
+        currentSource &&
+        !activePending &&
+        !picking &&
+        !addSourceOpen &&
+        !maxSourcesOpen,
+    ),
+    onSwipe: (direction) => {
+      setSourceTab((current) => tabAfterSwipe(tabs, current, direction) ?? current)
+    },
+  })
+
   const rutaItemCount = groupedItems.reduce((n, g) => n + g.items.length, 0)
   const pendingRouteCount = groupedItems.reduce(
     (n, g) => n + g.items.filter((item) => !addedItemIds.has(item.id)).length,
@@ -945,6 +964,12 @@ export default function InspirationPanel({
       <div
         className={cn(
           "relative flex min-w-0 flex-1 flex-col md:min-h-0 md:overflow-hidden",
+          // Eje Y nativo; el horizontal lo lee `useTabSwipe`. `pinch-zoom`
+          // explícito: `pan-y` a secas se lleva el zoom de la Crónica (no hay
+          // `user-scalable=no` en el viewport, así que hoy se puede ampliar).
+          // No va en el panel entero: el padre con pan-y anularía el pan-x de
+          // los chips.
+          isMobile && "touch-pan-y touch-pinch-zoom",
           isMobile &&
             headerCollapsed &&
             "pt-[var(--wp-chrome-reveal-clearance)]",
