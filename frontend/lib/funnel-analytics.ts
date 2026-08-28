@@ -349,8 +349,8 @@ export function outbound(
  * «la ven y la rechazan» de «no llegan a verla».
  *
  * Una vez por sesión y motivo, con la misma guarda que `start_opened`: la modal se
- * reabre sola cada 3 minutos, así que sin guarda esto contaría insistencias, no
- * personas, y dejaría de ser comparable con `start_opened`.
+ * reabre sola a los 3 minutos y luego cada 5, así que sin guarda esto contaría
+ * insistencias, no personas, y dejaría de ser comparable con `start_opened`.
  */
 export function gateShownStorageKey(reason: FunnelGateReason): string {
   return `${GATE_KEY_PREFIX}${reason}`

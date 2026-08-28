@@ -93,6 +93,14 @@ select count(*) from public.trips where user_id = '<uuid>';
 
 **Pines de Google Maps en el artículo:** `20260819120000_maps_link_pins.sql` crea `maps_link_pins` (caché global service_role de `{lng,lat}` extraídos de short links) y añade `usage_events.kind=maps_resolve`. Aplicar **antes** de desplegar el backend con `POST /maps/resolve`. No toca `TRIP_COLUMNS`: un front nuevo contra base vieja no tumba `/trips`; el resolve degrada a geocoding Mapbox. Verificar: `select count(*) from public.maps_link_pins;` como `anon` debe fallar; con service_role, 0.
 
+**Onboarding de primer impacto (cuentas registradas):** `20260828180000_profile_onboarding_seen.sql` añade `profiles.onboarding_seen_at`. El tour autoabierto sale **una vez por cuenta**, no por navegador; «Cómo funciona» lo reabre a mano. Consulta propia en el front (no va en `loadProfile`): si la columna no existe, el perfil de viajero no rompe y el auto-show no abre. Las cuentas registradas que ya existían se marcan al aplicar, para no reabrirles el tour en incógnito. Aplicar **antes** de desplegar el front que escribe la columna si quieres que una cuenta *nueva* vea el tour una vez; con el front nuevo y sin migración, los registrados no lo ven (fail-closed). Verificar:
+
+```sql
+select count(*) filter (where onboarding_seen_at is not null) as vistos,
+       count(*) filter (where onboarding_seen_at is null) as pendientes
+from public.profiles;
+```
+
 4. **Project Settings → API** → copia `URL` y `anon public` a `frontend/.env.local`:
 
 ```

@@ -78,6 +78,7 @@ jobs:
       - run: npm run test:middleware-guard
       - run: npm run test:trip-open-guard
       - run: npm run test:onboarding
+      - run: npm run test:guest-signup-nudge
       - run: npm run test:visual-viewport
       - run: npm run test:mobile-browser-chrome
       - run: npm run test:collapsing-header

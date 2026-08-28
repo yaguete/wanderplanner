@@ -237,8 +237,8 @@ const gateJson = JSON.stringify(gateBody)
 assert.equal(gateJson.includes("://"), false)
 assert.equal(gateJson.includes("@"), false)
 
-// Una vez por sesión y motivo: la modal se reabre sola cada 3 min, así que sin
-// guarda `gate_shown` contaría insistencias en vez de personas.
+// Una vez por sesión y motivo: la modal se reabre sola a los 3 min y luego
+// cada 5, así que sin guarda `gate_shown` contaría insistencias en vez de personas.
 const gateStore = new Map<string, string>()
 const gateStorage = {
   getItem: (k: string) => gateStore.get(k) ?? null,

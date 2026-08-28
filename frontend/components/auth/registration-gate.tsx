@@ -11,8 +11,8 @@
  *
  * Si el invitado ya envió email/contraseña pero aún no ha confirmado el correo, la modal
  * muestra el estado «pendiente de confirmación» en lugar de pedir el formulario otra vez.
- * Mientras sigue siendo invitado, la modal reaparece sola cada 3 minutos (si no hay otra
- * abierta) para incentivar el registro.
+ * Mientras sigue siendo invitado, la modal reaparece sola a los 3 minutos del acceso y,
+ * si la cierra, cada 5 minutos (si no hay otra abierta) para incentivar el registro.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -46,6 +46,7 @@ import {
   recordAccountCreated,
   recordGateShown,
 } from "@/lib/funnel-analytics"
+import { guestSignupNudgeDelay } from "@/lib/guest-signup-nudge"
 
 export type GateReason =
   | "new-trip"
@@ -96,8 +97,6 @@ const COPY: Record<GateReason, { title: string; description: string }> = {
   },
 }
 
-const GUEST_SIGNUP_NUDGE_MS = 3 * 60 * 1000
-
 type GateValue = {
   /** `true` si la acción puede continuar; `false` si se ha abierto la modal de registro. */
   requireAccount: (reason: GateReason) => boolean
@@ -131,6 +130,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
   const keepClaimRef = useRef(false)
+  const sessionStartedAtRef = useRef(Date.now())
+  const autoNudgeCountRef = useRef(0)
   const captchaEnabled = isTurnstileEnabled()
   const extractionLoading = pendingSources.some((p) => p.status === "loading")
 
@@ -166,9 +167,16 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
         schedule(15_000)
         return
       }
+      autoNudgeCountRef.current += 1
       requireAccountRef.current("home")
     }
-    schedule(GUEST_SIGNUP_NUDGE_MS)
+    schedule(
+      guestSignupNudgeDelay({
+        now: Date.now(),
+        sessionStartedAt: sessionStartedAtRef.current,
+        autoNudgeCount: autoNudgeCountRef.current,
+      }),
+    )
     return () => window.clearTimeout(timeoutId)
   }, [isGuest, reason])
 

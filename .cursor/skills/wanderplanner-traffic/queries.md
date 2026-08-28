@@ -296,7 +296,7 @@ group by 1
 order by llegadas desc;
 ```
 
-Por motivo. `home` es el recordatorio automático de los 3 minutos (no intención); los otros seis son acciones que el usuario quiso hacer y que le pidieron cuenta:
+Por motivo. `home` es el recordatorio automático (3 min la primera vez, luego cada 5; no intención); los otros seis son acciones que el usuario quiso hacer y que le pidieron cuenta:
 
 ```sql
 select meta->>'reason'           as motivo,

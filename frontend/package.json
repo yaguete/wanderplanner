@@ -70,6 +70,7 @@
     "test:auth-google": "tsx lib/auth-google.test.ts",
     "test:turnstile": "tsx components/auth/turnstile.test.ts",
     "test:onboarding": "tsx lib/onboarding.test.ts",
+    "test:guest-signup-nudge": "tsx lib/guest-signup-nudge.test.ts",
     "test:visual-viewport": "tsx lib/visual-viewport.test.ts",
     "test:mobile-browser-chrome": "tsx lib/mobile-browser-chrome.test.ts",
     "test:trip-merge": "tsx lib/trip-merge.test.ts",

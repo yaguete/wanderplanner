@@ -6,11 +6,13 @@ import {
   ONBOARDING_SESSION_KEY,
   claimAutoShow,
   funnelOutcomeFrom,
+  hasLocalUserOnboardingSeen,
   isTripDetailPath,
   markOnboardingSeen,
   onboardingCta,
   onboardingSeenKey,
   parseRecentStamp,
+  persistLocalUserOnboardingSeen,
   promoteGuestOnboarding,
   readOnboardingFunnelOutcome,
   shouldAutoShow,
@@ -77,6 +79,7 @@ function userInput(
     now: NOW,
     session: memoryStorage(),
     local: memoryStorage(),
+    profileSeen: false,
     ...overrides,
   }
 }
@@ -123,7 +126,7 @@ assert.equal(tripIdFromPath("/account"), null)
 }
 
 {
-  // 4. Registrado sin marca → abre; con marca → no.
+  // 4. Registrado sin marca local ni de perfil → abre; con marca → no.
   const clean = userInput()
   assert.equal(shouldAutoShow(clean), true)
   const seen = memoryStorage()
@@ -144,6 +147,19 @@ assert.equal(tripIdFromPath("/account"), null)
     local: claimed.local,
   })
   assert.equal(shouldAutoShow({ ...claimed, session: memoryStorage() }), false)
+}
+
+{
+  // 4b. Registrado: sin respuesta del perfil (otro navegador / incógnito) → no abre.
+  assert.equal(shouldAutoShow(userInput({ profileSeen: null })), false)
+  assert.equal(shouldAutoShow(userInput({ profileSeen: undefined })), false)
+  assert.equal(shouldAutoShow(userInput({ profileSeen: true })), false)
+  assert.equal(shouldAutoShow(userInput({ profileSeen: false })), true)
+}
+
+{
+  // 4c. Invitado ignora la marca de perfil (esa columna es de cuenta registrada).
+  assert.equal(shouldAutoShow(guestInput({ profileSeen: true })), true)
 }
 
 {
@@ -244,6 +260,14 @@ assert.equal(funnelOutcomeFrom("nope"), "unseen")
   assert.equal(readOnboardingFunnelOutcome(session), "unseen")
   session.setItem(ONBOARDING_OUTCOME_KEY, "completed")
   assert.equal(readOnboardingFunnelOutcome(session), "completed")
+}
+
+{
+  const local = memoryStorage()
+  assert.equal(hasLocalUserOnboardingSeen(local, USER), false)
+  persistLocalUserOnboardingSeen(local, USER)
+  assert.equal(hasLocalUserOnboardingSeen(local, USER), true)
+  assert.equal(local.getItem(onboardingSeenKey(USER)), "1")
 }
 
 assert.equal(parseRecentStamp(null, NOW), null)

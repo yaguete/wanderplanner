@@ -4,7 +4,9 @@
  * Storages inyectados para testear sin `window`. Reloj inyectado para el TTL.
  *
  * Invitado: `sessionStorage` (esta pestaña) + sello corto en `localStorage`
- * (45 min, anti-multipestaña). Registrado: `localStorage` por `userId`.
+ * (45 min, anti-multipestaña). Registrado: `localStorage` por `userId` y
+ * `profiles.onboarding_seen_at` (una vez en la vida de la cuenta). Hasta que
+ * el perfil responde, no autoabre: el problema era repetirlo en incógnito.
  */
 
 export const ONBOARDING_SESSION_KEY = "wp-onboarding-session"
@@ -44,6 +46,12 @@ export type ShouldAutoShowInput = {
   now: number
   session: StorageLike
   local: StorageLike
+  /**
+   * Cuenta registrada: `false` = el perfil confirma que nunca lo vio;
+   * `true` / `null` / omitido = no autoabrir (ya visto, o aún no sabemos).
+   * Los invitados lo ignoran.
+   */
+  profileSeen?: boolean | null
 }
 
 export type MarkOnboardingSeenInput = {
@@ -125,7 +133,10 @@ export function shouldAutoShow(input: ShouldAutoShowInput): boolean {
 
   const userId = (input.userId ?? "").trim()
   if (!userId) return false
-  return !userAlreadySeen(input.local, userId)
+  if (userAlreadySeen(input.local, userId)) return false
+  // Sin confirmación del perfil no abrimos: otro navegador no debe repetirlo.
+  if (input.profileSeen !== false) return false
+  return true
 }
 
 function writeSessionClaim(session: StorageLike, state: "open" | "done"): void {
@@ -138,6 +149,16 @@ function writeRecentStamp(local: StorageLike, now: number): void {
 
 function writeUserSeen(local: StorageLike, userId: string): void {
   safeSet(local, onboardingSeenKey(userId), "1")
+}
+
+export function hasLocalUserOnboardingSeen(local: StorageLike, userId: string): boolean {
+  const id = userId.trim()
+  return id ? userAlreadySeen(local, id) : false
+}
+
+export function persistLocalUserOnboardingSeen(local: StorageLike, userId: string): void {
+  const id = userId.trim()
+  if (id) writeUserSeen(local, id)
 }
 
 function writeOutcome(session: StorageLike, outcome: OnboardingOutcome): void {
@@ -167,8 +188,9 @@ export function markOnboardingSeen(input: MarkOnboardingSeenInput): void {
 }
 
 /**
- * Al autoabrir: reclama pestaña + sello (invitado) o marca de cuenta
+ * Al autoabrir: reclama pestaña + sello (invitado) o marca local de cuenta
  * (registrado) *antes* de pintar, para que la pestaña de al lado no abra otro.
+ * La marca durable (`profiles.onboarding_seen_at`) la escribe el provider.
  */
 export function claimAutoShow(input: ShouldAutoShowInput): boolean {
   if (!shouldAutoShow(input)) return false

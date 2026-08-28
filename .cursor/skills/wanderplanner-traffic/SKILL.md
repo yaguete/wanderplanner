@@ -77,8 +77,8 @@ Nombres de embudo: `start_opened`, `outbound_click`, `account_created`, `gate_sh
 La modal de registro (`RegistrationGate`) se ha puesto delante de un invitado. Existe porque `account_created` por sí solo es ambiguo: con pocas altas no distingues **«la ven y la rechazan»** (problema de producto: nada detrás del email) de **«no llegan a verla»** (problema de sitio y momento). Son diagnósticos opuestos con el mismo número.
 
 - `meta.reason`, lista cerrada de 7: `new-trip`, `second-source`, `home`, `source-limit`, `assistant-limit`, `invite`, `share-plan`. La misma lista vive en `FUNNEL_GATE_REASONS` (frontend) y en `ALLOWED_META_VALUES["reason"]` (backend); si divergen, el evento se descarta en silencio.
-- **`home` es el recordatorio automático de los 3 minutos**, no intención: a nadie le hizo falta la cuenta, solo pasó el tiempo. Los otros seis sí son intención, y señalan qué merecería la pena poner detrás del email.
-- Se emite **una vez por sesión y motivo**, con la misma guarda de `sessionStorage` que `start_opened` — así las dos columnas son comparables. Sin esa guarda contaría insistencias (la modal se reabre sola cada 3 min), no personas.
+- **`home` es el recordatorio automático** (3 min la primera vez, luego cada 5), no intención: a nadie le hizo falta la cuenta, solo pasó el tiempo. Los otros seis sí son intención, y señalan qué merecería la pena poner detrás del email.
+- Se emite **una vez por sesión y motivo**, con la misma guarda de `sessionStorage` que `start_opened` — así las dos columnas son comparables. Sin esa guarda contaría insistencias (la modal se reabre sola), no personas.
 - **No existe antes del 28 ago 2026.** En ventanas anteriores da cero y ese cero no significa nada: dilo explícitamente en el informe en vez de reportar 0.
 - Ojo con el nombre: esto es el **gate de registro**. El «gate» de la consulta 8 de [queries.md](queries.md) es el **captcha** (Turnstile). No los mezcles.
 
