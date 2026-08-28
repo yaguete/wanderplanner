@@ -247,7 +247,9 @@ Visitas a un viaje concreto (`/trips/<uuid>`) → cruza el uuid con la query (3)
 
 ---
 
-## 8. Heurística gate (cota, no cifra exacta)
+## 8. Heurística del gate del CAPTCHA (cota, no cifra exacta)
+
+> Esto es Turnstile, no la modal de registro. Para la petición de cuenta, ve a la 9.
 
 Un invitado que reusa viaje genera `start_opened` sin fila nueva. El join es por slug de path, no por persona.
 
@@ -273,4 +275,49 @@ select l.post_slug,
 from llegadas l
 left join pasaron p using (post_slug)
 order by l.llegadas desc;
+```
+
+---
+
+## 9. La petición de cuenta (`gate_shown`, desde el 28 ago 2026)
+
+Contesta lo que `account_created` por sí solo no puede: ¿la ven y la rechazan, o no llegan a verla? En ventanas anteriores al 28 ago 2026 esto da cero porque el evento no existía — dilo, no lo reportes como 0.
+
+`gate_shown` se emite una vez por sesión y motivo, con la misma guarda que `start_opened`, así que las columnas son comparables.
+
+```sql
+select coalesce(ref, '(directo)')                       as partner,
+       count(*) filter (where name = 'start_opened')    as llegadas,
+       count(*) filter (where name = 'gate_shown')      as vieron_la_peticion,
+       count(*) filter (where name = 'account_created') as cuentas
+from funnel_events
+where at >= :from and at < :to
+group by 1
+order by llegadas desc;
+```
+
+Por motivo. `home` es el recordatorio automático de los 3 minutos (no intención); los otros seis son acciones que el usuario quiso hacer y que le pidieron cuenta:
+
+```sql
+select meta->>'reason'           as motivo,
+       count(*)                  as veces,
+       count(distinct post_slug) as posts
+from funnel_events
+where name = 'gate_shown'
+  and at >= :from and at < :to
+group by 1
+order by veces desc;
+```
+
+Y por post, para cruzar con qué artículo trae a esa gente:
+
+```sql
+select coalesce(post_slug, '(sin post)')             as post,
+       count(*) filter (where name = 'start_opened') as llegadas,
+       count(*) filter (where name = 'gate_shown')   as vieron_la_peticion
+from funnel_events
+where at >= :from and at < :to
+  and ref is not null and ref <> 'wp-landing'
+group by 1
+order by llegadas desc;
 ```
