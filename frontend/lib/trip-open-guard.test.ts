@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import {
   shouldBeginOpenTrip,
   shouldBounceMissingTrip,
@@ -121,5 +122,37 @@ assert.equal(
   }),
   false,
 )
+
+/*
+ * El velo de «Abriendo el viaje» no puede comerse el click que lo abre.
+ *
+ * Si el overlay se monta entre el `pointerdown` y el `pointerup` de un tap, el
+ * navegador dispara el `click` en el ancestro común de ambos targets — el
+ * `<main>`, no el `<a>` — y la navegación no ocurre. Dos invariantes, las dos
+ * comprobadas sobre el fuente porque el fallo es de fuente, no de lógica:
+ * el overlay es inerte al puntero, y `beginOpenTrip` solo cuelga de `onClick`.
+ */
+const read = (rel: string) =>
+  readFileSync(new URL(rel, import.meta.url), "utf8")
+
+const overlay = read("../components/opening-trip.tsx")
+const overlayClass = /export function OpeningTripOverlay[\s\S]*?className="([^"]*)"/.exec(
+  overlay,
+)
+assert.ok(overlayClass, "OpeningTripOverlay: no se ha encontrado el className del velo")
+assert.ok(
+  overlayClass[1].split(/\s+/).includes("pointer-events-none"),
+  "OpeningTripOverlay debe ser inerte al puntero o se come el click de la tarjeta",
+)
+
+for (const rel of ["../app/(app)/trips/page.tsx", "../components/app-sidebar.tsx"]) {
+  const src = read(rel)
+  const onPointerDown = /onPointerDown=\{[\s\S]{0,120}?beginOpenTrip/.test(src)
+  assert.equal(
+    onPointerDown,
+    false,
+    `${rel}: beginOpenTrip va en onClick, nunca en onPointerDown`,
+  )
+}
 
 console.log("trip-open-guard: ok")

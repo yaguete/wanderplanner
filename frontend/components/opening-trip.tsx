@@ -110,14 +110,22 @@ export function OpeningTripStatus({ name }: { name?: string }) {
   )
 }
 
-/** Cubre el canvas del shell hasta que el detalle del viaje pinta. Vive en el layout para sobrevivir al swap de página. */
+/**
+ * Cubre el canvas del shell hasta que el detalle del viaje pinta. Vive en el
+ * layout para sobrevivir al swap de página.
+ *
+ * `pointer-events-none` NO es cosmético: si este overlay llega a montarse entre
+ * el `pointerdown` y el `pointerup` de un tap, el navegador dispara el `click`
+ * en el ancestro común de los dos targets (el `<main>`), el `<a>` no lo recibe
+ * y la navegación no ocurre nunca. Es un indicador de progreso, no un modal.
+ */
 export function OpeningTripOverlay() {
   const { openingTrip } = useOpeningTrip()
   if (!openingTrip) return null
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-[var(--wp-header-height)] z-20 flex cursor-progress items-center justify-center bg-canvas/70 animate-in fade-in-0 duration-200 md:absolute md:inset-0"
+      className="pointer-events-none fixed inset-x-0 bottom-0 top-[var(--wp-header-height)] z-20 flex items-center justify-center bg-canvas/70 animate-in fade-in-0 duration-200 md:absolute md:inset-0"
       role="status"
       aria-live="polite"
       aria-busy="true"

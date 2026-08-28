@@ -222,11 +222,19 @@ export default function TripsHomePage() {
   const archivedTrips = useMemo(() => trips.filter((t) => t.archived), [trips])
   const visibleTrips = filter === "active" ? activeTrips : archivedTrips
 
+  // `visibleTrips` es un array nuevo en cada mutación del viaje (portadas,
+  // Realtime…). Sin esta clave, el backfill de portadas relanza el prefetch de
+  // las 6 rutas una vez por foto aplicada.
+  const prefetchKey = visibleTrips
+    .slice(0, 6)
+    .map((t) => t.id)
+    .join(",")
   useEffect(() => {
-    for (const trip of visibleTrips.slice(0, 6)) {
-      router.prefetch(`/trips/${trip.id}`)
+    if (!prefetchKey) return
+    for (const id of prefetchKey.split(",")) {
+      router.prefetch(`/trips/${id}`)
     }
-  }, [visibleTrips, router])
+  }, [prefetchKey, router])
 
   const setView = (mode: ViewMode) => {
     setViewMode(mode)
@@ -435,7 +443,6 @@ export default function TripsHomePage() {
                 >
                   <Link
                     href={`/trips/${trip.id}`}
-                    onPointerDown={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                     onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                     aria-busy={openingTrip?.id === trip.id || undefined}
                     className={cn(
@@ -533,7 +540,6 @@ export default function TripsHomePage() {
                   >
                     <Link
                       href={`/trips/${trip.id}`}
-                      onPointerDown={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       aria-busy={openingTrip?.id === trip.id || undefined}
                       className={cn(

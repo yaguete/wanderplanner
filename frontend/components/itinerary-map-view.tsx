@@ -66,20 +66,15 @@ import {
   type PlacesLineStyle,
 } from "@/components/itinerary-map-controls"
 
-export type { ItineraryMapPoint, MapViewMode, PlacesLineStyle }
-export {
-  MapDayDropdown,
-  MapModeDropdown,
-  persistMapMode,
-  persistPlacesLineStyle,
-  PlacesLineStyleDropdown,
-  readStoredMapMode,
-  readStoredPlacesLineStyle,
-} from "@/components/itinerary-map-controls"
+/*
+ * Este módulo NO reexporta los dropdowns ni los tipos de
+ * `itinerary-map-controls`. Lo hacía, y nadie lo usaba: era una puerta abierta a
+ * importar un control desde aquí y arrastrar `mapbox-gl` (~1,7 MB) al bundle de
+ * Lista, justo lo que evita el `next/dynamic` del panel. Impórtalos de
+ * `@/components/itinerary-map-controls`.
+ */
 
 mapboxgl.accessToken = MAPBOX_TOKEN
-
-export type { ItineraryMapSegment }
 
 function pinShapeSvg(type: ItineraryMapPoint["type"], fill: string, stroke: string, dashed: boolean): string {
   const dash = dashed ? ` stroke-dasharray="3 2"` : ""
