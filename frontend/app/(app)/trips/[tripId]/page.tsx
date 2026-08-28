@@ -16,7 +16,7 @@ import {
 } from "@/lib/onboarding"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
-import { AssistantPanelLayer } from "@/components/assistant-dock"
+import dynamic from "next/dynamic"
 import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { OpeningTripStatus, useOpeningTrip } from "@/components/opening-trip"
@@ -27,6 +27,11 @@ import {
   type TripPanelState,
 } from "@/lib/trip-chrome-context"
 import { useTripRealtime } from "@/hooks/use-trip-realtime"
+
+const AssistantPanelLayer = dynamic(
+  () => import("@/components/assistant-dock").then((m) => m.AssistantPanelLayer),
+  { ssr: false },
+)
 
 const PANELS_KEY = "wp-trip-panels"
 /** Con 3 paneles activos, por debajo de este ancho útil se auto-colapsa el sidebar a rail. */
@@ -347,16 +352,21 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   )
 
   const assistantOpen = panels.assistant
+  const wantAssistant = isMobile ? mobileSection === "assistant" : assistantOpen
+  const [assistantMounted, setAssistantMounted] = useState(false)
+  if (wantAssistant && !assistantMounted) setAssistantMounted(true)
+
   const assistantNode = useMemo(
-    () => (
-      <AssistantPanelLayer
-        open={assistantOpen}
-        onOpenChange={handleAssistantOpenChange}
-        tripId={tripId}
-        variant="panel"
-      />
-    ),
-    [assistantOpen, handleAssistantOpenChange, tripId],
+    () =>
+      assistantMounted ? (
+        <AssistantPanelLayer
+          open={assistantOpen}
+          onOpenChange={handleAssistantOpenChange}
+          tripId={tripId}
+          variant="panel"
+        />
+      ) : null,
+    [assistantMounted, assistantOpen, handleAssistantOpenChange, tripId],
   )
 
   if (isLoading && !trip) {
@@ -438,22 +448,24 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
             {planNode}
           </div>
 
-          <AssistantPanelLayer
-            open={mobileSection === "assistant"}
-            onOpenChange={(open) => {
-              if (open) selectMobileSection("assistant")
-              else selectMobileSection("sources")
-            }}
-            tripId={tripId}
-            variant="section"
-            bottomNav={
-              <TripMobileNav
-                variant="embedded"
-                active={mobileSection}
-                onChange={selectMobileSection}
-              />
-            }
-          />
+          {assistantMounted ? (
+            <AssistantPanelLayer
+              open={mobileSection === "assistant"}
+              onOpenChange={(open) => {
+                if (open) selectMobileSection("assistant")
+                else selectMobileSection("sources")
+              }}
+              tripId={tripId}
+              variant="section"
+              bottomNav={
+                <TripMobileNav
+                  variant="embedded"
+                  active={mobileSection}
+                  onChange={selectMobileSection}
+                />
+              }
+            />
+          ) : null}
 
           {mobileSection !== "assistant" ? (
             <TripMobileNav

@@ -74,6 +74,7 @@ jobs:
       - run: npm run test:turnstile
       - run: npm run test:theme-scope
       - run: npm run test:theme-contrast
+      - run: npm run test:document-theme
       - run: npm run test:onboarding
       - run: npm run test:visual-viewport
       - run: npm run test:mobile-browser-chrome

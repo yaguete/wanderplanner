@@ -77,7 +77,18 @@ import {
   VIEW_MODE_TASK_CATEGORIES,
   type ItineraryViewMode,
 } from "@/components/itinerary-view-mode-tabs"
-import { ItineraryMapView, MapDayDropdown, MapModeDropdown, persistMapMode, persistPlacesLineStyle, PlacesLineStyleDropdown, readStoredMapMode, readStoredPlacesLineStyle, type ItineraryMapPoint, type MapViewMode, type PlacesLineStyle } from "@/components/itinerary-map-view"
+import {
+  MapDayDropdown,
+  MapModeDropdown,
+  persistMapMode,
+  persistPlacesLineStyle,
+  PlacesLineStyleDropdown,
+  readStoredMapMode,
+  readStoredPlacesLineStyle,
+  type ItineraryMapPoint,
+  type MapViewMode,
+  type PlacesLineStyle,
+} from "@/components/itinerary-map-controls"
 import {
   ItineraryCalendarView,
   persistRouteView,
@@ -127,6 +138,19 @@ import { useListFlip } from "@/hooks/use-list-flip"
 import { useItineraryDnd } from "@/hooks/use-itinerary-dnd"
 import { useStableList } from "@/hooks/use-stable-list"
 import type { MoveParams } from "@/lib/itinerary-dnd"
+import dynamic from "next/dynamic"
+
+const ItineraryMapView = dynamic(
+  () => import("@/components/itinerary-map-view").then((m) => m.ItineraryMapView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[280px] flex-1 items-center justify-center text-sm text-muted-foreground">
+        Cargando mapa…
+      </div>
+    ),
+  },
+)
 
 const CATEGORY_EMPTY: Record<
   Exclude<ItineraryViewMode, "itinerary">,
@@ -242,13 +266,14 @@ export default function ItineraryPanel({
     [trip],
   )
   const tripSources = useStableList(getTripSources(tripId))
+  const [listMode, setListMode] = useState<RouteViewMode>("list")
   const mapDestHint = useMemo(
-    () => (trip ? mapDestinationHint(trip, tripSources) : null),
-    [trip, tripSources],
+    () => (trip && listMode === "map" ? mapDestinationHint(trip, tripSources) : null),
+    [trip, tripSources, listMode],
   )
   const mapCountries = useMemo(
-    () => (trip ? mapCountryCodes(trip, tripSources) : []),
-    [trip, tripSources],
+    () => (trip && listMode === "map" ? mapCountryCodes(trip, tripSources) : []),
+    [trip, tripSources, listMode],
   )
   // Fallback de la `region` por ítem: si el ítem no trae una pista propia, se usa el `area` del artículo.
   const sourceAreaById = useMemo(() => {
@@ -274,7 +299,6 @@ export default function ItineraryPanel({
   const [pendingDayAction, setPendingDayAction] = useState<DayDestructiveAction | null>(null)
   const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
   const [planSurface, setPlanSurface] = useState<"plan" | "budget">("plan")
-  const [listMode, setListMode] = useState<RouteViewMode>("list")
   /** Lienzo de Calendario/Mapa a sangre. Solo aplica con `desktopSolo`. */
   const [wideCanvas, setWideCanvas] = useState(false)
   // Recorrido por defecto; preferencia de localStorage tras hidratar.

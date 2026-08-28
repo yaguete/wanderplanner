@@ -6,7 +6,6 @@
  */
 import { useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,7 +19,7 @@ import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 import { persistModeFromRemember } from "@/lib/auth-session-persist"
-import { safeNext } from "@/lib/auth-next"
+import { completeAuthNavigation, safeNext } from "@/lib/auth-next"
 import { writeSessionPersistMode } from "@/lib/supabase/client"
 import { recordAccountCreated } from "@/lib/funnel-analytics"
 import type { FavoriteReferenceInput } from "@/lib/db/profile-repo"
@@ -35,7 +34,6 @@ export function SignupForm({
   next?: string
   className?: string
 }) {
-  const router = useRouter()
   const { signUp, isGuest, upgradeGuest, user, isLoading } = useAuth()
   const dest = safeNext(next)
   const compact = variant === "compact"
@@ -106,20 +104,22 @@ export function SignupForm({
     const result = convertingGuest
       ? await upgradeGuest(payload)
       : await signUp({ ...payload, captchaToken: captchaToken ?? undefined })
-    setSubmitting(false)
 
     if (!result.ok) {
+      setSubmitting(false)
       if (captchaEnabled) resetCaptcha()
       setError(result.error)
       return
     }
     if (convertingGuest) recordAccountCreated()
-    setNotice(
-      "Cuenta creada. Te hemos enviado un correo para confirmar tu email, revisa tu bandeja de entrada.",
-    )
-    if (result.signedIn === false) return
-    router.push(dest)
-    router.refresh()
+    if (result.signedIn === false) {
+      setSubmitting(false)
+      setNotice(
+        "Cuenta creada. Te hemos enviado un correo para confirmar tu email, revisa tu bandeja de entrada.",
+      )
+      return
+    }
+    completeAuthNavigation(dest)
   }
 
   const prefix = compact ? "landing-" : ""

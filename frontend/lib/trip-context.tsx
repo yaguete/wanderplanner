@@ -668,16 +668,38 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   // Backfill: sin portada, o reaplicar una vez por sesión para recuperar
   // fotos de destino que un fallback genérico hubiera pisado.
+  // Idle: no pelear el primer paint de /trips con N GET /cover.
   useEffect(() => {
     if (!rehydrated) return
-    for (const trip of tripsRef.current) {
-      if (trip.sourceIds.length === 0) continue
-      if (coverBackfillAttempted.current.has(trip.id)) continue
-      const firstId = trip.sourceIds[0]
-      const source = sourcesRef.current.find((s) => s.id === firstId)
-      if (!source) continue
-      coverBackfillAttempted.current.add(trip.id)
-      void applyCoverFromSource(trip.id, source)
+    const run = () => {
+      for (const trip of tripsRef.current) {
+        if (trip.sourceIds.length === 0) continue
+        if (coverBackfillAttempted.current.has(trip.id)) continue
+        const firstId = trip.sourceIds[0]
+        const source = sourcesRef.current.find((s) => s.id === firstId)
+        if (!source) continue
+        coverBackfillAttempted.current.add(trip.id)
+        void applyCoverFromSource(trip.id, source)
+      }
+    }
+    let idleId = 0
+    let timeoutId = 0
+    const ric = (
+      globalThis as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+      }
+    ).requestIdleCallback
+    if (typeof ric === "function") {
+      idleId = ric(run, { timeout: 2500 })
+    } else {
+      timeoutId = window.setTimeout(run, 400)
+    }
+    return () => {
+      const cic = (
+        globalThis as unknown as { cancelIdleCallback?: (id: number) => void }
+      ).cancelIdleCallback
+      if (idleId && typeof cic === "function") cic(idleId)
+      if (timeoutId) window.clearTimeout(timeoutId)
     }
   }, [rehydrated, trips, sources, applyCoverFromSource])
 

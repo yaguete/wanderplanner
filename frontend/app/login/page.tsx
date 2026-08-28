@@ -12,7 +12,7 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { isTurnstileEnabled } from "@/components/auth/turnstile"
 import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
-import { safeNext } from "@/lib/auth-next"
+import { completeAuthNavigation, safeNext } from "@/lib/auth-next"
 import { useAuth } from "@/lib/auth-context"
 import { authCallbackErrorMessage } from "@/lib/auth-errors"
 import { persistModeFromRemember } from "@/lib/auth-session-persist"
@@ -29,6 +29,10 @@ function LoginForm() {
     if (isLoading) return
     if (user && !isGuest) router.replace(next)
   }, [isGuest, isLoading, next, router, user])
+
+  useEffect(() => {
+    router.prefetch(next)
+  }, [next, router])
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -114,15 +118,14 @@ function LoginForm() {
     }
     writeSessionPersistMode(persistModeFromRemember(rememberMe))
     const result = await signIn(email.trim(), password, captchaToken ?? undefined)
-    setSubmitting(false)
     if (!result.ok) {
+      setSubmitting(false)
       clearStash()
       resetCaptcha()
       setError(result.error)
       return
     }
-    router.push(next)
-    router.refresh()
+    completeAuthNavigation(next)
   }
 
   const claimLabel = guestTripName
