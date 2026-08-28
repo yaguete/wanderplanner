@@ -20,6 +20,10 @@ export const THEME_MODES = [
 
 export type ThemeModeId = (typeof THEME_MODES)[number]["id"]
 
+function isThemeModeId(value: string | undefined): value is ThemeModeId {
+  return THEME_MODES.some((m) => m.id === value)
+}
+
 /** Sistema: teléfono en viewport móvil, monitor en desktop. */
 function AppearanceGlyph({
   id,
@@ -42,7 +46,7 @@ export function ThemeModeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
-  const active = mounted && theme && THEME_MODES.some((m) => m.id === theme) ? theme : ""
+  const active = mounted && isThemeModeId(theme) ? theme : ""
   const { containerRef, box, ready } = useSlidingIndicator(active, THEME_MODES.length)
 
   return (
@@ -97,7 +101,7 @@ export function AppearanceMenuFold({
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
-  const value = mounted && theme && THEME_MODES.some((m) => m.id === theme) ? theme : "system"
+  const value: ThemeModeId = mounted && isThemeModeId(theme) ? theme : "system"
   const Chevron = expand === "up" ? ChevronUp : ChevronDown
 
   const trigger = (
