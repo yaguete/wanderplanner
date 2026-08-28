@@ -19,7 +19,6 @@ function smoothstep(t: number) {
 /** Logo único: grande sobre el h1 → pequeño en el header. Incluye Firefox. */
 export function LandingLockup({
   tone = "light",
-  href = "/",
   label,
   markSrc,
   wordmarkClassName,
@@ -27,18 +26,17 @@ export function LandingLockup({
   wordmarkHand,
 }: {
   tone?: LandingTone
-  href?: string
   label?: string
   markSrc?: string
   wordmarkClassName?: string
   wordmarkInk?: "brand" | "black"
   wordmarkHand?: boolean
 }) {
-  const elRef = useRef<HTMLAnchorElement>(null)
+  const elRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
     const flying =
-      elRef.current ?? document.querySelector<HTMLAnchorElement>(".landing-flying-lockup")
+      elRef.current ?? document.querySelector<HTMLDivElement>(".landing-flying-lockup")
     const root = document.documentElement
 
     const syncHeaderBlur = () => {
@@ -123,11 +121,10 @@ export function LandingLockup({
   }, [])
 
   return (
-    <a
+    <div
       ref={elRef}
-      href={href}
-      className="landing-flying-lockup fixed left-0 top-0 z-50 origin-top-left will-change-transform"
-      aria-label={label ? `${label} — inicio` : "WanderPlanner — inicio"}
+      aria-hidden
+      className="landing-flying-lockup pointer-events-none fixed left-0 top-0 z-50 origin-top-left will-change-transform"
     >
       <BrandLockup
         variant={tone === "negative" ? "negative" : "color"}
@@ -137,6 +134,6 @@ export function LandingLockup({
         wordmarkInk={wordmarkInk}
         wordmarkHand={wordmarkHand}
       />
-    </a>
+    </div>
   )
 }

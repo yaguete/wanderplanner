@@ -20,6 +20,7 @@ import dynamic from "next/dynamic"
 import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-nav"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { OpeningTripStatus, useOpeningTrip } from "@/components/opening-trip"
+import { shouldBounceMissingTrip } from "@/lib/trip-open-guard"
 import { TripPanelsEmpty } from "@/components/trip-panel-toggles"
 import {
   useTripChrome,
@@ -172,12 +173,20 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   }, [])
 
   useEffect(() => {
-    if (authLoading || isLoading || !user) return
-    if (!trip) {
-      if (openingTrip?.id === tripId) return
-      clearOpeningTrip()
-      router.replace("/trips")
+    if (
+      !shouldBounceMissingTrip({
+        authLoading,
+        tripsPending: isLoading,
+        userId: user?.id ?? null,
+        tripFound: Boolean(trip),
+        openingTripId: openingTrip?.id ?? null,
+        tripId,
+      })
+    ) {
+      return
     }
+    clearOpeningTrip()
+    router.replace("/trips")
   }, [authLoading, isLoading, user, trip, tripId, openingTrip, router, clearOpeningTrip])
 
   useEffect(() => {
@@ -369,15 +378,16 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     [assistantMounted, assistantOpen, handleAssistantOpenChange, tripId],
   )
 
-  if (isLoading && !trip) {
-    return (
-      <div className="flex h-full flex-1 flex-col items-center justify-center">
-        <OpeningTripStatus />
-      </div>
-    )
+  if (!trip) {
+    if (isLoading || authLoading || openingTrip?.id === tripId) {
+      return (
+        <div className="flex h-full flex-1 flex-col items-center justify-center">
+          <OpeningTripStatus name={openingTrip?.id === tripId ? openingTrip.name : undefined} />
+        </div>
+      )
+    }
+    return null
   }
-
-  if (!trip) return null
 
   return (
     <div className="flex flex-1 flex-col md:h-full md:min-h-0 md:overflow-hidden">

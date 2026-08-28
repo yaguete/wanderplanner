@@ -1,16 +1,27 @@
 /**
- * Decisiones puras del middleware de sesión. Sin I/O: el `getUser()` a GoTrue
- * vive en `middleware.ts` y lleva presupuesto; si se cuelga, Vercel responde
- * `MIDDLEWARE_INVOCATION_TIMEOUT` (504) y no entra ni el login.
+ * Decisiones puras del middleware de sesión. Sin I/O.
+ *
+ * No llamamos a `getUser()` en el Edge: un round-trip a GoTrue desde Vercel
+ * acaba en `MIDDLEWARE_INVOCATION_TIMEOUT` (504) o en 1–5 s por cada
+ * navegación a `/trips` y `/trips/[id]`. Con cookie, se deja pasar; el
+ * cliente refresca. Sin cookie en ruta protegida, login.
  */
 
 export const PROTECTED_PREFIXES = ["/trips", "/account"] as const
 
-/** Tope por debajo de los ~25 s de Edge. Si vence, se deja pasar la request. */
+/** Histórico: presupuesto que usábamos en `getUser()`. Ya no hay I/O en Edge. */
 export const GET_USER_BUDGET_MS = 5_000
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
+
+export function middlewareGate(input: {
+  isProtected: boolean
+  hasToken: boolean
+}): "pass" | "login" {
+  if (!input.isProtected) return "pass"
+  return input.hasToken ? "pass" : "login"
 }
 
 /**

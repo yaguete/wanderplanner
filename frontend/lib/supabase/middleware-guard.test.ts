@@ -3,6 +3,7 @@ import {
   GET_USER_BUDGET_MS,
   hasSupabaseAuthCookie,
   isProtectedPath,
+  middlewareGate,
   withTimeout,
 } from "./middleware-guard"
 
@@ -27,6 +28,15 @@ assert.equal(
 )
 assert.ok(GET_USER_BUDGET_MS < 25_000)
 assert.ok(GET_USER_BUDGET_MS >= 1_000)
+
+assert.equal(middlewareGate({ isProtected: false, hasToken: false }), "pass")
+assert.equal(middlewareGate({ isProtected: false, hasToken: true }), "pass")
+assert.equal(middlewareGate({ isProtected: true, hasToken: false }), "login")
+assert.equal(
+  middlewareGate({ isProtected: true, hasToken: true }),
+  "pass",
+  "cookie presente: no esperar a GoTrue",
+)
 
 async function run() {
   const got = await withTimeout(Promise.resolve(42), 50)

@@ -8,7 +8,9 @@ import type { LandingTone } from "./landing-tone"
 
 function navLinkClass(negative: boolean) {
   return cn(
-    "relative text-sm font-medium leading-none outline-none after:absolute after:-inset-x-2.5 after:-inset-y-2 after:-z-10 after:rounded-md after:shadow-sm after:opacity-0 after:transition-opacity hover:after:opacity-100 focus-visible:ring-2 focus-visible:ring-ring max-sm:hover:after:opacity-0",
+    "relative inline-flex min-h-11 items-center text-sm font-medium leading-none outline-none",
+    "after:absolute after:-inset-x-2.5 after:-inset-y-2 after:-z-10 after:rounded-md after:shadow-sm after:opacity-0 after:transition-opacity hover:after:opacity-100",
+    "focus-visible:ring-2 focus-visible:ring-ring max-sm:hover:after:opacity-0",
     negative
       ? "text-white after:bg-white/10 focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(20_8%_11%)]"
       : "after:bg-background focus-visible:ring-offset-2",
@@ -31,7 +33,7 @@ export function LandingNav({
   const ready = !isLoading && user
 
   return (
-    <nav className="flex items-center gap-3 sm:gap-4" aria-label="Principal">
+    <nav className="relative z-10 flex items-center gap-3 sm:gap-4" aria-label="Principal">
       {ready && !isGuest ? (
         <Link href="/trips" className={navLinkClass(negative)}>
           Tus viajes

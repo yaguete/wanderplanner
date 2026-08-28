@@ -50,7 +50,6 @@ export function LandingHeader({
       </div>
       <LandingLockup
         tone={tone}
-        href={homeHref}
         label={lockupLabel}
         markSrc={lockupMarkSrc}
         wordmarkClassName={lockupWordmarkClassName}

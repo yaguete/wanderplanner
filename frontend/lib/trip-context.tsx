@@ -81,6 +81,7 @@ import {
 } from "@/lib/transport-routes"
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { canAddSource } from "@/lib/trip-sources"
+import { tripsQueryPending } from "@/lib/trip-open-guard"
 import { userDayItemFromSource } from "@/lib/item-provenance"
 import {
   applySourceRouteImport,
@@ -185,7 +186,7 @@ function canAdoptGuideSchedule(trip: Trip): boolean {
 interface TripContextValue {
   trips: Trip[]
   sources: Source[]
-  /** Viajes y fuentes aún cargándose: la UI no debe concluir que un viaje no existe. */
+  /** Viajes y fuentes aún cargándose (incluye el hueco user-sin-snapshot). La UI no debe concluir que un viaje no existe. */
   isLoading: boolean
   /**
    * Vacía el debounce del syncer y espera al persist. `false` si falló:
@@ -539,7 +540,6 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         syncer.reset(snapshot)
         setTrips(snapshot.trips)
         setSources(snapshot.sources)
-        setRehydrated(true)
         hydratedFor.current = userId
         completed = true
         if (claimedIds && claimedIds.length > 0) {
@@ -556,7 +556,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         console.error("[trips] load failed", err)
         if (active) toast.error("No hemos podido cargar tus viajes.")
       } finally {
-        if (active) setIsLoading(false)
+        if (active) {
+          setRehydrated(true)
+          setIsLoading(false)
+        }
       }
     })()
 
@@ -2115,11 +2118,18 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     [],
   )
 
+  const tripsPending = tripsQueryPending({
+    authLoading,
+    tripsLoading: isLoading,
+    userId: user?.id ?? null,
+    rehydrated,
+  })
+
   const value = useMemo<TripContextValue>(
     () => ({
       trips,
       sources,
-      isLoading,
+      isLoading: tripsPending,
       flushPendingSync,
       reloadTrips,
       createTrip,
@@ -2177,7 +2187,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       upsertRouteLeg,
       upsertTransportRouteItem,
     }),
-    [trips, sources, isLoading, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, addSourceRouteToTrip, removeItemFromDay, clearDayItems, setDayItemCoords, setItemSpanDays, updateDayItem, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, setShareCard, upsertRouteLeg, upsertTransportRouteItem],
+    [trips, sources, tripsPending, flushPendingSync, reloadTrips, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, applyRemoteTrip, ingestRemote, savedTrip, dropTrip, getTrip, getTripSources, startSourceExtraction, cancelPendingSource, retryPendingSource, dismissPendingSource, pendingSources, lastExtractionEvent, ackExtractionEvent, refetchSource, isRefetchingSource, removeSourceFromTrip, ensureArticleHtml, isArticleHtmlLoading, loadTripSourcesWithArticles, addDay, updateDayLabel, applyDaySummary, removeDay, removeSelectedDays, addItemToDay, addItemsToDay, addSourceRouteToTrip, removeItemFromDay, clearDayItems, setDayItemCoords, setItemSpanDays, updateDayItem, moveItemBetweenDays, addBasicToTrip, removeBasicFromTrip, setTaskState, addExtraTask, removeExtraTask, updateExtraTask, acceptCountryTask, dismissCountryTask, reevaluateCountryTasks, setNumTravelers, setTripCurrency, setTripBudget, setShareCard, upsertRouteLeg, upsertTransportRouteItem],
   )
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>

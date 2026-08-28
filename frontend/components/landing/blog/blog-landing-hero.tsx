@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 import { LandingStart } from "../landing-start"
 import { ProductFrame } from "../product-frame"
@@ -27,7 +28,12 @@ export function BlogLandingHero({
 
       <div className="relative mx-auto w-full max-w-6xl px-6 text-center">
         <div className="landing-hero-lockup">
-          <div data-landing-lockup-from>
+          <Link
+            href={`/${blogSlug}`}
+            data-landing-lockup-from
+            className="inline-block"
+            aria-label={`${displayName} — inicio`}
+          >
             <BrandLockup
               label={displayName}
               markSrc={markSrc}
@@ -35,7 +41,7 @@ export function BlogLandingHero({
               wordmarkInk="black"
               wordmarkHand
             />
-          </div>
+          </Link>
         </div>
         <h1 className="mx-auto max-w-4xl text-balance text-[2.75rem] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-6xl sm:leading-[1.05] lg:text-7xl">
           Los viajes que te inspiran,{" "}

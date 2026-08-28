@@ -80,7 +80,8 @@
     "test:theme-scope": "tsx lib/theme-scope.test.ts",
     "test:theme-contrast": "tsx lib/theme-contrast.test.ts",
     "test:document-theme": "tsx lib/document-theme.test.ts",
-    "test:middleware-guard": "tsx lib/supabase/middleware-guard.test.ts"
+    "test:middleware-guard": "tsx lib/supabase/middleware-guard.test.ts",
+    "test:trip-open-guard": "tsx lib/trip-open-guard.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

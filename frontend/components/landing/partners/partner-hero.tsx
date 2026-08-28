@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { BrandLockup } from "@/components/brand-mark"
 import { PartnerStart } from "./partner-start"
 
@@ -12,9 +13,9 @@ export function PartnerHero() {
 
       <div className="relative mx-auto w-full max-w-6xl px-6 text-center">
         <div className="landing-hero-lockup">
-          <div data-landing-lockup-from>
+          <Link href="/partners" data-landing-lockup-from className="inline-block" aria-label="WanderPlanner — inicio">
             <BrandLockup variant="negative" />
-          </div>
+          </Link>
         </div>
         <h1 className="mx-auto max-w-4xl text-balance text-[2.75rem] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-6xl sm:leading-[1.05] lg:text-7xl">
           Permite que tu audiencia{" "}

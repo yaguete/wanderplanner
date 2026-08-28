@@ -222,6 +222,12 @@ export default function TripsHomePage() {
   const archivedTrips = useMemo(() => trips.filter((t) => t.archived), [trips])
   const visibleTrips = filter === "active" ? activeTrips : archivedTrips
 
+  useEffect(() => {
+    for (const trip of visibleTrips.slice(0, 6)) {
+      router.prefetch(`/trips/${trip.id}`)
+    }
+  }, [visibleTrips, router])
+
   const setView = (mode: ViewMode) => {
     setViewMode(mode)
     try {
@@ -429,6 +435,7 @@ export default function TripsHomePage() {
                 >
                   <Link
                     href={`/trips/${trip.id}`}
+                    onPointerDown={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                     onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                     aria-busy={openingTrip?.id === trip.id || undefined}
                     className={cn(
@@ -526,6 +533,7 @@ export default function TripsHomePage() {
                   >
                     <Link
                       href={`/trips/${trip.id}`}
+                      onPointerDown={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       aria-busy={openingTrip?.id === trip.id || undefined}
                       className={cn(

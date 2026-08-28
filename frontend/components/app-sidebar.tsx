@@ -240,6 +240,9 @@ export function AppSidebar({
                     <TooltipTrigger asChild>
                       <Link
                         href={`/trips/${t.id}`}
+                        onPointerDown={(e) => {
+                          beginOpenTrip({ id: t.id, name: t.name }, e)
+                        }}
                         onClick={(e) => {
                           beginOpenTrip({ id: t.id, name: t.name }, e)
                           onNavigate?.()
@@ -280,6 +283,9 @@ export function AppSidebar({
                       <Link
                         key={t.id}
                         href={`/trips/${t.id}`}
+                        onPointerDown={(e) => {
+                          beginOpenTrip({ id: t.id, name: t.name }, e)
+                        }}
                         onClick={(e) => {
                           beginOpenTrip({ id: t.id, name: t.name }, e)
                           onNavigate?.()

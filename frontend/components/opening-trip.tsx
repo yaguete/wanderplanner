@@ -12,6 +12,7 @@ import {
 } from "react"
 import { usePathname } from "next/navigation"
 import { BrandMark } from "@/components/brand-mark"
+import { shouldBeginOpenTrip } from "@/lib/trip-open-guard"
 
 export type OpeningTrip = { id: string; name: string }
 
@@ -20,7 +21,7 @@ type ClickModifiers = {
   ctrlKey: boolean
   shiftKey: boolean
   altKey: boolean
-  button: number
+  button?: number
 }
 
 type OpeningTripContextValue = {
@@ -30,10 +31,6 @@ type OpeningTripContextValue = {
 }
 
 const OpeningTripContext = createContext<OpeningTripContextValue | null>(null)
-
-function isModifiedClick(event: ClickModifiers): boolean {
-  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
-}
 
 export function OpeningTripProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -47,7 +44,7 @@ export function OpeningTripProvider({ children }: { children: ReactNode }) {
 
   const beginOpenTrip = useCallback(
     (trip: OpeningTrip, event?: ClickModifiers) => {
-      if (event && isModifiedClick(event)) return
+      if (!shouldBeginOpenTrip(event)) return
       if (pathname === `/trips/${trip.id}`) return
       seenTargetRef.current = false
       setOpeningTrip(trip)

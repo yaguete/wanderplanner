@@ -812,10 +812,12 @@ li[data-wp-draggable] {
   }
 }
 
-/* Con JS activo el lockup volador cubre estos dos; se ocultan pero siguen midiendo. */
+/* Con JS activo el lockup volador cubre estos dos; se ocultan pero siguen
+ * midiendo Y recibiendo taps. `visibility: hidden` no recibe pointer events,
+ * y el volador (z-50) se comía «Entrar» / «Tus viajes» en móvil. */
 html.landing-lockup-armed .landing-hero-lockup,
 html.landing-lockup-armed .landing-header-lockup {
-  visibility: hidden;
+  opacity: 0;
 }
 
 /* Lockup volador: invisible hasta que JS arma el morph. No usar el atributo
@@ -823,6 +825,7 @@ html.landing-lockup-armed .landing-header-lockup {
 .landing-flying-lockup {
   --landing-lockup-p: 0;
   visibility: hidden;
+  pointer-events: none;
 }
 html.landing-lockup-armed .landing-flying-lockup {
   visibility: visible;
