@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
   // Compiler) y no son bugs, son opiniones sobre el estilo de los efectos. Quedan
   // como warning: siguen visibles en local y en los logs del CI, sin bloquear.
   // Promocionar `react-hooks/refs` cuando se hayan revisado sus ~17 sitios.
+  // `react-hooks/purity` se queda en error: `Date.now()` / `Math.random()` en
+  // render tumba el CI a propósito (el recordatorio de invitados lo pisó el 28 ago).
   {
     rules: {
       "react-hooks/rules-of-hooks": "error",

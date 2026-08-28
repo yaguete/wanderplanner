@@ -130,7 +130,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaKey, setCaptchaKey] = useState(0)
   const keepClaimRef = useRef(false)
-  const sessionStartedAtRef = useRef(Date.now())
+  // No `Date.now()` en render: `react-hooks/purity` lo trata como error y tumba el CI.
+  const sessionStartedAtRef = useRef<number | null>(null)
   const autoNudgeCountRef = useRef(0)
   const captchaEnabled = isTurnstileEnabled()
   const extractionLoading = pendingSources.some((p) => p.status === "loading")
@@ -157,6 +158,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
   requireAccountRef.current = requireAccount
 
   useEffect(() => {
+    const startedAt = sessionStartedAtRef.current ?? Date.now()
+    sessionStartedAtRef.current = startedAt
     if (!isGuest || reason !== null) return
     let timeoutId = 0
     const schedule = (ms: number) => {
@@ -173,7 +176,7 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     schedule(
       guestSignupNudgeDelay({
         now: Date.now(),
-        sessionStartedAt: sessionStartedAtRef.current,
+        sessionStartedAt: startedAt,
         autoNudgeCount: autoNudgeCountRef.current,
       }),
     )
