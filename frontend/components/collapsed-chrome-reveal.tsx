@@ -21,7 +21,6 @@ export function CollapsedChromeReveal({
       type="button"
       onClick={onReveal}
       aria-label="Mostrar cabecera"
-      data-wp-no-tab-swipe=""
       className={cn(
         "absolute left-1/2 top-full z-10 mt-2 flex size-8 -translate-x-1/2 items-center justify-center",
         "wp-glass rounded-full touch-manipulation text-foreground md:hidden",
