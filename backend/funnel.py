@@ -23,12 +23,16 @@ from obs import log_kv
 logger = logging.getLogger(__name__)
 
 TABLE = "funnel_events"
-FUNNEL_NAMES = frozenset({"start_opened", "outbound_click", "account_created"})
+FUNNEL_NAMES = frozenset(
+    {"start_opened", "outbound_click", "account_created", "gate_shown"}
+)
 POST_SLUG_RE = re.compile(r"^[a-z0-9-]{1,120}$")
 REF_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 META_MAX_KEYS = 5
 META_VALUE_MAX = 64
-ALLOWED_META_KEYS = frozenset({"target", "affiliate", "surface", "onboarding", "sourceKind"})
+ALLOWED_META_KEYS = frozenset(
+    {"target", "affiliate", "surface", "onboarding", "sourceKind", "reason"}
+)
 ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
     "target": frozenset(
         {"booking", "skyscanner", "getyourguide", "kayak", "stay22", "other"}
@@ -39,6 +43,18 @@ ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
     ),
     "onboarding": frozenset({"completed", "skipped", "unseen"}),
     "sourceKind": frozenset({"instagram", "article"}),
+    # Motivos del RegistrationGate. Deben coincidir con GateReason del frontend.
+    "reason": frozenset(
+        {
+            "new-trip",
+            "second-source",
+            "home",
+            "source-limit",
+            "assistant-limit",
+            "invite",
+            "share-plan",
+        }
+    ),
 }
 
 _day: date | None = None

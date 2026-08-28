@@ -14,6 +14,7 @@ def test_sanitize_name_whitelist():
     assert mod.sanitize_name("start_opened") == "start_opened"
     assert mod.sanitize_name("outbound_click") == "outbound_click"
     assert mod.sanitize_name("account_created") == "account_created"
+    assert mod.sanitize_name("gate_shown") == "gate_shown"
     assert mod.sanitize_name("scroll") is None
     assert mod.sanitize_name("guest_session_created") is None
     assert mod.sanitize_name("") is None
@@ -64,6 +65,38 @@ def test_sanitize_meta_drops_unknown_keys_and_bad_values():
     assert mod.sanitize_meta({"surface": "budget_row"}) == {"surface": "budget_row"}
     assert mod.sanitize_meta({"onboarding": "completed"}) == {"onboarding": "completed"}
     assert mod.sanitize_meta({"onboarding": "maybe"}) == {}
+
+
+def test_sanitize_meta_gate_reason():
+    """`reason` del RegistrationGate: lista cerrada, igual que el resto de meta."""
+    for reason in (
+        "new-trip",
+        "second-source",
+        "home",
+        "source-limit",
+        "assistant-limit",
+        "invite",
+        "share-plan",
+    ):
+        assert mod.sanitize_meta({"reason": reason}) == {"reason": reason}
+    assert mod.sanitize_meta({"reason": "porque-si"}) == {}
+    assert mod.sanitize_meta({"reason": "https://x.com"}) == {}
+    assert mod.sanitize_meta({"reason": 3}) == {}
+
+
+def test_normalize_gate_shown_keeps_reason_and_attribution():
+    row = mod.normalize_funnel_event(
+        "gate_shown",
+        "lacosmopolilla",
+        "que-ver-en-rumania",
+        {"reason": "source-limit"},
+    )
+    assert row == {
+        "name": "gate_shown",
+        "ref": "lacosmopolilla",
+        "post_slug": "que-ver-en-rumania",
+        "meta": {"reason": "source-limit"},
+    }
 
 
 def test_normalize_rejects_unknown_name_without_row():

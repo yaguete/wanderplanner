@@ -19,6 +19,7 @@ export const FUNNEL_EVENT_NAMES = [
   "start_opened",
   "outbound_click",
   "account_created",
+  "gate_shown",
 ] as const
 
 export type FunnelEventName = (typeof FUNNEL_EVENT_NAMES)[number]
@@ -41,6 +42,23 @@ export type OutboundSurface =
   | "flight_search"
   | "inspiration"
 
+/**
+ * Motivos por los que se abre el RegistrationGate. Mismo conjunto que `GateReason`
+ * en `components/auth/registration-gate.tsx`: si divergen, el compilador avisa en
+ * el call site. Y la misma lista vive en `ALLOWED_META_VALUES["reason"]` del backend.
+ */
+export const FUNNEL_GATE_REASONS = [
+  "new-trip",
+  "second-source",
+  "home",
+  "source-limit",
+  "assistant-limit",
+  "invite",
+  "share-plan",
+] as const
+
+export type FunnelGateReason = (typeof FUNNEL_GATE_REASONS)[number]
+
 export type FunnelAttribution = {
   ref: string | null
   postSlug: string | null
@@ -52,6 +70,7 @@ export type FunnelPayload = FunnelAttribution & {
 
 const ATTR_KEY = "wp-funnel-attr"
 const START_KEY_PREFIX = "wp-funnel-start:"
+const GATE_KEY_PREFIX = "wp-funnel-gate:"
 
 function slugifySegment(raw: string): string | null {
   const folded = raw
@@ -321,6 +340,35 @@ export function outbound(
       surface: meta.surface,
     },
   })
+}
+
+/**
+ * La modal de registro se ha puesto delante de un invitado. Contesta la pregunta que
+ * `account_created` no puede: cuánta gente llega a ver la petición de cuenta, y a raíz
+ * de qué acción. Sin esto, un embudo con pocas altas es ambiguo — no se distingue
+ * «la ven y la rechazan» de «no llegan a verla».
+ *
+ * Una vez por sesión y motivo, con la misma guarda que `start_opened`: la modal se
+ * reabre sola cada 3 minutos, así que sin guarda esto contaría insistencias, no
+ * personas, y dejaría de ser comparable con `start_opened`.
+ */
+export function gateShownStorageKey(reason: FunnelGateReason): string {
+  return `${GATE_KEY_PREFIX}${reason}`
+}
+
+export function recordGateShown(
+  reason: FunnelGateReason,
+  storage?: StorageLike | null,
+): boolean {
+  const store =
+    storage ?? (typeof window !== "undefined" ? window.sessionStorage : null)
+  // Sin sessionStorage (modo privado) preferimos contar de más a no contar.
+  if (store && !claimStartOpened(store, gateShownStorageKey(reason))) return false
+  funnel("gate_shown", {
+    ...mergeFunnelAttribution(),
+    meta: { reason },
+  })
+  return true
 }
 
 export function recordAccountCreated(override?: Partial<FunnelAttribution>): void {

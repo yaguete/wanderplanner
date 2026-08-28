@@ -41,7 +41,11 @@ import {
   prepareGuestTripClaim,
 } from "@/lib/guest-trip-claim"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
-import { postSlugFromSourceUrl, recordAccountCreated } from "@/lib/funnel-analytics"
+import {
+  postSlugFromSourceUrl,
+  recordAccountCreated,
+  recordGateShown,
+} from "@/lib/funnel-analytics"
 
 export type GateReason =
   | "new-trip"
@@ -167,6 +171,13 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
     schedule(GUEST_SIGNUP_NUDGE_MS)
     return () => window.clearTimeout(timeoutId)
   }, [isGuest, reason])
+
+  // `reason` pasa de null a un motivo exactamente cuando la modal se pone en pantalla,
+  // así que este efecto emite una vez por apertura sin depender de los call sites.
+  useEffect(() => {
+    if (reason === null) return
+    recordGateShown(reason)
+  }, [reason])
 
   const resetGateState = () => {
     setReason(null)

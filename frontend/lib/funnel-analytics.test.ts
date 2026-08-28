@@ -2,6 +2,10 @@ import assert from "node:assert/strict"
 import {
   attributionForBlogLanding,
   buildFunnelBody,
+  FUNNEL_EVENT_NAMES,
+  FUNNEL_GATE_REASONS,
+  gateShownStorageKey,
+  recordGateShown,
   claimStartOpened,
   classifyOutboundAffiliate,
   classifyOutboundTarget,
@@ -203,3 +207,45 @@ assert.equal(
 )
 
 console.log("funnel-analytics: ok")
+
+// ── gate_shown: la modal de registro se pone delante de un invitado ──────────
+assert.equal(FUNNEL_EVENT_NAMES.includes("gate_shown"), true)
+
+// Los siete motivos deben coincidir con GateReason (registration-gate.tsx) y con
+// ALLOWED_META_VALUES["reason"] del backend; si divergen, el evento se descarta
+// en silencio y el embudo miente sin avisar.
+assert.deepEqual([...FUNNEL_GATE_REASONS], [
+  "new-trip",
+  "second-source",
+  "home",
+  "source-limit",
+  "assistant-limit",
+  "invite",
+  "share-plan",
+])
+
+const gateBody = buildFunnelBody("gate_shown", {
+  ref: "lacosmopolilla",
+  postSlug: "que-ver-en-austria-ruta-10-dias",
+  meta: { reason: "source-limit" },
+})
+assert.equal(gateBody.name, "gate_shown")
+assert.equal(gateBody.ref, "lacosmopolilla")
+assert.equal(gateBody.post_slug, "que-ver-en-austria-ruta-10-dias")
+assert.equal(gateBody.meta.reason, "source-limit")
+const gateJson = JSON.stringify(gateBody)
+assert.equal(gateJson.includes("://"), false)
+assert.equal(gateJson.includes("@"), false)
+
+// Una vez por sesión y motivo: la modal se reabre sola cada 3 min, así que sin
+// guarda `gate_shown` contaría insistencias en vez de personas.
+const gateStore = new Map<string, string>()
+const gateStorage = {
+  getItem: (k: string) => gateStore.get(k) ?? null,
+  setItem: (k: string, v: string) => void gateStore.set(k, v),
+}
+assert.equal(recordGateShown("home", gateStorage), true)
+assert.equal(recordGateShown("home", gateStorage), false)
+assert.equal(recordGateShown("source-limit", gateStorage), true)
+assert.equal(gateStore.has(gateShownStorageKey("home")), true)
+assert.equal(gateShownStorageKey("home").includes("://"), false)

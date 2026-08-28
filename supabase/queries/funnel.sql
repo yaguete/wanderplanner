@@ -96,6 +96,35 @@ from llegadas l
 left join pasaron p using (post_slug)
 order by l.llegadas desc;
 
+-- ── Exposición al gate de registro, últimos 7 días ──────────────────────────
+-- `gate_shown` se emite una vez por sesión y motivo, con la misma guarda que
+-- `start_opened`, así que las dos columnas son comparables. Contesta lo que
+-- `account_created` por sí solo no puede: ¿la gente ve la petición de cuenta y
+-- la rechaza, o no llega a verla? Son dos diagnósticos opuestos con el mismo
+-- número de altas.
+select coalesce(ref, '(directo)')                       as partner,
+       count(*) filter (where name = 'start_opened')    as llegadas,
+       count(*) filter (where name = 'gate_shown')      as vieron_la_peticion,
+       count(*) filter (where name = 'account_created') as cuentas
+from funnel_events
+where at > now() - interval '7 days'
+group by ref
+order by llegadas desc;
+
+-- ── Qué acción provoca la petición de cuenta ────────────────────────────────
+-- Si domina `home`, es el recordatorio automático de los 3 minutos: a nadie le
+-- hizo falta la cuenta, solo pasó el tiempo. El resto de motivos sí son
+-- intención (querer otra fuente, compartir, invitar), y señalan qué merece la
+-- pena poner detrás del email.
+select meta->>'reason'           as motivo,
+       count(*)                  as veces,
+       count(distinct post_slug) as posts
+from funnel_events
+where name = 'gate_shown'
+  and at > now() - interval '7 days'
+group by motivo
+order by veces desc;
+
 -- ── Higiene: nada de URLs, emails ni user_id en la tabla ────────────────────
 select *
 from funnel_events
