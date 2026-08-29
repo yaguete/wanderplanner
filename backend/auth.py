@@ -6,6 +6,14 @@ proyecto, o con el secreto HS256 heredado. Soportamos ambos: si hay `SUPABASE_JW
 valida con él; si no, se descarga el JWKS de `SUPABASE_URL`, se elige la clave por `kid` y se
 cachea en memoria.
 
+El proyecto gestionado firma **ES256** (JWKS con una sola clave `alg=ES256`, comprobado el
+29 ago 2026). Poner `SUPABASE_JWT_SECRET` en Fly haría que `_decode` fuera por HS256 y
+devolviera **401 en toda la API autenticada**. No la pongas: allí no está (verificado en
+`fly secrets list`) y el camino correcto es JWKS. En local sí va en `backend/.env`:
+`supabase start` firma HS256. La divergencia es qué firma cada Supabase, no qué variables
+tiene cada entorno. Copiar secrets de Vercel a Fly (la integración Supabase↔Vercel inyecta
+`SUPABASE_JWT_SECRET`) es el disparador. No decidas el algoritmo mirando el `alg` del token.
+
 Con `REQUIRE_AUTH=false` (por defecto en local) la dependencia deja pasar peticiones sin token.
 """
 from __future__ import annotations
@@ -89,6 +97,8 @@ def _jwk_for_token(token: str, jwks: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _decode(token: str, *, require_signature: bool = False) -> dict[str, Any]:
+    # Precedencia: secreto HS256 gana a JWKS. En Fly no pongas SUPABASE_JWT_SECRET
+    # (el proyecto firma ES256; HS256 contra esos tokens = 401 en toda la API).
     secret = (os.getenv("SUPABASE_JWT_SECRET") or "").strip()
     options = {"verify_aud": False}
 
@@ -103,7 +113,7 @@ async def _decode(token: str, *, require_signature: bool = False) -> dict[str, A
         return jwt.decode(token, key, algorithms=[alg, "ES256", "RS256"], options=options)
 
     # Local sin JWKS/secret: si REQUIRE_AUTH no está activo, lee claims sin verificar
-    # (el front ya autenticó con Supabase). En producción pon SUPABASE_JWT_SECRET o JWKS.
+    # (el front ya autenticó con Supabase). En Fly: JWKS vía SUPABASE_URL, no el secreto.
     # require_signature=True (invitar, correo) nunca cae aquí: sin clave → 500.
     if not require_signature and not _require_auth():
         return jwt.get_unverified_claims(token)

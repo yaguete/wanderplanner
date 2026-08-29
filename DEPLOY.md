@@ -79,7 +79,7 @@ fly secrets set NOMBRE=nuevo_valor   # redeploy implícito
 
 | Variable | Default / efecto |
 | --- | --- |
-| `SUPABASE_JWT_SECRET` | Si falta, valida por JWKS de `SUPABASE_URL`. Preferible **no** fijarlo si los tokens son asimétricos (ES256/RS256); un secreto HS256 desalineado provoca «Token de sesión inválido» |
+| `SUPABASE_JWT_SECRET` | **No la pongas en Fly.** El proyecto firma **ES256** (JWKS, una sola clave `alg=ES256`, comprobado el 29 ago 2026). Si está, [`auth.py`](backend/auth.py) verifica por HS256 y **toda la API autenticada responde 401**. Hoy no está en `wanderplanner-api` (`fly secrets list`); el disparador es copiar variables de Vercel (la integración Supabase↔Vercel la inyecta sola). En local sí va en `backend/.env`: `supabase start` firma HS256. Si falta, valida por JWKS de `SUPABASE_URL` |
 | `ASSISTANT_MODEL` | `deepseek-v4-flash` |
 | `SHARE_SUMMARY_MODEL` | vacío = el de `ASSISTANT_MODEL` (resumen de `/share-summary`) |
 | `USER_MAX_SHARE_SUMMARIES_DAY` | `15` (registrado; `usage_events.kind=share_summary`) |
