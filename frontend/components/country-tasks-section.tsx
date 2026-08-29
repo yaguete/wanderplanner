@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Loader2, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
+  countryTasksFetchErrorText,
   effectiveCountryCodesForTasks,
   fetchCountryTasks,
   filterVisibleSuggestions,
@@ -48,6 +49,7 @@ export function CountryTasksSection({
 
   const [phase, setPhase] = useState<"idle" | "loading" | "ready" | "error">("idle")
   const [result, setResult] = useState<CountryTasksResult | null>(null)
+  const [errorText, setErrorText] = useState<string | null>(null)
   const [reevaluating, setReevaluating] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const codesRef = useRef(codes)
@@ -56,6 +58,7 @@ export function CountryTasksSection({
   const load = useCallback(async (opts?: { bypassCache?: boolean }) => {
     const current = codesRef.current
     if (current.length === 0) {
+      setErrorText(null)
       setResult({
         disclaimer:
           "Las recomendaciones del MAE están redactadas para ciudadanos españoles.",
@@ -76,12 +79,18 @@ export function CountryTasksSection({
       bypassCache: opts?.bypassCache,
     })
     if (controller.signal.aborted) return
-    if (!data) {
+    if (!data.ok) {
       setResult(null)
+      setErrorText(
+        data.reason === "quota"
+          ? countryTasksFetchErrorText(data)
+          : "No se pudieron cargar las sugerencias de trámites. Puedes seguir gestionando el resto de tareas con normalidad.",
+      )
       setPhase("error")
       return
     }
-    setResult(data)
+    setErrorText(null)
+    setResult(data.result)
     setPhase("ready")
   }, [])
 
@@ -190,8 +199,8 @@ export function CountryTasksSection({
 
       {phase === "error" ? (
         <p className="py-1 text-xs text-muted-foreground">
-          No se pudieron cargar las sugerencias de trámites. Puedes seguir
-          gestionando el resto de tareas con normalidad.
+          {errorText ??
+            "No se pudieron cargar las sugerencias de trámites. Puedes seguir gestionando el resto de tareas con normalidad."}
         </p>
       ) : null}
 

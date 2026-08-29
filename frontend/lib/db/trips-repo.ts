@@ -704,15 +704,20 @@ export async function deleteGuestSlotTrips(
 export async function fetchArticleHtml(
   supabase: SupabaseClient,
   sourceId: string,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const { data, error } = await supabase
-    .from("sources")
-    .select("article_html")
-    .eq("id", sourceId)
-    .maybeSingle<{ article_html: string | null }>()
-
-  if (error) throw error
-  return data?.article_html ?? ""
+  if (signal?.aborted) return ""
+  let query = supabase.from("sources").select("article_html").eq("id", sourceId)
+  if (signal) query = query.abortSignal(signal)
+  try {
+    const { data, error } = await query.maybeSingle<{ article_html: string | null }>()
+    if (signal?.aborted) return ""
+    if (error) throw error
+    return data?.article_html ?? ""
+  } catch (e) {
+    if (signal?.aborted) return ""
+    throw e
+  }
 }
 
 // ── Guardado ──────────────────────────────────────────────────────────────────

@@ -86,7 +86,13 @@
     "test:mcp-verify-token": "tsx lib/mcp/verify-access-token.test.ts",
     "test:mcp-same-origin": "tsx lib/mcp/same-origin.test.ts",
     "test:mcp-enabled": "tsx lib/mcp/enabled.test.ts",
-    "test:mcp-list-trips": "tsx lib/mcp/list-trips.test.ts"
+    "test:mcp-list-trips": "tsx lib/mcp/list-trips.test.ts",
+    "test:mcp-trip-access": "tsx lib/mcp/trip-access.test.ts",
+    "test:mcp-get-trip": "tsx lib/mcp/get-trip.test.ts",
+    "test:mcp-list-trip-sources": "tsx lib/mcp/list-trip-sources.test.ts",
+    "test:mcp-search-sources": "tsx lib/mcp/search-sources.test.ts",
+    "test:mcp-get-trip-budget": "tsx lib/mcp/get-trip-budget.test.ts",
+    "test:mcp-get-country-tasks": "tsx lib/mcp/get-country-tasks.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

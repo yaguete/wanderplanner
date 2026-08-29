@@ -2,6 +2,7 @@
  * Cliente de GET /country-tasks + helpers de filtrado / ids.
  * Caché memoria + sessionStorage (patrón thumbs.ts). Fail soft: nunca bloquea la UI.
  */
+import { parseApiDetail } from "@/lib/api"
 import { authHeaders } from "@/lib/api-auth"
 import { resolveTripCountryCodes } from "@/lib/countries"
 import type { ExtraTask, Source, Trip, TripTaskCategory } from "@/types/itinerary"
@@ -10,7 +11,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 const SESSION_KEY = "wp-country-tasks-v1"
 const MAX_SESSION_ENTRIES = 40
-const FETCH_TIMEOUT_MS = 25_000
+/** Cliente web y MCP: Fly puede estar dormido (`min_machines_running = 0`). */
+export const COUNTRY_TASKS_FETCH_TIMEOUT_MS = 25_000
+const FETCH_TIMEOUT_MS = COUNTRY_TASKS_FETCH_TIMEOUT_MS
 
 export const COUNTRY_TASK_ID_PREFIX = "country:"
 
@@ -146,11 +149,13 @@ export function effectiveCountryCodesForTasks(
   return resolveTripCountryCodes(trip, sources)
 }
 
-function parseWire(data: WireResponse): CountryTasksResult {
+export function parseCountryTasksWire(data: unknown): CountryTasksResult {
+  const payload: WireResponse =
+    data && typeof data === "object" ? (data as WireResponse) : {}
   const suggestions: CountryTaskSuggestion[] = []
   const errors: CountryTasksResult["errors"] = []
   const sources: CountryTaskSource[] = []
-  for (const entry of data.countries ?? []) {
+  for (const entry of payload.countries ?? []) {
     const code = (entry.country_code || "").toUpperCase()
     const name = entry.name || code
     const url =
@@ -183,12 +188,12 @@ function parseWire(data: WireResponse): CountryTasksResult {
   }
   return {
     disclaimer:
-      typeof data.disclaimer === "string" && data.disclaimer.trim()
-        ? data.disclaimer
+      typeof payload.disclaimer === "string" && payload.disclaimer.trim()
+        ? payload.disclaimer
         : "Las recomendaciones del MAE están redactadas para ciudadanos españoles.",
     briefSource:
-      typeof data.brief_source === "string" && data.brief_source.trim()
-        ? data.brief_source
+      typeof payload.brief_source === "string" && payload.brief_source.trim()
+        ? payload.brief_source
         : "Ministerio de Asuntos Exteriores (España)",
     suggestions,
     sources,
@@ -196,34 +201,131 @@ function parseWire(data: WireResponse): CountryTasksResult {
   }
 }
 
+export function emptyCountryTasksResult(): CountryTasksResult {
+  return {
+    disclaimer: "Las recomendaciones del MAE están redactadas para ciudadanos españoles.",
+    briefSource: "Ministerio de Asuntos Exteriores (España)",
+    suggestions: [],
+    sources: [],
+    errors: [],
+  }
+}
+
+export type CountryTasksFetchFailure = {
+  ok: false
+  reason: "timeout" | "unauthorized" | "http" | "network" | "quota"
+  status?: number
+  message?: string
+}
+
+export type CountryTasksFetchOutcome =
+  | { ok: true; result: CountryTasksResult }
+  | CountryTasksFetchFailure
+
+/** Copia de `usage.py` (`country_tasks`, daily) si el 429 llega sin `detail.message`. */
+export const COUNTRY_TASKS_QUOTA_MESSAGE =
+  "Has alcanzado el límite diario de consultas de trámites. Vuelve mañana."
+
+export function countryTasksFetchErrorText(
+  failure: Pick<CountryTasksFetchFailure, "reason" | "message">,
+): string {
+  if (failure.reason === "quota") {
+    const custom = failure.message?.trim()
+    return custom || COUNTRY_TASKS_QUOTA_MESSAGE
+  }
+  if (failure.reason === "timeout") {
+    return "La consulta de trámites tardó demasiado (el servidor puede estar arrancando). Inténtalo de nuevo."
+  }
+  if (failure.reason === "unauthorized") {
+    return "No hay sesión. Vuelve a conectar WanderPlanner."
+  }
+  return "No se pudieron cargar los trámites oficiales. Inténtalo de nuevo."
+}
+
+async function countryTasksFailureFromResponse(
+  res: Response,
+): Promise<CountryTasksFetchFailure | null> {
+  if (res.ok) return null
+  if (res.status === 401) return { ok: false, reason: "unauthorized", status: 401 }
+  if (res.status === 429) {
+    let message = COUNTRY_TASKS_QUOTA_MESSAGE
+    try {
+      const body: unknown = await res.json()
+      const detail =
+        body != null && typeof body === "object" && !Array.isArray(body) && "detail" in body
+          ? (body as { detail: unknown }).detail
+          : body
+      const parsed = parseApiDetail(detail, 429)
+      if (parsed.message.trim() && !parsed.message.startsWith("Error del servidor")) {
+        message = parsed.message.trim()
+      }
+    } catch {
+      // Cuerpo ilegible: el default diario es el consejo correcto.
+    }
+    return { ok: false, reason: "quota", status: 429, message }
+  }
+  return { ok: false, reason: "http", status: res.status }
+}
+
 /**
- * Fetch lazy de trámites. Devuelve null ante fallo/timeout (la UI degrada).
+ * Fetch servidor (MCP): Bearer explícito, sin sessionStorage ni caché de proceso.
+ * La caché de memoria de `fetchCountryTasks` es de un usuario en el navegador;
+ * en serverless mezclaría respuestas entre peticiones.
+ */
+export async function fetchCountryTasksWithToken(
+  codes: string[],
+  accessToken: string,
+  options?: { timeoutMs?: number; fetchImpl?: typeof fetch },
+): Promise<CountryTasksFetchOutcome> {
+  const normalized = [...new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))]
+  if (normalized.length === 0) {
+    return { ok: true, result: emptyCountryTasksResult() }
+  }
+  const timeoutMs = options?.timeoutMs ?? COUNTRY_TASKS_FETCH_TIMEOUT_MS
+  const fetchImpl = options?.fetchImpl ?? fetch
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const params = new URLSearchParams({ codes: normalized.join(",") })
+    const res = await fetchImpl(`${API_BASE}/country-tasks?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: controller.signal,
+    })
+    const failure = await countryTasksFailureFromResponse(res)
+    if (failure) return failure
+    const data: unknown = await res.json()
+    return { ok: true, result: parseCountryTasksWire(data) }
+  } catch {
+    if (controller.signal.aborted) return { ok: false, reason: "timeout" }
+    return { ok: false, reason: "network" }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Fetch lazy de trámites. La UI degrada ante `ok: false` (timeout, red, cuota).
  * `bypassCache` solo limpia session/memory; el backend sigue sirviendo su caché durable.
  */
 export async function fetchCountryTasks(
   codes: string[],
   options?: { signal?: AbortSignal; bypassCache?: boolean },
-): Promise<CountryTasksResult | null> {
+): Promise<CountryTasksFetchOutcome> {
   const normalized = [...new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))]
   if (normalized.length === 0) {
-    return {
-      disclaimer: "Las recomendaciones del MAE están redactadas para ciudadanos españoles.",
-      briefSource: "Ministerio de Asuntos Exteriores (España)",
-      suggestions: [],
-      sources: [],
-      errors: [],
-    }
+    return { ok: true, result: emptyCountryTasksResult() }
   }
   const key = countryTasksCacheKey(normalized)
   if (options?.bypassCache) {
     invalidateCountryTasksCache(normalized)
   } else {
-    if (memoryCache.has(key)) return memoryCache.get(key) ?? null
+    const cached = memoryCache.get(key)
+    if (cached) return { ok: true, result: cached }
     if (typeof window !== "undefined") {
       const hit = readSessionMap()[key]
       if (hit) {
         memoryCache.set(key, hit)
-        return hit
+        return { ok: true, result: hit }
       }
     }
   }
@@ -238,17 +340,20 @@ export async function fetchCountryTasks(
       headers: { ...(await authHeaders()) },
       signal: controller.signal,
     })
-    if (!res.ok) return null
+    const failure = await countryTasksFailureFromResponse(res)
+    if (failure) return failure
     const data = (await res.json()) as WireResponse
-    const parsed = parseWire(data)
+    const parsed = parseCountryTasksWire(data)
     memoryCache.set(key, parsed)
     // No congelar fallos parciales en sessionStorage (sí en memoria de pestaña).
     if (parsed.errors.length === 0) {
       writeSessionKey(key, parsed)
     }
-    return parsed
+    return { ok: true, result: parsed }
   } catch {
-    return null
+    if (options?.signal?.aborted) return { ok: false, reason: "network" }
+    if (controller.signal.aborted) return { ok: false, reason: "timeout" }
+    return { ok: false, reason: "network" }
   } finally {
     clearTimeout(timer)
     options?.signal?.removeEventListener("abort", onAbort)
