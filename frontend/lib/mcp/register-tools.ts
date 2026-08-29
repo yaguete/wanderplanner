@@ -35,6 +35,14 @@ import {
   type SearchTripRow,
 } from "./search-sources"
 import {
+  mapReviewTrip,
+  MCP_REVIEW_TRIP_COLUMNS,
+  reviewTripInput,
+  reviewTripOutput,
+  reviewTripText,
+  type McpReviewTripRow,
+} from "./review-trip"
+import {
   getTripBudgetInput,
   getTripBudgetOutput,
   mapGetTripBudget,
@@ -80,7 +88,7 @@ const READ_ONLY = {
 } as const
 
 export const MCP_INSTRUCTIONS =
-  "Este servidor es la memoria de viaje del usuario: sus viajes y los artículos que él mismo ha elegido como fuentes. Reglas: (1) No inventes recomendaciones — si algo no está en las fuentes del viaje ni en get_country_tasks, dilo y ofrece añadir una fuente. (2) Cuando cites una recomendación de una fuente, atribúyela a su autor y usa el enlace que devuelve la herramienta, que es el que ese autor publicó en su artículo. (3) Antes de escribir en el viaje, confirma con el usuario. (4) No inventes precios: los costes los pone el usuario."
+  "Este servidor es la memoria de viaje del usuario: sus viajes y los artículos que él mismo ha elegido como fuentes. Reglas: (1) Para opinar sobre un viaje, llama primero a review_trip. No opines solo con get_trip ni con conocimiento general. (2) No inventes recomendaciones — si algo no está en las fuentes del viaje, en review_trip, en search_sources ni en get_country_tasks, dilo y ofrece añadir una fuente. (3) Cuando cites una recomendación de una fuente, atribúyela a su autor y usa el enlace que devuelve la herramienta, que es el que ese autor publicó en su artículo. (4) Antes de escribir en el viaje, confirma con el usuario. (5) No inventes precios: los costes los pone el usuario."
 
 export function registerWanderplannerTools(server: McpServer): void {
   server.registerTool(
@@ -169,11 +177,51 @@ export function registerWanderplannerTools(server: McpServer): void {
   )
 
   server.registerTool(
+    "review_trip",
+    {
+      title: "Auditar el viaje",
+      description:
+        "Úsala cuando el usuario pida opinión, revisión, auditoría o huecos del viaje (cómo ves la ruta, revisa el plan, qué me falta, tiene sentido). Devuelve hechos comprobados y citas de sus fuentes. No la sustituyas por get_trip ni por conocimiento general.",
+      inputSchema: reviewTripInput,
+      outputSchema: reviewTripOutput,
+      annotations: READ_ONLY,
+    },
+    async (args, ctx) => {
+      const token = tokenFromCtx(ctx)
+      if (!token) return mcpNoSession()
+      const { tripId } = args as z.infer<typeof reviewTripInput>
+      const supabase = createUserSupabase(token)
+      const loaded = await loadAccessibleTrip<McpReviewTripRow>(
+        supabase,
+        tripId,
+        MCP_REVIEW_TRIP_COLUMNS,
+      )
+      if (!loaded.ok) return tripLoadFailure(loaded)
+      const ids = asStringList(loaded.row.source_ids)
+      const sources = await loadSourcesByIds<SearchSourceRow>(
+        supabase,
+        ids,
+        MCP_SEARCH_SOURCE_COLUMNS,
+      )
+      if (!sources.ok) return mcpReadFailed()
+      const mapped = mapReviewTrip(loaded.row, sources.rows)
+      const evidence = await attachSearchQuotes(mapped.result.evidence, (sourceId, signal) =>
+        fetchArticleHtml(supabase, sourceId, signal),
+      )
+      const result = { checks: mapped.result.checks, evidence }
+      return mcpOk(
+        reviewTripText(loaded.row, result.checks, evidence, sources.rows.length),
+        result,
+      )
+    },
+  )
+
+  server.registerTool(
     "search_sources",
     {
       title: "Buscar en las fuentes del viaje",
       description:
-        "Busca de forma determinista (nombre, tipo y área, sin IA) qué recomiendan los artículos del viaje. Devuelve autor, título, enlace del autor (`affiliateUrl`) y una cita corta si hay artículo. Filtra con `type` si el usuario habla de dormir, comer, etc.",
+        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad. Devuelve autor, título, enlace del autor y una cita corta si hay artículo. Filtra con `type` si habla de dormir, comer, etc. No la uses para opinar sobre el plan completo: eso es review_trip.",
       inputSchema: searchSourcesInput,
       outputSchema: searchSourcesOutput,
       annotations: READ_ONLY,

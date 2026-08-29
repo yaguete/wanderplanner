@@ -92,7 +92,8 @@
     "test:mcp-list-trip-sources": "tsx lib/mcp/list-trip-sources.test.ts",
     "test:mcp-search-sources": "tsx lib/mcp/search-sources.test.ts",
     "test:mcp-get-trip-budget": "tsx lib/mcp/get-trip-budget.test.ts",
-    "test:mcp-get-country-tasks": "tsx lib/mcp/get-country-tasks.test.ts"
+    "test:mcp-get-country-tasks": "tsx lib/mcp/get-country-tasks.test.ts",
+    "test:mcp-review-trip": "tsx lib/mcp/review-trip.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -104,6 +104,7 @@ jobs:
       - run: npm run test:mcp-search-sources
       - run: npm run test:mcp-get-trip-budget
       - run: npm run test:mcp-get-country-tasks
+      - run: npm run test:mcp-review-trip
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
       # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
       # degradados a warning en eslint.config.mjs y no bloquean.
