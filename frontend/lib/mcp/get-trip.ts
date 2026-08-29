@@ -1,9 +1,11 @@
 import { z } from "zod"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { parseTripBudget } from "@/lib/db/trips-repo"
+import { isSyntheticSourceId } from "@/lib/item-provenance"
 import { tripWanderplannerUrl } from "@/lib/trip-tab"
 import { taskKeyForItem } from "@/lib/trip-tasks"
 import type { BasicCategory, ItemType, RoutePlaceKind, TripTaskStatus, UserDayItem } from "@/types/itinerary"
+import { attachSearchQuotes, type SearchHit } from "./search-sources"
 import { asStringList } from "./trip-access"
 
 export const MCP_GET_TRIP_COLUMNS =
@@ -125,6 +127,9 @@ const itemSchema = z.object({
   name: z.string(),
   detail: z.string().nullable(),
   sourceAuthor: z.string().nullable(),
+  sourceTitle: z.string().nullable(),
+  sourceUrl: z.string().nullable(),
+  quote: z.string().nullable(),
   affiliateUrl: z.string().nullable(),
   region: z.string().nullable(),
   spanDays: z.number().nullable(),
@@ -244,7 +249,39 @@ function mapRoute(raw: unknown): McpRoute {
   return { from, to, mode, leg }
 }
 
-function mapItem(raw: unknown): z.infer<typeof itemSchema> | null {
+export type GetTripSourceMeta = {
+  id: string
+  url?: string | null
+  author?: string | null
+  title?: string | null
+}
+
+export type GetTripQuoteTarget = {
+  itemId: string
+  sourceId: string
+  name: string
+}
+
+function sourceFieldsFromCatalog(
+  catalog: ReadonlyMap<string, GetTripSourceMeta>,
+  sourceId: string | null,
+): { sourceTitle: string | null; sourceUrl: string | null } {
+  if (!sourceId || isSyntheticSourceId(sourceId)) {
+    return { sourceTitle: null, sourceUrl: null }
+  }
+  const src = catalog.get(sourceId)
+  if (!src) return { sourceTitle: null, sourceUrl: null }
+  const title = (src.title ?? "").trim()
+  return {
+    sourceTitle: title || "Artículo sin título",
+    sourceUrl: sanitizeAffiliateUrl(typeof src.url === "string" ? src.url : null),
+  }
+}
+
+function mapItem(
+  raw: unknown,
+  catalog: ReadonlyMap<string, GetTripSourceMeta>,
+): { item: z.infer<typeof itemSchema>; quoteTarget: GetTripQuoteTarget | null } | null {
   const obj = asObject(raw)
   if (!obj) return null
   const type = obj.type
@@ -254,16 +291,26 @@ function mapItem(raw: unknown): z.infer<typeof itemSchema> | null {
   const spanRaw = obj.spanDays
   const spanDays =
     typeof spanRaw === "number" && Number.isInteger(spanRaw) && spanRaw >= 2 ? spanRaw : null
+  const sourceId = typeof obj.sourceId === "string" && obj.sourceId.trim() ? obj.sourceId.trim() : null
+  const sourced = sourceFieldsFromCatalog(catalog, sourceId)
+  const quoteTarget =
+    sourceId && !isSyntheticSourceId(sourceId) ? { itemId: id, sourceId, name } : null
   return {
-    id,
-    type: type as ItemType,
-    name,
-    detail: asTrimmed(obj.detail),
-    sourceAuthor: asTrimmed(obj.sourceAuthor),
-    affiliateUrl: sanitizeAffiliateUrl(typeof obj.affiliateUrl === "string" ? obj.affiliateUrl : null),
-    region: asTrimmed(obj.region),
-    spanDays,
-    route: mapRoute(obj.route),
+    item: {
+      id,
+      type: type as ItemType,
+      name,
+      detail: asTrimmed(obj.detail),
+      sourceAuthor: asTrimmed(obj.sourceAuthor),
+      sourceTitle: sourced.sourceTitle,
+      sourceUrl: sourced.sourceUrl,
+      quote: null,
+      affiliateUrl: sanitizeAffiliateUrl(typeof obj.affiliateUrl === "string" ? obj.affiliateUrl : null),
+      region: asTrimmed(obj.region),
+      spanDays,
+      route: mapRoute(obj.route),
+    },
+    quoteTarget,
   }
 }
 
@@ -411,14 +458,69 @@ function formatHeaderLine(h: ReturnType<typeof header>): string {
   return bits.join(" · ")
 }
 
-export type GetTripMapped = { result: GetTripResult; text: string }
+export type GetTripMapped = {
+  result: GetTripResult
+  text: string
+  quoteTargets: GetTripQuoteTarget[]
+}
 
-export function mapGetTrip(row: McpGetTripRow, days?: number[]): GetTripMapped {
+function catalogById(sources: readonly GetTripSourceMeta[]): Map<string, GetTripSourceMeta> {
+  const catalog = new Map<string, GetTripSourceMeta>()
+  for (const src of sources) {
+    if (src.id) catalog.set(src.id, src)
+  }
+  return catalog
+}
+
+export async function attachGetTripQuotes(
+  result: GetTripResult,
+  quoteTargets: GetTripQuoteTarget[],
+  fetchHtml: (sourceId: string, signal?: AbortSignal) => Promise<string>,
+): Promise<GetTripResult> {
+  if (result.mode !== "detail" || quoteTargets.length === 0) return result
+  const hits: SearchHit[] = quoteTargets.map((t) => ({
+    kind: "item",
+    name: t.name,
+    type: "activity",
+    days: [],
+    consolidated: true,
+    sourceId: t.sourceId,
+    sourceAuthor: "",
+    sourceTitle: "",
+    sourceUrl: null,
+    wanderplannerUrl: null,
+    affiliateUrl: null,
+    quote: null,
+  }))
+  const quoted = await attachSearchQuotes(hits, fetchHtml)
+  const quoteByItemId = new Map<string, string | null>()
+  for (let i = 0; i < quoteTargets.length; i++) {
+    const target = quoteTargets[i]
+    if (!target) continue
+    quoteByItemId.set(target.itemId, quoted[i]?.quote ?? null)
+  }
+  return {
+    ...result,
+    days: result.days.map((day) => ({
+      ...day,
+      items: day.items.map((item) =>
+        quoteByItemId.has(item.id) ? { ...item, quote: quoteByItemId.get(item.id) ?? null } : item,
+      ),
+    })),
+  }
+}
+
+export function mapGetTrip(
+  row: McpGetTripRow,
+  days?: number[],
+  sources: readonly GetTripSourceMeta[] = [],
+): GetTripMapped {
   const dayRows = asDayRows(row.days)
   const numDays = dayRows.length > 0 ? dayRows.length : typeof row.num_days === "number" ? row.num_days : 0
   const h = header(row, numDays)
   const { tasks, ...head } = h
   const indexes = requestedDayIndexes(days, numDays)
+  const catalog = catalogById(sources)
 
   if (indexes.length === 0) {
     const result: GetTripResult = {
@@ -426,8 +528,8 @@ export function mapGetTrip(row: McpGetTripRow, days?: number[]): GetTripMapped {
       ...head,
       days: dayRows.map((day, i) => {
         const names = day.items.flatMap((it) => {
-          const mapped = mapItem(it)
-          return mapped ? [mapped.name] : []
+          const mapped = mapItem(it, catalog)
+          return mapped ? [mapped.item.name] : []
         })
         return {
           index: i + 1,
@@ -441,14 +543,17 @@ export function mapGetTrip(row: McpGetTripRow, days?: number[]): GetTripMapped {
       numDays > 0
         ? ` Pasa days con hasta ${GET_TRIP_DETAIL_DAYS_MAX} números de día (1-based) para ver ítems, rutas y enlaces.`
         : ""
-    return { result, text: `${formatHeaderLine(h)}.${hint}` }
+    return { result, text: `${formatHeaderLine(h)}.${hint}`, quoteTargets: [] }
   }
 
+  const quoteTargets: GetTripQuoteTarget[] = []
   const detailDays = indexes.map((index) => {
     const day = dayRows[index - 1]
     const items = (day?.items ?? []).flatMap((it) => {
-      const mapped = mapItem(it)
-      return mapped ? [mapped] : []
+      const mapped = mapItem(it, catalog)
+      if (!mapped) return []
+      if (mapped.quoteTarget) quoteTargets.push(mapped.quoteTarget)
+      return [mapped.item]
     })
     return { index, label: day?.label ?? "", items }
   })
@@ -466,5 +571,6 @@ export function mapGetTrip(row: McpGetTripRow, days?: number[]): GetTripMapped {
   return {
     result,
     text: `${formatHeaderLine(h)}. Detalle de los días ${listed}.`,
+    quoteTargets,
   }
 }

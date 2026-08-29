@@ -6,6 +6,7 @@ import {
   type BudgetLineStatus,
   type TripBudgetView,
 } from "@/lib/trip-budget"
+import { tripWanderplannerUrl } from "@/lib/trip-tab"
 import type { TaskGroupCategory } from "@/types/itinerary"
 
 export const MCP_GET_TRIP_BUDGET_COLUMNS =
@@ -22,6 +23,8 @@ const lineSchema = z.object({
 })
 
 export const getTripBudgetOutput = z.object({
+  name: z.string(),
+  wanderplannerUrl: z.string(),
   currency: z.string(),
   counted: z.number(),
   split: z.object({
@@ -85,8 +88,14 @@ export type McpBudgetRow = {
   num_travelers: number | null
 }
 
-function slimView(view: TripBudgetView): GetTripBudgetResult {
+function slimView(
+  view: TripBudgetView,
+  name: string,
+  wanderplannerUrl: string,
+): GetTripBudgetResult {
   return {
+    name,
+    wanderplannerUrl,
     currency: view.currency,
     counted: view.counted,
     split: view.split,
@@ -150,8 +159,9 @@ export function tripFromBudgetRow(row: McpBudgetRow) {
 export function mapGetTripBudget(row: McpBudgetRow): { result: GetTripBudgetResult; text: string } {
   const trip = tripFromBudgetRow(row)
   const view = buildTripBudgetView(trip)
+  const name = (row.name ?? "").trim() || "Viaje sin nombre"
   return {
-    result: slimView(view),
+    result: slimView(view, name, tripWanderplannerUrl(row.id, "itinerary")),
     text: formatBudgetBriefingMarkdown(view),
   }
 }

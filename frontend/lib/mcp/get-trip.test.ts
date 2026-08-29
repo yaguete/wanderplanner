@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { applyMcpAffiliateGate } from "./affiliate-gate"
 import {
+  attachGetTripQuotes,
   GET_TRIP_DETAIL_DAYS_MAX,
   getTripOutput,
   MCP_GET_TRIP_COLUMNS,
@@ -148,6 +149,9 @@ const dirty: McpGetTripRow = {
   if (result.mode !== "detail") throw new Error("expected detail")
   const item = result.days[0]?.items[0]
   assert.equal(item?.name, "Hotel Split")
+  assert.equal(item?.sourceTitle, null)
+  assert.equal(item?.sourceUrl, null)
+  assert.equal(item?.quote, null)
   assert.equal(item?.affiliateUrl, "https://www.booking.com/hotel/hr/split.html?aid=12345")
   assert.equal(item?.spanDays, 3)
   assert.equal(item?.route?.from.label, "Madrid")
@@ -189,4 +193,75 @@ assert.deepEqual(requestedDayIndexes([99], 5), [])
   assert.match(text, /Pasa days/)
 }
 
-console.log("mcp-get-trip: ok")
+{
+  const { result } = mapGetTrip(dirty)
+  const keys = collectKeys(result)
+  assert.equal(keys.has("sourceTitle"), false)
+  assert.equal(keys.has("sourceUrl"), false)
+  assert.equal(keys.has("quote"), false)
+}
+
+async function main() {
+  const catalog = [
+    {
+      id: "src-1",
+      url: "https://blog.example/split",
+      author: "Patricia",
+      title: "Split en verano",
+    },
+  ]
+  const { result, quoteTargets } = mapGetTrip(dirty, [1], catalog)
+  assert.equal(result.mode, "detail")
+  getTripOutput.parse(result)
+  if (result.mode !== "detail") throw new Error("expected detail")
+  const item = result.days[0]?.items[0]
+  assert.equal(item?.sourceTitle, "Split en verano")
+  assert.equal(item?.sourceUrl, "https://blog.example/split")
+  assert.equal(item?.quote, null)
+  assert.equal(quoteTargets.length, 1)
+  assert.equal(quoteTargets[0]?.sourceId, "src-1")
+  assert.equal(quoteTargets[0]?.itemId, "item-1")
+
+  const html = "<p>Dormimos en el <strong>Hotel Split</strong> junto al puerto, un sitio sencillo.</p>"
+  const quoted = await attachGetTripQuotes(result, quoteTargets, async () => html)
+  if (quoted.mode !== "detail") throw new Error("expected detail")
+  assert.match(quoted.days[0]?.items[0]?.quote ?? "", /Hotel Split/)
+  getTripOutput.parse(quoted)
+
+  const gated = applyMcpAffiliateGate(quoted, false)
+  if (gated.mode !== "detail") throw new Error("expected detail")
+  assert.equal(gated.days[0]?.items[0]?.affiliateUrl, null)
+  assert.equal(gated.days[0]?.items[0]?.sourceUrl, "https://blog.example/split")
+  assert.equal(JSON.stringify(gated).includes("booking.com"), false)
+
+  const manualRow: McpGetTripRow = {
+    ...dirty,
+    days: [
+      {
+        id: "d1",
+        label: "Llegada",
+        items: [
+          {
+            id: "own",
+            sourceId: "manual",
+            type: "activity",
+            name: "Paseo",
+            sourceAuthor: "",
+          },
+        ],
+      },
+    ],
+  }
+  const mappedManual = mapGetTrip(manualRow, [1], catalog)
+  if (mappedManual.result.mode !== "detail") throw new Error("expected detail")
+  assert.equal(mappedManual.result.days[0]?.items[0]?.sourceTitle, null)
+  assert.equal(mappedManual.result.days[0]?.items[0]?.sourceUrl, null)
+  assert.deepEqual(mappedManual.quoteTargets, [])
+
+  console.log("mcp-get-trip: ok")
+}
+
+void main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})

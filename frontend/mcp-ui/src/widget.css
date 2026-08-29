@@ -145,6 +145,10 @@ body {
   font-size: 0.8rem;
   color: var(--wp-muted);
 }
+.item blockquote {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+}
 .dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-bg) 100%, transparent); }
 .summary-line {
   margin: 0;
@@ -252,4 +256,127 @@ blockquote {
 }
 @media (prefers-reduced-motion: reduce) {
   .skel i { animation: none; }
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.check {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  column-gap: 14px;
+  padding: 12px 0;
+}
+.check + .check {
+  border-top: 1px solid var(--wp-border);
+}
+.sev {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--wp-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-bg) 100%, transparent);
+}
+.sev[data-sev="ok"] { background: var(--dot-food); }
+.sev[data-sev="info"] { background: var(--dot-transport); }
+.sev[data-sev="warning"] { background: var(--dot-stay); }
+.check-label {
+  margin: 0 0 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.check-summary {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+.chip {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--wp-chip);
+  color: var(--wp-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.section-kicker {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wp-muted);
+}
+.evidence {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--wp-border);
+}
+
+.budget-rows { margin: 0 0 14px; }
+.budget-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 6px;
+  color: var(--wp-muted);
+  font-size: 0.9rem;
+}
+.budget-row strong {
+  color: var(--wp-fg);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+.verdict {
+  margin: 0 0 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.coverage-label {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--wp-muted);
+}
+.bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--wp-chip);
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--wp-fg);
+}
+.unpriced {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--wp-border);
+}
+.unpriced ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.unpriced li {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  color: var(--wp-muted);
 }

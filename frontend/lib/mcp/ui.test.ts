@@ -2,7 +2,13 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import {
+  budgetVerdictLabel,
+  coveragePercent,
   dayDateLabel,
+  formatWidgetAmount,
+  reviewCheckLabel,
+  reviewWidgetFromContent,
+  budgetWidgetFromContent,
   sourceCardFromHit,
   searchWidgetFromContent,
   tripWidgetFromContent,
@@ -123,7 +129,7 @@ async function main() {
         index: 1,
         label: "Llegada",
         items: [
-          { name: "Hotel Split", type: "stay", sourceAuthor: "Patricia", affiliateUrl: "https://booking.com/x" },
+          { name: "Hotel Split", type: "stay", sourceAuthor: "Patricia", sourceTitle: "Split en verano", quote: "Dormimos en el centro.", affiliateUrl: "https://booking.com/x" },
         ],
       },
     ],
@@ -134,11 +140,105 @@ async function main() {
   if (trip?.mode === "detail") {
     assert.equal(trip.days[0]?.items[0]?.name, "Hotel Split")
     assert.equal(trip.days[0]?.items[0]?.sourceAuthor, "Patricia")
+    assert.equal(trip.days[0]?.items[0]?.sourceTitle, "Split en verano")
+    assert.equal(trip.days[0]?.items[0]?.quote, "Dormimos en el centro.")
   }
   const blob = JSON.stringify(trip)
   assert.equal(blob.includes("420"), false)
   assert.equal(blob.includes("booking"), false)
   assert.equal(blob.includes("cost"), false)
+}
+
+{
+  const review = reviewWidgetFromContent({
+    name: "Alaska",
+    wanderplannerUrl: "https://wanderplanner.ai/trips/x?tab=itinerary",
+    checks: [
+      { id: "empty_days", severity: "ok", summary: "Ningún día vacío.", days: [] },
+      { id: "unconsolidated_items", severity: "info", summary: "2 ítems fuera del plan.", days: [3] },
+      { id: "stay_coverage", severity: "warning", summary: "Noches 4–5 sin alojamiento.", days: [4, 5] },
+      { id: "budget_coverage", severity: "info", summary: "Precio en 1 de 3 gestiones.", days: [] },
+      { id: "missing_legs", severity: "ok", summary: "Ida y vuelta definidas.", days: [] },
+    ],
+    evidence: [
+      {
+        name: "Hotel Denali",
+        sourceAuthor: "Patricia",
+        sourceTitle: "Alaska en furgoneta",
+        quote: "Dormimos al pie del parque.",
+        sourceUrl: "https://blog.example/alaska",
+        wanderplannerUrl: "https://wanderplanner.ai/trips/x?tab=stay",
+        affiliateUrl: "https://www.booking.com/hotel/us/denali.html?aid=1",
+        cost: 400,
+      },
+    ],
+  })
+  assert.equal(review?.kind, "review")
+  assert.equal(review?.checks.length, 5)
+  assert.equal(reviewCheckLabel("stay_coverage"), "Alojamiento")
+  assert.equal(review?.checks[2]?.severity, "warning")
+  assert.deepEqual(review?.checks[2]?.days, [4, 5])
+  assert.equal(review?.evidence[0]?.cta.kind, "trip")
+  const reviewBlob = JSON.stringify(review)
+  assert.equal(reviewBlob.includes("booking"), false)
+  assert.equal(reviewBlob.includes("400"), false)
+  assert.equal(reviewBlob.includes("affiliate"), false)
+}
+
+{
+  assert.equal(reviewWidgetFromContent({ mode: "detail", name: "X", days: [] }), null)
+}
+
+{
+  const budget = budgetWidgetFromContent({
+    name: "Alaska",
+    wanderplannerUrl: "https://wanderplanner.ai/trips/x?tab=itinerary",
+    currency: "EUR",
+    counted: 400,
+    coverage: { priced: 1, total: 3 },
+    verdict: { kind: "under", cap: 1000, delta: 600 },
+    unpriced: [{ category: "activities", titles: ["Glaciar Worthington", "Salmon bake"] }],
+  })
+  assert.equal(budget?.kind, "budget")
+  assert.equal(budget?.counted, 400)
+  assert.equal(budget?.cap, 1000)
+  assert.equal(budget?.priced, 1)
+  assert.equal(budget?.total, 3)
+  assert.deepEqual(budget?.unpricedTitles, ["Glaciar Worthington", "Salmon bake"])
+  assert.match(budgetVerdictLabel("under", 600, "EUR"), /600 EUR/)
+  assert.equal(coveragePercent(1, 4), 25)
+  assert.equal(coveragePercent(0, 0), 0)
+  assert.equal(formatWidgetAmount(400, "eur"), "400 EUR")
+}
+
+{
+  const viaReview = widgetModelFromContent({
+    structuredContent: {
+      name: "Alaska",
+      checks: [{ id: "empty_days", severity: "ok", summary: "Ningún día vacío.", days: [] }],
+      evidence: [],
+    },
+  })
+  assert.equal(viaReview?.kind, "review")
+}
+
+{
+  const viaBudget = widgetModelFromContent({
+    content: [{ type: "text", text: "Presupuesto" }],
+    structuredContent: {
+      name: "Alaska",
+      currency: "EUR",
+      counted: 0,
+      coverage: { priced: 0, total: 2 },
+      verdict: { kind: "noCap", cap: null, delta: 0 },
+      unpriced: [],
+    },
+    toolOutput: null,
+  })
+  assert.equal(viaBudget?.kind, "budget")
+  if (viaBudget?.kind === "budget") {
+    assert.equal(viaBudget.verdictKind, "noCap")
+  }
 }
 
 {
@@ -286,6 +386,8 @@ assert.ok(MCP_INSTRUCTIONS.length > 200)
 assert.ok(MCP_INSTRUCTIONS.slice(0, 512).includes("WanderPlanner"))
 assert.ok(MCP_INSTRUCTIONS.includes("No inventes reservas ni vuelos"))
 assert.ok(MCP_INSTRUCTIONS.includes("no llames get_trip ni search_sources dos veces"))
+assert.ok(MCP_INSTRUCTIONS.includes("consulta primero sus fuentes"))
+assert.equal(MCP_INSTRUCTIONS.includes("no busques en la web"), false)
 assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
 
 {
@@ -295,6 +397,9 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   assert.ok(html.includes("#86675B"))
   assert.ok(html.includes("widget-head"))
   assert.ok(html.includes("timeline"))
+  assert.ok(html.includes("checks"))
+  assert.ok(html.includes("bar-fill"))
+  assert.ok(html.includes("data-sev"))
   assert.ok(html.includes("ui/initialize"))
   assert.ok(html.includes("ui/notifications/initialized"))
   assert.ok(html.includes("ui/notifications/tool-result"))
@@ -310,6 +415,10 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   const src = readFileSync(fileURLToPath(new URL("./register-tools.ts", import.meta.url)), "utf8")
   assert.equal(/from ["']\.\/ui\/widget-html["']/.test(src), false)
   assert.ok(src.includes('await import("./ui/widget-html")'))
+  assert.equal((src.match(/_meta: widgetToolMeta\(\)/g) ?? []).length, 4)
+  // El plan del viaje no puede caerse si PostgREST no trae sources.
+  assert.equal(src.includes("if (!loadedSources.ok) return mcpReadFailed()"), false)
+  assert.ok(src.includes("sourceRowsOrEmpty"))
 }
 
 

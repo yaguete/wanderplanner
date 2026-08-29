@@ -3,6 +3,7 @@ import { isSyntheticSourceId } from "@/lib/item-provenance"
 import { expandSpannedItems, parseSpanDays } from "@/lib/item-span"
 import { isRouteLeg } from "@/lib/route-legs"
 import { buildTripBudgetView } from "@/lib/trip-budget"
+import { tripWanderplannerUrl } from "@/lib/trip-tab"
 import { normalizeName } from "@/lib/trip-tasks"
 import type { BasicCategory, ItemType, UserDay, UserDayItem } from "@/types/itinerary"
 import { tripFromBudgetRow } from "./get-trip-budget"
@@ -69,6 +70,8 @@ export const reviewCheckSchema = z.object({
 })
 
 export const reviewTripOutput = z.object({
+  name: z.string(),
+  wanderplannerUrl: z.string(),
   checks: z.array(reviewCheckSchema),
   evidence: searchSourcesOutput.shape.results,
 })
@@ -581,7 +584,12 @@ export function mapReviewTrip(
   const checks = buildReviewChecks(row, ordered)
   const evidence = collectReviewEvidence(row, ordered)
   return {
-    result: { checks, evidence },
+    result: {
+      name: (row.name ?? "").trim() || "Viaje sin nombre",
+      wanderplannerUrl: tripWanderplannerUrl(row.id, "itinerary"),
+      checks,
+      evidence,
+    },
     text: reviewTripText(row, checks, evidence, ordered.length),
   }
 }

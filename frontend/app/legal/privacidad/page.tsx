@@ -125,6 +125,13 @@ export default function PrivacidadPage() {
           <LegalMail />.
         </p>
         <p>
+          Si conectas WanderPlanner a un asistente de terceros, ese asistente recibe —en
+          cada consulta que le hagas— el contenido de tus viajes que las herramientas de
+          lectura le entregan: el plan (días, sitios, artículos guardados con título,
+          dirección y un extracto breve), la auditoría del viaje, los trámites del país y
+          los importes que tú has puesto en el presupuesto. No le enviamos tu correo.
+        </p>
+        <p>
           Algunos están fuera de la Unión Europea. Con los de Estados Unidos firmamos las
           cláusulas contractuales tipo que aprueba la Comisión Europea. Con los países que
           no tienen un acuerdo de protección de datos con Europa —hoy, China— no vale ese

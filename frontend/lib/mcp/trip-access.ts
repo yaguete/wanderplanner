@@ -41,6 +41,11 @@ export async function loadSourcesByIds<T>(
   return { ok: true, rows: (data ?? []) as T[] }
 }
 
+/** Enriquecimiento: si PostgREST falla, el llamante sigue con `[]`. */
+export function sourceRowsOrEmpty<T>(loaded: SourceLoad<T>): T[] {
+  return loaded.ok ? loaded.rows : []
+}
+
 export function tripLoadFailure(result: TripLoadFail) {
   return result.reason === "not_found" ? mcpUnavailableTrip() : mcpReadFailed()
 }

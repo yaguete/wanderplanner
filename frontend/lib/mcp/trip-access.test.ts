@@ -5,6 +5,7 @@ import {
   asStringList,
   loadAccessibleTrip,
   orderBySourceIds,
+  sourceRowsOrEmpty,
   tripLoadFailure,
 } from "./trip-access"
 
@@ -64,6 +65,9 @@ async function main() {
 
   assert.deepEqual(asStringList(["a", "", 1, "b"]), ["a", "b"])
   assert.deepEqual(asStringList(null), [])
+
+  assert.deepEqual(sourceRowsOrEmpty({ ok: false, reason: "error" }), [])
+  assert.deepEqual(sourceRowsOrEmpty({ ok: true, rows: [{ id: "s1" }] }), [{ id: "s1" }])
 
   {
     const ordered = orderBySourceIds(

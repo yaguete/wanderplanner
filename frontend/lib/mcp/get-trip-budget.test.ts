@@ -56,6 +56,11 @@ const view = buildTripBudgetView(tripFromBudgetRow(row))
 const mapped = mapGetTripBudget(row)
 assert.equal(mapped.result.counted, view.counted)
 assert.equal(mapped.result.currency, "EUR")
+assert.equal(mapped.result.name, "Alaska")
+assert.equal(
+  mapped.result.wanderplannerUrl,
+  "https://wanderplanner.ai/trips/trip-1?tab=itinerary",
+)
 assert.equal(mapped.result.verdict.kind, view.verdict.kind)
 assert.equal(mapped.result.coverage.priced, view.coverage.priced)
 assert.equal(mapped.result.groups[0]?.lines[0]?.title, "Hotel Denali")

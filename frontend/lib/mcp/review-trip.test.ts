@@ -433,6 +433,11 @@ function main() {
     }
     const mapped = mapReviewTrip(baseRow({ days: days19 }), [source])
     reviewTripOutput.parse(mapped.result)
+    assert.equal(mapped.result.name, "Alaska")
+    assert.match(
+      mapped.result.wanderplannerUrl,
+      /\/trips\/11111111-1111-4111-8111-111111111111\?tab=itinerary/,
+    )
     const blob = JSON.stringify(mapped.result)
     assert.equal(blob.includes("share_card"), false)
     assert.equal(blob.includes("article_html"), false)

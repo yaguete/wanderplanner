@@ -8,9 +8,10 @@ import {
   COUNTRY_TASKS_FETCH_TIMEOUT_MS,
   fetchCountryTasksWithToken,
 } from "@/lib/country-tasks"
-import { asStringList, loadAccessibleTrip, loadSourcesByIds, tripLoadFailure } from "./trip-access"
+import { asStringList, loadAccessibleTrip, loadSourcesByIds, sourceRowsOrEmpty, tripLoadFailure } from "./trip-access"
 import { listTripsResult, MCP_TRIP_COLUMNS, type McpTripRow } from "./list-trips"
 import {
+  attachGetTripQuotes,
   getTripInput,
   getTripOutput,
   mapGetTrip,
@@ -110,7 +111,7 @@ export function registerWanderplannerTools(server: McpServer): void {
     MCP_WIDGET_URI,
     {
       mimeType: MCP_WIDGET_MIME,
-      description: "Tarjeta de fuente y día de viaje de WanderPlanner.",
+      description: "Tarjeta de fuente, día, auditoría y presupuesto de WanderPlanner.",
       // También en el listado: no está claro si el host lee los metadatos del
       // widget de `resources/list` o de la lectura, así que van en los dos.
       _meta: widgetResourceMeta(),
@@ -161,7 +162,7 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       title: "Ver un viaje",
       description:
-        "Plan del viaje: sin `days` devuelve un resumen (una línea por día). Con `days` (números 1-based, hasta 7) detalla ítems, rutas y enlaces de esas jornadas. Una sola llamada por pregunta: si preguntan por un día, pasa `days` en esa llamada y no hagas antes un resumen. No incluye coordenadas ni el texto de Compartir.",
+        "Plan del viaje: sin `days` devuelve un resumen (una línea por día). Con `days` (números 1-based, hasta 7) detalla ítems, rutas, el artículo de cada fuente (título, URL y cita) y enlaces de esas jornadas. Una sola llamada por pregunta: si preguntan por un día, pasa `days` en esa llamada y no hagas antes un resumen. No incluye coordenadas ni el texto de Compartir.",
       inputSchema: getTripInput,
       outputSchema: getTripOutput,
       annotations: READ_ONLY,
@@ -178,8 +179,27 @@ export function registerWanderplannerTools(server: McpServer): void {
         MCP_GET_TRIP_COLUMNS,
       )
       if (!loaded.ok) return tripLoadFailure(loaded)
-      const mapped = mapGetTrip(loaded.row, days)
-      return mcpOk(mapped.text, applyMcpAffiliateGate(mapped.result), widgetToolMeta())
+      let sources: McpSourceMetaRow[] = []
+      const sourceIds = asStringList(loaded.row.source_ids)
+      if ((days?.length ?? 0) > 0 && sourceIds.length > 0) {
+        const loadedSources = await loadSourcesByIds<McpSourceMetaRow>(
+          supabase,
+          sourceIds,
+          MCP_SOURCE_META_COLUMNS,
+        )
+        if (!loadedSources.ok) {
+          console.warn("[mcp] get_trip: no se pudieron leer las fuentes; el plan se entrega igual")
+        }
+        sources = sourceRowsOrEmpty(loadedSources)
+      }
+      const mapped = mapGetTrip(loaded.row, days, sources)
+      let result = mapped.result
+      if (result.mode === "detail" && mapped.quoteTargets.length > 0) {
+        result = await attachGetTripQuotes(result, mapped.quoteTargets, (sourceId, signal) =>
+          fetchArticleHtml(supabase, sourceId, signal),
+        )
+      }
+      return mcpOk(mapped.text, applyMcpAffiliateGate(result), widgetToolMeta())
     },
   )
 
@@ -225,6 +245,7 @@ export function registerWanderplannerTools(server: McpServer): void {
       inputSchema: reviewTripInput,
       outputSchema: reviewTripOutput,
       annotations: READ_ONLY,
+      _meta: widgetToolMeta(),
     },
     async (args, ctx) => {
       const token = tokenFromCtx(ctx)
@@ -248,10 +269,11 @@ export function registerWanderplannerTools(server: McpServer): void {
       const evidence = await attachSearchQuotes(mapped.result.evidence, (sourceId, signal) =>
         fetchArticleHtml(supabase, sourceId, signal),
       )
-      const result = { checks: mapped.result.checks, evidence }
+      const result = { ...mapped.result, evidence }
       return mcpOk(
         reviewTripText(loaded.row, result.checks, evidence, sources.rows.length),
         applyMcpAffiliateGate(result),
+        widgetToolMeta(),
       )
     },
   )
@@ -261,7 +283,7 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       title: "Buscar en las fuentes del viaje",
       description:
-        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. Una sola llamada por pregunta. No la uses para opinar sobre el plan completo: eso es review_trip.",
+        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad, o por horarios, cómo llegar, qué hace falta o las condiciones de algo que ya está en el plan. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. Una sola llamada por pregunta. No la uses para opinar sobre el plan completo: eso es review_trip. Las fuentes del usuario y la web se complementan.",
       inputSchema: searchSourcesInput,
       outputSchema: searchSourcesToolOutput,
       annotations: {
@@ -386,6 +408,7 @@ export function registerWanderplannerTools(server: McpServer): void {
       inputSchema: getTripBudgetInput,
       outputSchema: getTripBudgetOutput,
       annotations: READ_ONLY,
+      _meta: widgetToolMeta(),
     },
     async (args, ctx) => {
       const token = tokenFromCtx(ctx)
@@ -400,7 +423,7 @@ export function registerWanderplannerTools(server: McpServer): void {
       if (!loaded.ok) return tripLoadFailure(loaded)
       try {
         const mapped = mapGetTripBudget(loaded.row)
-        return mcpOk(mapped.text, mapped.result)
+        return mcpOk(mapped.text, mapped.result, widgetToolMeta())
       } catch {
         return mcpReadFailed()
       }
