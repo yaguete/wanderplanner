@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { openExternalUrl, type OpenAiHost } from "../../lib/mcp/ui-open-link"
 import {
+  dayDateLabel,
   widgetModelFromContent,
   type SearchWidgetModel,
   type SourceCardModel,
@@ -146,6 +147,17 @@ function SearchView({ model }: { model: SearchWidgetModel }) {
   )
 }
 
+/** «Día 4 · mié 31 dic». La fecha es lo que responde a «el último día del año». */
+function DayKicker({ index, startDate }: { index: number; startDate: string | null }) {
+  const date = dayDateLabel(startDate, index)
+  return (
+    <p className="day-kicker">
+      <span className="day-kicker-num">Día {index}</span>
+      {date ? <span className="day-kicker-date">{date}</span> : null}
+    </p>
+  )
+}
+
 function TripView({ model }: { model: TripWidgetModel }) {
   return (
     <div className="widget">
@@ -156,7 +168,7 @@ function TripView({ model }: { model: TripWidgetModel }) {
       {model.mode === "summary"
         ? model.days.map((day) => (
             <section className="day" key={day.index}>
-              <p className="day-kicker">Día {day.index}</p>
+              <DayKicker index={day.index} startDate={model.startDate} />
               {day.label ? <p className="day-title">{day.label}</p> : null}
               <p className="summary-line">
                 {day.itemNames.length > 0 ? day.itemNames.join(" · ") : "Sin ítems"}
@@ -165,7 +177,7 @@ function TripView({ model }: { model: TripWidgetModel }) {
           ))
         : model.days.map((day) => (
             <section className="day" key={day.index}>
-              <p className="day-kicker">Día {day.index}</p>
+              <DayKicker index={day.index} startDate={model.startDate} />
               {day.label ? <p className="day-title">{day.label}</p> : null}
               <ul className="timeline">
                 {day.items.map((item) => (

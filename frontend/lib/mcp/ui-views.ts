@@ -48,6 +48,7 @@ export type TripWidgetModel =
   | {
       kind: "trip"
       name: string
+      startDate: string | null
       wanderplannerUrl: string | null
       mode: "summary"
       days: TripDaySummary[]
@@ -55,6 +56,7 @@ export type TripWidgetModel =
   | {
       kind: "trip"
       name: string
+      startDate: string | null
       wanderplannerUrl: string | null
       mode: "detail"
       days: Array<{ index: number; label: string; items: TripDayItemView[] }>
@@ -212,15 +214,38 @@ function mapDetailDays(
   })
 }
 
+const DAY_NAMES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"]
+const MONTH_NAMES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+]
+
+/**
+ * «Día 4» no responde a «el último día del año»: la fecha sí. Se calcula en UTC
+ * a partir de `startDate` (`YYYY-MM-DD`) para que no derive con la zona horaria
+ * de quien mira el widget. Sin fechas en el viaje, `null` y solo se pinta el número.
+ */
+export function dayDateLabel(startDate: string | null, dayIndex: number): string | null {
+  if (!startDate || !Number.isInteger(dayIndex) || dayIndex < 1) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startDate.trim())
+  if (!m) return null
+  const base = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const d = new Date(base + (dayIndex - 1) * 86_400_000)
+  if (Number.isNaN(d.getTime())) return null
+  return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()]}`
+}
+
 export function tripWidgetFromContent(raw: unknown): TripWidgetModel | null {
   const obj = asObject(raw)
   if (!obj) return null
   const name = asString(obj.name) || "Viaje"
+  const startDate = asString(obj.startDate)
   const wanderplannerUrl = asString(obj.wanderplannerUrl)
   if (obj.mode === "summary") {
     return {
       kind: "trip",
       name,
+      startDate,
       wanderplannerUrl: wanderplannerUrl && isHttpUrl(wanderplannerUrl) ? wanderplannerUrl : null,
       mode: "summary",
       days: mapSummaryDays(obj.days),
@@ -230,6 +255,7 @@ export function tripWidgetFromContent(raw: unknown): TripWidgetModel | null {
     return {
       kind: "trip",
       name,
+      startDate,
       wanderplannerUrl: wanderplannerUrl && isHttpUrl(wanderplannerUrl) ? wanderplannerUrl : null,
       mode: "detail",
       days: mapDetailDays(obj.days),

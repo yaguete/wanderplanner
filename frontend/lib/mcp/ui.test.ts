@@ -1,7 +1,13 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { sourceCardFromHit, searchWidgetFromContent, tripWidgetFromContent, widgetModelFromContent } from "./ui-views"
+import {
+  dayDateLabel,
+  sourceCardFromHit,
+  searchWidgetFromContent,
+  tripWidgetFromContent,
+  widgetModelFromContent,
+} from "./ui-views"
 import { openExternalUrl } from "./ui-open-link"
 import { MCP_WIDGET_MIME, MCP_WIDGET_URI, widgetResourceMeta, widgetToolMeta } from "./ui/resource"
 import { MCP_WIDGET_HTML } from "./ui/widget-html"
@@ -304,6 +310,34 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   const src = readFileSync(fileURLToPath(new URL("./register-tools.ts", import.meta.url)), "utf8")
   assert.equal(/from ["']\.\/ui\/widget-html["']/.test(src), false)
   assert.ok(src.includes('await import("./ui/widget-html")'))
+}
+
+
+// --- dayDateLabel: «Día 4» no responde a «el último día del año»; la fecha sí ---
+{
+  // Escocia en Navidades arranca el 28 dic 2026: el día 4 es Nochevieja.
+  assert.equal(dayDateLabel("2026-12-28", 4), "jue 31 dic")
+  assert.equal(dayDateLabel("2026-12-28", 1), "lun 28 dic", "el día 1 es la fecha de inicio")
+  assert.equal(dayDateLabel("2026-12-28", 5), "vie 1 ene", "cruza el año sin romperse")
+  // Sin fechas en el viaje no se inventa nada: solo se pinta el número de día.
+  assert.equal(dayDateLabel(null, 3), null)
+  assert.equal(dayDateLabel("", 3), null)
+  assert.equal(dayDateLabel("mañana", 3), null, "solo YYYY-MM-DD")
+  assert.equal(dayDateLabel("2026-12-28", 0), null)
+  assert.equal(dayDateLabel("2026-12-28", 1.5), null)
+}
+
+// El modelo del viaje arrastra startDate para poder fechar los días.
+{
+  const model = tripWidgetFromContent({
+    mode: "detail",
+    name: "Escocia en Navidades",
+    startDate: "2026-12-28",
+    wanderplannerUrl: "https://wanderplanner.ai/trips/abc",
+    days: [{ index: 4, label: "Edimburgo", items: [] }],
+  })
+  assert.ok(model && model.kind === "trip")
+  assert.equal(model.startDate, "2026-12-28")
 }
 
 console.log("mcp-ui: ok")

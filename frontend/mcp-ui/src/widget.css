@@ -42,14 +42,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * El host pinta el borde (`prefersBorder`), así que el aire lo ponemos nosotros:
+ * sin este relleno el contenido queda pegado al marco.
+ */
 .widget {
-  padding: 4px 4px 8px;
+  padding: 20px 22px 22px;
 }
 .widget-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
-  margin: 0 0 16px;
+  margin: 0 0 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--wp-border);
 }
 .mark {
   display: block;
@@ -66,16 +72,25 @@ body {
   line-height: 1.2;
 }
 .day {
-  margin: 0 0 16px;
+  margin: 0 0 22px;
 }
-.day:last-of-type { margin-bottom: 12px; }
+.day:last-of-type { margin-bottom: 4px; }
 .day-kicker {
-  margin: 0 0 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--wp-muted);
+}
+/* La fecha se separa del número con un punto, sin depender de un carácter en el markup. */
+.day-kicker-date::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--wp-border);
 }
 .day-title {
   margin: 0 0 2px;
@@ -91,16 +106,18 @@ body {
 .item {
   display: grid;
   grid-template-columns: 14px 1fr;
-  column-gap: 12px;
+  column-gap: 14px;
   position: relative;
-  padding: 7px 0;
+  padding: 9px 0;
 }
+.item:first-child { padding-top: 2px; }
+.item:last-child { padding-bottom: 2px; }
 .item:not(:last-child) .rail::after {
   content: "";
   position: absolute;
   left: 5px;
-  top: 18px;
-  bottom: -7px;
+  top: 20px;
+  bottom: -9px;
   width: 1.5px;
   background: var(--wp-border);
 }
@@ -124,10 +141,11 @@ body {
 }
 .item-meta {
   display: block;
-  margin-top: 1px;
+  margin-top: 2px;
   font-size: 0.8rem;
   color: var(--wp-muted);
 }
+.dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-bg) 100%, transparent); }
 .summary-line {
   margin: 0;
   font-size: 0.9rem;
@@ -184,7 +202,21 @@ blockquote {
   text-decoration: none;
 }
 .btn:hover { filter: brightness(1.06); }
-.btn-row { margin: 12px 0 0; }
+.btn:focus-visible {
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+/* Separado del contenido y del borde inferior que pinta el host. */
+.btn-row {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--wp-border);
+}
+.source .btn-row {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: 0;
+}
 
 .empty {
   margin: 8px 0;
