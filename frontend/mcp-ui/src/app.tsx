@@ -7,11 +7,19 @@ import {
   type TripWidgetModel,
 } from "../../lib/mcp/ui-views"
 import { listenMcpMessages, mcpRequest, OPENAI_SET_GLOBALS_EVENT } from "./bridge"
+import { SquirrelMark } from "./brand"
 
 declare global {
   interface Window {
     openai?: OpenAiHost
   }
+}
+
+const TYPE_META: Record<string, string> = {
+  stay: "Alojamiento",
+  activity: "Actividad",
+  food: "Restaurante",
+  transport: "Transporte",
 }
 
 function hostOpenAi(): OpenAiHost | undefined {
@@ -47,9 +55,18 @@ async function onOpenHref(href: string) {
   })
 }
 
-function CardLink({ href, children }: { href: string; children: string }) {
+function CardLink({
+  href,
+  children,
+  className,
+}: {
+  href: string
+  children: string
+  className?: string
+}) {
   return (
     <a
+      className={className}
       href={href}
       target="_blank"
       rel="noopener noreferrer"
@@ -65,14 +82,16 @@ function CardLink({ href, children }: { href: string; children: string }) {
 
 function SourceCard({ card }: { card: SourceCardModel }) {
   return (
-    <article className="card">
-      <p className="kicker">{card.author}</p>
-      <h2>{card.articleTitle}</h2>
-      <p className="place">{card.place}</p>
+    <article className="source">
+      <p className="source-author">{card.author}</p>
+      <h2 className="source-title">{card.articleTitle}</h2>
+      <p className="source-place">{card.place}</p>
       {card.quote ? <blockquote>{card.quote}</blockquote> : null}
       {card.cta.kind === "none" ? null : (
-        <p className="cta">
-          <CardLink href={card.cta.href}>{card.cta.label}</CardLink>
+        <p className="btn-row">
+          <CardLink className="btn" href={card.cta.href}>
+            {card.cta.label}
+          </CardLink>
         </p>
       )}
     </article>
@@ -81,14 +100,22 @@ function SourceCard({ card }: { card: SourceCardModel }) {
 
 function SearchView({ model }: { model: SearchWidgetModel }) {
   if (model.layer === "none") {
-    return <p className="empty">No hay fuentes para esto. Añade un artículo en WanderPlanner.</p>
+    return (
+      <div className="widget">
+        <p className="empty">No hay fuentes para esto. Añade un artículo en WanderPlanner.</p>
+      </div>
+    )
   }
   if (model.layer === "trip") {
     if (model.cards.length === 0) {
-      return <p className="empty">No hay recomendaciones en las fuentes de este viaje.</p>
+      return (
+        <div className="widget">
+          <p className="empty">No hay recomendaciones en las fuentes de este viaje.</p>
+        </div>
+      )
     }
     return (
-      <div className="stack">
+      <div className="widget">
         {model.cards.map((card, i) => (
           <SourceCard key={`${card.place}-${i}`} card={card} />
         ))}
@@ -96,16 +123,22 @@ function SearchView({ model }: { model: SearchWidgetModel }) {
     )
   }
   if (model.suggestions.length === 0) {
-    return <p className="empty">No hay artículos que mostrar.</p>
+    return (
+      <div className="widget">
+        <p className="empty">No hay artículos que mostrar.</p>
+      </div>
+    )
   }
   return (
-    <div className="stack">
+    <div className="widget">
       {model.suggestions.map((s) => (
-        <article className="card" key={s.url}>
-          <p className="kicker">{s.host}</p>
-          <h2>{s.title}</h2>
-          <p className="cta">
-            <CardLink href={s.url}>Leer el artículo</CardLink>
+        <article className="source" key={s.url}>
+          <p className="source-author">{s.host}</p>
+          <h2 className="source-title">{s.title}</h2>
+          <p className="btn-row">
+            <CardLink className="btn" href={s.url}>
+              Leer el artículo
+            </CardLink>
           </p>
         </article>
       ))}
@@ -115,42 +148,49 @@ function SearchView({ model }: { model: SearchWidgetModel }) {
 
 function TripView({ model }: { model: TripWidgetModel }) {
   return (
-    <div className="stack">
-      <header>
-        <p className="kicker">WanderPlanner</p>
-        <h1>{model.name}</h1>
+    <div className="widget">
+      <header className="widget-head">
+        <SquirrelMark />
+        <h1 className="trip-name">{model.name}</h1>
       </header>
       {model.mode === "summary"
         ? model.days.map((day) => (
-            <section key={day.index}>
-              <h2>
-                Día {day.index}
-                {day.label ? ` · ${day.label}` : ""}
-              </h2>
-              <p className="place">
+            <section className="day" key={day.index}>
+              <p className="day-kicker">Día {day.index}</p>
+              {day.label ? <p className="day-title">{day.label}</p> : null}
+              <p className="summary-line">
                 {day.itemNames.length > 0 ? day.itemNames.join(" · ") : "Sin ítems"}
               </p>
             </section>
           ))
         : model.days.map((day) => (
-            <section key={day.index}>
-              <h2>
-                Día {day.index}
-                {day.label ? ` · ${day.label}` : ""}
-              </h2>
-              <ul>
+            <section className="day" key={day.index}>
+              <p className="day-kicker">Día {day.index}</p>
+              {day.label ? <p className="day-title">{day.label}</p> : null}
+              <ul className="timeline">
                 {day.items.map((item) => (
-                  <li key={`${day.index}-${item.name}`}>
-                    <strong>{item.name}</strong>
-                    {item.sourceAuthor ? ` · ${item.sourceAuthor}` : ""}
+                  <li className="item" key={`${day.index}-${item.name}`}>
+                    <span className="rail">
+                      <span className="dot" data-type={item.type} />
+                    </span>
+                    <div>
+                      <span className="item-name">{item.name}</span>
+                      <span className="item-meta">
+                        {item.sourceAuthor
+                          ? item.sourceAuthor
+                          : (TYPE_META[item.type] ?? "En el plan")}
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
             </section>
           ))}
       {model.wanderplannerUrl ? (
-        <p className="cta">
-          <CardLink href={model.wanderplannerUrl}>Abrir en WanderPlanner</CardLink>
+        <p className="btn-row">
+          <CardLink className="btn" href={model.wanderplannerUrl}>
+            Abrir en WanderPlanner
+          </CardLink>
         </p>
       ) : null}
     </div>
@@ -189,7 +229,16 @@ export function App() {
 
   const model = widgetModelFromContent(content)
   if (!model) {
-    return <p className="empty">Cargando…</p>
+    return (
+      <div className="widget">
+        <div className="skel" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </div>
+        <p className="visually-hidden">Cargando…</p>
+      </div>
+    )
   }
   if (model.kind === "search") return <SearchView model={model} />
   return <TripView model={model} />

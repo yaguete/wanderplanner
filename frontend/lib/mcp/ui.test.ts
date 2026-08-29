@@ -260,7 +260,7 @@ async function main() {
   assert.equal(viaWindow, "fallback")
 }
 
-assert.equal(MCP_WIDGET_URI, "ui://wanderplanner/widgets/v2.html")
+assert.equal(MCP_WIDGET_URI, "ui://wanderplanner/widgets/v3.html")
 assert.equal(MCP_WIDGET_MIME, "text/html;profile=mcp-app")
 assert.deepEqual(widgetResourceMeta().ui.csp.connectDomains, [])
 assert.deepEqual(widgetResourceMeta().ui.csp.resourceDomains, [])
@@ -270,6 +270,7 @@ assert.equal(widgetToolMeta()["openai/outputTemplate"], MCP_WIDGET_URI)
 assert.ok(MCP_INSTRUCTIONS.length > 200)
 assert.ok(MCP_INSTRUCTIONS.slice(0, 512).includes("WanderPlanner"))
 assert.ok(MCP_INSTRUCTIONS.includes("No inventes reservas ni vuelos"))
+assert.ok(MCP_INSTRUCTIONS.includes("no llames get_trip ni search_sources dos veces"))
 assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
 
 {
@@ -277,6 +278,8 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   assert.ok(html.includes('id="root"'))
   assert.ok(html.includes('type="module"'))
   assert.ok(html.includes("#86675B"))
+  assert.ok(html.includes("widget-head"))
+  assert.ok(html.includes("timeline"))
   assert.ok(html.includes("ui/initialize"))
   assert.ok(html.includes("ui/notifications/initialized"))
   assert.ok(html.includes("ui/notifications/tool-result"))

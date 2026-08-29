@@ -158,7 +158,7 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       title: "Ver un viaje",
       description:
-        "Plan del viaje: sin `days` devuelve un resumen (una línea por día). Con `days` (números 1-based, hasta 7) detalla ítems, rutas y enlaces de esas jornadas. No incluye coordenadas ni el texto de Compartir.",
+        "Plan del viaje: sin `days` devuelve un resumen (una línea por día). Con `days` (números 1-based, hasta 7) detalla ítems, rutas y enlaces de esas jornadas. Una sola llamada por pregunta: si preguntan por un día, pasa `days` en esa llamada y no hagas antes un resumen. No incluye coordenadas ni el texto de Compartir.",
       inputSchema: getTripInput,
       outputSchema: getTripOutput,
       annotations: READ_ONLY,
@@ -258,7 +258,7 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       title: "Buscar en las fuentes del viaje",
       description:
-        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. No la uses para opinar sobre el plan completo: eso es review_trip.",
+        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. Una sola llamada por pregunta. No la uses para opinar sobre el plan completo: eso es review_trip.",
       inputSchema: searchSourcesInput,
       outputSchema: searchSourcesToolOutput,
       annotations: {

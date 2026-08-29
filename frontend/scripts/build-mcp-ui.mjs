@@ -31,7 +31,9 @@ if (!js) {
 }
 
 const bootstrap = readFileSync(join(root, "mcp-ui/src/bootstrap.js"), "utf8")
+const css = readFileSync(join(root, "mcp-ui/src/widget.css"), "utf8")
 const safeBootstrap = bootstrap.replace(/<\/script/gi, "<\\/script")
+const safeCss = css.replace(/<\/style/gi, "<\\/style")
 const safeJs = js.replace(/<\/script/gi, "<\\/script")
 
 const html = `<!DOCTYPE html>
@@ -39,49 +41,7 @@ const html = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-:root {
-  color-scheme: light dark;
-  --wp-bg: var(--color-background-primary, #fff);
-  --wp-fg: var(--color-text-primary, #1a1513);
-  --wp-ink: var(--color-text-primary, #86675B);
-  --wp-muted: var(--color-text-secondary, #6b5a54);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: var(--wp-bg);
-  color: var(--wp-fg);
-  font-size: 15px;
-  line-height: 1.45;
-}
-.stack { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
-.card, section, header {
-  border: 1px solid color-mix(in srgb, var(--wp-ink) 18%, transparent);
-  border-radius: 10px;
-  padding: 12px;
-}
-h1 { font-size: 1.15rem; margin: 0; }
-h2 { font-size: 1rem; margin: 0 0 4px; }
-.kicker {
-  margin: 0 0 4px;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--wp-muted);
-}
-.place, .empty { margin: 0; color: var(--wp-muted); }
-blockquote {
-  margin: 8px 0 0;
-  padding-left: 10px;
-  border-left: 2px solid var(--wp-ink);
-  color: var(--wp-fg);
-}
-ul { margin: 8px 0 0; padding-left: 1.1rem; }
-.cta { margin: 10px 0 0; }
-a { color: var(--wp-ink); font-weight: 600; }
-</style>
+<style>${safeCss}</style>
 <script>${safeBootstrap}</script>
 </head>
 <body>
