@@ -7,7 +7,7 @@
  * cliente refresca. Sin cookie en ruta protegida, login.
  */
 
-export const PROTECTED_PREFIXES = ["/trips", "/account"] as const
+export const PROTECTED_PREFIXES = ["/trips", "/account", "/oauth"] as const
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))

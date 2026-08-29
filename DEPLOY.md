@@ -135,7 +135,7 @@ Los **secrets** no vuelven atrás con la imagen: si un secret nuevo rompió prod
 ### Proyecto
 
 1. Importar el repo `yaguete/wanderplanner` (o el remoto actual).
-2. **Root Directory: `frontend`** (crítico: el `package.json` de Next vive ahí).
+2. **Root Directory: `frontend`** (crítico: el `package.json` de Next vive ahí). [`frontend/vercel.json`](frontend/vercel.json) fija `regions: ["dub1"]`; no lo pongas en la raíz del monorepo, Vercel no lo leería.
 3. Framework preset: Next.js. Build / install por defecto (`npm run build`).
 4. Dominio producción: `wanderplanner.ai` → este proyecto.
 
@@ -143,7 +143,7 @@ Cada push a `main` despliega Production; ramas / PRs generan Preview.
 
 ### Variables de entorno (Production y Preview)
 
-Configurar en Vercel → Project → Settings → Environment Variables. Todas son `NEXT_PUBLIC_*` (van al bundle del navegador):
+Configurar en Vercel → Project → Settings → Environment Variables. Las `NEXT_PUBLIC_*` van al bundle del navegador; las del MCP **no** (`MCP_ENABLED`, `MCP_RESOURCE_URL`, `SUPABASE_JWT_SECRET`).
 
 | Variable | De dónde sale | Notas |
 | --- | --- | --- |
@@ -160,7 +160,19 @@ Configurar en Vercel → Project → Settings → Environment Variables. Todas s
 
 Opcional: `NEXT_PUBLIC_VENDOR_LOGO_PROVIDER` (default `clearbit`).
 
-**No** poner en Vercel: `UNSPLASH_ACCESS_KEY`, `GOOGLE_PLACES_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TURNSTILE_SECRET_KEY`, ni ninguna clave de IA.
+**MCP (T9.1, servidor; no van al bundle):**
+
+| Variable | Default | Notas |
+| --- | --- | --- |
+| `MCP_ENABLED` | off (cualquier valor salvo `true`) | Kill switch. Solo la cadena `true` (sin importar mayúsculas) enciende `POST/GET /mcp`. Unset / `false` → **503** sin JWKS ni PostgREST. El well-known y `/oauth/consent` se quedan vivos. **El rollback del MCP es `MCP_ENABLED=false` + redeploy, no el Instant Rollback de Vercel** (Hobby solo vuelve al deployment anterior y se llevaría la web entera) |
+| `MCP_RESOURCE_URL` | `https://wanderplanner.ai/mcp` | Identificador RFC 9728 del recurso. El `WWW-Authenticate` usa el **origen**; el documento well-known anuncia esta URL completa |
+| `MCP_JWT_HS256_SECRET` | (vacío → JWKS) | **Solo para local.** En producción **déjala sin poner**: el proyecto firma con **ES256** y el verificador va por JWKS `{NEXT_PUBLIC_SUPABASE_URL}/auth/v1/.well-known/jwks.json`. El issuer se deriva de `NEXT_PUBLIC_SUPABASE_URL` (`…/auth/v1`); no copies el project-ref a mano.<br><br>⚠️ **No se llama `SUPABASE_JWT_SECRET` a propósito.** La integración Supabase↔Vercel **ya inyecta esa variable sola** en el proyecto (junto con `POSTGRES_*`, `SUPABASE_SERVICE_ROLE_KEY`, etc.). Si el verificador la leyera, tomaría la ruta HS256 contra tokens ES256 y **rechazaría todos los tokens** con un 401 que parece un fallo de la lógica de `client_id`. Comprobado el 29 ago 2026: el JWKS del proyecto tiene una sola clave, `alg=ES256` |
+
+Las funciones Node van a **Dublín** (`dub1`) vía [`frontend/vercel.json`](frontend/vercel.json) (`regions`). Alinea el round-trip con Supabase `eu-west-1`. El middleware Edge sigue global.
+
+**No** poner en Vercel: `UNSPLASH_ACCESS_KEY`, `GOOGLE_PLACES_API_KEY`, `TURNSTILE_SECRET_KEY`, ni ninguna clave de IA.
+
+⚠️ **`SUPABASE_SERVICE_ROLE_KEY` está en el proyecto y no la puso nadie a mano**: la inyecta la **integración Supabase↔Vercel** (icono de rayo, junto a `POSTGRES_*`, `SUPABASE_SECRET_KEY` y `SUPABASE_JWT_SECRET`). No va al bundle —no lleva `NEXT_PUBLIC_`— pero **ningún código nuestro debe leerla**: el MCP habla con PostgREST con la anon key y el Bearer del usuario, y RLS hace el resto. Si alguna vez se borra, la integración la vuelve a poner al resincronizar; la defensa es que nadie la lea, no que no exista.
 
 ### Deploy manual (CLI)
 

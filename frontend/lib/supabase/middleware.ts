@@ -21,6 +21,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   // Sin red a GoTrue. Un getUser() desde Edge fue 504 en toda la web y, cuando
   // no se colgaba, 1–5 s extra al abrir un viaje (el cliente ya refresca).
+  // `/oauth/consent` entra por cookie, igual que `/trips`: el JWT lo refresca el cliente.
   if (middlewareGate({ isProtected, hasToken }) === "login") {
     return redirectToLogin(request)
   }

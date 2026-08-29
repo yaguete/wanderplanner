@@ -66,7 +66,7 @@ export function SignupForm({
       <div className={cn("flex flex-col items-center gap-3 text-center", className)}>
         <p className="text-sm text-foreground/70">Ya estás dentro.</p>
         <Button asChild className="h-11 w-full">
-          <Link href="/trips">Ir a tus viajes</Link>
+          <Link href={dest}>{dest === "/trips" ? "Ir a tus viajes" : "Continuar"}</Link>
         </Button>
       </div>
     )

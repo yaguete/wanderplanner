@@ -82,10 +82,15 @@
     "test:theme-contrast": "tsx lib/theme-contrast.test.ts",
     "test:document-theme": "tsx lib/document-theme.test.ts",
     "test:middleware-guard": "tsx lib/supabase/middleware-guard.test.ts",
-    "test:trip-open-guard": "tsx lib/trip-open-guard.test.ts"
+    "test:trip-open-guard": "tsx lib/trip-open-guard.test.ts",
+    "test:mcp-verify-token": "tsx lib/mcp/verify-access-token.test.ts",
+    "test:mcp-same-origin": "tsx lib/mcp/same-origin.test.ts",
+    "test:mcp-enabled": "tsx lib/mcp/enabled.test.ts",
+    "test:mcp-list-trips": "tsx lib/mcp/list-trips.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -127,8 +132,10 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
+    "jose": "^6.2.10",
     "lucide-react": "^0.454.0",
     "mapbox-gl": "^3.8.0",
+    "mcp-handler": "^2.1.1",
     "next": "15.2.6",
     "next-themes": "^0.4.6",
     "react": "^19",
@@ -141,7 +148,7 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "3.25.76"
+    "zod": "^4.5.2"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",

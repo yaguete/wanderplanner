@@ -16,3 +16,13 @@ export function safeNext(raw: string | null | undefined, fallback = "/trips"): s
 export function completeAuthNavigation(path: string): void {
   window.location.assign(safeNext(path))
 }
+
+/**
+ * Enlaza a `path` conservando `?next=` cuando no es el fallback. El valor de
+ * `next` puede llevar query (`/oauth/consent?authorization_id=…`): va encoded.
+ */
+export function hrefWithNext(path: string, next: string | null | undefined): string {
+  const dest = safeNext(next)
+  if (dest === "/trips") return path
+  return `${path}?next=${encodeURIComponent(dest)}`
+}

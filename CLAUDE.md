@@ -6,7 +6,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Stack
 
-**Frontend (confirmado en `frontend/package.json`):** Next.js `15.2.6`, React `^19`, TypeScript, Tailwind, Radix UI, `mapbox-gl`, `lucide-react`, `react-markdown`, `@supabase/supabase-js` + `@supabase/ssr`. Fuente UI: **Inter** (`next/font` en [`app/layout.tsx`](frontend/app/layout.tsx)).
+**Frontend (confirmado en `frontend/package.json`):** Next.js `15.2.6`, React `^19`, TypeScript, Tailwind, Radix UI, `mapbox-gl`, `lucide-react`, `react-markdown`, `@supabase/supabase-js` + `@supabase/ssr`, `mcp-handler` + `@modelcontextprotocol/server` (MCP en `/mcp`). Fuente UI: **Inter** (`next/font` en [`app/layout.tsx`](frontend/app/layout.tsx)).
 
 **Backend:** FastAPI, CORS vía `ALLOWED_ORIGINS` (default localhost:3000/3001), `httpx`, `anthropic`, `openai` (DeepSeek), `python-jose` (JWT Supabase), `bs4`/`lxml`, `python-dotenv`. Tavily en [`backend/web_search.py`](backend/web_search.py). Fichas país MAE en [`backend/country_briefs.py`](backend/country_briefs.py).
 
@@ -62,13 +62,17 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
     Dockerfile
     agents/
   frontend/
-    app/                   # App Router: /, /login, /signup, /forgot-password, /reset-password, /partners, /start, /legal…; (app)/ → /trips y /account
-      robots.ts            # Allow /; Disallow /trips y /account; NO /start
+    app/                   # App Router: /, /login, /signup, /forgot-password, /reset-password, /partners, /start, /legal, /mcp, /oauth…; (app)/ → /trips y /account
+      mcp/route.ts         # MCP Streamable HTTP (list_trips); kill switch MCP_ENABLED
+      oauth/consent        # Consentimiento OAuth (ChatGPT → GoTrue)
+      oauth/decision       # POST aprueba/deniega (skipBrowserRedirect → 303)
+      .well-known/oauth-protected-resource/  # RFC 9728 (raíz y /mcp)
+      robots.ts            # Allow /; Disallow /trips, /account, /oauth y /mcp; NO /start
       sitemap.ts           # /, /partners y /legal/* (indexables)
       opengraph-image.tsx  # OG 1200×630 (next/og + brandSvgMarkup)
       apple-icon.tsx       # 180×180, ardilla #9F8173 sobre blanco opaco
       icon.svg             # favicon SVG con prefers-color-scheme
-    middleware.ts          # Sesión: /trips y /account; getUser con tope (no en / ni /login)
+    middleware.ts          # Sesión: /trips, /account y /oauth; cookie only (no getUser en Edge)
     components/            # UI + auth/ + partners/ + landing/ + legal/ + tareas + tramos + mapa + nav móvil
       brand-mark.tsx       # isotipo ardilla, BrandLockup, brandSvgMarkup
       landing/             # home pública + /partners en negativo; LandingNav (sesión)
@@ -115,6 +119,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
       auth-session-persist.ts # remember-me: `wp-session-persist` + applyPersistMode (test:auth-session-persist)
       auth-next.ts         # saneador de `?next=` + completeAuthNavigation (test:auth-next)
       auth-google.ts       # SSO Google + flag NEXT_PUBLIC_GOOGLE_AUTH_ENABLED (test:auth-google)
+      mcp/                 # MCP: config, JWT, list_trips, cliente PostgREST (anon + Bearer)
       start-session.ts     # decisión pura de `/start` (open/reuse/create/replace)
       account-security.ts  # confirmación de borrado + validación de contraseña + aviso sharing
       trip-merge.ts        # fusión a 3 bandas OCC (numDays/endDate derivados)
@@ -142,6 +147,8 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - **`/account/settings`** — Configuración de cuenta (email de solo lectura, cambio de contraseña, borrar cuenta). Mismo shell. Invitado que entre a mano → `/trips`.
 - **`/partners`** — Landing de marketing en negativo ([`app/partners/page.tsx`](frontend/app/partners/page.tsx) + [`components/landing/partners/`](frontend/components/landing/partners/)): misma arquitectura que `/` (hero + 3 zooms + CTA + footer) sobre tinta `hsl(20 8% 11%)`. El generador del botón vive en el hero (`id="empezar"`) y dispara `POST /partners/prewarm`. Indexable. Slugs reservados: `landing`, `wp-landing`, `start`, `admin`. **No** usa `AuthShell`.
 - **`/start?source=&ref=&days=`** — CTA de blogs amigos y de los chips del hero. **Cuenta registrada:** el viaje entra en la cuenta; el mismo artículo (`trips.seed_source_key`) abre el existente, no clona. **Invitado:** un solo hueco (el último CTA sustituye al anterior; si había trabajo real, pregunta). `&days=N` (opcional, 1..60) fuerza la duración del borrador; tiene prioridad sobre `total_days` de la extracción. El `ref` es obligatorio para el auto-dimensionado; los chips usan `ref=wp-landing` (reservado, no es un partner). **Rastreable + `noindex, follow`**: Google tiene que leer el meta; no va en `Disallow`.
+- **`/mcp`** — Servidor MCP (Streamable HTTP) de **solo lectura**. Una herramienta: `list_trips`. OAuth de Supabase (el token lleva `client_id`; `aud` sigue siendo `"authenticated"`). Kill switch `MCP_ENABLED` (solo `"true"` enciende; si no, 503). No usa `TripProvider` ni `useTrips()`: PostgREST con el Bearer del usuario y RLS. Runtime Node, región `dub1`.
+- **`/oauth/consent`** + **`POST /oauth/decision`** — Pantalla de consentimiento para el AS de Supabase (ChatGPT y otros clientes OAuth). Prefijo `/oauth` protegido por cookie, igual que `/trips`. Invitado anónimo → `/signup?next=…` (`upgradeGuest`, sin `signOut`). Sin Turnstile. `robots`: `noindex`.
 - **Layout raíz** — Inter, `AuthProvider`, `CookieBanner`, `AnalyticsGate` (Vercel Analytics y Speed Insights solo con consentimiento). **Sin** `TripProvider`. Metadata (`metadataBase`, OG, Twitter) en [`app/layout.tsx`](frontend/app/layout.tsx).
 - **Shell de app (`/trips` + `/account`)** — [`app/(app)/layout.tsx`](frontend/app/(app)/layout.tsx) es Server Component (`robots: noindex, nofollow`). El grupo `(app)` no cambia las URLs. Los providers viven en [`trips-shell.tsx`](frontend/components/trips-shell.tsx): `TripProvider` → `RegistrationGateProvider` → `TripChromeProvider` → shell (header, sidebar colapsable **solo en `/trips/[id]`**, main sobre canvas gris). Único sitio de `useTrips()`. Menú de cuenta: **Perfil** (`/account`) y **Configuración** (`/account/settings`); el invitado ve «Guardar mi viaje». En listado y cuenta el menú va en la cabecera; en el detalle desktop, en el pie del sidebar.
 - **`/trips`** — Listado Activos/Archivados; empty/loading con spinner mientras `isLoading`.
@@ -157,7 +164,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 
 ## Auth e invitados
 
-- Sesión vía Supabase Auth. Middleware exige sesión (registrada **o anónima**) en `/trips` y `/account`.
+- Sesión vía Supabase Auth. Middleware exige sesión (registrada **o anónima**) en `/trips`, `/account` y `/oauth`. `/mcp` no mira cookies: Bearer OAuth.
 - **Invitado:** `signInAnonymously` (hay que activar Anonymous Sign-Ins en el dashboard). Un solo viaje (el último CTA). Al registrarse (`upgradeGuest`) conserva el `user_id`. Cerrar sesión siendo invitado pide confirmación: es irreversible.
 - **`RegistrationGate`:** con `user.is_anonymous`, bloquea segunda fuente / nuevo viaje / ir a inicio. Registro con `upgradeGuest` (nombre + email + contraseña dos veces). `linkGuestEmail` solo reenvía la confirmación si el proyecto exige confirmar el correo. **«Ya tengo cuenta»** prepara un claim (`prepare_guest_trip_claim`) y, tras `signIn` a la cuenta existente, `claim_guest_trips` reasigna `trips` / `sources` / `assistant_conversations`. En `/login` el traspaso es una casilla (marcada por defecto). `/signup` no cierra al invitado: ya hace `upgradeGuest`. `/forgot-password` sigue preparando el claim (TTL 30 min). Google desde invitado: `flushPendingSync` + claim **sin** `signOut` previo (si cancela en Google, el sandbox sigue vivo).
 - Contrato de `/start`: nadie → sandbox nuevo; invitado → un hueco; cuenta → añade a la cuenta. El viaje de un invitado llega a una cuenta **solo** si se identifica desde el sandbox y lo ve en pantalla.
@@ -217,6 +224,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - [`frontend/lib/db/trips-repo.ts`](frontend/lib/db/trips-repo.ts) / [`assistant-repo.ts`](frontend/lib/db/assistant-repo.ts) / [`profile-repo.ts`](frontend/lib/db/profile-repo.ts).
 - [`frontend/lib/auth-context.tsx`](frontend/lib/auth-context.tsx) — login, signup, upgradeGuest, linkGuestEmail, signInAnonymously, requestPasswordReset, updatePassword, deleteAccount.
 - [`frontend/lib/auth-session-persist.ts`](frontend/lib/auth-session-persist.ts) / [`auth-next.ts`](frontend/lib/auth-next.ts) / [`auth-google.ts`](frontend/lib/auth-google.ts) — remember-me, destino `?next=` y SSO Google.
+- [`frontend/lib/mcp/`](frontend/lib/mcp/) — MCP de solo lectura: JWT (`client_id` es el enlace; `aud` = `authenticated`), `list_trips`, cliente PostgREST con anon + Bearer. Rutas: [`app/mcp/route.ts`](frontend/app/mcp/route.ts), [`app/oauth/consent/page.tsx`](frontend/app/oauth/consent/page.tsx), [`app/oauth/decision/route.ts`](frontend/app/oauth/decision/route.ts).
 - [`frontend/lib/guest-trip-claim.ts`](frontend/lib/guest-trip-claim.ts) — stash + RPC para llevar el viaje del invitado a una cuenta existente.
 - [`frontend/lib/start-session.ts`](frontend/lib/start-session.ts) — decisión pura de `/start` (open / reuse / create / replace).
 - [`frontend/lib/account-security.ts`](frontend/lib/account-security.ts) — confirmación de borrado (`displayNameFor`) y validación de contraseña.
@@ -281,12 +289,12 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 ## Reglas que no se rompen
 
 - ❌ **No uses `useTrips()`** fuera del shell de [`trips-shell.tsx`](frontend/components/trips-shell.tsx). El `TripProvider` se monta desde [`app/(app)/layout.tsx`](frontend/app/(app)/layout.tsx) (`/trips` y `/account`).
-- ❌ **No pongas `/start` en `Disallow` de `robots.txt`.** Es el CTA de los blogs: tiene que ser rastreable para que Google lea el `noindex, follow`. `/trips` y `/account` sí van en `Disallow`. `/` y `/partners` se indexan. `Disallow` + `noindex` sobre la misma URL se anulan.
+- ❌ **No pongas `/start` en `Disallow` de `robots.txt`.** Es el CTA de los blogs: tiene que ser rastreable para que Google lea el `noindex, follow`. `/trips`, `/account`, `/oauth` y `/mcp` sí van en `Disallow`. `/` y `/partners` se indexan. `Disallow` + `noindex` sobre la misma URL se anulan.
 - ❌ **No amplíes `ItemType` / `BasicCategory` / `TaskGroupCategory`** sin alinear [`item-styles.ts`](frontend/lib/item-styles.ts) (`ITEM_TYPE_ICONS`, `BASIC_ICONS`, `TASK_CATEGORY_ICONS`).
 - ❌ **No alteres el contrato JSON de extracción** en un solo sitio.
 - ❌ **No coercees un itinerario de Instagram con `media.caption`.** El detector es `InstagramText` (`instagram_llm_text`); si vuelves a `media.caption`, la revalidación aplana un Caso A que el OCR había estructurado. El hash es `sha256(IG_PIPELINE_VERSION + caption)` — calculable **sin** OCR. `/partners/prewarm` rechaza URLs de Instagram.
 - ❌ **No mutes a mano** `trip.days[…].items` → solo `moveItemBetweenDays`.
-- ❌ **No expongas `SUPABASE_SERVICE_ROLE_KEY`** al frontend.
+- ❌ **No expongas `SUPABASE_SERVICE_ROLE_KEY`** al frontend. Tampoco la pongas en Vercel: el MCP habla con PostgREST con la **anon key** + el Bearer del usuario. RLS (`trips_select_access`) hace el resto.
 - ❌ **No hay OTP ni magic link en el producto; no lo reintroduzcas** — ni para convertir invitados ni para entrar. La recuperación es `resetPasswordForEmail` → `/reset-password`. Entrar en una cuenta ya existente desde invitado va por `prepare_guest_trip_claim` / `claim_guest_trips`. Google desde invitado también: claim, **no** `upgradeGuest` (OAuth crea otro `user_id`).
 - ❌ **No llames a `turnstile.ready()`.** Su primera línea es `g.scriptWasLoadedAsync && (warn(...), throw(...))`: si `api.js` se cargó con async/defer **lanza siempre**, y un `<script>` inyectado desde JS es async por definición. Al llamarla dentro de un `setTimeout` la excepción escapaba de la promesa, `waitForTurnstileApi` no resolvía nunca y a los 8 s salía «El captcha no terminó a tiempo» sobre un hueco vacío — con login, alta, recuperación, `/start`, invitado, ajustes de cuenta, landing y partners caídos a la vez. La vía soportada con async es el parámetro `onload=` de `api.js` (más sondeo de `window.turnstile.render` como red). Por eso `ready` **no** está en el tipo `TurnstileApi` de [`turnstile.tsx`](frontend/components/auth/turnstile.tsx): que no compile es la defensa. Lo fija [`turnstile.test.ts`](frontend/components/auth/turnstile.test.ts), cuyo doble de `api.js` lanza igual que el real.
 - ❌ **No escribas las cookies `sb-…` sin pasar por `applyPersistMode`**, y no le quites el `maxAge: 0` a un borrado — ahí `signOut` deja de cerrar sesión en silencio. `@supabase/ssr` pisa `cookieOptions.maxAge`; el único punto es nuestro `setAll`.
@@ -348,6 +356,12 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 - ❌ **No dejes markdown en la salida del resumen.** El texto acaba en WhatsApp, Telegram y correo; solo uno entiende énfasis, y con otra sintaxis.
 - ❌ **No llames a `navigator.share()` después de un `await`.** Fuera del gesto del usuario, iOS lo rechaza.
 - ❌ **No des por hecho que `require_user` te protege sin mirar `REQUIRE_AUTH`.** Con la bandera en `false` devuelve `None` sin token y `enforce_usage` **no aplica ningún límite**: un endpoint de IA nuevo queda abierto y gratis para cualquiera. En **producción está en `true`** (verificado el 26 ago 2026: 401 sin Bearer), así que ahí sí protege; en local y en cualquier entorno con `REQUIRE_AUTH=false` **no**, y por eso el límite nunca se prueba donde se escribe el código. Si añades un endpoint de IA, comprueba su 401 en `scripts/smoke.sh`, que es el único sitio donde esto se verifica de verdad.
+- ❌ **No añadas más tools al MCP en este spike.** T9.1 es `list_trips` de solo lectura. Escritura, más herramientas o `service_role` son otra tarea.
+- ❌ **No uses `aud` como enlace de audiencia del MCP.** Supabase ignora `resource` (RFC 8707) y deja `aud: "authenticated"` (el mismo que los JWT de `/trips`). El enlace es el claim **`client_id`**, que solo emite el servidor OAuth. Se comprueba `aud === "authenticated"`; nunca `verify_aud: false` a secas ni exigir que `aud` sea `https://wanderplanner.ai/mcp`.
+- ❌ **No leas `SUPABASE_JWT_SECRET` desde el frontend.** La integración Supabase↔Vercel **la inyecta sola** en el proyecto (con `POSTGRES_*` y `SUPABASE_SERVICE_ROLE_KEY`), y el proyecto firma con **ES256**. Un verificador que la lea toma la ruta HS256 y **rechaza todos los tokens** con un 401 que parece un fallo de la lógica de `client_id`. El MCP usa `MCP_JWT_HS256_SECRET` —nombre que ninguna integración pone— y **solo para local**; en producción va por JWKS. Y no decidas el algoritmo mirando el `alg` del token: eso es confusión de algoritmos, lo decide la configuración del servidor.
+- ❌ **No enciendas el MCP sin `MCP_ENABLED=true`.** El kill switch existe desde T9.1: unset / `false` → `/mcp` 503. El rollback es apagar la env y redeployar, no Instant Rollback.
+- ❌ **El consentimiento OAuth no se apoya en `SameSite`.** `POST /oauth/decision` mina un código OAuth y el `authorization_id` **no está ligado a ningún usuario hasta que alguien aprueba**: se liga a la sesión de quien aprueba. Con DCR abierto, cualquiera consigue un id válido. Hoy el POST cross-site lo bloquea la cookie `SameSite=Lax` de `@supabase/ssr`, pero eso es una invariante del navegador **y este repo ya intercepta esas opciones de cookie en `applyPersistMode`**. La defensa explícita es [`isSameOriginRequest`](frontend/lib/mcp/same-origin.ts) (`test:mcp-same-origin`): no la quites, y si añades otro endpoint que apruebe autorizaciones, pásalo también por ahí.
+- ❌ **No toques `supabase/config.toml` para el OAuth server.** El remoto ya está en el dashboard (T9.0). Inventar `authorization_url_path` sin verificar la clave contra la CLI rompe `supabase start`.
 
 ## Dependencias críticas
 
@@ -376,4 +390,5 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
 | Calendario de Ruta | [`itinerary-calendar-view.tsx`](frontend/components/itinerary-calendar-view.tsx), [`itinerary-calendar.ts`](frontend/lib/itinerary-calendar.ts), `wp-route-view` / `wp-calendar-scale` |
 | Scroll / alturas en `/trips` móvil | [`trips-shell.tsx`](frontend/components/trips-shell.tsx), [`app-header.tsx`](frontend/components/app-header.tsx), [`use-collapsing-header.ts`](frontend/hooks/use-collapsing-header.ts), [`collapsing-header.ts`](frontend/lib/collapsing-header.ts), [`collapsed-chrome-reveal.tsx`](frontend/components/collapsed-chrome-reveal.tsx), [`route-view-rail.tsx`](frontend/components/route-view-rail.tsx), [`trip-mobile-nav.tsx`](frontend/components/trip-mobile-nav.tsx), `--wp-header-height` / `data-wp-scroll-lock` en [`globals.css`](frontend/app/globals.css) |
 | Marca / SEO | [`brand-mark.tsx`](frontend/components/brand-mark.tsx), [`site.ts`](frontend/lib/site.ts), [`robots.ts`](frontend/app/robots.ts), [`opengraph-image.tsx`](frontend/app/opengraph-image.tsx) |
+| MCP (ChatGPT / T9.1) | [`app/mcp/route.ts`](frontend/app/mcp/route.ts), [`lib/mcp/`](frontend/lib/mcp/), [`app/oauth/consent/page.tsx`](frontend/app/oauth/consent/page.tsx), [`app/oauth/decision/route.ts`](frontend/app/oauth/decision/route.ts), well-known RFC 9728, `MCP_ENABLED` / `MCP_RESOURCE_URL`, [`frontend/vercel.json`](frontend/vercel.json) (`dub1`). Sin `service_role`. |
 | Proveedor o modelo de IA (`ASSISTANT_MODEL`, cliente de [`assistant.py`](backend/assistant.py), extracción de [`main.py`](backend/main.py)) | Párrafo `#terceros` de [`/legal/privacidad`](frontend/app/legal/privacidad/page.tsx) (país + garantía), texto de [`ai-transfer-gate.tsx`](frontend/components/ai-transfer-gate.tsx) y `AI_TRANSFER_CONSENT_VERSION` en [`ai-transfer-consent.ts`](frontend/lib/ai-transfer-consent.ts) si cambia el país |

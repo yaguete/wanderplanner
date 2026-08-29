@@ -12,7 +12,7 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { isTurnstileEnabled } from "@/components/auth/turnstile"
 import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
-import { completeAuthNavigation, safeNext } from "@/lib/auth-next"
+import { completeAuthNavigation, hrefWithNext, safeNext } from "@/lib/auth-next"
 import { useAuth } from "@/lib/auth-context"
 import { authCallbackErrorMessage } from "@/lib/auth-errors"
 import { persistModeFromRemember } from "@/lib/auth-session-persist"
@@ -143,7 +143,10 @@ function LoginForm() {
       footer={
         <>
           ¿Aún no tienes cuenta?{" "}
-          <Link href="/signup" className="font-medium text-foreground underline underline-offset-4">
+          <Link
+            href={hrefWithNext("/signup", next)}
+            className="font-medium text-foreground underline underline-offset-4"
+          >
             Crear cuenta
           </Link>
         </>

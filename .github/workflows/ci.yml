@@ -94,6 +94,10 @@ jobs:
       - run: npm run test:item-span
       - run: npm run test:route-legs
       - run: npm run test:transport-routes
+      - run: npm run test:mcp-verify-token
+      - run: npm run test:mcp-same-origin
+      - run: npm run test:mcp-enabled
+      - run: npm run test:mcp-list-trips
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
       # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
       # degradados a warning en eslint.config.mjs y no bloquean.

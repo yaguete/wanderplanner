@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { ASSISTANT_SOURCE_ID, MANUAL_SOURCE_ID } from "./item-provenance"
+import { dateISOForDayIndex, toISODate } from "./trip-dates"
 import {
   BOOKING_AFFILIATE_AID,
   BOOKING_AFFILIATE_LABEL,
@@ -13,6 +14,27 @@ function params(href: string | null): URLSearchParams {
   assert.ok(href)
   return new URL(href).searchParams
 }
+
+/**
+ * Fechas relativas a hoy, nunca constantes: `booking-dates` no pinta checkin/checkout
+ * cuando el check-in ya pasó (`checkin < todayISO()`), así que una fecha fija convierte
+ * el test en una bomba de relojería — el 29 ago 2026 reventó por un `"2026-08-28"`.
+ */
+function futureISO(daysFromToday: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + daysFromToday)
+  return toISODate(d)
+}
+
+function checkoutFor(checkin: string, nights: number): string {
+  const iso = dateISOForDayIndex(checkin, nights)
+  assert.ok(iso)
+  return iso
+}
+
+const checkinA = futureISO(30)
+const checkinB = futureISO(60)
+const checkinC = futureISO(90)
 
 {
   assert.equal(buildAssistantBookingSearchUrl({ name: "   " }), null)
@@ -102,7 +124,7 @@ function params(href: string | null): URLSearchParams {
     name: "Hotel Goldener Adler",
     region: "Innsbruck",
     sourceId: ASSISTANT_SOURCE_ID,
-    startDate: "2027-09-14",
+    startDate: checkinA,
     dayIndexes: [0, 1],
     currency: "eur",
     numTravelers: 3,
@@ -110,8 +132,8 @@ function params(href: string | null): URLSearchParams {
   const q = params(href)
   assert.equal(q.get("aid"), BOOKING_AFFILIATE_AID)
   assert.equal(q.get("ss"), "Hotel Goldener Adler Innsbruck")
-  assert.equal(q.get("checkin"), "2027-09-14")
-  assert.equal(q.get("checkout"), "2027-09-16")
+  assert.equal(q.get("checkin"), checkinA)
+  assert.equal(q.get("checkout"), checkoutFor(checkinA, 2))
   assert.equal(q.get("selected_currency"), "EUR")
   assert.equal(q.get("group_adults"), "3")
 }
@@ -122,7 +144,7 @@ function params(href: string | null): URLSearchParams {
     name: "Full Moon Budapest",
     region: "Budapest",
     sourceId: MANUAL_SOURCE_ID,
-    startDate: "2026-08-28",
+    startDate: checkinB,
     dayIndexes: [0, 1, 2],
     currency: "EUR",
     numTravelers: 2,
@@ -130,8 +152,8 @@ function params(href: string | null): URLSearchParams {
   const q = params(href)
   assert.equal(q.get("aid"), BOOKING_AFFILIATE_AID)
   assert.equal(q.get("ss"), "Full Moon Budapest")
-  assert.equal(q.get("checkin"), "2026-08-28")
-  assert.equal(q.get("checkout"), "2026-08-31")
+  assert.equal(q.get("checkin"), checkinB)
+  assert.equal(q.get("checkout"), checkoutFor(checkinB, 3))
   assert.equal(q.get("selected_currency"), "EUR")
   assert.equal(q.get("group_adults"), "2")
 }
@@ -144,7 +166,7 @@ function params(href: string | null): URLSearchParams {
     name: "Hotel Blog",
     sourceId: "src-1",
     affiliateUrl: blogger,
-    startDate: "2027-09-14",
+    startDate: checkinC,
     dayIndexes: [0],
     currency: "USD",
     numTravelers: 4,
@@ -152,8 +174,8 @@ function params(href: string | null): URLSearchParams {
   const q = params(href)
   assert.equal(q.get("aid"), "12345")
   assert.equal(q.get("label"), "blog")
-  assert.equal(q.get("checkin"), "2027-09-14")
-  assert.equal(q.get("checkout"), "2027-09-15")
+  assert.equal(q.get("checkin"), checkinC)
+  assert.equal(q.get("checkout"), checkoutFor(checkinC, 1))
   assert.equal(q.get("selected_currency"), null)
   assert.equal(q.get("group_adults"), null)
 }

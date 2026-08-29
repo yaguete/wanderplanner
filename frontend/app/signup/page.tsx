@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { SignupForm } from "@/components/auth/signup-form"
-import { safeNext } from "@/lib/auth-next"
+import { hrefWithNext, safeNext } from "@/lib/auth-next"
 import { useAuth } from "@/lib/auth-context"
 
 function SignupPageBody() {
@@ -24,7 +24,10 @@ function SignupPageBody() {
       footer={
         <>
           ¿Ya tienes cuenta?{" "}
-          <Link href="/login" className="font-medium text-foreground underline underline-offset-4">
+          <Link
+            href={hrefWithNext("/login", next)}
+            className="font-medium text-foreground underline underline-offset-4"
+          >
             Entrar
           </Link>
         </>
