@@ -260,10 +260,19 @@ async function main() {
   assert.equal(viaWindow, "fallback")
 }
 
-assert.equal(MCP_WIDGET_URI, "ui://wanderplanner/widgets/v3.html")
-assert.equal(MCP_WIDGET_MIME, "text/html;profile=mcp-app")
+// ChatGPT (runtime Apps SDK) solo reconoce como plantilla los `ui://…` con
+// `text/html+skybridge`; con el MIME de la spec MCP Apps devolvía
+// «Failed to fetch template». Y la URI va SIN versión: cambiarla rompe la
+// caché de plantillas del host.
+assert.equal(MCP_WIDGET_URI, "ui://wanderplanner/widgets/main.html")
+assert.equal(MCP_WIDGET_MIME, "text/html+skybridge")
+assert.equal(MCP_WIDGET_URI.includes("/v"), false, "la URI del widget no se versiona")
 assert.deepEqual(widgetResourceMeta().ui.csp.connectDomains, [])
 assert.deepEqual(widgetResourceMeta().ui.csp.resourceDomains, [])
+// Metadatos en las dos familias: `ui.*` (spec) y `openai/*` (runtime de hoy).
+assert.equal(widgetResourceMeta()["openai/widgetPrefersBorder"], true)
+assert.deepEqual(widgetResourceMeta()["openai/widgetCSP"].connect_domains, [])
+assert.deepEqual(widgetResourceMeta()["openai/widgetCSP"].resource_domains, [])
 assert.equal(widgetToolMeta().ui.resourceUri, MCP_WIDGET_URI)
 assert.equal(widgetToolMeta()["openai/outputTemplate"], MCP_WIDGET_URI)
 

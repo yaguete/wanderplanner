@@ -111,6 +111,9 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       mimeType: MCP_WIDGET_MIME,
       description: "Tarjeta de fuente y día de viaje de WanderPlanner.",
+      // También en el listado: no está claro si el host lee los metadatos del
+      // widget de `resources/list` o de la lectura, así que van en los dos.
+      _meta: widgetResourceMeta(),
     },
     async () => {
       const { MCP_WIDGET_HTML } = await import("./ui/widget-html")
