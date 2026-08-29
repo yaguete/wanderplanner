@@ -38,3 +38,10 @@ export function tokenFromCtx(ctx: { http?: { authInfo?: { token?: string } } }):
   const token = ctx.http?.authInfo?.token
   return typeof token === "string" && token.length > 0 ? token : null
 }
+
+export function userIdFromCtx(ctx: {
+  http?: { authInfo?: { extra?: Record<string, unknown>; token?: string } }
+}): string | null {
+  const sub = ctx.http?.authInfo?.extra?.sub
+  return typeof sub === "string" && sub.trim().length > 0 ? sub.trim() : null
+}

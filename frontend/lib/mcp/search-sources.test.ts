@@ -13,11 +13,23 @@ import {
   type SearchSourceRow,
   type SearchTripRow,
 } from "./search-sources"
+import {
+  needsSourceSuggest,
+  rankSuggestionsByFavoriteHosts,
+  resolveSearchLayer,
+  searchSourcesToolOutput,
+  searchSourcesToolText,
+  searchTravelerFrom,
+  slimSuggestHit,
+  suggestQueryForSearch,
+} from "./search-layers"
+import type { SourceSuggestHit } from "@/lib/source-suggest"
 
 async function main() {
 const sourceCols = MCP_SEARCH_SOURCE_COLUMNS.split(",").map((c) => c.trim())
 assert.equal(sourceCols.includes("article_html"), false)
 assert.equal(sourceCols.includes("items"), true)
+assert.equal(sourceCols.includes("url"), true)
 
 const source: SearchSourceRow = {
   id: "src-1",
@@ -207,6 +219,100 @@ const trip: SearchTripRow = {
   assert.ok(out[0]?.quote)
   assert.ok((out[0]?.quote?.length ?? 0) <= SEARCH_QUOTE_MAX)
   assert.equal(JSON.stringify(out).includes("<p>"), false)
+}
+
+{
+  const tripHits: SearchHit[] = [
+    {
+      kind: "item",
+      name: "Hotel Málaga Palace",
+      type: "stay",
+      days: [2],
+      consolidated: true,
+      sourceId: "src-1",
+      sourceAuthor: "Patricia",
+      sourceTitle: "Split en verano",
+      affiliateUrl: null,
+      quote: null,
+    },
+  ]
+  const curated: SourceSuggestHit = {
+    url: "https://blog.example/alaska",
+    title: "Alaska",
+    destination: "Alaska",
+    totalDays: 10,
+    host: "blog.example",
+    origin: "curated",
+    instant: false,
+  }
+  const web: SourceSuggestHit = {
+    url: "https://web.example/alaska",
+    title: "Web Alaska",
+    destination: null,
+    totalDays: null,
+    host: "web.example",
+    origin: "web",
+    instant: false,
+  }
+  assert.equal(needsSourceSuggest(tripHits), false)
+  assert.equal(needsSourceSuggest([]), true)
+
+  const tripLayer = resolveSearchLayer(tripHits, [curated, web])
+  assert.equal(tripLayer.layer, "trip")
+  assert.equal(tripLayer.results.length, 1)
+  assert.deepEqual(tripLayer.suggestions, [])
+
+  const curatedLayer = resolveSearchLayer([], [curated, web])
+  assert.equal(curatedLayer.layer, "curated")
+  assert.deepEqual(curatedLayer.results, [])
+  assert.equal(curatedLayer.suggestions.length, 1)
+  assert.equal(curatedLayer.suggestions[0]?.origin, "curated")
+
+  const cacheHit: SourceSuggestHit = { ...curated, origin: "cache", host: "cache.example" }
+  const cacheLayer = resolveSearchLayer([], [cacheHit, web])
+  assert.equal(cacheLayer.layer, "curated")
+  assert.equal(cacheLayer.suggestions.some((s) => s.origin === "web"), false)
+
+  const webLayer = resolveSearchLayer([], [web])
+  assert.equal(webLayer.layer, "web")
+  assert.equal(webLayer.suggestions[0]?.origin, "web")
+
+  const noneLayer = resolveSearchLayer([], [])
+  assert.equal(noneLayer.layer, "none")
+  assert.match(searchSourcesToolText("alaska", "none", [], [], 0), /no tengo fuentes/i)
+
+  const ranked = rankSuggestionsByFavoriteHosts(
+    [slimSuggestHit(web), slimSuggestHit(curated)],
+    ["blog.example"],
+  )
+  assert.equal(ranked[0]?.host, "blog.example")
+  assert.equal(ranked[1]?.host, "web.example")
+
+  searchSourcesToolOutput.parse({
+    layer: "curated",
+    results: [],
+    suggestions: curatedLayer.suggestions,
+    traveler: null,
+  })
+  searchSourcesOutput.parse({ results: tripHits })
+
+  const traveler = searchTravelerFrom(
+    {
+      id: "u1",
+      displayName: "Ana",
+      travelerTypes: ["naturaleza"],
+      travelerNotes: "Sin prisas",
+      signupReferrer: null,
+    },
+    [{ id: "r1", label: "Patricia", url: "https://blog.example", domain: "blog.example" }],
+    "Ritmo lento",
+  )
+  assert.deepEqual(traveler?.travelerTypes, ["naturaleza"])
+  assert.deepEqual(traveler?.favoriteDomains, ["blog.example"])
+  assert.equal(traveler?.expectations, "Ritmo lento")
+
+  assert.equal(suggestQueryForSearch("Alaska", { name: "Viaje", countries: [] }, []), "Alaska")
+  assert.equal(suggestQueryForSearch("ab", { name: "Viaje", countries: [] }, []), null)
 }
 
 console.log("mcp-search-sources: ok")

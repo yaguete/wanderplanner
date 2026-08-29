@@ -7,8 +7,9 @@ import { findMatchRanges } from "@/lib/text-highlight"
 import { normalizeName } from "@/lib/trip-tasks"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
-export const MCP_SEARCH_SOURCES_TRIP_COLUMNS = "id, source_ids, days, basics" as const
-export const MCP_SEARCH_SOURCE_COLUMNS = "id, author, title, area, items, basics" as const
+export const MCP_SEARCH_SOURCES_TRIP_COLUMNS =
+  "id, name, countries, expectations, source_ids, days, basics" as const
+export const MCP_SEARCH_SOURCE_COLUMNS = "id, url, author, title, area, items, basics" as const
 
 export const SEARCH_MAX_RESULTS = 15
 export const SEARCH_QUOTE_MAX = 240
@@ -75,6 +76,7 @@ export type SearchHit = SearchSourcesResult["results"][number]
 
 export type SearchSourceRow = {
   id: string
+  url?: string | null
   author: string | null
   title: string | null
   area: string | null
@@ -84,6 +86,9 @@ export type SearchSourceRow = {
 
 export type SearchTripRow = {
   id: string
+  name?: string | null
+  countries?: unknown
+  expectations?: unknown
   source_ids: unknown
   days: unknown
   basics: unknown

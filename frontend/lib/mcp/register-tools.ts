@@ -1,6 +1,9 @@
 import { z } from "zod"
 import type { createMcpHandler } from "mcp-handler"
 import { fetchArticleHtml } from "@/lib/db/trips-repo"
+import { loadFavoriteReferences, loadProfile } from "@/lib/db/profile-repo"
+import { isSourceSuggestEnabled, suggestSources } from "@/lib/source-suggest"
+import { filterUnusedHits } from "@/lib/trip-source-suggestions"
 import {
   COUNTRY_TASKS_FETCH_TIMEOUT_MS,
   fetchCountryTasksWithToken,
@@ -29,11 +32,20 @@ import {
   MCP_SEARCH_SOURCES_TRIP_COLUMNS,
   searchSources,
   searchSourcesInput,
-  searchSourcesOutput,
-  searchSourcesText,
   type SearchSourceRow,
   type SearchTripRow,
 } from "./search-sources"
+import {
+  needsSourceSuggest,
+  rankSuggestionsByFavoriteHosts,
+  resolveSearchLayer,
+  SEARCH_SUGGEST_LIMIT,
+  SEARCH_SUGGEST_TIMEOUT_MS,
+  searchSourcesToolOutput,
+  searchSourcesToolText,
+  searchTravelerFrom,
+  suggestQueryForSearch,
+} from "./search-layers"
 import {
   mapReviewTrip,
   MCP_REVIEW_TRIP_COLUMNS,
@@ -62,7 +74,7 @@ import {
   type McpCountryTasksSourceRow,
   type McpCountryTasksTripRow,
 } from "./get-country-tasks"
-import { mcpNoSession, mcpOk, mcpReadFailed, mcpTextError, tokenFromCtx } from "./result"
+import { mcpNoSession, mcpOk, mcpReadFailed, mcpTextError, tokenFromCtx, userIdFromCtx } from "./result"
 import { createUserSupabase } from "./supabase"
 
 type McpServer = Parameters<Parameters<typeof createMcpHandler>[0]>[0]
@@ -221,14 +233,19 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       title: "Buscar en las fuentes del viaje",
       description:
-        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad. Devuelve autor, título, enlace del autor y una cita corta si hay artículo. Filtra con `type` si habla de dormir, comer, etc. No la uses para opinar sobre el plan completo: eso es review_trip.",
+        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. No la uses para opinar sobre el plan completo: eso es review_trip.",
       inputSchema: searchSourcesInput,
-      outputSchema: searchSourcesOutput,
-      annotations: READ_ONLY,
+      outputSchema: searchSourcesToolOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async (args, ctx) => {
       const token = tokenFromCtx(ctx)
       if (!token) return mcpNoSession()
+      const userId = userIdFromCtx(ctx)
       const { tripId, query, type } = args as z.infer<typeof searchSourcesInput>
       const supabase = createUserSupabase(token)
       const loaded = await loadAccessibleTrip<SearchTripRow>(
@@ -244,13 +261,88 @@ export function registerWanderplannerTools(server: McpServer): void {
         MCP_SEARCH_SOURCE_COLUMNS,
       )
       if (!sources.ok) return mcpReadFailed()
+
+      let traveler = searchTravelerFrom(null, [], loaded.row.expectations)
+      try {
+        const [profile, refs] = await Promise.all([
+          userId ? loadProfile(supabase, userId) : Promise.resolve(null),
+          userId ? loadFavoriteReferences(supabase, userId) : Promise.resolve([]),
+        ])
+        traveler = searchTravelerFrom(profile, refs, loaded.row.expectations)
+      } catch {
+        traveler = searchTravelerFrom(null, [], loaded.row.expectations)
+      }
+
       const hits = searchSources(query, sources.rows, loaded.row, type)
-      const withQuotes = await attachSearchQuotes(hits, (sourceId, signal) =>
-        fetchArticleHtml(supabase, sourceId, signal),
+      if (!needsSourceSuggest(hits)) {
+        const withQuotes = await attachSearchQuotes(hits, (sourceId, signal) =>
+          fetchArticleHtml(supabase, sourceId, signal),
+        )
+        return mcpOk(
+          searchSourcesToolText(query, "trip", withQuotes, [], sources.rows.length),
+          {
+            layer: "trip" as const,
+            results: withQuotes,
+            suggestions: [],
+            traveler,
+          },
+        )
+      }
+
+      let suggestHits: Awaited<ReturnType<typeof suggestSources>>["results"] = []
+      if (isSourceSuggestEnabled()) {
+        const q = suggestQueryForSearch(
+          query,
+          {
+            name: (loaded.row.name ?? "").trim() || "Viaje",
+            countries: asStringList(loaded.row.countries),
+          },
+          sources.rows,
+        )
+        if (q) {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), SEARCH_SUGGEST_TIMEOUT_MS)
+          try {
+            const response = await suggestSources(q, {
+              scope: "trip",
+              limit: SEARCH_SUGGEST_LIMIT,
+              fresh: false,
+              signal: controller.signal,
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            suggestHits = response.results
+          } catch {
+            suggestHits = []
+          } finally {
+            clearTimeout(timer)
+          }
+        }
+      }
+
+      const usedUrls = sources.rows
+        .map((s) => (typeof s.url === "string" ? s.url : ""))
+        .filter(Boolean)
+      const unused = filterUnusedHits(suggestHits, usedUrls)
+      const composed = resolveSearchLayer([], unused)
+      const suggestions = rankSuggestionsByFavoriteHosts(
+        composed.suggestions,
+        traveler?.favoriteDomains ?? [],
       )
-      return mcpOk(searchSourcesText(query, withQuotes, sources.rows.length), {
-        results: withQuotes,
-      })
+      return mcpOk(
+        searchSourcesToolText(
+          query,
+          composed.layer,
+          composed.results,
+          suggestions,
+          sources.rows.length,
+        ),
+        {
+          layer: composed.layer,
+          results: composed.results,
+          suggestions,
+          traveler,
+        },
+      )
     },
   )
 
