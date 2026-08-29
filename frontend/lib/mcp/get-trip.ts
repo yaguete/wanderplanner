@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { parseTripBudget } from "@/lib/db/trips-repo"
+import { tripWanderplannerUrl } from "@/lib/trip-tab"
 import { taskKeyForItem } from "@/lib/trip-tasks"
 import type { BasicCategory, ItemType, RoutePlaceKind, TripTaskStatus, UserDayItem } from "@/types/itinerary"
 import { asStringList } from "./trip-access"
@@ -97,6 +98,7 @@ const headerFields = {
   countries: z.array(z.string()),
   expectations: z.string().nullable(),
   sourceIds: z.array(z.string()),
+  wanderplannerUrl: z.string(),
   numTravelers: z.number().nullable(),
   currency: z.string(),
   origin: originSchema,
@@ -367,6 +369,7 @@ function header(row: McpGetTripRow, daysLen: number) {
     countries: asStringList(row.countries),
     expectations: asTrimmed(row.expectations),
     sourceIds: asStringList(row.source_ids),
+    wanderplannerUrl: tripWanderplannerUrl(row.id, "itinerary"),
     numTravelers:
       typeof row.num_travelers === "number" && Number.isFinite(row.num_travelers)
         ? row.num_travelers

@@ -21,6 +21,7 @@ import { TripMobileNav, type TripMobileSection } from "@/components/trip-mobile-
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { OpeningTripStatus, useOpeningTrip } from "@/components/opening-trip"
 import { shouldBounceMissingTrip } from "@/lib/trip-open-guard"
+import { parseTripTabParam, tripDetailPath } from "@/lib/trip-tab"
 import { TripPanelsEmpty } from "@/components/trip-panel-toggles"
 import {
   useTripChrome,
@@ -110,6 +111,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     [trip, tripSources],
   )
   const querySource = searchParams.get("source")?.trim() || null
+  const queryTab = parseTripTabParam(searchParams.get("tab"))
   const [stashedSource, setStashedSource] = useState<string | null>(null)
   const autoSourceRequested = useRef<string | null>(null)
   const pendingSourceUrl = querySource || stashedSource
@@ -119,7 +121,9 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   const [panels, setPanels] = useState<TripPanelState>(DEFAULT_PANELS)
   const [panelsHydrated, setPanelsHydrated] = useState(false)
-  const [mobileSection, setMobileSection] = useState<TripMobileSection>("sources")
+  const [mobileSection, setMobileSection] = useState<TripMobileSection>(
+    queryTab ? "plan" : "sources",
+  )
   const [mobileNavHidden, setMobileNavHidden] = useState(false)
   const mobileSectionRef = useRef(mobileSection)
   mobileSectionRef.current = mobileSection
@@ -168,9 +172,19 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   // Evitar mismatch SSR/cliente: leer localStorage tras montar.
   useEffect(() => {
-    setPanels(readPanels())
+    const stored = readPanels()
+    if (queryTab) stored.plan = true
+    setPanels(stored)
     setPanelsHydrated(true)
+    // Solo al montar: un tab posterior lo aplica el efecto de queryTab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!queryTab) return
+    setMobileSection((prev) => (prev === "plan" ? prev : "plan"))
+    setPanels((prev) => (prev.plan ? prev : { ...prev, plan: true }))
+  }, [queryTab])
 
   useEffect(() => {
     if (
@@ -229,8 +243,8 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
 
   useEffect(() => {
     if (!pendingSourceUrl || !trip || trip.sourceIds.length === 0) return
-    router.replace(`/trips/${tripId}`)
-  }, [pendingSourceUrl, trip, tripId, router])
+    router.replace(tripDetailPath(tripId, queryTab))
+  }, [pendingSourceUrl, trip, tripId, router, queryTab])
 
   useEffect(() => {
     if (!panelsHydrated) return
@@ -245,7 +259,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   if (layoutTripId !== tripId) {
     setLayoutTripId(tripId)
     setEditTripOpen(false)
-    setMobileSection("sources")
+    setMobileSection(queryTab ? "plan" : "sources")
     setMobileNavHidden(false)
     sectionScrollRef.current = {}
     if (!pendingSourceUrl) setAddSourceOpen(false)
@@ -338,6 +352,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         onEditTrip={openEditTrip}
         onHeaderCollapsedChange={onPlanHeaderCollapsed}
         activeOnMobile={mobileSection === "plan"}
+        initialViewMode={queryTab ?? "itinerary"}
         desktopSolo={
           !isMobile &&
           panelsHydrated &&
@@ -352,6 +367,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       openEditTrip,
       onPlanHeaderCollapsed,
       mobileSection,
+      queryTab,
       isMobile,
       panelsHydrated,
       panels.plan,

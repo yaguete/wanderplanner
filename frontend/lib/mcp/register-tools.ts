@@ -74,8 +74,11 @@ import {
   type McpCountryTasksSourceRow,
   type McpCountryTasksTripRow,
 } from "./get-country-tasks"
+import { MCP_INSTRUCTIONS } from "./instructions"
+import { applyMcpAffiliateGate } from "./affiliate-gate"
 import { mcpNoSession, mcpOk, mcpReadFailed, mcpTextError, tokenFromCtx, userIdFromCtx } from "./result"
 import { createUserSupabase } from "./supabase"
+import { MCP_WIDGET_MIME, MCP_WIDGET_URI, widgetResourceMeta, widgetToolMeta } from "./ui/resource"
 
 type McpServer = Parameters<Parameters<typeof createMcpHandler>[0]>[0]
 
@@ -99,10 +102,31 @@ const READ_ONLY = {
   openWorldHint: false,
 } as const
 
-export const MCP_INSTRUCTIONS =
-  "Este servidor es la memoria de viaje del usuario: sus viajes y los artículos que él mismo ha elegido como fuentes. Reglas: (1) Para opinar sobre un viaje, llama primero a review_trip. No opines solo con get_trip ni con conocimiento general. (2) No inventes recomendaciones — si algo no está en las fuentes del viaje, en review_trip, en search_sources ni en get_country_tasks, dilo y ofrece añadir una fuente. (3) Cuando cites una recomendación de una fuente, atribúyela a su autor y usa el enlace que devuelve la herramienta, que es el que ese autor publicó en su artículo. (4) Antes de escribir en el viaje, confirma con el usuario. (5) No inventes precios: los costes los pone el usuario."
+export { MCP_INSTRUCTIONS }
 
 export function registerWanderplannerTools(server: McpServer): void {
+  server.registerResource(
+    "wanderplanner-widgets",
+    MCP_WIDGET_URI,
+    {
+      mimeType: MCP_WIDGET_MIME,
+      description: "Tarjeta de fuente y día de viaje de WanderPlanner.",
+    },
+    async () => {
+      const { MCP_WIDGET_HTML } = await import("./ui/widget-html")
+      return {
+        contents: [
+          {
+            uri: MCP_WIDGET_URI,
+            mimeType: MCP_WIDGET_MIME,
+            text: MCP_WIDGET_HTML,
+            _meta: widgetResourceMeta(),
+          },
+        ],
+      }
+    },
+  )
+
   server.registerTool(
     "list_trips",
     {
@@ -138,6 +162,7 @@ export function registerWanderplannerTools(server: McpServer): void {
       inputSchema: getTripInput,
       outputSchema: getTripOutput,
       annotations: READ_ONLY,
+      _meta: widgetToolMeta(),
     },
     async (args, ctx) => {
       const token = tokenFromCtx(ctx)
@@ -151,7 +176,7 @@ export function registerWanderplannerTools(server: McpServer): void {
       )
       if (!loaded.ok) return tripLoadFailure(loaded)
       const mapped = mapGetTrip(loaded.row, days)
-      return mcpOk(mapped.text, mapped.result)
+      return mcpOk(mapped.text, applyMcpAffiliateGate(mapped.result), widgetToolMeta())
     },
   )
 
@@ -223,7 +248,7 @@ export function registerWanderplannerTools(server: McpServer): void {
       const result = { checks: mapped.result.checks, evidence }
       return mcpOk(
         reviewTripText(loaded.row, result.checks, evidence, sources.rows.length),
-        result,
+        applyMcpAffiliateGate(result),
       )
     },
   )
@@ -241,6 +266,7 @@ export function registerWanderplannerTools(server: McpServer): void {
         destructiveHint: false,
         openWorldHint: true,
       },
+      _meta: widgetToolMeta(),
     },
     async (args, ctx) => {
       const token = tokenFromCtx(ctx)
@@ -280,12 +306,13 @@ export function registerWanderplannerTools(server: McpServer): void {
         )
         return mcpOk(
           searchSourcesToolText(query, "trip", withQuotes, [], sources.rows.length),
-          {
+          applyMcpAffiliateGate({
             layer: "trip" as const,
             results: withQuotes,
             suggestions: [],
             traveler,
-          },
+          }),
+          widgetToolMeta(),
         )
       }
 
@@ -336,12 +363,13 @@ export function registerWanderplannerTools(server: McpServer): void {
           suggestions,
           sources.rows.length,
         ),
-        {
+        applyMcpAffiliateGate({
           layer: composed.layer,
           results: composed.results,
           suggestions,
           traveler,
-        },
+        }),
+        widgetToolMeta(),
       )
     },
   )

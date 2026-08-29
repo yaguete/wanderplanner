@@ -39,3 +39,10 @@ export function supabaseAnonKey(
 ): string {
   return (raw ?? "").trim()
 }
+
+/** Solo `"true"` (sin importar mayúsculas) deja `affiliateUrl` en el payload MCP. Default off. */
+export function isMcpAffiliateLinksEnabled(
+  raw: string | undefined = process.env.MCP_AFFILIATE_LINKS_ENABLED,
+): boolean {
+  return (raw ?? "").trim().toLowerCase() === "true"
+}

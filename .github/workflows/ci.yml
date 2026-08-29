@@ -20,6 +20,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: node scripts/build-mcp-ui.mjs
+      - run: git diff --exit-code -- lib/mcp/ui/widget-html.ts
       - run: npx tsc --noEmit
       - run: npm run test:trip-dates
       - run: npm run test:day-heading
@@ -85,6 +87,7 @@ jobs:
       - run: npm run test:trip-merge
       - run: npm run test:trip-share
       - run: npm run test:trip-invite-url
+      - run: npm run test:trip-tab
       - run: npm run test:trip-rail-mark
       - run: npm run test:trips-repo
       - run: npm run test:itinerary-calendar
@@ -105,6 +108,8 @@ jobs:
       - run: npm run test:mcp-get-trip-budget
       - run: npm run test:mcp-get-country-tasks
       - run: npm run test:mcp-review-trip
+      - run: npm run test:mcp-affiliate-gate
+      - run: npm run test:mcp-ui
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
       # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
       # degradados a warning en eslint.config.mjs y no bloquean.

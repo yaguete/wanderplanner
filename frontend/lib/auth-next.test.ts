@@ -9,6 +9,19 @@ assert.equal(safeNext("/trips"), "/trips")
 assert.equal(safeNext("/trips/abc"), "/trips/abc")
 assert.equal(safeNext("/reset-password"), "/reset-password")
 assert.equal(safeNext("/trips?foo=1"), "/trips?foo=1")
+assert.equal(
+  safeNext("/trips/abc?tab=stay"),
+  "/trips/abc?tab=stay",
+  "el deep link del MCP conserva ?tab= tras el login",
+)
+assert.equal(
+  hrefWithNext("/signup", "/trips/abc?tab=stay"),
+  `/signup?next=${encodeURIComponent("/trips/abc?tab=stay")}`,
+)
+assert.equal(
+  hrefWithNext("/login", "/trips/abc?tab=stay"),
+  `/login?next=${encodeURIComponent("/trips/abc?tab=stay")}`,
+)
 assert.equal(safeNext("//evil.com"), "/trips")
 assert.equal(safeNext("https://evil.com"), "/trips")
 assert.equal(safeNext("https://evil.com/trips"), "/trips")
@@ -45,7 +58,8 @@ assert.equal(
   try {
     completeAuthNavigation("//evil.com")
     completeAuthNavigation("/trips/abc")
-    assert.deepEqual(assigned, ["/trips", "/trips/abc"])
+    completeAuthNavigation("/trips/abc?tab=stay")
+    assert.deepEqual(assigned, ["/trips", "/trips/abc", "/trips/abc?tab=stay"])
   } finally {
     if (previous === undefined) {
       Reflect.deleteProperty(globalThis, "window")

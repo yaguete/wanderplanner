@@ -8,8 +8,9 @@
     "lint": "eslint .",
     "start": "next start",
     "postinstall": "node scripts/copy-circle-flags.mjs",
-    "predev": "node scripts/copy-circle-flags.mjs",
-    "prebuild": "node scripts/copy-circle-flags.mjs",
+    "predev": "node scripts/copy-circle-flags.mjs && node scripts/build-mcp-ui.mjs",
+    "prebuild": "node scripts/copy-circle-flags.mjs && node scripts/build-mcp-ui.mjs",
+    "build:mcp-ui": "node scripts/build-mcp-ui.mjs",
     "test:trip-dates": "tsx lib/trip-dates.test.ts",
     "test:day-heading": "tsx lib/day-heading.test.ts",
     "test:trip-tasks": "tsx lib/trip-tasks.test.ts",
@@ -76,6 +77,7 @@
     "test:trip-merge": "tsx lib/trip-merge.test.ts",
     "test:trip-share": "tsx lib/trip-share.test.ts",
     "test:trip-invite-url": "tsx lib/trip-invite-url.test.ts",
+    "test:trip-tab": "tsx lib/trip-tab.test.ts",
     "test:trip-rail-mark": "tsx lib/trip-rail-mark.test.ts",
     "test:trips-repo": "tsx lib/db/schema-column-errors.test.ts && tsx lib/db/trips-persist.test.ts",
     "test:theme-scope": "tsx lib/theme-scope.test.ts",
@@ -93,7 +95,9 @@
     "test:mcp-search-sources": "tsx lib/mcp/search-sources.test.ts",
     "test:mcp-get-trip-budget": "tsx lib/mcp/get-trip-budget.test.ts",
     "test:mcp-get-country-tasks": "tsx lib/mcp/get-country-tasks.test.ts",
-    "test:mcp-review-trip": "tsx lib/mcp/review-trip.test.ts"
+    "test:mcp-review-trip": "tsx lib/mcp/review-trip.test.ts",
+    "test:mcp-affiliate-gate": "tsx lib/mcp/affiliate-gate.test.ts",
+    "test:mcp-ui": "tsx lib/mcp/ui.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -165,6 +169,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.0",
+    "esbuild": "^0.28.1",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.23.1",

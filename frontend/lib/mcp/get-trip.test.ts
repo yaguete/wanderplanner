@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { applyMcpAffiliateGate } from "./affiliate-gate"
 import {
   GET_TRIP_DETAIL_DAYS_MAX,
   getTripOutput,
@@ -134,6 +135,10 @@ const dirty: McpGetTripRow = {
   assert.ok(blob.includes("example.com/sim"))
   assert.equal(result.origin?.label, "Madrid")
   assert.equal(result.origin?.countryCode, "ES")
+  assert.equal(
+    result.wanderplannerUrl,
+    "https://wanderplanner.ai/trips/11111111-1111-4111-8111-111111111111?tab=itinerary",
+  )
 }
 
 {
@@ -157,6 +162,13 @@ const dirty: McpGetTripRow = {
   assert.equal(result.tasks["activity:palacio de diocleciano"], undefined)
   assert.equal(result.taskCounts.booked, 1)
   assert.equal(result.taskCounts.pending, 1)
+  const gated = applyMcpAffiliateGate(result, false)
+  const gatedBlob = JSON.stringify(gated)
+  assert.equal(gatedBlob.includes("booking.com"), false)
+  assert.equal(gatedBlob.includes("aid=12345"), false)
+  if (gated.mode !== "detail") throw new Error("expected detail")
+  assert.equal(gated.days[0]?.items[0]?.affiliateUrl, null)
+  assert.equal(gated.basics[0]?.affiliateUrl, null)
 }
 
 {

@@ -1,6 +1,7 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler"
 import { isMcpEnabled, mcpResourceOrigin } from "@/lib/mcp/config"
-import { MCP_INSTRUCTIONS, registerWanderplannerTools } from "@/lib/mcp/register-tools"
+import { MCP_INSTRUCTIONS } from "@/lib/mcp/instructions"
+import { registerWanderplannerTools } from "@/lib/mcp/register-tools"
 import { verifyMcpBearer } from "@/lib/mcp/verify-access-token"
 
 export const runtime = "nodejs"

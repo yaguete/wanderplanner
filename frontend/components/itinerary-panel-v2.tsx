@@ -196,6 +196,7 @@ export default function ItineraryPanel({
   onHeaderCollapsedChange,
   activeOnMobile = true,
   desktopSolo = false,
+  initialViewMode = "itinerary",
 }: {
   tripId: string
   onClose?: () => void
@@ -210,6 +211,8 @@ export default function ItineraryPanel({
    * columna de lectura; el botón agrandar/encoger los lleva a sangre.
    */
   desktopSolo?: boolean
+  /** `?tab=` del deep link MCP: gana al default Ruta. */
+  initialViewMode?: ItineraryViewMode
 }) {
   const {
     getTrip,
@@ -297,7 +300,10 @@ export default function ItineraryPanel({
   const insertLineRef = useRef<HTMLDivElement>(null)
   const [selectedDayIds, setSelectedDayIds] = useState<Set<string>>(() => new Set())
   const [pendingDayAction, setPendingDayAction] = useState<DayDestructiveAction | null>(null)
-  const [viewMode, setViewMode] = useState<ItineraryViewMode>("itinerary")
+  const [viewMode, setViewMode] = useState<ItineraryViewMode>(initialViewMode)
+  useEffect(() => {
+    setViewMode(initialViewMode)
+  }, [initialViewMode])
   const [planSurface, setPlanSurface] = useState<"plan" | "budget">("plan")
   /** Lienzo de Calendario/Mapa a sangre. Solo aplica con `desktopSolo`. */
   const [wideCanvas, setWideCanvas] = useState(false)

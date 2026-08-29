@@ -4,6 +4,7 @@ import { stripHtml } from "@/lib/blog-wp-search"
 import { chronicleSearchNeedles } from "@/lib/chronicle-search"
 import { parseSpanDays, unionStayDayIndexes } from "@/lib/item-span"
 import { findMatchRanges } from "@/lib/text-highlight"
+import { tabForItemType, tripWanderplannerUrl } from "@/lib/trip-tab"
 import { normalizeName } from "@/lib/trip-tasks"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
 
@@ -65,6 +66,8 @@ export const searchSourcesOutput = z.object({
       sourceId: z.string(),
       sourceAuthor: z.string(),
       sourceTitle: z.string(),
+      sourceUrl: z.string().nullable(),
+      wanderplannerUrl: z.string().nullable(),
       affiliateUrl: z.string().nullable(),
       quote: z.string().nullable(),
     }),
@@ -288,8 +291,21 @@ export function searchSources(
   const numDays = dayRows.length
   const refs = collectDayItemRefs(trip.days)
   const basicIds = collectBasicIds(trip.basics)
+  const tripId = typeof trip.id === "string" ? trip.id : ""
   const q = query.trim()
   const scored: Array<{ score: number; hit: SearchHit }> = []
+
+  const sourceUrlOf = (source: SearchSourceRow): string | null =>
+    sanitizeAffiliateUrl(typeof source.url === "string" ? source.url : null)
+
+  const wanderplannerUrlOf = (
+    kind: "item" | "basic",
+    type: string,
+    consolidated: boolean,
+  ): string | null => {
+    if (!consolidated || !tripId) return null
+    return tripWanderplannerUrl(tripId, tabForItemType(kind, type))
+  }
 
   for (const source of sources) {
     const author = (source.author ?? "").trim()
@@ -311,6 +327,7 @@ export function searchSources(
         if (score <= 0) continue
         const id = typeof obj.id === "string" ? obj.id : ""
         const days = id ? daysForSourceItem(refs, id, numDays) : []
+        const consolidated = days.length > 0
         scored.push({
           score,
           hit: {
@@ -318,10 +335,12 @@ export function searchSources(
             name,
             type: itemType,
             days,
-            consolidated: days.length > 0,
+            consolidated,
             sourceId: source.id,
             sourceAuthor: author,
             sourceTitle: title,
+            sourceUrl: sourceUrlOf(source),
+            wanderplannerUrl: wanderplannerUrlOf("item", itemType, consolidated),
             affiliateUrl: sanitizeAffiliateUrl(
               typeof obj.affiliateUrl === "string" ? obj.affiliateUrl : null,
             ),
@@ -358,6 +377,8 @@ export function searchSources(
             sourceId: source.id,
             sourceAuthor: author,
             sourceTitle: title,
+            sourceUrl: sourceUrlOf(source),
+            wanderplannerUrl: wanderplannerUrlOf("basic", category, consolidated),
             affiliateUrl: sanitizeAffiliateUrl(
               typeof obj.affiliateUrl === "string" ? obj.affiliateUrl : null,
             ),

@@ -2,14 +2,10 @@
 
 import { Bed, Car, Luggage, Route, Ticket } from "lucide-react"
 import { SegmentedControl } from "@/components/segmented-control"
+import type { TripTab } from "@/lib/trip-tab"
 import type { TripTaskCategory } from "@/types/itinerary"
 
-export type ItineraryViewMode =
-  | "itinerary"
-  | "activities"
-  | "stay"
-  | "transport"
-  | "basics"
+export type ItineraryViewMode = TripTab
 
 /** Etiqueta de cada pestaña de tareas (no aplica a Ruta). */
 export const VIEW_MODE_LABELS: Record<

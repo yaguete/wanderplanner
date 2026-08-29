@@ -15,11 +15,21 @@ export function mcpTextError(text: string) {
   }
 }
 
-export function mcpOk<T extends Record<string, unknown>>(text: string, structuredContent: T) {
-  return {
-    content: [{ type: "text" as const, text }],
-    structuredContent,
-  }
+export function mcpOk<T extends object>(
+  text: string,
+  structuredContent: T,
+  _meta?: Record<string, unknown>,
+) {
+  return _meta
+    ? {
+        content: [{ type: "text" as const, text }],
+        structuredContent,
+        _meta,
+      }
+    : {
+        content: [{ type: "text" as const, text }],
+        structuredContent,
+      }
 }
 
 export function mcpUnavailableTrip() {

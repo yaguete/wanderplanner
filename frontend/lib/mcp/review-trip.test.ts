@@ -3,6 +3,7 @@ import { MANUAL_SOURCE_ID, ASSISTANT_SOURCE_ID } from "@/lib/item-provenance"
 import { buildTripBudgetView } from "@/lib/trip-budget"
 import { taskKeyForItem } from "@/lib/trip-tasks"
 import { MCP_TRIP_UNAVAILABLE } from "./result"
+import { applyMcpAffiliateGate } from "./affiliate-gate"
 import { tripFromBudgetRow } from "./get-trip-budget"
 import { tripLoadFailure } from "./trip-access"
 import {
@@ -50,6 +51,7 @@ function stay(partial: Partial<UserDayItem> & Pick<UserDayItem, "id" | "name">):
 
 const source: SearchSourceRow = {
   id: "src-1",
+  url: "https://blog.example/alaska",
   author: "Patricia",
   title: "Alaska en furgoneta",
   area: "Alaska",
@@ -375,10 +377,10 @@ function main() {
     const evidence = collectReviewEvidence(row, [source])
     assert.ok(evidence.some((h) => h.name === "Glaciar Worthington"))
     assert.equal(evidence[0]?.sourceAuthor, "Patricia")
-    assert.equal(
-      evidence[0]?.affiliateUrl == null || !evidence[0].affiliateUrl.includes("pxf.io"),
-      true,
-    )
+    assert.equal(evidence[0]?.sourceUrl, "https://blog.example/alaska")
+    const gated = applyMcpAffiliateGate({ evidence }, false)
+    assert.equal(JSON.stringify(gated).includes("booking.com"), false)
+    assert.equal(gated.evidence.every((h) => h.affiliateUrl == null), true)
   }
 
   {

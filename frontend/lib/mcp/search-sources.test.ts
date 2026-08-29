@@ -24,6 +24,25 @@ import {
   suggestQueryForSearch,
 } from "./search-layers"
 import type { SourceSuggestHit } from "@/lib/source-suggest"
+import { SITE_URL } from "@/lib/site"
+import { applyMcpAffiliateGate } from "./affiliate-gate"
+
+function hit(over: Partial<SearchHit> & Pick<SearchHit, "name">): SearchHit {
+  return {
+    kind: "item",
+    type: "stay",
+    days: [],
+    consolidated: false,
+    sourceId: "src-1",
+    sourceAuthor: "A",
+    sourceTitle: "T",
+    sourceUrl: null,
+    wanderplannerUrl: null,
+    affiliateUrl: null,
+    quote: null,
+    ...over,
+  }
+}
 
 async function main() {
 const sourceCols = MCP_SEARCH_SOURCE_COLUMNS.split(",").map((c) => c.trim())
@@ -33,6 +52,7 @@ assert.equal(sourceCols.includes("url"), true)
 
 const source: SearchSourceRow = {
   id: "src-1",
+  url: "https://blog.example/split",
   author: "Patricia",
   title: "Split en verano",
   area: "Dalmacia, Croacia",
@@ -95,9 +115,15 @@ const trip: SearchTripRow = {
     "https://www.booking.com/hotel/hr/malaga-palace.html?aid=99",
   )
   assert.equal(hits[0]?.sourceAuthor, "Patricia")
+  assert.equal(hits[0]?.sourceUrl, "https://blog.example/split")
+  assert.equal(hits[0]?.wanderplannerUrl, `${SITE_URL}/trips/t1?tab=stay`)
   assert.equal(JSON.stringify(hits).includes("article_html"), false)
   assert.equal(JSON.stringify(hits).includes("coords"), false)
   searchSourcesOutput.parse({ results: hits })
+  const gated = applyMcpAffiliateGate({ results: hits }, false)
+  assert.equal(JSON.stringify(gated).includes("booking.com"), false)
+  assert.equal(gated.results[0]?.affiliateUrl, null)
+  assert.equal(gated.results[0]?.sourceUrl, "https://blog.example/split")
 }
 
 {
@@ -106,6 +132,40 @@ const trip: SearchTripRow = {
   assert.equal(hits[0]?.kind, "basic")
   assert.equal(hits[0]?.consolidated, true)
   assert.deepEqual(hits[0]?.days, [])
+  assert.equal(hits[0]?.wanderplannerUrl, `${SITE_URL}/trips/t1?tab=basics`)
+}
+
+{
+  const hits = searchSources("konoba", [source], trip, "food")
+  assert.equal(hits.length, 1)
+  assert.equal(hits[0]?.consolidated, false)
+  assert.equal(hits[0]?.wanderplannerUrl, null)
+  assert.equal(hits[0]?.sourceUrl, "https://blog.example/split")
+}
+
+{
+  const withFood: SearchTripRow = {
+    ...trip,
+    days: [
+      { items: [{ sourceItemId: "food-1", type: "food", name: "Konoba Varoš" }] },
+      {
+        items: [
+          {
+            sourceItemId: "stay-1",
+            type: "stay",
+            name: "Hotel Málaga Palace",
+            spanDays: 3,
+          },
+        ],
+      },
+      { items: [] },
+      { items: [] },
+      { items: [] },
+    ],
+  }
+  const hits = searchSources("konoba", [source], withFood, "food")
+  assert.equal(hits[0]?.consolidated, true)
+  assert.equal(hits[0]?.wanderplannerUrl, `${SITE_URL}/trips/t1?tab=activities`)
 }
 
 {
@@ -131,35 +191,22 @@ const trip: SearchTripRow = {
 }
 
 {
-  const hits: SearchHit[] = Array.from({ length: 5 }, (_, i) => ({
-    kind: "item",
-    name: `Lugar ${i}`,
-    type: "stay",
-    days: [],
-    consolidated: false,
-    sourceId: `src-${i}`,
-    sourceAuthor: "A",
-    sourceTitle: "T",
-    affiliateUrl: null,
-    quote: null,
-  }))
+  const hits: SearchHit[] = Array.from({ length: 5 }, (_, i) =>
+    hit({ name: `Lugar ${i}`, sourceId: `src-${i}` }),
+  )
   assert.deepEqual(pickQuoteSourceIds(hits), ["src-0", "src-1", "src-2"])
 }
 
 {
   const pending: SearchHit[] = [
-    {
-      kind: "item",
+    hit({
       name: "Hotel Málaga Palace",
-      type: "stay",
       days: [2],
       consolidated: true,
-      sourceId: "src-1",
       sourceAuthor: "Patricia",
       sourceTitle: "Split en verano",
-      affiliateUrl: null,
       quote: "previo",
-    },
+    }),
   ]
   const out = await attachSearchQuotes(pending, () => new Promise(() => {}), { timeoutMs: 30 })
   assert.equal(out[0]?.quote, null)
@@ -167,18 +214,14 @@ const trip: SearchTripRow = {
 
 {
   const pending: SearchHit[] = [
-    {
-      kind: "item",
+    hit({
       name: "Hotel Málaga Palace",
-      type: "stay",
       days: [2],
       consolidated: true,
-      sourceId: "src-1",
       sourceAuthor: "Patricia",
       sourceTitle: "Split en verano",
-      affiliateUrl: null,
       quote: "previo",
-    },
+    }),
   ]
   let aborted = false
   const out = await attachSearchQuotes(
@@ -200,18 +243,13 @@ const trip: SearchTripRow = {
 
 {
   const pending: SearchHit[] = [
-    {
-      kind: "item",
+    hit({
       name: "Hotel Málaga Palace",
-      type: "stay",
       days: [2],
       consolidated: true,
-      sourceId: "src-1",
       sourceAuthor: "Patricia",
       sourceTitle: "Split en verano",
-      affiliateUrl: null,
-      quote: null,
-    },
+    }),
   ]
   const out = await attachSearchQuotes(pending, async () => {
     return "<p>Nos alojamos en Hotel Málaga Palace frente al mar Adriático.</p>"
@@ -223,18 +261,13 @@ const trip: SearchTripRow = {
 
 {
   const tripHits: SearchHit[] = [
-    {
-      kind: "item",
+    hit({
       name: "Hotel Málaga Palace",
-      type: "stay",
       days: [2],
       consolidated: true,
-      sourceId: "src-1",
       sourceAuthor: "Patricia",
       sourceTitle: "Split en verano",
-      affiliateUrl: null,
-      quote: null,
-    },
+    }),
   ]
   const curated: SourceSuggestHit = {
     url: "https://blog.example/alaska",
