@@ -4,7 +4,7 @@
  * falla si `git diff` no está limpio.
  */
 import { build } from "esbuild"
-import { writeFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -30,6 +30,8 @@ if (!js) {
   throw new Error("esbuild no produjo el bundle del widget MCP")
 }
 
+const bootstrap = readFileSync(join(root, "mcp-ui/src/bootstrap.js"), "utf8")
+const safeBootstrap = bootstrap.replace(/<\/script/gi, "<\\/script")
 const safeJs = js.replace(/<\/script/gi, "<\\/script")
 
 const html = `<!DOCTYPE html>
@@ -80,6 +82,7 @@ ul { margin: 8px 0 0; padding-left: 1.1rem; }
 .cta { margin: 10px 0 0; }
 a { color: var(--wp-ink); font-weight: 600; }
 </style>
+<script>${safeBootstrap}</script>
 </head>
 <body>
 <div id="root"></div>

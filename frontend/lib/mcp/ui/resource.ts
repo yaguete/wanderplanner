@@ -1,4 +1,4 @@
-export const MCP_WIDGET_URI = "ui://wanderplanner/widgets/v1.html"
+export const MCP_WIDGET_URI = "ui://wanderplanner/widgets/v2.html"
 export const MCP_WIDGET_MIME = "text/html;profile=mcp-app"
 
 export const MCP_WIDGET_CSP = {

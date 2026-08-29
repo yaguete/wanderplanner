@@ -6,7 +6,7 @@ import {
   type SourceCardModel,
   type TripWidgetModel,
 } from "../../lib/mcp/ui-views"
-import { handshake, listenMcpMessages, mcpRequest } from "./bridge"
+import { listenMcpMessages, mcpRequest, OPENAI_SET_GLOBALS_EVENT } from "./bridge"
 
 declare global {
   interface Window {
@@ -18,11 +18,22 @@ function hostOpenAi(): OpenAiHost | undefined {
   return typeof window !== "undefined" ? window.openai : undefined
 }
 
-function structuredFromUnknown(raw: unknown): unknown {
-  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return raw
-  const obj = raw as Record<string, unknown>
-  if ("structuredContent" in obj) return obj.structuredContent
-  return raw
+function toolOutputFromEvent(event: Event): unknown {
+  const detail = (event as CustomEvent).detail
+  return detail?.globals?.toolOutput ?? detail ?? hostOpenAi()?.toolOutput
+}
+
+function initialHostPayload(): unknown {
+  return (
+    hostOpenAi()?.toolOutput ??
+    (typeof window !== "undefined" ? (window.__WP_MCP_PAYLOAD ?? window.__wpMcp?.getPayload()) : null) ??
+    null
+  )
+}
+
+function applyIfWidget(raw: unknown, setContent: (next: unknown) => void) {
+  if (raw == null) return
+  if (widgetModelFromContent(raw)) setContent(raw)
 }
 
 async function onOpenHref(href: string) {
@@ -147,14 +158,33 @@ function TripView({ model }: { model: TripWidgetModel }) {
 }
 
 export function App() {
-  const [content, setContent] = useState<unknown>(() => hostOpenAi()?.toolOutput ?? null)
+  const [content, setContent] = useState<unknown>(() => {
+    const raw = initialHostPayload()
+    return widgetModelFromContent(raw) ? raw : null
+  })
 
   useEffect(() => {
-    void handshake().then((result) => {
-      const next = structuredFromUnknown(result)
-      if (next != null) setContent(next)
-    })
-    return listenMcpMessages((structured) => setContent(structured))
+    const apply = (raw: unknown) => applyIfWidget(raw, setContent)
+
+    apply(initialHostPayload())
+
+    const onGlobals = (event: Event) => apply(toolOutputFromEvent(event))
+    window.addEventListener(OPENAI_SET_GLOBALS_EVENT, onGlobals)
+
+    const stopMcp = listenMcpMessages(apply)
+
+    let ticks = 0
+    const timer = window.setInterval(() => {
+      ticks += 1
+      apply(hostOpenAi()?.toolOutput)
+      if (ticks >= 40) window.clearInterval(timer)
+    }, 250)
+
+    return () => {
+      window.removeEventListener(OPENAI_SET_GLOBALS_EVENT, onGlobals)
+      stopMcp()
+      window.clearInterval(timer)
+    }
   }, [])
 
   const model = widgetModelFromContent(content)

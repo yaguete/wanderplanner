@@ -238,6 +238,47 @@ export function tripWidgetFromContent(raw: unknown): TripWidgetModel | null {
   return null
 }
 
+/**
+ * ChatGPT / MCP Apps envuelven el dato. El widget trata todo como
+ * entrada no confiable: solo aceptamos objetos con `layer` o `mode`.
+ * No pelear un `toolOutput: null` si al lado viene `structuredContent`.
+ */
+export function unwrapToolPayload(raw: unknown): unknown {
+  if (typeof raw === "string") {
+    try {
+      return unwrapToolPayload(JSON.parse(raw))
+    } catch {
+      return raw
+    }
+  }
+  const obj = asObject(raw)
+  if (!obj) return raw
+
+  if (obj.toolOutput != null) return unwrapToolPayload(obj.toolOutput)
+  if (obj.structuredContent != null) return unwrapToolPayload(obj.structuredContent)
+  if (obj.globals != null) return unwrapToolPayload(obj.globals)
+  if (obj.result != null && !("mode" in obj) && !("layer" in obj)) {
+    return unwrapToolPayload(obj.result)
+  }
+
+  if (!("mode" in obj) && !("layer" in obj) && Array.isArray(obj.content)) {
+    for (const item of obj.content) {
+      const block = asObject(item)
+      const text = firstText(block)
+      if (!text) continue
+      const peeled = unwrapToolPayload(text)
+      const inner = asObject(peeled)
+      if (inner && ("mode" in inner || "layer" in inner)) return peeled
+    }
+  }
+  return raw
+}
+
+function firstText(block: Record<string, unknown> | null): string | null {
+  return block ? asString(block.text) : null
+}
+
 export function widgetModelFromContent(raw: unknown): TripWidgetModel | SearchWidgetModel | null {
-  return searchWidgetFromContent(raw) ?? tripWidgetFromContent(raw)
+  const data = unwrapToolPayload(raw)
+  return searchWidgetFromContent(data) ?? tripWidgetFromContent(data)
 }

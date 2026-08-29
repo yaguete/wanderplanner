@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { sourceCardFromHit, searchWidgetFromContent, tripWidgetFromContent } from "./ui-views"
+import { sourceCardFromHit, searchWidgetFromContent, tripWidgetFromContent, widgetModelFromContent } from "./ui-views"
 import { openExternalUrl } from "./ui-open-link"
 import { MCP_WIDGET_MIME, MCP_WIDGET_URI, widgetResourceMeta, widgetToolMeta } from "./ui/resource"
 import { MCP_WIDGET_HTML } from "./ui/widget-html"
@@ -136,6 +136,84 @@ async function main() {
 }
 
 {
+  const wrapped = widgetModelFromContent({
+    structuredContent: {
+      mode: "detail",
+      name: "Edimburgo",
+      wanderplannerUrl: "https://wanderplanner.ai/trips/x?tab=itinerary",
+      days: [{ index: 1, label: "Fin de año", items: [{ name: "Hogmanay", type: "activity" }] }],
+    },
+  })
+  assert.equal(wrapped?.kind, "trip")
+  assert.equal(wrapped?.name, "Edimburgo")
+}
+
+{
+  const viaGlobals = widgetModelFromContent({
+    globals: {
+      toolOutput: {
+        mode: "summary",
+        name: "Edimburgo",
+        days: [{ index: 1, label: "Fin de año", itemNames: ["Hogmanay"] }],
+      },
+    },
+  })
+  assert.equal(viaGlobals?.kind, "trip")
+  if (viaGlobals?.mode === "summary") {
+    assert.equal(viaGlobals.days[0]?.itemNames[0], "Hogmanay")
+  }
+}
+
+{
+  assert.equal(widgetModelFromContent({ protocolVersion: "2026-01-26" }), null)
+}
+
+{
+  const asJson = widgetModelFromContent(
+    JSON.stringify({
+      mode: "detail",
+      name: "Edimburgo",
+      days: [{ index: 1, label: "Fin de año", items: [{ name: "Hogmanay", type: "activity" }] }],
+    }),
+  )
+  assert.equal(asJson?.kind, "trip")
+  assert.equal(asJson?.name, "Edimburgo")
+}
+
+{
+  const callResult = widgetModelFromContent({
+    content: [{ type: "text", text: "Edimburgo · 7 días" }],
+    structuredContent: {
+      mode: "detail",
+      name: "Edimburgo",
+      days: [{ index: 1, label: "Fin de año", items: [{ name: "Hogmanay", type: "activity" }] }],
+    },
+    toolOutput: null,
+  })
+  assert.equal(callResult?.kind, "trip")
+  assert.equal(callResult?.name, "Edimburgo")
+}
+
+{
+  const fromText = widgetModelFromContent({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          mode: "summary",
+          name: "Edimburgo",
+          days: [{ index: 1, label: "Fin de año", itemNames: ["Hogmanay"] }],
+        }),
+      },
+    ],
+  })
+  assert.equal(fromText?.kind, "trip")
+  if (fromText?.mode === "summary") {
+    assert.equal(fromText.days[0]?.itemNames[0], "Hogmanay")
+  }
+}
+
+{
   const calls: string[] = []
   const viaOpenai = await openExternalUrl("https://wanderplanner.ai/trips/x", {
     openai: { openExternal: ({ href }) => calls.push(href) },
@@ -182,7 +260,7 @@ async function main() {
   assert.equal(viaWindow, "fallback")
 }
 
-assert.equal(MCP_WIDGET_URI, "ui://wanderplanner/widgets/v1.html")
+assert.equal(MCP_WIDGET_URI, "ui://wanderplanner/widgets/v2.html")
 assert.equal(MCP_WIDGET_MIME, "text/html;profile=mcp-app")
 assert.deepEqual(widgetResourceMeta().ui.csp.connectDomains, [])
 assert.deepEqual(widgetResourceMeta().ui.csp.resourceDomains, [])
@@ -199,6 +277,10 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   assert.ok(html.includes('id="root"'))
   assert.ok(html.includes('type="module"'))
   assert.ok(html.includes("#86675B"))
+  assert.ok(html.includes("ui/initialize"))
+  assert.ok(html.includes("ui/notifications/initialized"))
+  assert.ok(html.includes("ui/notifications/tool-result"))
+  assert.ok(html.includes("openai:set_globals"))
   assert.equal(html.includes("booking.com"), false)
   assert.equal(html.includes("pxf.io"), false)
   assert.equal(html.includes("mapbox"), false)
