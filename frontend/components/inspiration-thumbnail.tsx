@@ -14,19 +14,7 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import type { SourceBasicItem, SourceItem } from "@/types/itinerary"
-
-/** Ratón fino vs táctil: el hover preview no vale en touch; el tap lightbox sí. */
-function useFinePointer() {
-  const [fine, setFine] = useState<boolean | null>(null)
-  useEffect(() => {
-    const mql = window.matchMedia("(hover: hover) and (pointer: fine)")
-    const onChange = () => setFine(mql.matches)
-    onChange()
-    mql.addEventListener("change", onChange)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-  return fine
-}
+import { useFinePointer } from "@/hooks/use-fine-pointer"
 
 type ItineraryItemProps = {
   kind: "item"

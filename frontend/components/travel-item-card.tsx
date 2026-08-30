@@ -1,6 +1,6 @@
 "use client"
 
-import { createElement, useEffect, useState, type ReactNode } from "react"
+import { createElement, type ReactNode } from "react"
 import {
   Car,
   Check,
@@ -35,6 +35,7 @@ import { BASIC_ICONS, BASIC_LABELS, ITEM_COLORS, ITEM_LABELS } from "@/lib/item-
 import { itemProvenanceLabel } from "@/lib/item-provenance"
 import type { FlightSearchHit } from "@/lib/flight-search"
 import type { BasicCategory, ItemType } from "@/types/itinerary"
+import { useFinePointer } from "@/hooks/use-fine-pointer"
 
 /** Hover de 1px solo con puntero fino; no se pega en táctil. */
 const CARD_MOTION =
@@ -228,21 +229,9 @@ function ItemOverflowMenu({
   )
 }
 
-function useFinePointer(): boolean {
-  const [fine, setFine] = useState(false)
-  useEffect(() => {
-    const mql = window.matchMedia("(hover: hover) and (pointer: fine)")
-    const sync = () => setFine(mql.matches)
-    sync()
-    mql.addEventListener("change", sync)
-    return () => mql.removeEventListener("change", sync)
-  }, [])
-  return fine
-}
-
 /** Nota en ficha de Ruta: tooltip al hover, popover al tap (como el calendario). */
 function ItemNoteHint({ note }: { note: string }) {
-  const finePointer = useFinePointer()
+  const finePointer = useFinePointer() === true
   const trigger = (
     <button
       type="button"

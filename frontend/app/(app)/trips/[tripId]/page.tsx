@@ -65,13 +65,33 @@ function panelCount(p: TripPanelState): number {
   return (p.sources ? 1 : 0) + (p.plan ? 1 : 0) + (p.assistant ? 1 : 0)
 }
 
-function DesktopPanelSlot({
-  active,
+/**
+ * Hueco de panel (Fuentes / Viaje / Asistente). **Un solo nodo para las dos
+ * disposiciones**: quién se ve lo decide CSS (`max-md:` / `md:`), no el árbol.
+ *
+ * Antes había dos ramas de JSX (`isMobile ? … : …`). Cruzar 768 px movía los
+ * paneles a otra posición del árbol, así que React desmontaba y volvía a montar
+ * `InspirationPanel` y `ItineraryPanel` enteros —cientos de tarjetas— de golpe,
+ * y el panel Fuentes perdía pestaña, búsqueda y scroll en cada cambio de
+ * tamaño. No es hipotético en producción: un iPad mini al girar, o el
+ * multitarea a pantalla partida, cruzan el breakpoint.
+ *
+ * Es además la regla que ya declara el shell en `trips-shell.tsx`: los
+ * breakpoints van en CSS, no en `useIsMobile()`. `isMobile` se queda solo para
+ * `inert` / `aria-hidden`, que son atributos y no cambian la forma del árbol.
+ */
+function TripPanelSlot({
+  mobileActive,
+  desktopActive,
+  effectiveActive,
   label,
   padStart,
   children,
 }: {
-  active: boolean
+  mobileActive: boolean
+  desktopActive: boolean
+  /** El que manda para `inert` / `aria-hidden`: eso sí depende del viewport. */
+  effectiveActive: boolean
   label: string
   /** Separación respecto al panel activo anterior (evita gaps fantasma con flex:0). */
   padStart?: boolean
@@ -79,20 +99,24 @@ function DesktopPanelSlot({
 }) {
   return (
     <div
-      inert={!active}
+      inert={!effectiveActive}
       className={cn(
-        "@container min-h-0 overflow-hidden rounded-lg bg-background shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-        "transition-opacity duration-150 ease-out",
-        active
-          ? "min-w-0 opacity-100 [contain:layout_paint]"
-          : "pointer-events-none w-0 min-w-0 opacity-0 [content-visibility:hidden]",
-        active && padStart && "ml-2.5",
+        "@container",
+        // Móvil: la sección activa va en flujo (el scroller es el documento);
+        // la inactiva, `display:none` — el componente sigue montado.
+        mobileActive ? "max-md:flex max-md:flex-1 max-md:flex-col" : "max-md:hidden",
+        // Escritorio: tarjeta con alto acotado y `flex` alícuota.
+        "md:block md:min-h-0 md:overflow-hidden md:rounded-lg md:bg-background",
+        "md:shadow-[0_1px_2px_rgba(0,0,0,0.04)] md:transition-opacity md:duration-150 md:ease-out",
+        desktopActive
+          ? "md:min-w-0 md:flex-[1_1_0%] md:opacity-100 md:[contain:layout_paint]"
+          : "md:pointer-events-none md:w-0 md:min-w-0 md:flex-[0_0_0%] md:opacity-0 md:[content-visibility:hidden]",
+        desktopActive && padStart && "md:ml-2.5",
       )}
-      style={{ flex: active ? "1 1 0%" : "0 0 0%" }}
-      aria-hidden={!active}
+      aria-hidden={!effectiveActive}
       aria-label={label}
     >
-      <div className="flex h-full min-h-0 flex-col">{children}</div>
+      <div className="flex flex-col max-md:flex-1 md:h-full md:min-h-0">{children}</div>
     </div>
   )
 }
@@ -438,43 +462,55 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         }}
       />
 
-      {isMobile ? (
-        <div
-          className="relative flex flex-1 flex-col"
-          style={
-            mobileNavHidden
-              ? ({ "--wp-nav-height": "var(--wp-nav-height-compact)" } as CSSProperties)
-              : undefined
-          }
+      {/*
+        Un solo árbol para móvil y escritorio: cruzar 768 px cambia clases, no
+        la posición de los paneles, así que ni `InspirationPanel` ni
+        `ItineraryPanel` se remontan (ver `TripPanelSlot`).
+
+        Móvil: las secciones no se apilan en `absolute inset-0` — con el
+        documento como scroller la activa tiene que estar en flujo para darle
+        altura al documento; la inactiva va con `display:none` y su posición de
+        scroll la guarda `sectionScrollRef`.
+      */}
+      <div
+        className={cn(
+          "relative flex flex-1 flex-col md:min-h-0 md:flex-row md:p-2.5 md:pt-0",
+          !panelsHydrated && "md:invisible",
+        )}
+        style={
+          isMobile && mobileNavHidden
+            ? ({ "--wp-nav-height": "var(--wp-nav-height-compact)" } as CSSProperties)
+            : undefined
+        }
+      >
+        {!isMobile && panelCount(panels) === 0 ? (
+          <TripPanelsEmpty onSelect={togglePanel} destination={emptyDestination} />
+        ) : null}
+
+        <TripPanelSlot
+          mobileActive={mobileSection === "sources"}
+          desktopActive={panels.sources}
+          effectiveActive={isMobile ? mobileSection === "sources" : panels.sources}
+          label="Fuentes"
+          padStart={false}
         >
-          {/*
-            Las secciones ya no se apilan en `absolute inset-0`: con el
-            documento como scroller la activa tiene que estar en flujo para
-            darle altura al documento. La inactiva va con `display:none` — el
-            componente sigue montado (React conserva su estado) y su posición
-            de scroll la guarda `sectionScrollRef`.
-          */}
-          <div
-            className={cn(
-              "@container",
-              mobileSection === "sources" ? "flex flex-1 flex-col" : "hidden",
-            )}
-            aria-hidden={mobileSection !== "sources"}
-          >
-            {sourcesNode}
-          </div>
+          {sourcesNode}
+        </TripPanelSlot>
 
-          <div
-            className={cn(
-              "@container",
-              mobileSection === "plan" ? "flex flex-1 flex-col" : "hidden",
-            )}
-            aria-hidden={mobileSection !== "plan"}
-          >
-            {planNode}
-          </div>
+        <TripPanelSlot
+          mobileActive={mobileSection === "plan"}
+          desktopActive={panels.plan}
+          effectiveActive={isMobile ? mobileSection === "plan" : panels.plan}
+          label="Viaje"
+          padStart={panels.sources}
+        >
+          {planNode}
+        </TripPanelSlot>
 
-          {assistantMounted ? (
+        {/* El asistente sí cambia de forma (chat a pantalla completa vs panel),
+            y es barato: pocas tarjetas, montado en diferido. Sigue ramificando. */}
+        {isMobile ? (
+          assistantMounted ? (
             <AssistantPanelLayer
               open={mobileSection === "assistant"}
               onOpenChange={(open) => {
@@ -491,44 +527,27 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
                 />
               }
             />
-          ) : null}
-
-          {mobileSection !== "assistant" ? (
-            <TripMobileNav
-              active={mobileSection}
-              onChange={selectMobileSection}
-              compact={mobileNavHidden}
-            />
-          ) : null}
-        </div>
-      ) : (
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 p-2.5 pt-0",
-            !panelsHydrated && "invisible",
-          )}
-        >
-          {panelCount(panels) === 0 ? (
-            <TripPanelsEmpty onSelect={togglePanel} destination={emptyDestination} />
-          ) : null}
-
-          <DesktopPanelSlot active={panels.sources} label="Fuentes" padStart={false}>
-            {sourcesNode}
-          </DesktopPanelSlot>
-
-          <DesktopPanelSlot active={panels.plan} label="Viaje" padStart={panels.sources}>
-            {planNode}
-          </DesktopPanelSlot>
-
-          <DesktopPanelSlot
-            active={panels.assistant}
+          ) : null
+        ) : (
+          <TripPanelSlot
+            mobileActive={false}
+            desktopActive={panels.assistant}
+            effectiveActive={panels.assistant}
             label="Asistente"
             padStart={panels.sources || panels.plan}
           >
             {assistantNode}
-          </DesktopPanelSlot>
-        </div>
-      )}
+          </TripPanelSlot>
+        )}
+
+        {isMobile && mobileSection !== "assistant" ? (
+          <TripMobileNav
+            active={mobileSection}
+            onChange={selectMobileSection}
+            compact={mobileNavHidden}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }

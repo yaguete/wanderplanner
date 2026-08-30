@@ -32,6 +32,7 @@ import { formatDayDate, toISODate } from "@/lib/trip-dates"
 import { expandSpannedItems } from "@/lib/item-span"
 import { cn } from "@/lib/utils"
 import type { UserDay, UserDayItem } from "@/types/itinerary"
+import { useFinePointer } from "@/hooks/use-fine-pointer"
 
 export type RouteViewMode = "list" | "calendar" | "map"
 
@@ -103,18 +104,6 @@ function persistCalendarScale(scale: CalendarScale): void {
   }
 }
 
-function useFinePointer(): boolean {
-  const [fine, setFine] = useState(false)
-  useEffect(() => {
-    const mql = window.matchMedia("(hover: hover) and (pointer: fine)")
-    const sync = () => setFine(mql.matches)
-    sync()
-    mql.addEventListener("change", sync)
-    return () => mql.removeEventListener("change", sync)
-  }, [])
-  return fine
-}
-
 function useCalendarDensity() {
   const ref = useRef<HTMLDivElement>(null)
   const [density, setDensity] = useState<CalendarDensity>(() =>
@@ -180,7 +169,7 @@ export const ItineraryCalendarView = memo(function ItineraryCalendarView({
   onOpenDay: (dayId: string) => void
 }) {
   const { rootRef, density } = useCalendarDensity()
-  const finePointer = useFinePointer()
+  const finePointer = useFinePointer() === true
   const todayISO = useMemo(() => toISODate(new Date()), [])
   const [scale, setScale] = useState<CalendarScale>("month")
   const [anchorISO, setAnchorISO] = useState(() =>
