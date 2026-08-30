@@ -39,7 +39,6 @@ import { PanelTabs } from "@/components/panel-tabs"
 import { CollapsedChromeReveal } from "@/components/collapsed-chrome-reveal"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useViewportIdle } from "@/hooks/use-viewport-idle"
 import { useStableList } from "@/hooks/use-stable-list"
 import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
@@ -1680,53 +1679,15 @@ function WindowVirtualSourceRows({
   )
 }
 
-/** Móvil sin virtualizar: el window virtualizer no aguanta un chorro de resize. */
-function StaticMobileSourceRows({
-  groups,
-  renderItem,
-  onAddAllDay,
-  isDayComplete,
-  toolbar,
-}: VirtualSourceRowsProps) {
-  return (
-    <>
-      {toolbar ? (
-        <div className="px-4 pb-2 pt-3">
-          <div className="panel-column">{toolbar}</div>
-        </div>
-      ) : null}
-      <div className="space-y-5 px-4 pb-[var(--wp-nav-clearance)] pt-1">
-        <div className="panel-column space-y-5">
-          {groups.map((group, gi) => (
-            <div key={gi} className="space-y-2">
-              {group.items.length > 0 && (onAddAllDay || group.day != null) ? (
-                <DayGroupHeading
-                  day={group.day}
-                  items={group.items}
-                  onAddAll={onAddAllDay}
-                  complete={isDayComplete?.(group.day, group.items) ?? false}
-                />
-              ) : null}
-              {group.items.map((item) => renderItem(item))}
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  )
-}
-
 /** Lista virtualizada: solo monta las filas visibles (+ overscan). */
 function VirtualSourceRows(props: VirtualSourceRowsProps) {
   const isMobile = useIsMobile()
-  const idle = useViewportIdle(isMobile)
   // Un virtualizador por scroller: no se puede alternar el hook dentro de uno.
-  // En móvil, esperar a que el viewport repose: al pasar de escritorio a
-  // dispositivo DevTools dispara decenas de `resize` y `useWindowVirtualizer`
-  // encadena updates síncronos (React #185).
-  if (!isMobile) return <ElementVirtualSourceRows {...props} />
-  if (!idle) return <StaticMobileSourceRows {...props} />
-  return <WindowVirtualSourceRows {...props} />
+  return isMobile ? (
+    <WindowVirtualSourceRows {...props} />
+  ) : (
+    <ElementVirtualSourceRows {...props} />
+  )
 }
 
 function ItemRow({
