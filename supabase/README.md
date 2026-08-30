@@ -10,47 +10,38 @@ Proyecto: `https://kzriijgdkrdruikmpufl.supabase.co`
 2. **Auth → URL Configuration**  
    Añade `http://localhost:3000/**` (y el dominio de producción) en Redirect URLs. Site URL: `http://localhost:3000` en local.
 
-3. **Aplicar migraciones** (SQL Editor → New query, o CLI):
+3. **Aplicar migraciones** — desde el **30 ago 2026, con `supabase db push`**:
 
 ```bash
-# Opción A: pegar en orden el contenido de
-#   migrations/20260726220000_init_wanderplanner.sql
-#   migrations/20260726223000_cleanup_anonymous_users.sql
-#   migrations/20260726230000_grant_data_api.sql
-#   migrations/20260728000000_place_thumbs_and_covers.sql
-#   migrations/20260728120000_usage_events.sql
-#   migrations/20260803000000_grant_service_role_backend_tables.sql
-#   migrations/20260803120000_article_extractions_validation.sql
-#   migrations/20260803180000_trip_tasks.sql
-#   migrations/20260804010000_day_summary_usage.sql
-#   migrations/20260808000000_sources_total_days.sql
-#   migrations/20260808190000_partner_prewarm_usage.sql
-#   migrations/20260808200000_dismissed_country_tasks.sql
-#   migrations/20260808210000_country_task_suggestions.sql
-#   migrations/20260808220000_trip_origin.sql
-#   migrations/20260816120000_ai_transfer_consent.sql
-#   migrations/20260816180000_guest_trip_claim.sql
-#   migrations/20260817000000_place_thumbs_wikimedia.sql
-#   migrations/20260817120000_photo_paid_usage.sql
-#   migrations/20260817190000_delete_own_account.sql
-#   migrations/20260818120000_trip_seed_source_key.sql
-#   migrations/20260818130000_cleanup_anonymous_users_v2.sql
-#   migrations/20260818200000_funnel_events.sql
-#   migrations/20260819120000_maps_link_pins.sql
-
-# Opción B: NO disponible hoy. `supabase db push` no funciona en este proyecto:
-# no hay supabase/config.toml, el CLI no está vinculado y el remoto no tiene
-# historial (`supabase_migrations.schema_migrations` vacío, porque todo se ha
-# aplicado a mano). Si se ejecutara, intentaría replicar TODAS las migraciones
-# desde el init, y ese fichero tiene 24 `create policy` / `create trigger` sin
-# `if exists`: falla en el primero y no aplica nada.
-#
-# Para habilitarlo algún día, una sola vez (pide la contraseña de Postgres):
-#   supabase init
-#   supabase link --project-ref kzriijgdkrdruikmpufl
-#   supabase migration repair --status applied <las 15 versiones ya aplicadas>
-# A partir de ahí `supabase db push` sí aplica solo lo pendiente.
+supabase db push            # aplica solo lo pendiente
+supabase db push --dry-run  # ver qué haría, sin tocar nada
+supabase migration list     # historial local vs remoto
 ```
+
+El CLI ya está vinculado (`supabase link --project-ref kzriijgdkrdruikmpufl`), existe `supabase/config.toml` y el historial remoto (`supabase_migrations.schema_migrations`) está **alineado con las 37 migraciones del repo**: `db push --dry-run` responde *«Remote database is up to date»*.
+
+> ### ⚠️ Aplica siempre con `db push`, no por MCP ni pegando SQL en el editor
+>
+> Las dos vías **funcionan**, pero solo `db push` deja el historial cuadrado. Aplicar por MCP registra un timestamp propio, al segundo (`20260824101635`), que no coincide con el del fichero, redondeado (`20260824120000_trip_sharing.sql`). El SQL es el mismo, pero para el CLI son **dos migraciones distintas**.
+>
+> Eso ya pasó: entre el 24 y el 30 de agosto se acumularon **diez** entradas remotas sin fichero local, sin que nadie lo notara, y `db push` quedó bloqueado con *«Remote migration versions not found in local migrations directory»*. Se arregló el 30 de agosto emparejando las nueve duplicadas (todas tenían su fichero en el repo, ninguna era SQL huérfano) y renombrando la décima.
+>
+> Si por lo que sea vuelve a aplicarse algo fuera de `db push`, el desfase se detecta con `supabase migration list` (columna `local` vacía) y se arregla así:
+>
+> ```bash
+> # ver qué son antes de decidir (SQL Editor):
+> #   select version, name from supabase_migrations.schema_migrations where version in (...)
+>
+> # si el SQL ya está en un fichero del repo → borrar solo el registro duplicado:
+> supabase migration repair --status reverted <versiones>
+>
+> # si el SQL NO existe en el repo → guardarlo como fichero CON ESA MISMA versión,
+> # nunca `supabase db pull` (vuelca el esquema entero y arrasa los 37 ficheros curados)
+> ```
+>
+> `migration repair` **no ejecuta SQL en ningún caso**: solo escribe la tabla de historial. Lo peligroso no es el comando, es marcar `applied` algo que no lo esté — entonces `db push` lo saltará para siempre y el esquema divergirá en silencio.
+
+Para reconstruir el proyecto desde cero (entorno nuevo), `supabase db push` aplica las 37 en orden. Pegarlas a mano en el SQL Editor sigue siendo posible, pero **deja el historial sin registrar** y reproduce el problema de arriba.
 
 `20260803180000_trip_tasks.sql` debe aplicarse **antes** de desplegar un frontend que lea `tasks` / `extra_tasks` / `num_travelers` / `currency` (si no, PostgREST 400 y `/trips` no carga). Es aditiva e idempotente: segura con el front viejo aún en producción.
 

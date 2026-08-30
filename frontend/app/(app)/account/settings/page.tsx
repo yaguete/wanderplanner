@@ -249,43 +249,45 @@ export default function AccountSettingsPage() {
                 )}
               </section>
 
-              <ConnectedAppsSection />
+              <div className="flex flex-col gap-3">
+                <ConnectedAppsSection />
 
-              <section>
-                <button
-                  type="button"
-                  className="inline-flex h-11 w-full items-center justify-center gap-1 text-sm font-medium text-destructive hover:text-destructive/90 sm:h-auto sm:w-auto sm:justify-start"
-                  aria-expanded={showDelete}
-                  onClick={() => setShowDelete((open) => !open)}
-                >
-                  Borrar cuenta
-                  <ChevronDown
-                    className={cn("size-3.5 transition-transform", showDelete && "rotate-180")}
-                    aria-hidden
-                  />
-                </button>
-                {showDelete ? (
-                  <div className="mt-4">
-                    <p className="text-sm text-muted-foreground">
-                      Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste, todas tus
-                      conversaciones con el asistente y las autorizaciones a asistentes que hayas conectado.
-                      Esta acción no se puede deshacer.
-                      {sharedWarning ? ` ${sharedWarning}` : ""}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className="mt-4 h-11 w-full sm:w-auto sm:px-6"
-                      onClick={() => {
-                        setDeleteTyped("")
-                        setDeleteOpen(true)
-                      }}
-                    >
-                      Borrar cuenta
-                    </Button>
-                  </div>
-                ) : null}
-              </section>
+                <section>
+                  <button
+                    type="button"
+                    className="inline-flex h-11 w-full items-center justify-center gap-1 text-sm font-medium text-destructive hover:text-destructive/90 sm:h-auto sm:w-auto sm:justify-start"
+                    aria-expanded={showDelete}
+                    onClick={() => setShowDelete((open) => !open)}
+                  >
+                    Borrar cuenta
+                    <ChevronDown
+                      className={cn("size-3.5 transition-transform", showDelete && "rotate-180")}
+                      aria-hidden
+                    />
+                  </button>
+                  {showDelete ? (
+                    <div className="mt-4">
+                      <p className="text-sm text-muted-foreground">
+                        Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste, todas tus
+                        conversaciones con el asistente y las autorizaciones a asistentes que hayas conectado.
+                        Esta acción no se puede deshacer.
+                        {sharedWarning ? ` ${sharedWarning}` : ""}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        className="mt-4 h-11 w-full sm:w-auto sm:px-6"
+                        onClick={() => {
+                          setDeleteTyped("")
+                          setDeleteOpen(true)
+                        }}
+                      >
+                        Borrar cuenta
+                      </Button>
+                    </div>
+                  ) : null}
+                </section>
+              </div>
             </div>
           )}
         </div>
