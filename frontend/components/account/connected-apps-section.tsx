@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -19,6 +20,7 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 export function ConnectedAppsSection() {
+  const [open, setOpen] = useState(false)
   const [grants, setGrants] = useState<ConnectedGrant[] | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [revokeTarget, setRevokeTarget] = useState<ConnectedGrant | null>(null)
@@ -42,8 +44,9 @@ export function ConnectedAppsSection() {
   }, [])
 
   useEffect(() => {
+    if (!open) return
     void reload()
-  }, [reload])
+  }, [open, reload])
 
   const handleRevoke = async () => {
     if (!revokeTarget || revoking) return
@@ -62,52 +65,67 @@ export function ConnectedAppsSection() {
 
   return (
     <section>
-      <h2 className="text-base font-medium text-foreground">Asistentes conectados</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Aplicaciones a las que has dado acceso a tus viajes. Revocar invalida sus sesiones
-        y permisos de renovación al momento.
-      </p>
+      <button
+        type="button"
+        className="inline-flex h-11 w-full items-center justify-center gap-1 text-sm font-medium text-foreground hover:text-foreground/90 sm:h-auto sm:w-auto sm:justify-start"
+        aria-expanded={open}
+        onClick={() => setOpen((next) => !next)}
+      >
+        Asistentes conectados
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="mt-4">
+          <p className="text-sm text-muted-foreground">
+            Aplicaciones a las que has dado acceso a tus viajes. Revocar invalida sus sesiones
+            y permisos de renovación al momento.
+          </p>
 
-      {grants === null ? (
-        <div className="mt-4 flex justify-center rounded-xl border border-dashed border-border px-6 py-8">
-          <Spinner className="size-5 text-muted-foreground" />
+          {grants === null ? (
+            <div className="mt-4 flex justify-center rounded-xl border border-dashed border-border px-6 py-8">
+              <Spinner className="size-5 text-muted-foreground" />
+            </div>
+          ) : loadError ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              No se pudieron cargar las aplicaciones conectadas. Recarga la página.
+            </p>
+          ) : grants.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              En este momento, ningún asistente externo tiene acceso a tus viajes.
+            </p>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-3">
+              {grants.map((grant) => {
+                const granted = formatGrantDate(grant.grantedAt)
+                return (
+                  <li
+                    key={grant.clientId}
+                    className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{grant.clientName}</p>
+                      {granted ? (
+                        <p className="mt-0.5 text-sm text-muted-foreground">Conectado el {granted}</p>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 w-full sm:w-auto sm:px-4"
+                      onClick={() => setRevokeTarget(grant)}
+                    >
+                      Revocar
+                    </Button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
-      ) : loadError ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          No se pudieron cargar las aplicaciones conectadas. Recarga la página.
-        </p>
-      ) : grants.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Ningún asistente externo tiene acceso a tus viajes.
-        </p>
-      ) : (
-        <ul className="mt-4 flex flex-col gap-3">
-          {grants.map((grant) => {
-            const granted = formatGrantDate(grant.grantedAt)
-            return (
-              <li
-                key={grant.clientId}
-                className="flex flex-col gap-3 rounded-xl border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{grant.clientName}</p>
-                  {granted ? (
-                    <p className="mt-0.5 text-sm text-muted-foreground">Conectado el {granted}</p>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 w-full sm:w-auto sm:px-4"
-                  onClick={() => setRevokeTarget(grant)}
-                >
-                  Revocar
-                </Button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      ) : null}
 
       <AlertDialog
         open={revokeTarget !== null}
