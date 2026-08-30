@@ -64,9 +64,8 @@ export function ConnectedAppsSection() {
     <section>
       <h2 className="text-base font-medium text-foreground">Asistentes conectados</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Aplicaciones a las que has dado acceso de lectura a tus viajes. Revocar invalida
-        sus sesiones y tokens de renovación al momento; un token de acceso que ya tuvieran
-        puede seguir valiendo unos minutos.
+        Aplicaciones a las que has dado acceso a tus viajes. Revocar invalida sus sesiones
+        y permisos de renovación al momento.
       </p>
 
       {grants === null ? (
@@ -79,7 +78,7 @@ export function ConnectedAppsSection() {
         </p>
       ) : grants.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">
-          Ningún asistente tiene acceso a tus viajes.
+          Ningún asistente externo tiene acceso a tus viajes.
         </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-3">
