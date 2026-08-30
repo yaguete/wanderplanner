@@ -4,21 +4,28 @@
  * Selector de día para consolidar un ítem de una fuente en «Mi viaje».
  * Modal (no popover) para que en viajes largos la lista de días siga siendo
  * alcanzable: scroll propio + filtro cuando hay muchos días.
+ *
+ * Stay y activity: el día elegido es el ancla; «Noches» / «Días» escribe
+ * `spanDays` igual que el alta manual. Food y transport siguen en un clic.
  */
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Car, Check, Home, MapPin, Plus, Search, Ticket, UtensilsCrossed } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { getDayUserDescription } from "@/lib/day-heading"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
 import { itemTypeLabel } from "@/lib/item-styles"
+import { itemTakesCalendarSpan, spanDaysForWrite } from "@/lib/item-span"
 import type { ItemType, UserDay } from "@/types/itinerary"
 
 /** A partir de aquí la lista se vuelve incómoda sin buscador. */
@@ -44,7 +51,7 @@ export type AddToDayDialogProps = {
   description?: string
   /** Números de día (1-based) donde ya está este ítem (o todos, en lote). */
   addedDayNumbers?: number[]
-  onSelect: (dayId: string) => void
+  onSelect: (dayId: string, spanDays?: number) => void
   /** Crea un día vacío al final de la ruta (mismo `addDay` que «Mi viaje»). */
   onAddDay?: () => void
 }
@@ -62,10 +69,18 @@ export function AddToDayDialog({
   onSelect,
   onAddDay,
 }: AddToDayDialogProps) {
+  const nightsFieldId = useId()
   const [query, setQuery] = useState("")
+  const [anchorDayId, setAnchorDayId] = useState<string | null>(null)
+  const [nights, setNights] = useState(1)
+
+  const spanKind = itemType != null && itemTakesCalendarSpan(itemType)
 
   useEffect(() => {
-    if (open) setQuery("")
+    if (!open) return
+    setQuery("")
+    setAnchorDayId(null)
+    setNights(1)
   }, [open])
 
   const rows = useMemo(() => {
@@ -83,6 +98,18 @@ export function AddToDayDialog({
     })
   }, [days, tripStartDate, addedDayNumbers])
 
+  const selectedDayIndex = useMemo(
+    () => (anchorDayId ? Math.max(0, days.findIndex((d) => d.id === anchorDayId)) : -1),
+    [anchorDayId, days],
+  )
+  const maxNights =
+    spanKind && selectedDayIndex >= 0 ? Math.max(1, days.length - selectedDayIndex) : 1
+
+  useEffect(() => {
+    if (!spanKind) return
+    setNights((n) => Math.min(Math.max(1, n), maxNights))
+  }, [spanKind, maxNights])
+
   const needle = query.trim().toLowerCase()
   const visibleRows = needle
     ? rows.filter(
@@ -97,11 +124,28 @@ export function AddToDayDialog({
   const showItemPreview = !!itemName && !!itemType
   const descriptionText =
     description ??
-    (itemType
-      ? `Elige en qué día de tu viaje quieres colocar ${ADD_TO_DAY_OBJECT[itemType]}.`
-      : "Elige en qué día de tu viaje quieres colocar estos ítems.")
+    (itemType === "stay"
+      ? "Elige el día de entrada y cuántas noches quieres quedarte."
+      : itemType === "activity"
+        ? "Elige el día de inicio y cuántos días dura."
+        : itemType
+          ? `Elige en qué día de tu viaje quieres colocar ${ADD_TO_DAY_OBJECT[itemType]}.`
+          : "Elige en qué día de tu viaje quieres colocar estos ítems.")
+
+  const spanEndNumber =
+    spanKind && selectedDayIndex >= 0 ? selectedDayIndex + nights : null
+
+  const confirmSpan = () => {
+    if (!anchorDayId) return
+    onSelect(anchorDayId, spanDaysForWrite(nights, selectedDayIndex, days.length))
+    onOpenChange(false)
+  }
 
   const handleSelect = (dayId: string) => {
+    if (spanKind) {
+      setAnchorDayId(dayId)
+      return
+    }
     onSelect(dayId)
     onOpenChange(false)
   }
@@ -119,7 +163,7 @@ export function AddToDayDialog({
         <DialogHeader className="shrink-0 space-y-3 border-b border-border px-5 pb-4 pt-5 text-left max-sm:pt-[max(1.25rem,env(safe-area-inset-top))]">
           <div className="pr-16">
             <DialogTitle className="text-base font-semibold tracking-tight">
-              Añadir al día
+              {spanKind && itemType === "stay" ? "Añadir alojamiento" : "Añadir al día"}
             </DialogTitle>
             <DialogDescription className="mt-1">
               {descriptionText}
@@ -184,15 +228,29 @@ export function AddToDayDialog({
             Ningún día coincide con «{query.trim()}».
           </p>
         ) : (
-          <ul className="max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:space-y-1.5 max-sm:px-3 max-sm:pt-3 max-sm:pb-[env(safe-area-inset-bottom)]">
-            {visibleRows.map((row) => (
+          <ul className={cn(
+            "max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:space-y-1.5 max-sm:px-3 max-sm:pt-3",
+            !spanKind && "max-sm:pb-[env(safe-area-inset-bottom)]",
+          )}>
+            {visibleRows.map((row) => {
+              const isAnchor = spanKind && row.id === anchorDayId
+              const inSpan =
+                spanKind &&
+                selectedDayIndex >= 0 &&
+                spanEndNumber != null &&
+                row.number > selectedDayIndex + 1 &&
+                row.number <= spanEndNumber
+              return (
               <li key={row.id}>
                 <button
                   type="button"
                   onClick={() => handleSelect(row.id)}
+                  aria-pressed={spanKind ? isAnchor : undefined}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent",
                     "max-sm:border max-sm:border-border max-sm:bg-card max-sm:shadow-sm max-sm:active:bg-accent",
+                    isAnchor && "bg-primary/10 ring-1 ring-primary/25 hover:bg-primary/10",
+                    inSpan && !isAnchor && "bg-primary/5",
                   )}
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-sm font-semibold tabular-nums text-foreground">
@@ -208,10 +266,18 @@ export function AddToDayDialog({
                       ) : null}
                     </span>
                     <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">
-                      {row.description ||
-                        (row.itemCount === 0
-                          ? "Sin planes todavía"
-                          : `${row.itemCount} ${row.itemCount === 1 ? "ítem" : "ítems"}`)}
+                      {isAnchor
+                        ? itemType === "stay"
+                          ? "Entrada / check-in"
+                          : "Inicio"
+                        : inSpan
+                          ? itemType === "stay"
+                            ? `Noche ${row.number - selectedDayIndex} de ${nights}`
+                            : `Día ${row.number - selectedDayIndex} de ${nights}`
+                          : row.description ||
+                            (row.itemCount === 0
+                              ? "Sin planes todavía"
+                              : `${row.itemCount} ${row.itemCount === 1 ? "ítem" : "ítems"}`)}
                     </span>
                   </span>
                   {row.alreadyHere ? (
@@ -222,7 +288,8 @@ export function AddToDayDialog({
                   ) : null}
                 </button>
               </li>
-            ))}
+              )
+            })}
             {!needle && onAddDay ? (
               <li>
                 <AddDayButton onClick={onAddDay} />
@@ -230,6 +297,58 @@ export function AddToDayDialog({
             ) : null}
           </ul>
         )}
+
+        {spanKind && days.length > 0 ? (
+          <DialogFooter className="shrink-0 flex-col gap-3 border-t border-border bg-background px-5 py-3 sm:flex-col sm:space-x-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="w-full space-y-1.5">
+              <Label htmlFor={nightsFieldId}>
+                {itemType === "stay" ? "Noches" : "Días"}
+              </Label>
+              <Input
+                id={nightsFieldId}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={maxNights}
+                value={nights}
+                disabled={anchorDayId == null}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10)
+                  if (!Number.isFinite(n)) {
+                    setNights(1)
+                    return
+                  }
+                  setNights(Math.min(Math.max(1, n), maxNights))
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                {anchorDayId == null
+                  ? itemType === "stay"
+                    ? "Primero elige el día de entrada."
+                    : "Primero elige el día de inicio."
+                  : maxNights === 1
+                    ? itemType === "stay"
+                      ? "El viaje acaba este día: 1 noche."
+                      : "El viaje acaba este día: 1 día."
+                    : itemType === "stay"
+                      ? nights > 1
+                        ? `Hasta ${maxNights} desde la entrada. Se muestra en los días ${selectedDayIndex + 1}–${spanEndNumber}.`
+                        : `Hasta ${maxNights} desde el día de entrada.`
+                      : nights > 1
+                        ? `Hasta ${maxNights} desde el inicio. Se muestra en los días ${selectedDayIndex + 1}–${spanEndNumber}.`
+                        : `Hasta ${maxNights} desde el día de inicio.`}
+              </p>
+            </div>
+            <Button
+              type="button"
+              className="w-full sm:w-auto sm:self-end"
+              disabled={anchorDayId == null}
+              onClick={confirmSpan}
+            >
+              Añadir al plan
+            </Button>
+          </DialogFooter>
+        ) : null}
       </DialogContent>
     </Dialog>
   )

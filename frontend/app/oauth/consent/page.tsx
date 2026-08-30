@@ -66,12 +66,24 @@ export default async function OAuthConsentPage({
 
   const scopes = splitScopes(authDetails.scope)
   const clientName = authDetails.client.name?.trim() || "Una aplicación"
+  // Qué cuenta se conecta = la de la cookie de sesión de ESTE navegador, no la
+  // del cliente OAuth. Con dos cuentas (la personal y una de pruebas) no hay
+  // otra forma de notar que estás autorizando la equivocada, porque una sesión
+  // ya abierta salta el login y cae directa en esta pantalla.
+  const accountEmail = typeof claims.email === "string" ? claims.email.trim() : ""
 
   return (
     <AuthShell
       title={`¿Permitir a ${clientName}?`}
       subtitle="Quiere acceder a tus viajes de WanderPlanner, en modo lectura."
     >
+      {accountEmail ? (
+        <p className="mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          Se conectará tu cuenta{" "}
+          <span className="font-medium text-foreground">{accountEmail}</span>
+        </p>
+      ) : null}
+
       {scopes.length > 0 ? (
         <ul className="mb-4 list-disc space-y-1 pl-5 text-sm text-foreground/80">
           {scopes.map((scope) => (

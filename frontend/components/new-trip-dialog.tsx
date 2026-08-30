@@ -541,7 +541,7 @@ export function NewTripDialog({
               Son el número de días que con el que iniciaremos tu panel de viaje (podrás quitar o añadir días en cualquier momento).
             </p>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 [overflow-anchor:none]">
             <Label id={datesId}>¿Qué día te gustaría empezar tu viaje?</Label>
             <Popover open={datePopOpen} onOpenChange={setDatePopOpen}>
               <PopoverTrigger asChild>
@@ -562,7 +562,12 @@ export function NewTripDialog({
                       : "Selecciona la fecha de inicio"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
+              <PopoverContent
+                className="w-auto p-0"
+                align="start"
+                side="bottom"
+                sticky="always"
+              >
                 <Calendar
                   mode="single"
                   selected={startDate}

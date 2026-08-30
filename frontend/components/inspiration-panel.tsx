@@ -539,9 +539,11 @@ export default function InspirationPanel({
     }
   }
 
-  const handleAddItem = (item: SourceItem, dayId: string) => {
+  const handleAddItem = (item: SourceItem, dayId: string, spanDays?: number) => {
     if (!currentSource) return
-    addItemToDay(tripId, dayId, userDayItemFromSource(item, currentSource))
+    const userItem = userDayItemFromSource(item, currentSource)
+    if (spanDays != null) userItem.spanDays = spanDays
+    addItemToDay(tripId, dayId, userItem)
   }
 
   const handleAddAllForSourceDay = (group: {
@@ -1168,8 +1170,8 @@ export default function InspirationPanel({
           itemType={picking.type}
           itemAffiliateUrl={picking.affiliateUrl}
           addedDayNumbers={addedItemDaysBySourceItemId.get(picking.id) ?? []}
-          onSelect={(dayId) => {
-            handleAddItem(picking, dayId)
+          onSelect={(dayId, spanDays) => {
+            handleAddItem(picking, dayId, spanDays)
             setPicking(null)
           }}
           onAddDay={() => addDay(trip.id)}

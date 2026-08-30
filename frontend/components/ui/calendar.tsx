@@ -19,6 +19,9 @@ function Calendar({
   buttonVariant = 'ghost',
   formatters,
   components,
+  // Siempre 6 semanas: si no, el popover cambia de alto al pasar de mes
+  // (agosto 6 vs septiembre 5) y Radix lo voltea arriba/abajo del trigger.
+  fixedWeeks = true,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>['variant']
@@ -28,6 +31,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      fixedWeeks={fixedWeeks}
       className={cn(
         'bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent',
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
@@ -48,7 +52,7 @@ function Calendar({
         ),
         month: cn('flex flex-col w-full gap-4', defaultClassNames.month),
         nav: cn(
-          'flex items-center gap-1 w-full absolute top-0 inset-x-0 justify-between',
+          'flex items-center gap-1 w-full absolute top-0 inset-x-0 z-10 justify-between',
           defaultClassNames.nav,
         ),
         button_previous: cn(
