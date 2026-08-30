@@ -58,7 +58,7 @@ function TypeBadge({ type, label }: { type: ItemType; label?: string }) {
 
 function AddedBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium tabular-nums text-foreground">
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium tabular-nums text-success">
       <Check className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
       {label}
     </span>
@@ -293,7 +293,6 @@ export function TravelItemCard(props: TravelItemCardProps) {
           "relative flex items-center gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm",
           CARD_MOTION,
           props.onSelect && "cursor-pointer",
-          props.isAdded && "opacity-70",
           props.className,
         )}
       >
@@ -305,56 +304,68 @@ export function TravelItemCard(props: TravelItemCardProps) {
             aria-label="Añadir al itinerario"
           />
         ) : null}
-        <div className="relative z-[1] pointer-events-auto shrink-0">{props.thumbnail}</div>
+        <div
+          className={cn(
+            "relative z-[1] pointer-events-auto shrink-0",
+            props.isAdded && "opacity-70",
+          )}
+        >
+          {props.thumbnail}
+        </div>
         <div className="relative z-[1] pointer-events-none min-w-0 flex-1 pr-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <TypeBadge type={props.type} label={props.typeLabel} />
+            <span className={cn(props.isAdded && "opacity-70")}>
+              <TypeBadge type={props.type} label={props.typeLabel} />
+            </span>
             {props.addedLabel ? <AddedBadge label={props.addedLabel} /> : null}
           </div>
-          <div className="mt-1.5 flex items-center gap-0.5">
-            <p className="min-w-0 flex-1 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
-              {props.title}
-            </p>
-            {href ? (
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer noopener"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
-                }}
-                className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Abrir enlace de «${props.title}»`}
-                title="Abrir enlace"
-              >
-                <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </a>
-            ) : null}
-            {props.onFindInSource ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  props.onFindInSource?.()
-                }}
-                className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Buscar «${props.title}» en la crónica`}
-                title="Buscar en la crónica"
-              >
-                <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </button>
+          <div className={cn(props.isAdded && "opacity-70")}>
+            <div className="mt-1.5 flex items-center gap-0.5">
+              <p className="min-w-0 flex-1 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
+                {props.title}
+              </p>
+              {href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    trackCardOutbound(href, props.outboundSurface, props.outboundAffiliate)
+                  }}
+                  className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Abrir enlace de «${props.title}»`}
+                  title="Abrir enlace"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </a>
+              ) : null}
+              {props.onFindInSource ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    props.onFindInSource?.()
+                  }}
+                  className="pointer-events-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-offset-2 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Buscar «${props.title}» en la crónica`}
+                  title="Buscar en la crónica"
+                >
+                  <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              ) : null}
+            </div>
+            {props.detail ? (
+              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail}</p>
             ) : null}
           </div>
-          {props.detail ? (
-            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{props.detail}</p>
-          ) : null}
         </div>
         <div
           className={cn(
             "relative z-[1] flex shrink-0 items-center",
             props.onSelect && "pointer-events-none",
+            props.isAdded && "opacity-70",
           )}
         >
           {props.action}
@@ -367,22 +378,29 @@ export function TravelItemCard(props: TravelItemCardProps) {
     const textBlock = (
       <div className="min-w-0 flex-1 pr-1">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span
+            className={cn(
+              "inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground",
+              props.isAdded && "opacity-70",
+            )}
+          >
             {BASIC_LABELS[props.category]}
           </span>
           {props.isAdded ? <AddedBadge label="Añadido" /> : null}
         </div>
-        <p className="mt-1.5 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
-          {props.title}
-        </p>
-        {props.detail ? (
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{props.detail}</p>
-        ) : null}
+        <div className={cn(props.isAdded && "opacity-70")}>
+          <p className="mt-1.5 line-clamp-1 text-[15px] font-semibold leading-snug text-foreground">
+            {props.title}
+          </p>
+          {props.detail ? (
+            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{props.detail}</p>
+          ) : null}
+        </div>
       </div>
     )
     const main = (
       <>
-        {props.thumbnail}
+        <span className={cn("shrink-0", props.isAdded && "opacity-70")}>{props.thumbnail}</span>
         {textBlock}
       </>
     )
@@ -391,7 +409,6 @@ export function TravelItemCard(props: TravelItemCardProps) {
         className={cn(
           "flex items-stretch gap-3 overflow-hidden rounded-2xl border border-border bg-card p-2.5 shadow-sm",
           CARD_MOTION,
-          props.isAdded && "opacity-70",
           props.className,
         )}
       >

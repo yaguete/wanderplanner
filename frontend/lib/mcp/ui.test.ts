@@ -416,9 +416,11 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   assert.equal(/from ["']\.\/ui\/widget-html["']/.test(src), false)
   assert.ok(src.includes('await import("./ui/widget-html")'))
   assert.equal((src.match(/_meta: widgetToolMeta\(\)/g) ?? []).length, 4)
-  // El plan del viaje no puede caerse si PostgREST no trae sources.
+  // El plan del viaje no puede caerse si PostgREST no trae sources (salvo 401).
   assert.equal(src.includes("if (!loadedSources.ok) return mcpReadFailed()"), false)
   assert.ok(src.includes("sourceRowsOrEmpty"))
+  assert.ok(src.includes("listTripsLoadFailure(status)"))
+  assert.ok(src.includes('if (loadedSources.reason === "unauthorized") return readLoadFailure(loadedSources)'))
 }
 
 

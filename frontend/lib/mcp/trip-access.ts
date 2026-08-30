@@ -1,12 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { mcpReadFailed, mcpUnavailableTrip } from "./result"
+import { mcpNoSession, mcpReadFailed, mcpTextError, mcpUnavailableTrip } from "./result"
 
+export type ReadFailReason = "error" | "unauthorized"
 export type TripLoadOk<T> = { ok: true; row: T }
-export type TripLoadFail = { ok: false; reason: "not_found" | "error" }
+export type TripLoadFail = { ok: false; reason: "not_found" | ReadFailReason }
 export type TripLoad<T> = TripLoadOk<T> | TripLoadFail
 
 export type SourceLoadOk<T> = { ok: true; rows: T[] }
-export type SourceLoad<T> = SourceLoadOk<T> | { ok: false; reason: "error" }
+export type SourceLoadFail = { ok: false; reason: ReadFailReason }
+export type SourceLoad<T> = SourceLoadOk<T> | SourceLoadFail
+
+/** PostgREST pone el HTTP en la respuesta, no dentro de `error`. 401 = token muerto; no reintentar. */
+export function isUnauthorizedStatus(status: number | undefined): boolean {
+  return status === 401
+}
+
+function readFailReason(status: number | undefined): ReadFailReason {
+  return isUnauthorizedStatus(status) ? "unauthorized" : "error"
+}
 
 export function asStringList(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
@@ -23,8 +34,12 @@ export async function loadAccessibleTrip<T>(
   tripId: string,
   columns: string,
 ): Promise<TripLoad<T>> {
-  const { data, error } = await supabase.from("trips").select(columns).eq("id", tripId).maybeSingle()
-  if (error) return { ok: false, reason: "error" }
+  const { data, error, status } = await supabase
+    .from("trips")
+    .select(columns)
+    .eq("id", tripId)
+    .maybeSingle()
+  if (error) return { ok: false, reason: readFailReason(status) }
   if (!data) return { ok: false, reason: "not_found" }
   return { ok: true, row: data as T }
 }
@@ -36,8 +51,8 @@ export async function loadSourcesByIds<T>(
 ): Promise<SourceLoad<T>> {
   const unique = [...new Set(ids.filter(Boolean))]
   if (unique.length === 0) return { ok: true, rows: [] }
-  const { data, error } = await supabase.from("sources").select(columns).in("id", unique)
-  if (error) return { ok: false, reason: "error" }
+  const { data, error, status } = await supabase.from("sources").select(columns).in("id", unique)
+  if (error) return { ok: false, reason: readFailReason(status) }
   return { ok: true, rows: (data ?? []) as T[] }
 }
 
@@ -46,8 +61,22 @@ export function sourceRowsOrEmpty<T>(loaded: SourceLoad<T>): T[] {
   return loaded.ok ? loaded.rows : []
 }
 
+export function readLoadFailure(result: { reason: ReadFailReason }) {
+  return result.reason === "unauthorized" ? mcpNoSession() : mcpReadFailed()
+}
+
 export function tripLoadFailure(result: TripLoadFail) {
-  return result.reason === "not_found" ? mcpUnavailableTrip() : mcpReadFailed()
+  if (result.reason === "not_found") return mcpUnavailableTrip()
+  if (result.reason === "unauthorized") return mcpNoSession()
+  return mcpReadFailed()
+}
+
+export const MCP_LIST_TRIPS_READ_FAILED = "No se pudieron leer los viajes. Inténtalo de nuevo."
+
+export function listTripsLoadFailure(status: number | undefined) {
+  return isUnauthorizedStatus(status)
+    ? mcpNoSession()
+    : mcpTextError(MCP_LIST_TRIPS_READ_FAILED)
 }
 
 /** Ordena filas según `source_ids` del viaje; ids sin fila (RLS) se omiten. */

@@ -8,7 +8,15 @@ import {
   COUNTRY_TASKS_FETCH_TIMEOUT_MS,
   fetchCountryTasksWithToken,
 } from "@/lib/country-tasks"
-import { asStringList, loadAccessibleTrip, loadSourcesByIds, sourceRowsOrEmpty, tripLoadFailure } from "./trip-access"
+import {
+  asStringList,
+  listTripsLoadFailure,
+  loadAccessibleTrip,
+  loadSourcesByIds,
+  readLoadFailure,
+  sourceRowsOrEmpty,
+  tripLoadFailure,
+} from "./trip-access"
 import { listTripsOutput, listTripsResult, MCP_TRIP_COLUMNS, type McpTripRow } from "./list-trips"
 import {
   attachGetTripQuotes,
@@ -131,13 +139,11 @@ export function registerWanderplannerTools(server: McpServer): void {
       const token = tokenFromCtx(ctx)
       if (!token) return mcpNoSession()
       const supabase = createUserSupabase(token)
-      const { data, error } = await supabase
+      const { data, error, status } = await supabase
         .from("trips")
         .select(MCP_TRIP_COLUMNS)
         .order("archived", { ascending: true })
-      if (error) {
-        return mcpTextError("No se pudieron leer los viajes. Inténtalo de nuevo.")
-      }
+      if (error) return listTripsLoadFailure(status)
       const result = listTripsResult((data ?? []) as McpTripRow[])
       return mcpOk(result.text, { trips: result.trips })
     },
@@ -174,6 +180,7 @@ export function registerWanderplannerTools(server: McpServer): void {
           MCP_SOURCE_META_COLUMNS,
         )
         if (!loadedSources.ok) {
+          if (loadedSources.reason === "unauthorized") return readLoadFailure(loadedSources)
           console.warn("[mcp] get_trip: no se pudieron leer las fuentes; el plan se entrega igual")
         }
         sources = sourceRowsOrEmpty(loadedSources)
@@ -216,7 +223,7 @@ export function registerWanderplannerTools(server: McpServer): void {
         ids,
         MCP_SOURCE_META_COLUMNS,
       )
-      if (!sources.ok) return mcpReadFailed()
+      if (!sources.ok) return readLoadFailure(sources)
       const mapped = listTripSourcesResult(loaded.row, sources.rows)
       return mcpOk(mapped.text, mapped.result)
     },
@@ -250,7 +257,7 @@ export function registerWanderplannerTools(server: McpServer): void {
         ids,
         MCP_SEARCH_SOURCE_COLUMNS,
       )
-      if (!sources.ok) return mcpReadFailed()
+      if (!sources.ok) return readLoadFailure(sources)
       const mapped = mapReviewTrip(loaded.row, sources.rows)
       const evidence = await attachSearchQuotes(mapped.result.evidence, (sourceId, signal) =>
         fetchArticleHtml(supabase, sourceId, signal),
@@ -297,7 +304,7 @@ export function registerWanderplannerTools(server: McpServer): void {
         ids,
         MCP_SEARCH_SOURCE_COLUMNS,
       )
-      if (!sources.ok) return mcpReadFailed()
+      if (!sources.ok) return readLoadFailure(sources)
 
       let traveler = searchTravelerFrom(null, [], loaded.row.expectations)
       try {
@@ -451,7 +458,7 @@ export function registerWanderplannerTools(server: McpServer): void {
           ids,
           MCP_COUNTRY_TASKS_SOURCE_COLUMNS,
         )
-        if (!sources.ok) return mcpReadFailed()
+        if (!sources.ok) return readLoadFailure(sources)
         sourceRows = sources.rows
       }
       const codes = countryCodesForMcpTrip(loaded.row, sourceRows)
