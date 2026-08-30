@@ -128,7 +128,9 @@ export function AppHeader({ leading }: AppHeaderProps) {
       <div
         className={cn(
           "flex shrink-0 items-center",
-          alignToSidebar && (rail ? undefined : "w-56 px-2"),
+          // Rail: pl-3.5 centra la ardilla (~26 px) en el eje de los iconos
+          // (w-9 en w-14); el colapso va pegado, no al borde del rail.
+          alignToSidebar && (rail ? "gap-1 pl-3.5" : "w-56 px-2"),
           !alignToSidebar && "min-w-0",
           alignToSidebar && !chromeHydrated && "invisible",
         )}
@@ -139,8 +141,6 @@ export function AppHeader({ leading }: AppHeaderProps) {
           onClick={() => clearOpeningTrip()}
           className={cn(
             "flex min-w-0 items-center outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring",
-            // Rail: la ardilla sigue centrada en w-14 (eje de los iconos del aside).
-            alignToSidebar && rail && "w-14 justify-center",
             // Expandido: mismo inset que Inicio / Tus viajes (px-2.5 dentro del p-2 del aside).
             alignToSidebar && !rail && "px-2.5",
           )}

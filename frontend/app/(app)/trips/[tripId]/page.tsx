@@ -474,7 +474,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
       */}
       <div
         className={cn(
-          "relative flex flex-1 flex-col md:min-h-0 md:flex-row md:p-2.5 md:pt-0",
+          "relative flex flex-1 flex-col md:min-h-0 md:flex-row md:p-2.5 md:pt-0 md:pl-0",
           !panelsHydrated && "md:invisible",
         )}
         style={
