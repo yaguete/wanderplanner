@@ -252,6 +252,8 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   33. `20260824160000_fix_sources_rls_recursion.sql`
   34. `20260824170000_fix_source_owner_claim.sql` (claim de `sources`, ocupación sin caducadas, `list_share_peers(p_trip_id)`)
   35. `20260826120000_trip_share_card.sql` (`trips.share_card`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
+  36. `20260828180000_profile_onboarding_seen.sql`
+  37. `20260830120000_delete_own_account_oauth.sql` (borra `oauth_consents` / `oauth_authorizations` del usuario al borrar la cuenta; no toca `oauth_clients`)
 
 **Compartir viaje:** son ocho ficheros (`20260824120000_trip_sharing.sql` más los siete `fix` hasta `20260824170000`). Orden de despliegue: **1) las ocho migraciones**, **2) Realtime** publicación de `trips` y `trip_members` en el dashboard de Supabase, **3) backend Fly** (`RESEND_API_KEY`, `INVITE_EMAIL_FROM`, `SUPABASE_ANON_KEY`, `SITE_URL`, `GLOBAL_MAX_TRIP_INVITES_DAY`) + dominio verificado en Resend, **4) frontend Vercel**. El front pide `version` y `user_id` en `TRIP_COLUMNS`: si llega antes que la migración, PostgREST falla. `/invite/**` no pasa por GoTrue; no hace falta redirect URL nueva. Quien reconstruya la BD solo con `…120000` se come otra vez la recursión de RLS de `sources` y el INSERT de invitaciones roto.
 

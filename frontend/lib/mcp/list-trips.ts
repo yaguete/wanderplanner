@@ -1,3 +1,5 @@
+import { z } from "zod"
+
 export type McpTripRow = {
   id: string
   name: string | null
@@ -20,6 +22,20 @@ export type McpTripSummary = {
 
 export const MCP_TRIP_COLUMNS =
   "id, name, archived, start_date, end_date, num_days, countries" as const
+
+export const listTripsOutput = z.object({
+  trips: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      archived: z.boolean(),
+      startDate: z.string().nullable(),
+      endDate: z.string().nullable(),
+      numDays: z.number().nullable(),
+      countries: z.array(z.string()),
+    }),
+  ),
+})
 
 function asCountries(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []

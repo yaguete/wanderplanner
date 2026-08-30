@@ -8,6 +8,7 @@ import {
   LegalTable,
 } from "@/components/legal/legal-document"
 import { AEPD_URL, LEGAL } from "@/lib/legal"
+import { mcpPrivacyTableRows } from "@/lib/mcp/privacy-inventory"
 
 export const metadata: Metadata = {
   title: "Política de privacidad",
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
 const TOC = [
   { id: "datos", label: "Qué guardamos y por qué" },
   { id: "terceros", label: "Quién más los ve" },
+  { id: "asistentes", label: "Asistentes que conectas" },
   { id: "conservacion", label: "Cuánto tiempo" },
   { id: "derechos", label: "Tus derechos" },
 ] as const
@@ -41,6 +43,11 @@ const DATA_ROWS: readonly (readonly string[])[] = [
     "Conversaciones con el asistente",
     "Responderte y mantener el hilo de cada viaje.",
     "Contrato",
+  ],
+  [
+    "Qué asistentes has autorizado",
+    "Recordar la conexión y poder revocarla desde Configuración.",
+    "Tu instrucción",
   ],
   [
     "Cuántas veces usas cada función",
@@ -125,19 +132,22 @@ export default function PrivacidadPage() {
           <LegalMail />.
         </p>
         <p>
-          Si conectas WanderPlanner a un asistente de terceros, ese asistente recibe —en
-          cada consulta que le hagas— el contenido de tus viajes que las herramientas de
-          lectura le entregan: el plan (días, sitios, artículos guardados con título,
-          dirección y un extracto breve), la auditoría del viaje, los trámites del país y
-          los importes que tú has puesto en el presupuesto. No le enviamos tu correo.
+          Si conectas WanderPlanner a un asistente de terceros, ese asistente no trata los
+          datos por nuestra cuenta: lo eliges tú y recibe lo que las herramientas de
+          lectura le entregan en cada consulta. El detalle está en{" "}
+          <a href="#asistentes" className="font-medium text-foreground underline underline-offset-4">
+            Asistentes que conectas
+          </a>
+          .
         </p>
         <p>
-          Algunos están fuera de la Unión Europea. Con los de Estados Unidos firmamos las
-          cláusulas contractuales tipo que aprueba la Comisión Europea. Con los países que
-          no tienen un acuerdo de protección de datos con Europa —hoy, China— no vale ese
-          contrato, así que te lo preguntamos antes de que uses sus servicios por primera
-          vez en cada navegador. Si dices que no, quedarán apagados y todo lo demás
-          funciona igual.
+          Algunos encargados están fuera de la Unión Europea. Con los de Estados Unidos
+          firmamos las cláusulas contractuales tipo que aprueba la Comisión Europea. Con
+          los países que no tienen un acuerdo de protección de datos con Europa —hoy,
+          China— no vale ese contrato, así que te lo preguntamos antes de que uses sus
+          servicios por primera vez en cada navegador. Si dices que no, quedarán apagados y
+          todo lo demás funciona igual. Esa pregunta no cubre al asistente que tú
+          conectas: esa cesión la ordenas tú al aprobarla.
         </p>
         <p>
           La IA propone y tú decides: no tomamos decisiones automatizadas que te afecten
@@ -153,11 +163,46 @@ export default function PrivacidadPage() {
         </p>
       </LegalSection>
 
+      <LegalSection id="asistentes" title="Asistentes que conectas">
+        <p>
+          Si apruebas la conexión desde un asistente de terceros, ese asistente puede
+          consultar tus viajes en modo lectura. No es un encargado nuestro: es el que tú
+          has elegido. La autorización que concedes le permite consultar tu identidad
+          básica (correo, nombre y foto). Las herramientas de lectura no devuelven tu
+          correo; el contenido del viaje llega en cada consulta que le hagas.
+        </p>
+        <LegalTable columns={["Datos", "Qué incluye"]} rows={mcpPrivacyTableRows()} />
+        <p>
+          No le enviamos el HTML completo de los artículos, las coordenadas de los sitios,
+          los correos de quienes comparten el viaje, el texto de Compartir ni los enlaces
+          de búsqueda de vuelos.
+        </p>
+        <p>
+          Cada llamada deja un registro técnico con el identificador de tu cuenta y el de
+          la aplicación conectada, sin el contenido del viaje. Vive en los registros de
+          los servidores que nos alojan, como el resto de peticiones.
+        </p>
+        <p>
+          Para cortar el acceso, entra en{" "}
+          <Link href="/account/settings" className="font-medium text-foreground underline underline-offset-4">
+            Configuración
+          </Link>{" "}
+          y revoca la aplicación. Las sesiones y los tokens de renovación de ese asistente
+          se invalidan al momento; el token de acceso que ya tuviera puede seguir valiendo
+          hasta que caduque (minutos). Borrar la cuenta también corta esas autorizaciones.
+        </p>
+      </LegalSection>
+
       <LegalSection id="conservacion" title="Cuánto tiempo">
         <p>
-          Mientras tengas la cuenta. Si la borras, se van contigo el perfil, los viajes y
-          las conversaciones del asistente. Las sesiones de invitado que quedan abandonadas
-          se limpian periódicamente.
+          Mientras tengas la cuenta. Si la borras, se van contigo el perfil, los viajes,
+          las conversaciones del asistente y las autorizaciones a asistentes que hayas
+          conectado. Las sesiones de invitado que quedan abandonadas se limpian
+          periódicamente.
+        </p>
+        <p>
+          Las autorizaciones a un asistente duran hasta que las revocas o borras la
+          cuenta.
         </p>
         <p>
           El correo de una invitación a un viaje se guarda como máximo 14 días, o hasta que
@@ -177,8 +222,9 @@ export default function PrivacidadPage() {
           de los datos alojados en {LEGAL.siteName}. Puedes pedirnos acceder a tus datos, corregirlos, limitarlos,
           llevártelos u oponerte a que los tratemos, y retirar cuando quieras un
           consentimiento que hayas dado. Escríbenos a <LegalMail /> desde el correo de tu
-          cuenta y contestaremos en menos de 30 días. Para borrar la cuenta —perfil,
-          viajes, fuentes que añadiste y conversaciones— haz clic en el avatar y ve a Configuración; no hace
+          cuenta y contestaremos en menos de 30 días. Para cortar el acceso de un asistente
+          que hayas conectado, o para borrar la cuenta —perfil, viajes, fuentes que
+          añadiste y conversaciones—, haz clic en el avatar y ve a Configuración; no hace
           falta que nos escribas.
         </p>
         <p>

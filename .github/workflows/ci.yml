@@ -110,6 +110,9 @@ jobs:
       - run: npm run test:mcp-review-trip
       - run: npm run test:mcp-affiliate-gate
       - run: npm run test:mcp-ui
+      - run: npm run test:mcp-privacy-inventory
+      - run: npm run test:mcp-oauth-grants
+      - run: npm run test:mcp-oauth-href
       # Gate desde el 15 ago 2026: cero errores. Los warnings de la era del React
       # Compiler (set-state-in-effect, refs, preserve-manual-memoization) están
       # degradados a warning en eslint.config.mjs y no bloquean.

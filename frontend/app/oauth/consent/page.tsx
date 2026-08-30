@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { Button } from "@/components/ui/button"
@@ -72,12 +73,24 @@ export default async function OAuthConsentPage({
       subtitle="Quiere acceder a tus viajes de WanderPlanner, en modo lectura."
     >
       {scopes.length > 0 ? (
-        <ul className="mb-6 list-disc space-y-1 pl-5 text-sm text-foreground/80">
+        <ul className="mb-4 list-disc space-y-1 pl-5 text-sm text-foreground/80">
           {scopes.map((scope) => (
             <li key={scope}>{describeScope(scope)}</li>
           ))}
         </ul>
       ) : null}
+
+      <p className="mb-6 text-sm text-muted-foreground">
+        WanderPlanner usa esa autorización para identificarte. No usa tu teléfono. El
+        asistente recibe el plan de tus viajes en lectura; el detalle está en la{" "}
+        <Link
+          href="/legal/privacidad#asistentes"
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          política de privacidad
+        </Link>
+        .
+      </p>
 
       <form action="/oauth/decision" method="POST" className="flex flex-col gap-3">
         <input type="hidden" name="authorization_id" value={authorizationId} />

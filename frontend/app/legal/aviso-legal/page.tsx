@@ -72,6 +72,14 @@ export default function AvisoLegalPage() {
           propuesta que decides tú, nunca una reserva ni un consejo profesional.
         </p>
         <p>
+          También puedes conectar un asistente de terceros para consultar tus viajes en
+          modo lectura. Lo que ve y cómo se corta esa conexión está en la{" "}
+          <Link href="/legal/privacidad#asistentes" className="font-medium text-foreground underline underline-offset-4">
+            política de privacidad
+          </Link>
+          .
+        </p>
+        <p>
           Los trámites de país que sugerimos resumen las{" "}
           <a
             href={MAE_TRAVEL_ADVICE_URL}

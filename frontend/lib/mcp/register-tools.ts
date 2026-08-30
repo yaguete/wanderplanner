@@ -9,7 +9,7 @@ import {
   fetchCountryTasksWithToken,
 } from "@/lib/country-tasks"
 import { asStringList, loadAccessibleTrip, loadSourcesByIds, sourceRowsOrEmpty, tripLoadFailure } from "./trip-access"
-import { listTripsResult, MCP_TRIP_COLUMNS, type McpTripRow } from "./list-trips"
+import { listTripsOutput, listTripsResult, MCP_TRIP_COLUMNS, type McpTripRow } from "./list-trips"
 import {
   attachGetTripQuotes,
   getTripInput,
@@ -82,20 +82,6 @@ import { createUserSupabase } from "./supabase"
 import { MCP_WIDGET_MIME, MCP_WIDGET_URI, widgetResourceMeta, widgetToolMeta } from "./ui/resource"
 
 type McpServer = Parameters<Parameters<typeof createMcpHandler>[0]>[0]
-
-const listTripsOutput = z.object({
-  trips: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      archived: z.boolean(),
-      startDate: z.string().nullable(),
-      endDate: z.string().nullable(),
-      numDays: z.number().nullable(),
-      countries: z.array(z.string()),
-    }),
-  ),
-})
 
 const READ_ONLY = {
   readOnlyHint: true,

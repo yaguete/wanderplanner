@@ -97,7 +97,10 @@
     "test:mcp-get-country-tasks": "tsx lib/mcp/get-country-tasks.test.ts",
     "test:mcp-review-trip": "tsx lib/mcp/review-trip.test.ts",
     "test:mcp-affiliate-gate": "tsx lib/mcp/affiliate-gate.test.ts",
-    "test:mcp-ui": "tsx lib/mcp/ui.test.ts"
+    "test:mcp-ui": "tsx lib/mcp/ui.test.ts",
+    "test:mcp-privacy-inventory": "tsx lib/mcp/privacy-inventory.test.ts",
+    "test:mcp-oauth-grants": "tsx lib/mcp/oauth-grants.test.ts",
+    "test:mcp-oauth-href": "tsx lib/mcp/oauth-href.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -29,6 +29,7 @@ import {
   sharedDeletionWarning,
   validatePasswordChange,
 } from "@/lib/account-security"
+import { ConnectedAppsSection } from "@/components/account/connected-apps-section"
 import { cn } from "@/lib/utils"
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 
@@ -135,7 +136,8 @@ export default function AccountSettingsPage() {
               Configuración de cuenta
             </h1>
             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Email, contraseña y el cierre de la cuenta. El perfil de viajero está en Perfil.
+              Email, contraseña, asistentes conectados y el cierre de la cuenta. El perfil
+              de viajero está en Perfil.
             </p>
           </div>
 
@@ -247,6 +249,8 @@ export default function AccountSettingsPage() {
                 )}
               </section>
 
+              <ConnectedAppsSection />
+
               <section>
                 <button
                   type="button"
@@ -263,8 +267,9 @@ export default function AccountSettingsPage() {
                 {showDelete ? (
                   <div className="mt-4">
                     <p className="text-sm text-muted-foreground">
-                      Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste y todas tus
-                      conversaciones con el asistente. Esta acción no se puede deshacer.
+                      Se van contigo los datos de tu perfil, tus viajes, las fuentes que añadiste, todas tus
+                      conversaciones con el asistente y las autorizaciones a asistentes que hayas conectado.
+                      Esta acción no se puede deshacer.
                       {sharedWarning ? ` ${sharedWarning}` : ""}
                     </p>
                     <Button
@@ -298,8 +303,8 @@ export default function AccountSettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Borrar cuenta</AlertDialogTitle>
             <AlertDialogDescription>
-              Se irán tu perfil, tus viajes, las fuentes que añadiste y las conversaciones
-              del asistente.{sharedWarning ? ` ${sharedWarning}` : ""} Esta acción no se puede
+              Se irán tu perfil, tus viajes, las fuentes que añadiste, las conversaciones
+              del asistente y las autorizaciones a asistentes que hayas conectado.{sharedWarning ? ` ${sharedWarning}` : ""} Esta acción no se puede
               deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

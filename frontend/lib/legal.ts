@@ -9,6 +9,11 @@
  *
  * Si cambias de proveedor a uno de un país nuevo, repasa ese párrafo y el texto
  * del consentimiento en `components/ai-transfer-gate.tsx`.
+ *
+ * La enumeración de `/legal/privacidad#asistentes` sale de
+ * `lib/mcp/privacy-inventory.ts` (los `outputSchema` MCP). Conectar un
+ * asistente no sube `AI_TRANSFER_CONSENT_VERSION`: la pantalla OAuth ya es el
+ * aviso informado, y esa cesión no es un encargo nuestro.
  */
 import { SITE_URL } from "@/lib/site"
 
@@ -56,7 +61,7 @@ export const LEGAL = {
    */
   nif: "78726138J",
   address: "",
-  updatedAt: "2026-08-26",
+  updatedAt: "2026-08-30",
 } as const
 
 export const MAE_TRAVEL_ADVICE_URL =

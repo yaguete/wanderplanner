@@ -74,16 +74,26 @@ select public.claim_guest_trips('<token>');
 
 **Miniaturas Wikimedia + tope durable de fotos:** `20260817000000_place_thumbs_wikimedia.sql` (columnas `provider`/`attribution` en `place_thumbs`) y `20260817120000_photo_paid_usage.sql` (`usage_events.kind=photo_paid`, user_id null, índice `(kind, created_at)`). La segunda **antes** de desplegar el backend que escribe `photo_paid`: si no, el INSERT choca con el check y el tope lee 0 (fail-open). También relaja `usage_events_user_id_required` para kinds sin usuario (`partner_prewarm`, `landing_source_search`, `photo_paid`).
 
-**Borrar cuenta:** `20260817190000_delete_own_account.sql` crea `delete_own_account()`. No toca `TRIP_COLUMNS`, así que un front nuevo contra una base vieja no tumba `/trips`: el botón de borrar responde `PGRST202`. Aun así, **aplicar la migración y verificar el `delete` en SQL Editor → luego mergear el front**. Verificar:
+**Borrar cuenta:** `20260817190000_delete_own_account.sql` crea `delete_own_account()`. `20260830120000_delete_own_account_oauth.sql` la reemplaza para borrar `auth.oauth_consents` y `auth.oauth_authorizations` del llamante **antes** de `auth.users` (GoTrue ya tiene CASCADE; el SQL lo deja explícito). No toca `TRIP_COLUMNS`, así que un front nuevo contra una base vieja no tumba `/trips`: el botón de borrar responde `PGRST202`. Aun así, **aplicar la migración y verificar el `delete` en SQL Editor → luego mergear el front**. Verificar:
 
 ```sql
+-- FKs de GoTrue hacia auth.users (consents / authorizations deben ser ON DELETE CASCADE)
+select conrelid::regclass, pg_get_constraintdef(oid)
+from pg_constraint
+where confrelid = 'auth.users'::regclass
+  and conrelid::regclass::text like 'auth.%oauth%';
+
 -- Con sesión anónima → debe fallar (42501)
 select public.delete_own_account();
 -- Con cuenta de prueba registrada → borra auth.users y, en cascada,
 -- profiles / trips / sources / assistant_conversations / favorite_references.
+-- oauth_consents y oauth_authorizations de ese user_id deben quedar a 0.
+-- oauth_clients del proyecto NO se tocan.
 -- usage_events del uuid queda huérfano (sin FK, a propósito).
 -- article_extractions y el resto de cachés globales no se tocan.
 select count(*) from public.trips where user_id = '<uuid>';
+select count(*) from auth.oauth_consents where user_id = '<uuid>';
+select count(*) from auth.oauth_authorizations where user_id = '<uuid>';
 ```
 
 **`/start` sin clonar + cleanup de invitados v2:** aplicar **antes** de mergear el front, en este orden:
