@@ -18,7 +18,7 @@ El update script solo refresca dependencias (`npm ci` + `pip install`). Docker, 
 
 1. **Docker** (docker-in-docker): instalar `docker-ce`, usar `fuse-overlayfs` como storage driver y, en Docker 29+, **desactivar** `containerd-snapshotter` en `/etc/docker/daemon.json` (si no, `fuse-overlayfs` no funciona). Usar `iptables-legacy`. Arrancar `sudo dockerd` en segundo plano (no hay systemd).
 2. **Supabase CLI**: instalar el `.deb` de la última release de `supabase/cli`.
-3. `supabase start` desde `/workspace` (levanta el stack y aplica las 17 migraciones). Verificar con `supabase status`.
+3. `supabase start` desde `/workspace` (levanta el stack y aplica las migraciones de `supabase/migrations/`). Verificar con `supabase status`.
 
 ### Archivos de entorno (gitignored — hay que recrearlos)
 
@@ -29,7 +29,7 @@ El update script solo refresca dependencias (`npm ci` + `pip install`). Docker, 
 
 ### Caveats no obvios
 
-- `supabase/config.toml` está commiteado **solo para el stack local** (`supabase start`); tiene `enable_anonymous_sign_ins = true` (necesario para el flujo invitado de `/start`), `enable_confirmations = false` (registro sin confirmar email) y `http://localhost:3000` en redirect URLs. **No** habilita `supabase db push` contra el proyecto gestionado — ver la advertencia de [`supabase/README.md`](supabase/README.md) (el remoto no tiene historial de migraciones y `db push` fallaría).
+- `supabase/config.toml` está commiteado **solo para el stack local** (`supabase start`); tiene `enable_anonymous_sign_ins = true` (necesario para el flujo invitado de `/start`), `enable_confirmations = false` (registro sin confirmar email) y `http://localhost:3000` en redirect URLs. No copies esos valores al proyecto gestionado. Las migraciones de producción van con `supabase db push` (CLI vinculada; historial alineado con el repo desde el 30 ago 2026). No las apliques por MCP ni pegando SQL en el editor: descuadra los timestamps. Detalle y `migration repair` en [`supabase/README.md`](supabase/README.md).
 - `pip install` va con `--user` (Ubuntu 24.04 marca el entorno como externally-managed); los binarios quedan en `~/.local/bin`. Añade `~/.local/bin` al `PATH` para invocar `uvicorn` / `pytest` directamente, o usa `python3 -m uvicorn` / `python3 -m pytest`.
 - **Crear cuenta + crear viaje** (el hello-world del producto) funciona solo con Frontend + Supabase local; el backend no interviene en ese flujo. La persistencia va directa del navegador a Supabase (RLS) vía `trip-context` / `trips-repo`.
 - Las features de IA y de imágenes/mapa (`/itinerary`, `/assistant/chat`, `/thumb`, `/cover`, `/sources/suggest`, Mapbox) necesitan claves externas de pago (`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `TAVILY_API_KEY`, `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`, `NEXT_PUBLIC_MAPBOX_TOKEN`) que **no** están en este entorno. Sin ellas el resto de la app arranca; solo se degradan esas rutas concretas.

@@ -253,15 +253,18 @@ No hay “deploy” de app: el proyecto ya está en la nube. Lo que se despliega
   34. `20260824170000_fix_source_owner_claim.sql` (claim de `sources`, ocupación sin caducadas, `list_share_peers(p_trip_id)`)
   35. `20260826120000_trip_share_card.sql` (`trips.share_card`; **antes** del frontend que lo pide en `TRIP_COLUMNS`)
   36. `20260828180000_profile_onboarding_seen.sql`
-  37. `20260830120000_delete_own_account_oauth.sql` (borra `oauth_consents` / `oauth_authorizations` del usuario al borrar la cuenta; no toca `oauth_clients`)
+  37. `20260830001726_delete_own_account_oauth.sql` (borra `oauth_consents` / `oauth_authorizations` del usuario al borrar la cuenta; no toca `oauth_clients`; el timestamp es el del MCP, alineado a propósito con el historial remoto)
 
 **Compartir viaje:** son ocho ficheros (`20260824120000_trip_sharing.sql` más los siete `fix` hasta `20260824170000`). Orden de despliegue: **1) las ocho migraciones**, **2) Realtime** publicación de `trips` y `trip_members` en el dashboard de Supabase, **3) backend Fly** (`RESEND_API_KEY`, `INVITE_EMAIL_FROM`, `SUPABASE_ANON_KEY`, `SITE_URL`, `GLOBAL_MAX_TRIP_INVITES_DAY`) + dominio verificado en Resend, **4) frontend Vercel**. El front pide `version` y `user_id` en `TRIP_COLUMNS`: si llega antes que la migración, PostgREST falla. `/invite/**` no pasa por GoTrue; no hace falta redirect URL nueva. Quien reconstruya la BD solo con `…120000` se come otra vez la recursión de RLS de `sources` y el INSERT de invitaciones roto.
 
 ```bash
-# Con CLI vinculada al proyecto:
+# CLI vinculada (`supabase link --project-ref kzriijgdkrdruikmpufl`).
+# Historial remoto alineado con las 37 del repo (30 ago 2026).
+supabase db push --dry-run   # tiene que decir «Remote database is up to date» si no hay fichero nuevo
 supabase db push
-# O pegar cada fichero en SQL Editor, en orden.
 ```
+
+No pegues SQL en el editor ni uses `apply_migration` del MCP: registra un timestamp distinto al del fichero y `db push` se bloquea. Cómo repararlo: [`supabase/README.md`](supabase/README.md).
 
 **Orden con el frontend:** `20260803180000_trip_tasks.sql` añade columnas que el front ya pide en `TRIP_COLUMNS` (`tasks`, `extra_tasks`, `num_travelers`, `currency`). Hay que aplicar esa migración **antes** de mergear a `main` (Vercel despliega Production en cada push). Aplicarla con el frontend viejo aún en producción es inocuo (`add column if not exists`).
 
@@ -279,7 +282,7 @@ Detalle local y env: [`supabase/README.md`](supabase/README.md).
 
 ### Rollback (Supabase)
 
-- **Esquema:** las migraciones son forward-only. No hay `supabase db rollback` en producción. Para deshacer un cambio ya aplicado: escribe una **nueva migración compensatoria** (down SQL revisado a mano) y aplícala como las demás, pegándola en el SQL Editor.
+- **Esquema:** las migraciones son forward-only. No hay `supabase db rollback` en producción. Para deshacer un cambio ya aplicado: escribe una **nueva migración compensatoria** (down SQL revisado a mano) y aplícala con `supabase db push`.
 - **Nunca** `supabase db reset --linked` contra producción (borra datos).
 - **Datos:** el plan Free no tiene backups automáticos ni PITR. La continuidad depende de dumps periódicos (ver deuda T7.3 del plan de producción). Un restore es restaurar un `pg_dump` / backup manual, no “un botón de rollback”.
 
@@ -334,9 +337,10 @@ vercel rollback                 # Instant Rollback
 vercel promote <deployment>     # deshacer rollback / reactivar auto-assign
 
 # Supabase
-# Migraciones: SQL Editor del dashboard, pegando el fichero. `supabase db push`
-# NO funciona aquí (CLI sin vincular, sin historial en el remoto). Ver supabase/README.md.
-# Rollback de esquema = nueva migración compensatoria, no un undo mágico
+supabase db push --dry-run
+supabase db push              # CLI vinculada; no pegar SQL ni MCP (descuadra el historial)
+# Rollback de esquema = nueva migración compensatoria + db push, no un undo mágico
+# Detalle: supabase/README.md
 
 # Smoke
 ./scripts/smoke.sh https://api.wanderplanner.ai
