@@ -7,6 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${SITE_URL}/`, lastModified },
     { url: `${SITE_URL}/partners`, lastModified },
+    { url: `${SITE_URL}/soporte`, lastModified },
     { url: `${SITE_URL}/legal/aviso-legal`, lastModified },
     { url: `${SITE_URL}/legal/privacidad`, lastModified },
     { url: `${SITE_URL}/legal/cookies`, lastModified },
