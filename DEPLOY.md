@@ -14,7 +14,11 @@ Smoke test tras un deploy:
 
 ```bash
 ./scripts/smoke.sh https://api.wanderplanner.ai
+./scripts/smoke-mcp.sh https://wanderplanner.ai
 ```
+
+El primero cubre la API de Fly (auth 401 + CORS); el segundo, el servidor MCP en
+Vercel (401 con `WWW-Authenticate`, metadatos OAuth y `MCP_ENABLED`).
 
 ---
 
@@ -318,6 +322,8 @@ Checklist mínima (Fase 2 / T2.5 del plan de producción):
 5. Portadas y miniaturas al hacer scroll; **cero** claves de Places/Unsplash en el bundle.
 6. Artículo largo (15+ días) sin cortarse.
 7. `./scripts/smoke.sh https://api.wanderplanner.ai` en verde.
+8. `./scripts/smoke-mcp.sh https://wanderplanner.ai` en verde. Si sale 503, el
+   deploy se llevó por delante `MCP_ENABLED` (un cambio de env exige redeploy).
 
 ---
 
@@ -344,4 +350,5 @@ supabase db push              # CLI vinculada; no pegar SQL ni MCP (descuadra el
 
 # Smoke
 ./scripts/smoke.sh https://api.wanderplanner.ai
+./scripts/smoke-mcp.sh https://wanderplanner.ai
 ```

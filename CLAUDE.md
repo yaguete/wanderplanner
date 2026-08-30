@@ -25,6 +25,7 @@ WanderPlanner es una app web cuyo frontend carga y combina un viaje (`Trip`) y f
   DEPLOY.md                # Vercel + Fly.io + Supabase: env, deploy, rollback
   scripts/
     smoke.sh               # Smoke de la API (auth 401 + CORS)
+    smoke-mcp.sh           # Smoke del MCP (401 + WWW-Authenticate, RFC 9728, MCP_ENABLED)
   supabase/
     migrations/            # SQL: esquema documento + RLS + grants + cleanup anónimos
     README.md              # Activar Anonymous Sign-Ins, aplicar migraciones, env
