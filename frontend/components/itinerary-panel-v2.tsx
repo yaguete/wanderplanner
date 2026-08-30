@@ -246,10 +246,10 @@ export default function ItineraryPanel({
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
   } = useCollapsingHeader(
-    isMobile,
-    onHeaderCollapsedChange,
-    activeOnMobile,
-    false,
+    true,
+    isMobile ? onHeaderCollapsedChange : undefined,
+    isMobile ? activeOnMobile : true,
+    !isMobile,
   )
   const dateSub = useMemo(
     () => (trip ? formatTripDates(trip.startDate, trip.endDate) : null),
@@ -710,14 +710,16 @@ export default function ItineraryPanel({
   const categoryView = isRoute
     ? null
     : (viewMode as Exclude<ItineraryViewMode, "itinerary">)
-  // En Ruta, al bajar, se van título, pestañas de categoría y Lista /
-  // Calendario / Mapa. El filtro de día y el alta (Añadir ítem / día) se
-  // quedan, como las pestañas de Fuentes. El rail flotante sustituye al
-  // SegmentedControl para no dejar Calendario/Mapa sin forma de volver a
-  // Lista. En el resto de pestañas las categorías se quedan: sin ellas no
-  // hay forma de cambiar sin subir.
+  // En Ruta, al bajar: móvil se lleva título, pestañas de categoría y
+  // Lista / Calendario / Mapa (el rail las sustituye; el filtro de día y
+  // el alta se quedan). Desktop solo repliega las pestañas de categoría
+  // —como el titular del artículo en Fuentes— y las recupera al subir.
+  // Actividades / Alojamientos / Transporte / Básicos no se tocan: sin
+  // esas pestañas no hay forma de cambiar de vista.
   const collapseRouteChrome =
     isMobile && headerCollapsed && isRoute && planSurface === "plan"
+  const collapseViewModeTabs =
+    headerCollapsed && isRoute && planSurface === "plan"
   // Calendario y Mapa: al replegar la barra sticky se oculta entera (el
   // rail cubre el cambio de vista). Los filtros del mapa (día / recorrido /
   // línea) bajan al cuerpo, debajo de la burbuja, como el mes del calendario.
@@ -890,20 +892,20 @@ export default function ItineraryPanel({
         </div>
 
         {/* Fila 3: pestañas o barra de presupuesto.
-            En Ruta móvil se repliegan con el título; en el resto se quedan. */}
+            En Ruta se repliegan al bajar (móvil + desktop); en el resto se quedan. */}
         <div
           className={cn(
-            isMobile && isRoute && planSurface === "plan"
+            isRoute && planSurface === "plan"
               ? cn(
                   "overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
-                  collapseRouteChrome
+                  collapseViewModeTabs
                     ? "max-h-0 min-h-0 opacity-0"
                     : "max-h-10 min-h-8 opacity-100",
                 )
               : "min-h-8",
           )}
-          aria-hidden={collapseRouteChrome}
-          inert={collapseRouteChrome || undefined}
+          aria-hidden={collapseViewModeTabs}
+          inert={collapseViewModeTabs || undefined}
         >
           {planSurface === "budget" ? (
             <div className="flex min-h-8 items-center gap-2">
