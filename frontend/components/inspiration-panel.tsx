@@ -44,7 +44,7 @@ import { useTrips } from "@/lib/trip-context"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ApiLimitError } from "@/lib/api"
 import { itemTypeLabel } from "@/lib/item-styles"
-import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
+import { formatAddedDaysCompact } from "@/lib/trip-dates"
 import { formatGuideLabel, sourceArticleHeading } from "@/lib/itinerary-utils"
 import { canAddSource } from "@/lib/trip-sources"
 import { REVEAL_SOURCES_EVENT, type RevealSourcesDetail } from "@/lib/onboarding"
@@ -99,17 +99,6 @@ function toastSourceRouteImport(
 }
 
 type SourceTab = "itinerary" | "transport" | "source" | "basics"
-
-/** Badge «añadido»: fecha corta si hay startDate; si no, «Día n». `days` es 1-based. */
-function formatAddedDaysCompact(days: number[], startDate?: string | null): string {
-  if (!days.length) return ""
-  return days
-    .map((d) => {
-      const iso = startDate ? dateISOForDayIndex(startDate, d - 1) : null
-      return (iso ? formatDayDate(iso) : null) ?? `Día ${d}`
-    })
-    .join(", ")
-}
 
 export default function InspirationPanel({
   tripId,

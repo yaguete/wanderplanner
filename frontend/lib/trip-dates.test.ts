@@ -3,6 +3,7 @@ import {
   dateISOForDayIndex,
   daysBetweenInclusive,
   endDateFromStartAndNumDays,
+  formatAddedDaysCompact,
   formatDayDate,
   formatDayDateShort,
   formatTripDates,
@@ -36,6 +37,22 @@ assert.equal(formatDayDate("2026-08-09"), "dom 9 ago")
 assert.equal(formatDayDateShort("2026-08-29"), "29 ago")
 assert.equal(formatDayDateShort("2026-09-14"), "14 sept")
 assert.equal(formatDayDateShort(null), null)
+
+// Badge de ítem ya añadido: rachas consecutivas se colapsan.
+assert.equal(formatAddedDaysCompact([]), "")
+assert.equal(formatAddedDaysCompact([1], "2026-12-28"), "lun 28 dic")
+assert.equal(
+  formatAddedDaysCompact([1, 2, 3, 4, 5], "2026-12-28"),
+  "lun 28 dic a vie 1 ene",
+)
+assert.equal(formatAddedDaysCompact([1, 4], "2026-12-28"), "lun 28 dic, jue 31 dic")
+assert.equal(
+  formatAddedDaysCompact([1, 2, 5], "2026-12-28"),
+  "lun 28 dic a mar 29 dic, vie 1 ene",
+)
+assert.equal(formatAddedDaysCompact([5, 1, 2, 2], "2026-12-28"), "lun 28 dic a mar 29 dic, vie 1 ene")
+assert.equal(formatAddedDaysCompact([1, 2, 3], null), "Día 1 a Día 3")
+assert.equal(formatAddedDaysCompact([1, 4]), "Día 1, Día 4")
 
 // Añadir un día al viaje de aceptación: 14–20 → 14–21.
 assert.equal(endDateFromStartAndNumDays("2026-09-14", 8), "2026-09-21")

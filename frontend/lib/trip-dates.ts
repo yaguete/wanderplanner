@@ -104,6 +104,44 @@ export function dateISOForDayIndex(
   return toISODate(addDays(a, dayIndex0))
 }
 
+function labelForAddedDay(day1: number, startDate?: string | null): string {
+  const iso = startDate ? dateISOForDayIndex(startDate, day1 - 1) : null
+  return (iso ? formatDayDate(iso) : null) ?? `Día ${day1}`
+}
+
+/** Rachas de índices 1-based consecutivos, ordenadas y sin duplicados. */
+function consecutiveDayRuns(days: number[]): number[][] {
+  const unique = [...new Set(days.filter((d) => Number.isFinite(d) && d >= 1))].sort(
+    (a, b) => a - b,
+  )
+  const runs: number[][] = []
+  for (const d of unique) {
+    const last = runs[runs.length - 1]
+    if (last && d === last[last.length - 1] + 1) last.push(d)
+    else runs.push([d])
+  }
+  return runs
+}
+
+/**
+ * Badge «añadido» en Fuentes: fecha corta si hay startDate; si no, «Día n».
+ * `days` es 1-based. Rachas consecutivas → «lun 28 dic a vie 1 ene»;
+ * huecos → lista: «lun 28 dic, jue 31 dic».
+ */
+export function formatAddedDaysCompact(
+  days: number[],
+  startDate?: string | null,
+): string {
+  if (!days.length) return ""
+  return consecutiveDayRuns(days)
+    .map((run) => {
+      const first = labelForAddedDay(run[0], startDate)
+      if (run.length === 1) return first
+      return `${first} a ${labelForAddedDay(run[run.length - 1], startDate)}`
+    })
+    .join(", ")
+}
+
 /** YYYY-MM-DD de mañana en zona local del navegador. */
 export function tomorrowISO(): string {
   return toISODate(addDays(new Date(), 1))
