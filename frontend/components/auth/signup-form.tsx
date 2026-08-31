@@ -10,6 +10,7 @@ import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PasswordInput } from "@/components/auth/password-input"
 import { Textarea } from "@/components/ui/textarea"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
@@ -157,9 +158,8 @@ export function SignupForm({
 
         <div className="flex flex-col gap-1.5 text-left">
           <Label htmlFor={`${prefix}password`}>Contraseña</Label>
-          <Input
+          <PasswordInput
             id={`${prefix}password`}
-            type="password"
             autoComplete="new-password"
             required
             minLength={MIN_PASSWORD_LENGTH}
@@ -170,9 +170,8 @@ export function SignupForm({
 
         <div className="flex flex-col gap-1.5 text-left">
           <Label htmlFor={`${prefix}password-repeat`}>Repetir contraseña</Label>
-          <Input
+          <PasswordInput
             id={`${prefix}password-repeat`}
-            type="password"
             autoComplete="new-password"
             required
             minLength={MIN_PASSWORD_LENGTH}

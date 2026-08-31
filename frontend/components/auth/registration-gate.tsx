@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PasswordInput } from "@/components/auth/password-input"
 import { isTurnstileEnabled } from "@/components/auth/turnstile"
 import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
@@ -424,9 +425,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="gate-login-password">Contraseña</Label>
-                  <Input
+                  <PasswordInput
                     id="gate-login-password"
-                    type="password"
                     autoComplete="current-password"
                     required
                     minLength={6}
@@ -532,9 +532,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="gate-password">Contraseña</Label>
-                  <Input
+                  <PasswordInput
                     id="gate-password"
-                    type="password"
                     autoComplete="new-password"
                     required
                     minLength={MIN_PASSWORD_LENGTH}
@@ -544,9 +543,8 @@ export function RegistrationGateProvider({ children }: { children: React.ReactNo
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="gate-password-repeat">Repetir contraseña</Label>
-                  <Input
+                  <PasswordInput
                     id="gate-password-repeat"
-                    type="password"
                     autoComplete="new-password"
                     required
                     minLength={MIN_PASSWORD_LENGTH}

@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { PasswordInput } from "@/components/auth/password-input"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { RememberMeCheckbox } from "@/components/auth/remember-me-checkbox"
 import { isTurnstileEnabled } from "@/components/auth/turnstile"
@@ -168,9 +169,8 @@ function LoginForm() {
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="password">Contraseña</Label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
             required
             value={password}

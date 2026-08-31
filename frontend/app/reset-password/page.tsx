@@ -4,10 +4,10 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { PasswordInput } from "@/components/auth/password-input"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
 
@@ -70,9 +70,8 @@ export default function ResetPasswordPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-password">Nueva contraseña</Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={MIN_PASSWORD_LENGTH}
@@ -82,9 +81,8 @@ export default function ResetPasswordPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="repeat-password">Repetir contraseña</Label>
-            <Input
+            <PasswordInput
               id="repeat-password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={MIN_PASSWORD_LENGTH}

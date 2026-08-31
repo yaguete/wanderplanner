@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { PasswordInput } from "@/components/auth/password-input"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { isTurnstileEnabled } from "@/components/auth/turnstile"
 import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
@@ -146,8 +147,8 @@ export function InviteAccept({ token }: { token: string }) {
         </div>
         <div>
           <Label>Contraseña</Label>
-          <Input
-            type="password"
+          <PasswordInput
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -225,8 +226,8 @@ export function InviteAccept({ token }: { token: string }) {
           </div>
           <div>
             <Label>Contraseña</Label>
-            <Input
-              type="password"
+            <PasswordInput
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               minLength={MIN_PASSWORD_LENGTH}
@@ -235,7 +236,12 @@ export function InviteAccept({ token }: { token: string }) {
           </div>
           <div>
             <Label>Repite la contraseña</Label>
-            <Input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
+            <PasswordInput
+              autoComplete="new-password"
+              value={repeat}
+              onChange={(e) => setRepeat(e.target.value)}
+              required
+            />
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={busy}>
@@ -357,11 +363,21 @@ export function InviteAccept({ token }: { token: string }) {
         </div>
         <div>
           <Label>Contraseña</Label>
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <PasswordInput
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </div>
         <div>
           <Label>Repite la contraseña</Label>
-          <Input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} required />
+          <PasswordInput
+            autoComplete="new-password"
+            value={repeat}
+            onChange={(e) => setRepeat(e.target.value)}
+            required
+          />
         </div>
         {isTurnstileEnabled() ? (
           <ThemedTurnstile key={captchaKey} resetKey={captchaKey} onToken={setCaptcha} />
