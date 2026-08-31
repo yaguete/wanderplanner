@@ -5,12 +5,15 @@ import {
   buildFeedListRows,
   capFeedHosts,
   extractionFailureMessage,
+  faviconUrlForHost,
   feedHostsFromReferences,
   formatPublishedAt,
   hostIsFeedable,
   MAX_REFERENCE_FEED_HOSTS,
   mergeFeedItems,
   resolveFeedFilter,
+  toggleAllFeedFilter,
+  toggleOneFeedFilter,
   tripFeedEligibility,
   tripHasArticle,
   tripsWithArticle,
@@ -20,6 +23,10 @@ import type { FavoriteReference } from "@/lib/db/profile-repo"
 import type { Source, Trip } from "@/types/itinerary"
 
 assert.equal(MAX_REFERENCE_FEED_HOSTS, 8)
+assert.equal(
+  faviconUrlForHost("www.LaCosmopolilla.com"),
+  "https://www.google.com/s2/favicons?domain=lacosmopolilla.com&sz=32",
+)
 assert.equal(hostIsFeedable("lacosmopolilla.com"), true)
 assert.equal(hostIsFeedable("sinmapa.net"), true)
 assert.equal(hostIsFeedable("booking.com"), false)
@@ -55,6 +62,12 @@ assert.deepEqual(resolveFeedFilter(["a.com", "b.com"], null), ["a.com", "b.com"]
 assert.deepEqual(resolveFeedFilter(["a.com", "b.com"], ["b.com", "gone.com"]), ["b.com"])
 assert.deepEqual(resolveFeedFilter(["a.com", "b.com"], []), [])
 assert.deepEqual(resolveFeedFilter(["a.com"], ["gone.com"]), ["a.com"])
+
+assert.deepEqual(toggleAllFeedFilter(["a.com", "b.com"], ["a.com"]), ["a.com", "b.com"])
+assert.deepEqual(toggleAllFeedFilter(["a.com", "b.com"], ["a.com", "b.com"]), [])
+assert.deepEqual(toggleAllFeedFilter(["a.com", "b.com"], []), ["a.com", "b.com"])
+assert.deepEqual(toggleOneFeedFilter(["a.com"], "b.com"), ["a.com", "b.com"])
+assert.deepEqual(toggleOneFeedFilter(["a.com", "b.com"], "a.com"), ["b.com"])
 
 function item(patch: Partial<ReferenceFeedItem> & Pick<ReferenceFeedItem, "url" | "host">): ReferenceFeedItem {
   return {

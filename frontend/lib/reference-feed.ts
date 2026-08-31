@@ -43,6 +43,12 @@ export type FeedListRow =
 
 export type TripFeedEligibility = "ok" | "full" | "busy" | "duplicate"
 
+/** Icono público del sitio (gstatic). `/favicon.ico` suele 404 en WordPress. */
+export function faviconUrlForHost(host: string): string {
+  const domain = host.replace(/^www\./i, "").toLowerCase().trim()
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`
+}
+
 export function hostIsFeedable(host: string): boolean {
   const h = host.replace(/^www\./i, "").toLowerCase().trim()
   if (!h) return false
@@ -86,6 +92,30 @@ export function resolveFeedFilter(
   const next = stored.filter((d) => allow.has(d))
   if (stored.length > 0 && next.length === 0) return [...available]
   return next
+}
+
+export function allFeedFilterSelected(
+  available: readonly string[],
+  selected: readonly string[],
+): boolean {
+  return available.length > 0 && available.every((d) => selected.includes(d))
+}
+
+/** Si están todas, las oculta; si no, las muestra todas. */
+export function toggleAllFeedFilter(
+  available: readonly string[],
+  selected: readonly string[],
+): string[] {
+  return allFeedFilterSelected(available, selected) ? [] : [...available]
+}
+
+export function toggleOneFeedFilter(
+  selected: readonly string[],
+  domain: string,
+): string[] {
+  return selected.includes(domain)
+    ? selected.filter((d) => d !== domain)
+    : [...selected, domain]
 }
 
 export function readStoredFeedFilter(): string[] | null {

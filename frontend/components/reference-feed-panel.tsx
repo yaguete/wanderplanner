@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpen, ExternalLink, Map as MapIcon, MoreHorizontal, Plus } from "lucide-react"
+import { BookOpen, ChevronDown, ExternalLink, Map as MapIcon, MoreHorizontal, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { useOpeningTrip } from "@/components/opening-trip"
@@ -18,8 +18,10 @@ import {
 } from "@/components/ui/dialog"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -33,12 +35,16 @@ import {
   buildFeedListRows,
   capFeedHosts,
   extractionFailureMessage,
+  faviconUrlForHost,
   feedHostsFromReferences,
   fetchReferenceFeed,
   formatPublishedAt,
   hostIsFeedable,
+  allFeedFilterSelected,
   readStoredFeedFilter,
   resolveFeedFilter,
+  toggleAllFeedFilter,
+  toggleOneFeedFilter,
   tripsWithArticle,
   writeStoredFeedFilter,
   type AddArticleTripOption,
@@ -59,6 +65,43 @@ const FEED_ACTION_BTN_CLASS = cn(
 
 function openExternal(url: string) {
   window.open(url, "_blank", "noopener,noreferrer")
+}
+
+function SiteFavicon({ host }: { host: string }) {
+  const [failed, setFailed] = useState(false)
+  const letter = host.replace(/^www\./i, "").charAt(0).toUpperCase() || "?"
+  if (failed) {
+    return (
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-muted text-[9px] font-medium text-muted-foreground"
+        aria-hidden
+      >
+        {letter}
+      </span>
+    )
+  }
+  return (
+    <img
+      src={faviconUrlForHost(host)}
+      alt=""
+      width={16}
+      height={16}
+      className="h-4 w-4 shrink-0 rounded-sm"
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
+function SourceFilterLabel({ domain, label }: { domain: string; label: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <SiteFavicon host={domain} />
+      <span className="truncate">{label}</span>
+    </span>
+  )
 }
 
 function FeedRowAction({
@@ -298,9 +341,15 @@ export function ReferenceFeedPanel() {
   const toggleChip = (domain: string, feedable: boolean) => {
     if (!feedable) return
     setSelected((prev) => {
-      const next = prev.includes(domain)
-        ? prev.filter((d) => d !== domain)
-        : [...prev, domain]
+      const next = toggleOneFeedFilter(prev, domain)
+      writeStoredFeedFilter(next)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setSelected((prev) => {
+      const next = toggleAllFeedFilter(feedableDomains, prev)
       writeStoredFeedFilter(next)
       return next
     })
@@ -396,35 +445,68 @@ export function ReferenceFeedPanel() {
       </form>
 
       {chips.length > 0 ? (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por referencia">
-          {chips.map((chip) => {
-            const active = chip.feedable && selected.includes(chip.domain)
-            return (
-              <button
-                key={chip.domain}
-                type="button"
-                aria-pressed={active}
-                disabled={!chip.feedable}
-                title={
-                  chip.feedable
-                    ? undefined
-                    : "Esta web no publica una cronología de artículos que podamos listar."
-                }
-                onClick={() => toggleChip(chip.domain, chip.feedable)}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-sm transition-colors",
-                  !chip.feedable
-                    ? "cursor-not-allowed border-border text-muted-foreground/70"
-                    : active
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border bg-background text-foreground/80 hover:bg-muted",
-                )}
-              >
-                {chip.label}
-              </button>
-            )
-          })}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label={
+                feedableDomains.length > 0 &&
+                selected.length !== feedableDomains.length
+                  ? `Fuentes, ${selected.length} de ${feedableDomains.length}`
+                  : "Fuentes"
+              }
+              className="w-fit"
+            >
+              Fuentes
+              {feedableDomains.length > 0 &&
+              selected.length !== feedableDomains.length ? (
+                <span className="text-muted-foreground">
+                  ({selected.length})
+                </span>
+              ) : null}
+              <ChevronDown className="h-4 w-4 opacity-60" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[14rem]">
+            <DropdownMenuCheckboxItem
+              checked={
+                allFeedFilterSelected(feedableDomains, selected)
+                  ? true
+                  : selected.length > 0
+                    ? "indeterminate"
+                    : false
+              }
+              onCheckedChange={toggleAll}
+              onSelect={(e) => e.preventDefault()}
+              className="cursor-pointer"
+            >
+              Mostrar todas
+            </DropdownMenuCheckboxItem>
+            {chips.length > 0 ? <DropdownMenuSeparator /> : null}
+            {chips.map((chip) =>
+              chip.feedable ? (
+                <DropdownMenuCheckboxItem
+                  key={chip.domain}
+                  checked={selected.includes(chip.domain)}
+                  onCheckedChange={() => toggleChip(chip.domain, true)}
+                  onSelect={(e) => e.preventDefault()}
+                  className="cursor-pointer"
+                >
+                  <SourceFilterLabel domain={chip.domain} label={chip.label} />
+                </DropdownMenuCheckboxItem>
+              ) : (
+                <DropdownMenuItem
+                  key={chip.domain}
+                  disabled
+                  title="Esta web no publica una cronología de artículos que podamos listar."
+                >
+                  <SourceFilterLabel domain={chip.domain} label={chip.label} />
+                </DropdownMenuItem>
+              ),
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : null}
 
       {chips.length === 0 ? (
@@ -439,7 +521,7 @@ export function ReferenceFeedPanel() {
         <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
           <p className="text-sm font-medium text-foreground">Elige una referencia</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Activa uno o varios chips para ver sus últimos artículos.
+            Activa una o varias fuentes en el menú Fuentes para ver sus últimos artículos.
           </p>
         </div>
       ) : loading && listRows.length === 0 ? (

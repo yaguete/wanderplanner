@@ -45,7 +45,7 @@ export function TripsHomeHeading({
       <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
         {section === "trips"
           ? "Consolida fuentes en las que confías en una ruta editable."
-          : "Los últimos artículos de los blogueros en los que confías."}
+          : "El contenido más reciente de tus fuentes de inspiración"}
       </p>
     </div>
   )
