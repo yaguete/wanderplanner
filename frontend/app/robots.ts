@@ -1,13 +1,8 @@
 import type { MetadataRoute } from "next"
-import { SITE_URL } from "@/lib/site"
+import { headers } from "next/headers"
+import { hostnameFromHeaders, robotsForHostname } from "@/lib/mcp/host"
 
-export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: {
-      userAgent: "*",
-      allow: "/",
-      disallow: ["/trips", "/account", "/oauth", "/mcp"],
-    },
-    sitemap: `${SITE_URL}/sitemap.xml`,
-  }
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const hostname = hostnameFromHeaders(await headers())
+  return robotsForHostname(hostname)
 }

@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 # Smoke test del servidor MCP de WanderPlanner (complemento de ChatGPT).
-# Uso: ./scripts/smoke-mcp.sh <SITE_URL>
-# Ejemplo: ./scripts/smoke-mcp.sh https://wanderplanner.ai
+# Uso: ./scripts/smoke-mcp.sh <MCP_ENDPOINT_URL>
+# Ejemplo: ./scripts/smoke-mcp.sh https://mcp.wanderplanner.ai
+#          ./scripts/smoke-mcp.sh https://wanderplanner.ai/mcp   # path legado
+#
+# $1 es el endpoint al que se POST-ea, no el origen del producto. Apuntarlo a
+# https://wanderplanner.ai (la landing) tiene que FALLAR: POST / no es MCP.
 #
 # Hermano de scripts/smoke.sh, que cubre la API de Fly. Aquí solo va lo que
 # producción puede decir y los tests no: la forma del 401, el contenido de los
 # well-known y que el kill switch no se haya quedado apagado tras un deploy.
 #
 # Comprueba:
-#   1) POST /mcp sin Bearer → 401 con WWW-Authenticate y resource_metadata.
+#   1) POST al endpoint sin Bearer → 401 con WWW-Authenticate y resource_metadata.
 #      Es LA comprobación: sin esa cabecera ChatGPT no sabe dónde empezar el
 #      OAuth y el conector no arranca.
-#   2) /mcp no responde 503 (MCP_ENABLED sigue puesto).
-#   3) POST /mcp con Bearer inválido → 401, no 500.
-#   4) Las DOS rutas RFC 9728 → 200 con el `resource` y el issuer correctos.
-#      La de /mcp existe porque un cliente puede derivar la URL en vez de
-#      seguir la cabecera.
-#   5) OPTIONS en los well-known → CORS (metadataCorsOptionsRequestHandler).
+#   2) El endpoint no responde 503 (MCP_ENABLED sigue puesto).
+#   3) POST con Bearer inválido → 401, no 500.
+#   4) RFC 9728: well-known de raíz siempre; el de /mcp solo si el endpoint
+#      lleva path /mcp (un cliente puede derivar la URL en vez de seguir la
+#      cabecera). En mcp.wanderplanner.ai el relevante es el de la raíz.
+#   5) OPTIONS en el well-known de raíz → CORS (metadataCorsOptionsRequestHandler).
 #   6) /.well-known/openai-apps-challenge no revienta (404 mientras no esté
 #      OPENAI_APPS_CHALLENGE; 200 con el token durante el envío al directorio).
+#   7) Si el host es mcp.wanderplanner.ai: cierre de host (GET /trips → 308 al
+#      dominio principal) y robots.txt Disallow: / sin Allow: /.
 #
 # Token caducado o revocado NO se prueban aquí: fabricarlos en bash es un lío y
 # ya están cubiertos en frontend/lib/mcp/trip-access.test.ts.
@@ -29,10 +35,13 @@ set -euo pipefail
 
 TIMEOUT_S="${SMOKE_TIMEOUT:-15}"
 SUPABASE_ISSUER_HINT="${SMOKE_SUPABASE_ISSUER:-}"
+SITE_ORIGIN="https://wanderplanner.ai"
+MCP_DEDICATED_HOST="mcp.wanderplanner.ai"
 
 usage() {
-  echo "Uso: $0 <SITE_URL>" >&2
-  echo "Ejemplo: $0 https://wanderplanner.ai" >&2
+  echo "Uso: $0 <MCP_ENDPOINT_URL>" >&2
+  echo "Ejemplo: $0 https://mcp.wanderplanner.ai" >&2
+  echo "         $0 https://wanderplanner.ai/mcp" >&2
   exit 2
 }
 
@@ -45,15 +54,31 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 2
 fi
 
-BASE="${1%/}"
-if [[ -z "$BASE" ]]; then
+ENDPOINT="${1%/}"
+if [[ -z "$ENDPOINT" ]]; then
   usage
 fi
 
-MCP_URL="$BASE/mcp"
-PRM_ROOT="$BASE/.well-known/oauth-protected-resource"
-PRM_MCP="$BASE/.well-known/oauth-protected-resource/mcp"
-CHALLENGE="$BASE/.well-known/openai-apps-challenge"
+REST="${ENDPOINT#https://}"
+SCHEME="https"
+if [[ "$REST" == "$ENDPOINT" ]]; then
+  REST="${ENDPOINT#http://}"
+  SCHEME="http"
+fi
+HOSTPORT="${REST%%/*}"
+PATHPART="${REST#"$HOSTPORT"}"
+ORIGIN="${SCHEME}://${HOSTPORT}"
+MCP_URL="$ENDPOINT"
+HOST_ONLY="$(printf '%s' "${HOSTPORT%%:*}" | tr '[:upper:]' '[:lower:]')"
+
+PRM_ROOT="$ORIGIN/.well-known/oauth-protected-resource"
+PRM_MCP="$ORIGIN/.well-known/oauth-protected-resource/mcp"
+CHALLENGE="$ORIGIN/.well-known/openai-apps-challenge"
+
+CHECK_PRM_MCP=0
+if [[ "$PATHPART" == "/mcp" ]]; then
+  CHECK_PRM_MCP=1
+fi
 
 PASS=0
 FAIL=0
@@ -94,7 +119,7 @@ header_value() {
     | head -n 1
 }
 
-echo "Smoke MCP → $BASE (timeout ${TIMEOUT_S}s)"
+echo "Smoke MCP → $MCP_URL (timeout ${TIMEOUT_S}s)"
 echo
 
 # ── 1 y 2) Sin Bearer: 401 con WWW-Authenticate, y no 503 ────────────────────
@@ -103,9 +128,9 @@ NOAUTH_BODY="$TMPDIR/noauth.body"
 NOAUTH_CODE="$(mcp_post "$NOAUTH_HDRS" "$NOAUTH_BODY" || true)"
 
 if [[ "$NOAUTH_CODE" == "503" ]]; then
-  bad "POST /mcp → 503: el kill switch está apagado (MCP_ENABLED != 'true'). Recuerda que un cambio de env exige redeploy"
+  bad "POST $MCP_URL → 503: el kill switch está apagado (MCP_ENABLED != 'true'). Recuerda que un cambio de env exige redeploy"
 elif [[ "$NOAUTH_CODE" == "401" ]]; then
-  ok "POST /mcp sin Authorization → 401"
+  ok "POST sin Authorization → 401"
 
   WWW="$(header_value "$NOAUTH_HDRS" "www-authenticate")"
   if [[ -z "$WWW" ]]; then
@@ -121,7 +146,7 @@ elif [[ "$NOAUTH_CODE" == "401" ]]; then
     fi
   fi
 else
-  bad "POST /mcp sin Authorization esperaba 401, obtuvo '${NOAUTH_CODE:-error de red}'"
+  bad "POST sin Authorization esperaba 401, obtuvo '${NOAUTH_CODE:-error de red}'"
   if [[ -s "$NOAUTH_BODY" ]]; then
     echo "  body: $(head -c 200 "$NOAUTH_BODY")" >&2
   fi
@@ -136,17 +161,17 @@ BADTOK_CODE="$(
   || true
 )"
 if [[ "$BADTOK_CODE" == "401" ]]; then
-  ok "POST /mcp con Bearer inválido → 401"
+  ok "POST con Bearer inválido → 401"
 elif [[ "$BADTOK_CODE" == "503" ]]; then
-  bad "POST /mcp con Bearer inválido → 503 (MCP_ENABLED apagado)"
+  bad "POST con Bearer inválido → 503 (MCP_ENABLED apagado)"
 else
-  bad "POST /mcp con Bearer inválido esperaba 401, obtuvo '${BADTOK_CODE:-error de red}'"
+  bad "POST con Bearer inválido esperaba 401, obtuvo '${BADTOK_CODE:-error de red}'"
   if [[ -s "$BADTOK_BODY" ]]; then
     echo "  body: $(head -c 200 "$BADTOK_BODY")" >&2
   fi
 fi
 
-# ── 4) Metadatos RFC 9728, en las dos rutas ──────────────────────────────────
+# ── 4) Metadatos RFC 9728 ────────────────────────────────────────────────────
 check_prm() {
   local slug="$1" label="$2" url="$3"
   local body="$TMPDIR/prm-$slug.body"
@@ -179,9 +204,11 @@ check_prm() {
 }
 
 check_prm "root" "/.well-known/oauth-protected-resource" "$PRM_ROOT"
-# RFC 9728 inserta la ruta del recurso: un cliente que derive la URL en vez de
-# seguir la cabecera busca aquí. Por eso se sirven las dos.
-check_prm "mcp" "/.well-known/oauth-protected-resource/mcp" "$PRM_MCP"
+if [[ "$CHECK_PRM_MCP" == "1" ]]; then
+  # RFC 9728 inserta la ruta del recurso: un cliente que derive la URL en vez de
+  # seguir la cabecera busca aquí. Por eso se sirve también en /mcp.
+  check_prm "mcp" "/.well-known/oauth-protected-resource/mcp" "$PRM_MCP"
+fi
 
 # ── 5) CORS de los metadatos ─────────────────────────────────────────────────
 CORS_HDRS="$TMPDIR/cors.hdrs"
@@ -219,6 +246,39 @@ case "$CH_CODE" in
     bad "GET /.well-known/openai-apps-challenge esperaba 200 o 404, obtuvo '${CH_CODE:-error de red}'"
     ;;
 esac
+
+# ── 7) Cierre de host (solo el alias MCP) ────────────────────────────────────
+if [[ "$HOST_ONLY" == "$MCP_DEDICATED_HOST" ]]; then
+  TRIPS_HDRS="$TMPDIR/trips.hdrs"
+  TRIPS_CODE="$(
+    curl -sS -D "$TRIPS_HDRS" -o /dev/null -w "%{http_code}" --max-time "$TIMEOUT_S" \
+      "$ORIGIN/trips" \
+    || true
+  )"
+  TRIPS_LOC="$(header_value "$TRIPS_HDRS" "location")"
+  EXPECT_TRIPS="$SITE_ORIGIN/trips"
+  if [[ "$TRIPS_CODE" == "308" && "$TRIPS_LOC" == "$EXPECT_TRIPS" ]]; then
+    ok "GET /trips → 308 $EXPECT_TRIPS"
+  else
+    bad "GET /trips esperaba 308 $EXPECT_TRIPS, obtuvo '${TRIPS_CODE:-error}' Location='${TRIPS_LOC}'"
+  fi
+
+  ROBOTS_BODY="$TMPDIR/robots.body"
+  ROBOTS_CODE="$(
+    curl -sS -o "$ROBOTS_BODY" -w "%{http_code}" --max-time "$TIMEOUT_S" \
+      "$ORIGIN/robots.txt" \
+    || true
+  )"
+  if [[ "$ROBOTS_CODE" != "200" ]]; then
+    bad "GET /robots.txt esperaba 200, obtuvo '${ROBOTS_CODE:-error de red}'"
+  elif grep -Eq '^Allow:' "$ROBOTS_BODY"; then
+    bad "/robots.txt en el host MCP no debe tener Allow: · $(head -c 200 "$ROBOTS_BODY")"
+  elif grep -Eq '^Disallow: /[[:space:]]*$' "$ROBOTS_BODY"; then
+    ok "/robots.txt → Disallow: / (sin Allow: /)"
+  else
+    bad "/robots.txt sin Disallow: / · $(head -c 200 "$ROBOTS_BODY")"
+  fi
+fi
 
 echo
 echo "Resultado: $PASS pass, $FAIL fail"
