@@ -83,6 +83,7 @@
     "test:trip-tab": "tsx lib/trip-tab.test.ts",
     "test:trips-home-view": "tsx lib/trips-home-view.test.ts",
     "test:reference-feed": "tsx lib/reference-feed.test.ts",
+    "test:suggested-references": "tsx lib/suggested-references.test.ts",
     "test:trip-rail-mark": "tsx lib/trip-rail-mark.test.ts",
     "test:trips-repo": "tsx lib/db/schema-column-errors.test.ts && tsx lib/db/trips-persist.test.ts",
     "test:theme-scope": "tsx lib/theme-scope.test.ts",

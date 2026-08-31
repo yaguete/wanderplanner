@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, ExternalLink, Plus, Search } from "lucide-react"
+import { ArrowLeft, ChevronDown, ExternalLink, Lightbulb, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { AddReferenceDialog } from "@/components/add-reference-dialog"
@@ -10,6 +10,7 @@ import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ReferenceFeedRow } from "@/components/reference-feed-row"
 import { SearchReferenceDestinationDialog } from "@/components/search-reference-destination-dialog"
+import { SuggestedReferencesDirectory } from "@/components/suggested-references-directory"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -142,6 +143,7 @@ export function ReferenceFeedPanel() {
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [directory, setDirectory] = useState(false)
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
   const [pickerOptions, setPickerOptions] = useState<AddArticleTripOption[]>([])
@@ -219,7 +221,11 @@ export function ReferenceFeedPanel() {
     })
   }
 
-  const persistFavorite = async (homeUrl: string, domain: string): Promise<boolean> => {
+  const persistFavorite = async (
+    homeUrl: string,
+    domain: string,
+    label = "",
+  ): Promise<boolean> => {
     if (chips.some((c) => c.domain === domain)) {
       toast.error("Esa fuente ya está añadida.")
       return false
@@ -233,7 +239,7 @@ export function ReferenceFeedPanel() {
     const result = await updateProfile({
       favoriteReferences: [
         ...favoriteReferences.map((r) => ({ label: r.label, url: r.url })),
-        { label: "", url: homeUrl },
+        { label: label.trim(), url: homeUrl },
       ],
     })
     if (!result.ok) {
@@ -294,135 +300,169 @@ export function ReferenceFeedPanel() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-2">
-        {chips.length > 0 ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              aria-label={
-                feedableDomains.length > 0 &&
-                selected.length !== feedableDomains.length
-                  ? `Fuentes, ${selected.length} de ${feedableDomains.length}`
-                  : "Fuentes"
-              }
-              className="w-fit"
-            >
-              Fuentes
-              {feedableDomains.length > 0 &&
-              selected.length !== feedableDomains.length ? (
-                <span className="text-muted-foreground">
-                  ({selected.length})
-                </span>
-              ) : null}
-              <ChevronDown className="h-4 w-4 opacity-60" aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-[14rem]">
-            <DropdownMenuCheckboxItem
-              checked={allFeedFilterSelected(feedableDomains, selected)}
-              onCheckedChange={toggleAll}
-              onSelect={(e) => e.preventDefault()}
-              className="cursor-pointer"
-            >
-              Mostrar todas
-            </DropdownMenuCheckboxItem>
-            {chips.length > 0 ? <DropdownMenuSeparator /> : null}
-            {chips.map((chip) =>
-              chip.feedable ? (
-                <DropdownMenuCheckboxItem
-                  key={chip.domain}
-                  checked={selected.includes(chip.domain)}
-                  onCheckedChange={() => toggleChip(chip.domain, true)}
-                  onSelect={(e) => e.preventDefault()}
-                  className="cursor-pointer"
-                >
-                  <SourceFilterLabel domain={chip.domain} label={chip.label} />
-                </DropdownMenuCheckboxItem>
-              ) : (
-                <DropdownMenuItem
-                  key={chip.domain}
-                  disabled
-                  title="Esta web no publica una cronología de artículos que podamos listar."
-                >
-                  <SourceFilterLabel domain={chip.domain} label={chip.label} />
-                </DropdownMenuItem>
-              ),
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          aria-label="Añadir fuente"
-          className={GHOST_TOOLBAR_BTN}
-        >
-          <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          <span className="hidden md:inline">Añadir fuente</span>
-        </button>
-        {feedableDomains.length > 0 ? (
+      {directory ? (
+        <>
           <button
             type="button"
-            onClick={() => setSearching(true)}
-            aria-label="Buscar destino"
-            className={GHOST_TOOLBAR_BTN}
+            onClick={() => setDirectory(false)}
+            className="inline-flex h-10 w-fit items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Search className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-            <span className="hidden md:inline">Buscar destino</span>
+            <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+            Volver a tus fuentes
           </button>
-        ) : null}
-      </div>
-
-      {chips.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-          <p className="text-sm font-medium text-foreground">Aún no tienes referencias</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Pulsa Añadir fuente y pega la URL de un bloguero o una revista en la que confíes.
-          </p>
-        </div>
-      ) : selected.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-          <p className="text-sm font-medium text-foreground">Elige una referencia</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Activa una o varias fuentes en el menú Fuentes para ver sus últimos artículos.
-          </p>
-        </div>
-      ) : loading && listRows.length === 0 ? (
-        <div className="flex justify-center rounded-xl border border-dashed border-border px-6 py-14">
-          <Spinner className="size-5 text-muted-foreground" />
-        </div>
-      ) : allEmpty ? (
-        <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-          <p className="text-sm font-medium text-foreground">Sin artículos recientes</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            No hemos encontrado posts recientes en{" "}
-            {emptyHosts.map((h) => chips.find((c) => c.domain === h)?.label || h).join(", ")}.
-          </p>
-        </div>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Sugerencias</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Blogs de viaje que conocemos. Añádelos como referencia para ver sus artículos aquí.
+            </p>
+          </div>
+          <SuggestedReferencesDirectory
+            knownDomains={chips.map((c) => c.domain)}
+            onAdd={persistFavorite}
+          />
+        </>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border">
-          <ul className="divide-y divide-border">
-            {listRows.map((row) => {
-              if (row.type === "more") {
-                return <FeedMoreRow key={`more:${row.host}`} label={row.label} href={row.href} />
-              }
-              const item = row.item
-              const alreadyIn = alreadyInFor(item)
-              return (
-                <ReferenceFeedRow
-                  key={item.url}
-                  item={item}
-                  alreadyIn={alreadyIn}
-                  onRead={() => openExternal(item.url)}
-                  onAdd={() => openPicker(item)}
-                  onCreate={() => setCreating(item)}
-                />
-              )
-            })}
-          </ul>
-        </div>
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            {chips.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label={
+                      feedableDomains.length > 0 &&
+                      selected.length !== feedableDomains.length
+                        ? `Fuentes, ${selected.length} de ${feedableDomains.length}`
+                        : "Fuentes"
+                    }
+                    className="w-fit"
+                  >
+                    Fuentes
+                    {feedableDomains.length > 0 &&
+                    selected.length !== feedableDomains.length ? (
+                      <span className="text-muted-foreground">
+                        ({selected.length})
+                      </span>
+                    ) : null}
+                    <ChevronDown className="h-4 w-4 opacity-60" aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[14rem]">
+                  <DropdownMenuCheckboxItem
+                    checked={allFeedFilterSelected(feedableDomains, selected)}
+                    onCheckedChange={toggleAll}
+                    onSelect={(e) => e.preventDefault()}
+                    className="cursor-pointer"
+                  >
+                    Mostrar todas
+                  </DropdownMenuCheckboxItem>
+                  {chips.length > 0 ? <DropdownMenuSeparator /> : null}
+                  {chips.map((chip) =>
+                    chip.feedable ? (
+                      <DropdownMenuCheckboxItem
+                        key={chip.domain}
+                        checked={selected.includes(chip.domain)}
+                        onCheckedChange={() => toggleChip(chip.domain, true)}
+                        onSelect={(e) => e.preventDefault()}
+                        className="cursor-pointer"
+                      >
+                        <SourceFilterLabel domain={chip.domain} label={chip.label} />
+                      </DropdownMenuCheckboxItem>
+                    ) : (
+                      <DropdownMenuItem
+                        key={chip.domain}
+                        disabled
+                        title="Esta web no publica una cronología de artículos que podamos listar."
+                      >
+                        <SourceFilterLabel domain={chip.domain} label={chip.label} />
+                      </DropdownMenuItem>
+                    ),
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              aria-label="Añadir fuente"
+              className={GHOST_TOOLBAR_BTN}
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+              <span className="hidden md:inline">Añadir fuente</span>
+            </button>
+            {feedableDomains.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setSearching(true)}
+                aria-label="Buscar destino"
+                className={GHOST_TOOLBAR_BTN}
+              >
+                <Search className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                <span className="hidden md:inline">Buscar destino</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setDirectory(true)}
+              aria-label="Sugerencias"
+              className={GHOST_TOOLBAR_BTN}
+            >
+              <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+              <span className="hidden md:inline">Sugerencias</span>
+            </button>
+          </div>
+
+          {chips.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
+              <p className="text-sm font-medium text-foreground">Aún no tienes referencias</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Pulsa Añadir fuente o abre Sugerencias para seguir blogs en los que confíes.
+              </p>
+            </div>
+          ) : selected.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
+              <p className="text-sm font-medium text-foreground">Elige una referencia</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Activa una o varias fuentes en el menú Fuentes para ver sus últimos artículos.
+              </p>
+            </div>
+          ) : loading && listRows.length === 0 ? (
+            <div className="flex justify-center rounded-xl border border-dashed border-border px-6 py-14">
+              <Spinner className="size-5 text-muted-foreground" />
+            </div>
+          ) : allEmpty ? (
+            <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
+              <p className="text-sm font-medium text-foreground">Sin artículos recientes</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                No hemos encontrado posts recientes en{" "}
+                {emptyHosts.map((h) => chips.find((c) => c.domain === h)?.label || h).join(", ")}.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border">
+              <ul className="divide-y divide-border">
+                {listRows.map((row) => {
+                  if (row.type === "more") {
+                    return <FeedMoreRow key={`more:${row.host}`} label={row.label} href={row.href} />
+                  }
+                  const item = row.item
+                  const alreadyIn = alreadyInFor(item)
+                  return (
+                    <ReferenceFeedRow
+                      key={item.url}
+                      item={item}
+                      alreadyIn={alreadyIn}
+                      onRead={() => openExternal(item.url)}
+                      onAdd={() => openPicker(item)}
+                      onCreate={() => setCreating(item)}
+                    />
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+        </>
       )}
 
       <AddReferenceDialog
