@@ -70,6 +70,7 @@ export function AddToDayDialog({
   onAddDay,
 }: AddToDayDialogProps) {
   const nightsFieldId = useId()
+  const dayListLabelId = useId()
   const [query, setQuery] = useState("")
   const [anchorDayId, setAnchorDayId] = useState<string | null>(null)
   const [nights, setNights] = useState(1)
@@ -223,15 +224,27 @@ export function AddToDayDialog({
             </p>
             {onAddDay ? <AddDayButton onClick={onAddDay} /> : null}
           </div>
-        ) : visibleRows.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground max-sm:flex-1">
-            Ningún día coincide con «{query.trim()}».
-          </p>
         ) : (
-          <ul className={cn(
-            "max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:space-y-1.5 max-sm:px-3 max-sm:pt-3",
-            !spanKind && "max-sm:pb-[env(safe-area-inset-bottom)]",
-          )}>
+          <>
+            {spanKind ? (
+              <div className="shrink-0 px-5 pt-3">
+                <Label id={dayListLabelId}>
+                  {itemType === "stay" ? "Entrada / Check-in" : "Día / comienzo"}
+                </Label>
+              </div>
+            ) : null}
+            {visibleRows.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-muted-foreground max-sm:flex-1">
+                Ningún día coincide con «{query.trim()}».
+              </p>
+            ) : (
+              <ul
+                aria-labelledby={spanKind ? dayListLabelId : undefined}
+                className={cn(
+                  "max-h-[min(55vh,24rem)] overflow-y-auto p-2 max-sm:max-h-none max-sm:min-h-0 max-sm:flex-1 max-sm:space-y-1.5 max-sm:px-3 max-sm:pt-3",
+                  !spanKind && "max-sm:pb-[env(safe-area-inset-bottom)]",
+                )}
+              >
             {visibleRows.map((row) => {
               const isAnchor = spanKind && row.id === anchorDayId
               const inSpan =
@@ -268,7 +281,7 @@ export function AddToDayDialog({
                     <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">
                       {isAnchor
                         ? itemType === "stay"
-                          ? "Entrada / check-in"
+                          ? "Entrada / Check-in"
                           : "Inicio"
                         : inSpan
                           ? itemType === "stay"
@@ -295,7 +308,9 @@ export function AddToDayDialog({
                 <AddDayButton onClick={onAddDay} />
               </li>
             ) : null}
-          </ul>
+              </ul>
+            )}
+          </>
         )}
 
         {spanKind && days.length > 0 ? (
