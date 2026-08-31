@@ -37,8 +37,16 @@ BLOG_LANDINGS: tuple[BlogLanding, ...] = (
 )
 
 _BY_SLUG = {blog.slug: blog for blog in BLOG_LANDINGS}
+_BY_HOST = {
+    blog.host.lower().removeprefix("www."): blog for blog in BLOG_LANDINGS
+}
 
 
 def get_blog_landing(slug: str) -> BlogLanding | None:
     key = (slug or "").strip().lower()
     return _BY_SLUG.get(key)
+
+
+def get_blog_landing_by_host(host: str) -> BlogLanding | None:
+    key = (host or "").strip().lower().removeprefix("www.")
+    return _BY_HOST.get(key)

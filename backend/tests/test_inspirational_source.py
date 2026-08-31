@@ -1,4 +1,8 @@
-from inspirational_source import is_inspirational_source_url, is_institutional_source_url
+from inspirational_source import (
+    host_is_feedable,
+    is_inspirational_source_url,
+    is_institutional_source_url,
+)
 
 ARTICLES = (
     "https://lacosmopolilla.com/que-ver-en-austria-ruta-10-dias/",
@@ -60,3 +64,12 @@ def test_institutional_flag():
     assert not is_institutional_source_url(
         "https://lacosmopolilla.com/que-ver-en-austria-ruta-10-dias/"
     )
+
+
+def test_host_is_feedable():
+    assert host_is_feedable("lacosmopolilla.com")
+    assert host_is_feedable("sinmapa.net")
+    assert not host_is_feedable("booking.com")
+    assert not host_is_feedable("instagram.com")
+    assert not host_is_feedable("exteriores.gob.es")
+    assert not host_is_feedable("")

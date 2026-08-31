@@ -99,7 +99,7 @@ interface AuthContextValue {
    */
   refreshGuestStatus: () => Promise<boolean>
   signOut: () => Promise<void>
-  updateProfile: (data: ProfileInput) => Promise<AuthResult>
+  updateProfile: (data: Partial<ProfileInput>) => Promise<AuthResult>
   /**
    * Cambia la contraseña. `current: null` = sesión de recuperación (`/reset-password`);
    * si hay `current`, se verifica con `signInWithPassword`.

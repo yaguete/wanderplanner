@@ -91,6 +91,8 @@ jobs:
       - run: npm run test:trip-share
       - run: npm run test:trip-invite-url
       - run: npm run test:trip-tab
+      - run: npm run test:trips-home-view
+      - run: npm run test:reference-feed
       - run: npm run test:trip-rail-mark
       - run: npm run test:trips-repo
       - run: npm run test:itinerary-calendar

@@ -10,8 +10,17 @@ export const MAX_AUTO_DAYS = 60
 /** `ref` de los chips de la landing. Reservado: no es un slug de partner. */
 export const LANDING_REF = "wp-landing"
 
+/** `ref` de «Crear viaje» desde Tus fuentes. Reservado: no es un slug de partner. */
+export const SOURCES_HOME_REF = "wp-sources"
+
 /** Slugs que `/partners` no debe emitir: contaminarían atribución o el namespace interno. */
-export const RESERVED_REF_SLUGS = new Set(["landing", "wp-landing", "start", "admin"])
+export const RESERVED_REF_SLUGS = new Set([
+  "landing",
+  "wp-landing",
+  "wp-sources",
+  "start",
+  "admin",
+])
 
 export function isReservedRefSlug(slug: string): boolean {
   return RESERVED_REF_SLUGS.has(slug.trim().toLowerCase())

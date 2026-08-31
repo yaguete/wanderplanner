@@ -17,6 +17,8 @@ import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { ReferenceFeedPanel } from "@/components/reference-feed-panel"
+import { TripsHomeHeading } from "@/components/trips-home-heading"
 import {
   Dialog,
   DialogContent,
@@ -43,6 +45,12 @@ import {
 import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import {
+  readTripsHomeSection,
+  replaceTripsHomeViewInUrl,
+  writeStoredTripsHomeSection,
+  type TripsHomeSection,
+} from "@/lib/trips-home-view"
 
 type TripFilter = "active" | "archived"
 type ViewMode = "grid" | "list"
@@ -200,10 +208,19 @@ export default function TripsHomePage() {
   const [filter, setFilter] = useState<TripFilter>("active")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [leavingTripId, setLeavingTripId] = useState<string | null>(null)
+  const [homeSection, setHomeSectionState] = useState<TripsHomeSection>(() =>
+    typeof window === "undefined" ? "trips" : readTripsHomeSection(),
+  )
 
   useEffect(() => {
     setViewMode(readViewMode())
   }, [])
+
+  const setHomeSection = (next: TripsHomeSection) => {
+    setHomeSectionState(next)
+    writeStoredTripsHomeSection(next)
+    replaceTripsHomeViewInUrl(next)
+  }
 
   // El invitado aterriza aquí tras confirmar su correo. El `?confirmed=1` lo
   // pone la plantilla `change-email-address.html` (`/auth/confirm?…&next=`).
@@ -269,14 +286,7 @@ export default function TripsHomePage() {
     <div className="flex-1 md:overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
         <div className="mb-6 sm:mb-8">
-          <div className="max-w-xl">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              Tus viajes
-            </h1>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Consolida fuentes en las que confías en una ruta editable.
-            </p>
-          </div>
+          <TripsHomeHeading section={homeSection} onSectionChange={setHomeSection} />
         </div>
 
         {invites.length > 0 ? (
@@ -347,6 +357,8 @@ export default function TripsHomePage() {
           </ul>
         ) : null}
 
+        {homeSection === "trips" ? (
+        <>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div
             className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
@@ -634,6 +646,10 @@ export default function TripsHomePage() {
               </button>
             ) : null}
           </div>
+        )}
+        </>
+        ) : (
+          <ReferenceFeedPanel />
         )}
       </div>
 

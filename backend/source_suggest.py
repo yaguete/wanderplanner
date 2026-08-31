@@ -315,6 +315,18 @@ def curated_search_query(query: str) -> str:
     return query
 
 
+def url_has_junk_path(url: str) -> bool:
+    """Tag/category/author/page/search: no es un artículo extraíble."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return True
+    if _JUNK_PATH.search(parsed.path or ""):
+        return True
+    query_s = (parsed.query or "").lower()
+    return "s=" in query_s or "search=" in query_s
+
+
 def rewrite_feed_amp_url(url: str) -> str:
     """Convierte …/articulo/feed y …/articulo/amp en el artículo canónico."""
     parsed = urlparse(url)

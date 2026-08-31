@@ -287,3 +287,13 @@ def is_inspirational_source_url(url: str) -> bool:
     if _is_reference_host(host) or _is_reference_path(path):
         return False
     return _looks_like_article_path(path)
+
+
+def host_is_feedable(host: str) -> bool:
+    """¿Este host puede publicar un feed de artículos (no OTA, IG, ministerio…)?"""
+    h = (host or "").strip().lower().removeprefix("www.")
+    if not h:
+        return False
+    if _is_institutional_host(h) or _is_reference_host(h):
+        return False
+    return True

@@ -3,6 +3,8 @@
 --
 -- Convención: `ref` = slug del partner (p. ej. lacosmopolilla).
 -- `post_slug` = último segmento del path del artículo, NO la URL.
+-- Slugs reservados (`wp-landing`, `wp-sources`, `landing`, `start`, `admin`)
+-- no son partners: exclúyelos del agrupado por `ref` o salen como fila más.
 
 -- ── Tamaño de tablas (control semanal) ──────────────────────────────────────
 select relname,
@@ -33,6 +35,7 @@ select coalesce(ref, '(directo)')                                    as partner,
              / nullif(count(*) filter (where name = 'start_opened'), 0), 1) as conversion_pct
 from funnel_events
 where at > now() - interval '7 days'
+  and ref not in ('wp-landing', 'wp-sources', 'landing', 'start', 'admin')
 group by ref
 order by visitas desc;
 

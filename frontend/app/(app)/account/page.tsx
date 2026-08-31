@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -82,6 +83,11 @@ export default function AccountPage() {
                 references={references}
                 onReferencesChange={setReferences}
               />
+              <p className="-mt-2 text-xs text-muted-foreground">
+                <Link href="/trips?view=fuentes" className="underline-offset-4 hover:underline">
+                  Ver los últimos artículos en Tus fuentes
+                </Link>
+              </p>
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="traveler-notes">Algo más sobre cómo viajas</Label>

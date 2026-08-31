@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import {
   LANDING_REF,
+  SOURCES_HOME_REF,
   draftTripNameFor,
   isReservedRefSlug,
   isReusableDraftTrip,
@@ -39,7 +40,9 @@ function trip(patch: Partial<Trip> = {}): Trip {
 }
 
 assert.equal(LANDING_REF, "wp-landing")
+assert.equal(SOURCES_HOME_REF, "wp-sources")
 assert.equal(isReservedRefSlug("wp-landing"), true)
+assert.equal(isReservedRefSlug("wp-sources"), true)
 assert.equal(isReservedRefSlug("landing"), true)
 assert.equal(isReservedRefSlug("start"), true)
 assert.equal(isReservedRefSlug("admin"), true)
@@ -72,6 +75,7 @@ assert.equal(
 assert.equal(mergeDraftReferrer(null, LANDING_REF), LANDING_REF)
 assert.equal(mergeDraftReferrer("unblogdeviajes", LANDING_REF), "unblogdeviajes")
 assert.equal(mergeDraftReferrer(LANDING_REF, "unblogdeviajes"), "unblogdeviajes")
+assert.equal(mergeDraftReferrer("unblogdeviajes", SOURCES_HOME_REF), "unblogdeviajes")
 assert.equal(mergeDraftReferrer(null, null), null)
 
 assert.equal(parseDaysParam("7"), 7)
