@@ -448,13 +448,7 @@ export function ReferenceFeedPanel() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-[14rem]">
             <DropdownMenuCheckboxItem
-              checked={
-                allFeedFilterSelected(feedableDomains, selected)
-                  ? true
-                  : selected.length > 0
-                    ? "indeterminate"
-                    : false
-              }
+              checked={allFeedFilterSelected(feedableDomains, selected)}
               onCheckedChange={toggleAll}
               onSelect={(e) => e.preventDefault()}
               className="cursor-pointer"
@@ -486,10 +480,19 @@ export function ReferenceFeedPanel() {
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
-        <Button type="button" variant="outline" onClick={() => setAdding(true)}>
-          <Plus className="h-4 w-4" />
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className={cn(
+            "inline-flex h-10 items-center justify-center gap-2 rounded-md px-3",
+            "text-sm font-medium text-muted-foreground transition-colors",
+            "hover:bg-sidebar-accent hover:text-foreground",
+            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
           Añadir fuente
-        </Button>
+        </button>
       </div>
 
       {chips.length === 0 ? (

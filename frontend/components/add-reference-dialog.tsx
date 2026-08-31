@@ -99,8 +99,8 @@ export function AddReferenceDialog({
             }}
           />
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="shrink-0 space-y-4 px-6 pt-6">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="shrink-0 space-y-4 px-6 pb-4 pt-6">
               <DialogHeader className="space-y-1.5 text-left">
                 <DialogTitle className="text-lg font-semibold tracking-tight">
                   Añadir fuente
@@ -162,8 +162,8 @@ function ArticleOrReferenceChoice({
 }) {
   const follow = paste.canFollow && !paste.duplicate
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 space-y-4 px-6 pt-6">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 space-y-4 px-6 pb-4 pt-6">
         <DialogHeader className="space-y-1.5 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">
             {follow ? "¿Referencia o viaje?" : "Crear viaje"}
