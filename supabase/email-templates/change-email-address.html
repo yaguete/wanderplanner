@@ -1,0 +1,104 @@
+<!--
+  Plantilla "Change Email Address" (Authentication → Emails).
+
+  QUIÉN LA RECIBE: **solo un invitado que guarda su viaje creando una cuenta.**
+  No es una plantilla de cambio de correo pese al nombre. `upgradeGuest` y
+  `linkGuestEmail` hacen `updateUser({ email })` sobre el usuario anónimo, y
+  para GoTrue poner correo a un usuario que ya existe es un cambio de email
+  (`type=email_change`), no un alta. El alta normal de `/signup` usa `signUp()`
+  y cae en "Confirm sign up", que es otra plantilla.
+
+  Cambiar el correo no existe como función del producto: `/account/settings` lo
+  tiene en solo lectura y en todo el frontend solo hay tres `updateUser`, dos de
+  ellos los del invitado y el tercero solo de contraseña. Por eso este texto se
+  escribe para el invitado y no intenta servir a dos públicos.
+
+  {{ .NewEmail }} Y NO {{ .Email }}: en el flujo de cambio, `.Email` es la
+  dirección **actual** y `.NewEmail` la nueva. Un usuario anónimo no tiene
+  dirección actual, así que `.Email` sale VACÍO — que es el hueco que salía en
+  el correo antes de esto. Si algún día se añade cambiar de correo de verdad,
+  esta plantilla necesita las dos y un texto distinto.
+
+  Se aplica a mano en el dashboard; el CLI no la despliega. Este fichero es la
+  copia versionada: edítalo aquí y pega el resultado allí.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Confirma tu correo</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f7f6f3;">
+<div style="display:none;font-size:1px;color:#f7f6f3;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Un clic y tu viaje queda guardado.&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7f6f3;">
+<tr>
+<td align="center" style="padding:40px 16px;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+
+<!-- Marca -->
+<tr>
+<td align="left" style="padding:0 4px 20px 4px;">
+<span style="font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.02em;color:#86675b;">WanderPlanner</span>
+</td>
+</tr>
+
+<!-- Tarjeta -->
+<tr>
+<td style="background-color:#ffffff;border:1px solid #e5e5e5;border-radius:10px;padding:40px 36px;">
+
+<h1 style="margin:0 0 14px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:24px;line-height:1.25;font-weight:600;letter-spacing:-0.025em;color:#171717;">Confirma tu correo</h1>
+
+<p style="margin:0 0 8px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#404040;">Has guardado tu viaje creando una cuenta en WanderPlanner con esta dirección:</p>
+
+<p style="margin:0 0 24px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;font-weight:600;color:#171717;">{{ .NewEmail }}</p>
+
+<p style="margin:0 0 28px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#404040;">Confírmala y tu viaje deja de depender de este navegador: podrás recuperarlo desde cualquier sitio.</p>
+
+<!-- Botón -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td align="center" bgcolor="#272321" style="border-radius:10px;">
+<a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:13px 26px;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;line-height:1;color:#ffffff;text-decoration:none;border-radius:10px;">Confirmar correo</a>
+</td>
+</tr>
+</table>
+
+<p style="margin:24px 0 0 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#737373;">El enlace caduca en 24 horas y solo se puede usar una vez. Ábrelo en el mismo navegador desde el que creaste la cuenta.</p>
+
+<!-- Separador -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td style="padding:24px 0 0 0;border-bottom:1px solid #f0efed;font-size:0;line-height:0;">&nbsp;</td></tr>
+</table>
+
+<p style="margin:24px 0 6px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#737373;">¿No te funciona el botón? Copia este enlace en tu navegador:</p>
+
+<p style="margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;word-break:break-all;">
+<a href="{{ .ConfirmationURL }}" style="color:#86675b;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+</p>
+
+</td>
+</tr>
+
+<!-- Pie -->
+<tr>
+<td style="padding:24px 4px 0 4px;">
+<p style="margin:0 0 14px 0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#737373;">Si no has creado ninguna cuenta, puedes ignorar este mensaje.</p>
+<p style="margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.7;color:#a3a3a3;">
+WanderPlanner &middot; <a href="mailto:hola@wanderplanner.ai" style="color:#a3a3a3;text-decoration:underline;">hola@wanderplanner.ai</a><br>
+<a href="https://wanderplanner.ai/legal/privacidad" style="color:#a3a3a3;text-decoration:underline;">Privacidad</a> &nbsp;&middot;&nbsp; <a href="https://wanderplanner.ai/legal/aviso-legal" style="color:#a3a3a3;text-decoration:underline;">Aviso legal</a>
+</p>
+</td>
+</tr>
+
+</table>
+
+</td>
+</tr>
+</table>
+</body>
+</html>

@@ -38,6 +38,22 @@ import { clearStash } from "@/lib/guest-trip-claim"
 
 export type AuthResult = { ok: true; signedIn?: boolean; userId?: string } | { ok: false; error: string }
 
+/**
+ * A dónde vuelve el invitado al confirmar su correo.
+ *
+ * `upgradeGuest` / `linkGuestEmail` hacen `updateUser({ email })` sobre el
+ * usuario anónimo, y para GoTrue eso es un **cambio de email**, no un alta: sin
+ * `emailRedirectTo` el enlace cae en el Site URL del proyecto (la landing), que
+ * es justo donde no sirve de nada — el invitado acaba de guardar un viaje y
+ * quiere seguir editándolo. `/auth/callback` canjea el código por sesión y
+ * `next` lo lleva al listado con el aviso.
+ */
+function guestEmailRedirectTo(): string | undefined {
+  if (typeof window === "undefined") return undefined
+  const next = encodeURIComponent("/trips?confirmed=1")
+  return `${window.location.origin}/auth/callback?next=${next}`
+}
+
 type ProfileInput = {
   displayName: string | null
   travelerTypes: string[]
@@ -302,13 +318,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!configured) return { ok: false, error: "Supabase no está configurado." }
       try {
         const supabase = createClient()
-        const { data, error } = await supabase.auth.updateUser({
-          email,
-          password,
-          data: profileData.displayName
-            ? { display_name: profileData.displayName }
-            : undefined,
-        })
+        const { data, error } = await supabase.auth.updateUser(
+          {
+            email,
+            password,
+            data: profileData.displayName
+              ? { display_name: profileData.displayName }
+              : undefined,
+          },
+          { emailRedirectTo: guestEmailRedirectTo() },
+        )
         if (error) return { ok: false, error: authErrorMessage(error) }
         if (data.user) {
           await persistProfile(data.user.id, profileData)
@@ -379,10 +398,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const supabase = createClient()
         const trimmedName = displayName?.trim() || null
-        const { data, error } = await supabase.auth.updateUser({
-          email,
-          data: trimmedName ? { display_name: trimmedName } : undefined,
-        })
+        const { data, error } = await supabase.auth.updateUser(
+          {
+            email,
+            data: trimmedName ? { display_name: trimmedName } : undefined,
+          },
+          { emailRedirectTo: guestEmailRedirectTo() },
+        )
         if (error) return { ok: false, error: authErrorMessage(error) }
         if (data.user && trimmedName) {
           // Solo el nombre: no pisar traveler_types / notes / favoritos ya guardados.

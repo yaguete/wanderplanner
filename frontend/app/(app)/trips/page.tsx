@@ -205,6 +205,24 @@ export default function TripsHomePage() {
     setViewMode(readViewMode())
   }, [])
 
+  // El invitado aterriza aquí tras confirmar su correo: `upgradeGuest` manda el
+  // enlace a `/auth/callback?next=/trips?confirmed=1` en vez de dejarlo caer en
+  // el Site URL (la landing), que es donde no puede seguir editando nada.
+  // Se limpia el query con `replaceState` —no `router.replace`, que remontaría
+  // el listado— para que recargar no repita el aviso.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("confirmed") !== "1") return
+    toast.success("Correo confirmado. Tu viaje ya está guardado en tu cuenta.")
+    params.delete("confirmed")
+    const query = params.toString()
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`,
+    )
+  }, [])
+
   const isOwnerOf = (trip: Trip) => !trip.ownerId || trip.ownerId === user?.id
 
   const tripToDelete = deletingTripId ? trips.find((t) => t.id === deletingTripId) : null
