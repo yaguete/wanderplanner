@@ -39,14 +39,20 @@ import { clearStash } from "@/lib/guest-trip-claim"
 export type AuthResult = { ok: true; signedIn?: boolean; userId?: string } | { ok: false; error: string }
 
 /**
- * A dónde vuelve el invitado al confirmar su correo.
+ * A dónde vuelve el invitado al confirmar su correo si la plantilla aún usa
+ * `{{ .ConfirmationURL }}` (PKCE, mismo navegador). Red de seguridad: las
+ * plantillas nuevas construyen `/auth/confirm?token_hash=…` a mano y este
+ * valor no entra en ese href. El `next` del invitado vive en DOS sitios —
+ * aquí y en `supabase/email-templates/change-email-address.html` — y tienen
+ * que coincidir (`/trips?confirmed=1`).
  *
  * `upgradeGuest` / `linkGuestEmail` hacen `updateUser({ email })` sobre el
  * usuario anónimo, y para GoTrue eso es un **cambio de email**, no un alta: sin
- * `emailRedirectTo` el enlace cae en el Site URL del proyecto (la landing), que
- * es justo donde no sirve de nada — el invitado acaba de guardar un viaje y
- * quiere seguir editándolo. `/auth/callback` canjea el código por sesión y
- * `next` lo lleva al listado con el aviso.
+ * `emailRedirectTo` el ConfirmationURL cae en el Site URL del proyecto (la
+ * landing), que es justo donde no sirve de nada.
+ *
+ * No apuntar a `/auth/confirm`: ConfirmationURL llega con `code`, y esa ruta
+ * solo entiende `token_hash`.
  */
 function guestEmailRedirectTo(): string | undefined {
   if (typeof window === "undefined") return undefined
@@ -88,8 +94,8 @@ interface AuthContextValue {
    */
   linkGuestEmail: (email: string, displayName?: string | null) => Promise<AuthResult>
   /**
-   * Sincroniza con el servidor tras confirmar el email en otra pestaña.
-   * Devuelve `true` si la sesión sigue siendo anónima.
+   * Sincroniza con el servidor tras confirmar el email en otra pestaña o
+   * dispositivo. Devuelve `true` si la sesión sigue siendo anónima.
    */
   refreshGuestStatus: () => Promise<boolean>
   signOut: () => Promise<void>
@@ -287,6 +293,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             data: profileData.displayName
               ? { display_name: profileData.displayName }
               : undefined,
+            // Red PKCE si la plantilla del dashboard aún usa ConfirmationURL.
+            // El href nuevo lo construye `confirm-signup.html` (TokenHash).
             emailRedirectTo:
               typeof window !== "undefined"
                 ? `${window.location.origin}/auth/callback`
@@ -379,6 +387,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo:
             typeof window !== "undefined"
+              // Red PKCE. El href nuevo lo construye `reset-password.html`.
               ? `${window.location.origin}/auth/callback?next=/reset-password`
               : undefined,
           ...(captchaToken ? { captchaToken } : {}),
@@ -465,7 +474,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [configured])
 
-  // Tras confirmar el email en otra pestaña, al volver el foco sincronizamos el JWT.
+  // Tras confirmar el email en otra pestaña o en otro dispositivo, al volver
+  // el foco sincronizamos el JWT. Sin esto el escritorio se queda con
+  // `is_anonymous: true` (RegistrationGate sigue bloqueando) aunque el móvil
+  // ya tenga cuenta. `getUser()` lee el servidor; `refreshSession()` acuña
+  // un JWT nuevo. El botón «Ya lo he confirmado» del gate llama lo mismo.
   useEffect(() => {
     if (!configured) return
     const pendingUpgrade = Boolean(user?.is_anonymous && pendingEmailOf(user))

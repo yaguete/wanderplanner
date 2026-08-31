@@ -3,6 +3,7 @@ import {
   AUTH_CALLBACK_CANCELLED,
   AUTH_CALLBACK_GENERIC,
   AUTH_CALLBACK_PROVIDER,
+  AUTH_EMAIL_LINK_INVALID,
   AUTH_ERROR_FALLBACK,
   AUTH_EMAIL_EXISTS,
   authCallbackErrorCode,
@@ -85,6 +86,7 @@ assert.equal(authCallbackErrorCode("server_error"), "auth")
 assert.equal(authCallbackErrorMessage("cancelled"), AUTH_CALLBACK_CANCELLED)
 assert.equal(authCallbackErrorMessage("provider"), AUTH_CALLBACK_PROVIDER)
 assert.equal(authCallbackErrorMessage("auth"), AUTH_CALLBACK_GENERIC)
+assert.equal(authCallbackErrorMessage("link"), AUTH_EMAIL_LINK_INVALID)
 assert.equal(authCallbackErrorMessage("nope"), null)
 assert.equal(authCallbackErrorMessage(null), null)
 

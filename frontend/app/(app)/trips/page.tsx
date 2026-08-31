@@ -205,11 +205,12 @@ export default function TripsHomePage() {
     setViewMode(readViewMode())
   }, [])
 
-  // El invitado aterriza aquí tras confirmar su correo: `upgradeGuest` manda el
-  // enlace a `/auth/callback?next=/trips?confirmed=1` en vez de dejarlo caer en
-  // el Site URL (la landing), que es donde no puede seguir editando nada.
-  // Se limpia el query con `replaceState` —no `router.replace`, que remontaría
-  // el listado— para que recargar no repita el aviso.
+  // El invitado aterriza aquí tras confirmar su correo. El `?confirmed=1` lo
+  // pone la plantilla `change-email-address.html` (`/auth/confirm?…&next=`).
+  // `emailRedirectTo` de `guestEmailRedirectTo` es la red PKCE por si esa
+  // plantilla aún no se ha pegado en el dashboard. Se limpia el query con
+  // `replaceState` —no `router.replace`, que remontaría el listado— para que
+  // recargar no repita el aviso.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get("confirmed") !== "1") return

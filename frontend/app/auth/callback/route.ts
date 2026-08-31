@@ -1,27 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient, writeSessionPersistCookie } from "@/lib/supabase/server"
 import { authCallbackErrorCode } from "@/lib/auth-errors"
-import {
-  parsePersistMode,
-  persistModeFromRememberParam,
-  SESSION_PERSIST_COOKIE,
-  type PersistMode,
-} from "@/lib/auth-session-persist"
-import { cookies } from "next/headers"
+import { failRedirect, resolvePersistMode } from "@/lib/auth-callback-helpers"
 import { safeNext } from "@/lib/auth-next"
-
-function failRedirect(origin: string, recovery: boolean, code: string): NextResponse {
-  const path = recovery ? "/forgot-password" : "/login"
-  const error = recovery ? "link" : code
-  return NextResponse.redirect(`${origin}${path}?error=${encodeURIComponent(error)}`)
-}
-
-async function resolvePersistMode(rememberParam: string | null): Promise<PersistMode> {
-  const fromQuery = persistModeFromRememberParam(rememberParam)
-  if (fromQuery) return fromQuery
-  const cookieStore = await cookies()
-  return parsePersistMode(cookieStore.get(SESSION_PERSIST_COOKIE)?.value)
-}
 
 /** Intercambia el código de confirmación, recuperación u OAuth por una sesión con cookies. */
 export async function GET(request: NextRequest) {

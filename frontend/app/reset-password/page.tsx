@@ -10,6 +10,7 @@ import { AuthShell } from "@/components/auth/auth-shell"
 import { PasswordInput } from "@/components/auth/password-input"
 import { useAuth } from "@/lib/auth-context"
 import { MIN_PASSWORD_LENGTH, validatePasswordPair } from "@/lib/account-security"
+import { AUTH_EMAIL_LINK_INVALID } from "@/lib/auth-errors"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -63,8 +64,7 @@ export default function ResetPasswordPage() {
         </div>
       ) : sessionMissing ? (
         <p className="text-sm text-muted-foreground">
-          El enlace ha caducado o se ha abierto en otro navegador. Pide uno nuevo e ábrelo
-          aquí mismo.
+          {AUTH_EMAIL_LINK_INVALID}
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

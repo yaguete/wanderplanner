@@ -73,6 +73,7 @@ jobs:
       - run: npm run test:auth-next
       - run: npm run test:auth-session-persist
       - run: npm run test:auth-google
+      - run: npm run test:auth-email-confirm
       - run: npm run test:turnstile
       - run: npm run test:theme-scope
       - run: npm run test:theme-contrast

@@ -10,6 +10,7 @@ import { AuthShell } from "@/components/auth/auth-shell"
 import { isTurnstileEnabled } from "@/components/auth/turnstile"
 import { ThemedTurnstile } from "@/components/auth/themed-turnstile"
 import { useAuth } from "@/lib/auth-context"
+import { AUTH_EMAIL_LINK_INVALID } from "@/lib/auth-errors"
 import { createClient } from "@/lib/supabase/client"
 import { prepareGuestTripClaim } from "@/lib/guest-trip-claim"
 
@@ -20,7 +21,7 @@ function ForgotPasswordForm() {
 
   const [email, setEmail] = useState("")
   const [error, setError] = useState<string | null>(
-    linkFailed ? "El enlace ha caducado o se ha abierto en otro navegador." : null,
+    linkFailed ? AUTH_EMAIL_LINK_INVALID : null,
   )
   const [notice, setNotice] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -63,14 +64,14 @@ function ForgotPasswordForm() {
       return
     }
     setNotice(
-      "Si hay una cuenta con ese correo, te hemos enviado un enlace. Ábrelo en este mismo navegador; es para ahora.",
+      "Si hay una cuenta con ese correo, te hemos enviado un enlace. Caduca en 24 horas y vale en cualquier navegador.",
     )
   }
 
   return (
     <AuthShell
       title="¿Olvidaste tu contraseña?"
-      subtitle="Te enviamos un enlace para elegir una nueva. Ábrelo en este mismo navegador."
+      subtitle="Te enviamos un enlace para elegir una nueva. Vale en cualquier navegador."
       footer={
         <>
           ¿La recuerdas?{" "}

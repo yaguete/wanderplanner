@@ -13,8 +13,9 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
 
 /**
- * `persistMode` pisa el marcador de la request. Obligatorio en `/auth/callback`:
- * `exchangeCodeForSession` escribe las cookies durante la llamada.
+ * `persistMode` pisa el marcador de la request. Obligatorio en `/auth/callback`
+ * y `/auth/confirm`: `exchangeCodeForSession` / `verifyOtp` escriben las
+ * cookies durante la llamada.
  */
 export async function createClient(persistMode?: PersistMode): Promise<SupabaseClient> {
   const cookieStore = await cookies()

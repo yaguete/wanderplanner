@@ -8,6 +8,9 @@ export const AUTH_EMAIL_EXISTS = "Ya hay una cuenta con este email. Entra o usa 
 export const AUTH_CALLBACK_CANCELLED = "Has cancelado el acceso con Google."
 export const AUTH_CALLBACK_PROVIDER = "El acceso con Google no está disponible ahora mismo."
 export const AUTH_CALLBACK_GENERIC = "No hemos podido completar el acceso. Inténtalo de nuevo."
+/** Enlace de confirmación / recuperación: caducado, ya usado, o quemado por un escáner. */
+export const AUTH_EMAIL_LINK_INVALID =
+  "El enlace ha caducado o ya se ha usado. Si hace falta, pide otro."
 
 function asText(value: unknown): string {
   if (value == null) return ""
@@ -111,6 +114,7 @@ export function authCallbackErrorMessage(code: string | null | undefined): strin
   if (code === "cancelled") return AUTH_CALLBACK_CANCELLED
   if (code === "provider") return AUTH_CALLBACK_PROVIDER
   if (code === "auth") return AUTH_CALLBACK_GENERIC
+  if (code === "link") return AUTH_EMAIL_LINK_INVALID
   return null
 }
 
