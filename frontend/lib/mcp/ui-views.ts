@@ -196,6 +196,56 @@ export function sourceCardFromHit(hit: SourceHitView): SourceCardModel {
   return { author, articleTitle, place, quote, cta: { kind: "none" } }
 }
 
+/**
+ * Línea de atribución de una tarjeta: «{artículo} vía {autor}».
+ *
+ * Omite el «vía» cuando el título del artículo YA nombra al autor, que en los
+ * blogs es lo normal («Ourense, la Galicia sin playa… La Cosmopolilla» de
+ * lacosmopolilla). Sin esto la línea acaba en «…La Cosmopolilla vía
+ * lacosmopolilla», que además de feo es más larga que el propio titular.
+ *
+ * La comparación aplana espacios, mayúsculas y acentos porque el autor suele
+ * ser el host (`lacosmopolilla`) y el título la marca escrita (`La
+ * Cosmopolilla`). Sin autor, la línea es solo el título.
+ */
+export function sourceAttribution(articleTitle: string, author: string): string {
+  const title = articleTitle.trim()
+  const via = author.trim()
+  if (!via) return title
+  if (flattenForCompare(title).includes(flattenForCompare(via))) return title
+  return `${title} vía ${via}`
+}
+
+function flattenForCompare(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+}
+
+/**
+ * Deja el CTA solo en la primera tarjeta de cada destino.
+ *
+ * La evidencia de `review_trip` cita muchos sitios de pocas fuentes: sin esto
+ * salen treinta botones «Leer el artículo de saltaconmigo» seguidos, todos al
+ * mismo sitio. Se deduplica por `href` y no por fuente porque hay dos CTAs
+ * distintos —«Verlo en tu viaje» apunta a una pestaña del viaje, «Leer el
+ * artículo» al artículo— y agrupar por fuente escondería uno de los dos.
+ *
+ * El autor sigue visible en cada tarjeta (línea «vía …»), así que la atribución
+ * no se pierde al quitar el botón.
+ */
+export function withCtaOncePerHref(cards: readonly SourceCardModel[]): SourceCardModel[] {
+  const seen = new Set<string>()
+  return cards.map((card) => {
+    if (card.cta.kind === "none") return card
+    if (seen.has(card.cta.href)) return { ...card, cta: { kind: "none" } }
+    seen.add(card.cta.href)
+    return card
+  })
+}
+
 export function searchWidgetFromContent(raw: unknown): SearchWidgetModel | null {
   const obj = asObject(raw)
   if (!obj) return null

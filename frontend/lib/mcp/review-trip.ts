@@ -497,6 +497,11 @@ export function planNamesForEvidence(daysRaw: unknown): string[] {
       if (!item) continue
       const type = item.type
       if (typeof type !== "string" || !ITEM_TYPES.has(type as ItemType)) continue
+      // El transporte no entra en la auditoría de fuentes. «Vuelos a Vigo» o
+      // «Alquiler de coche» son logística: un artículo no los "recomienda", y
+      // buscarlos gasta una consulta para devolver ruido. Lo que interesa aquí
+      // es qué dicen las fuentes de los SITIOS del plan.
+      if (type === "transport") continue
       const route = asObject(item.route)
       if (isRouteLeg(route?.leg)) continue
       const name = asTrimmed(item.name)
@@ -535,6 +540,9 @@ export function collectReviewEvidence(
   for (const name of names) {
     const hits = searchSources(name, sources, trip)
     for (const hit of hits) {
+      // Filtro también en el hit, no solo en la consulta: buscar un sitio puede
+      // casar con un ítem de transporte del artículo («Vigo» → «Vuelos a Vigo»).
+      if (hit.type === "transport") continue
       const key = `${hit.sourceId}\0${normalizeName(hit.name)}`
       if (seen.has(key)) continue
       seen.add(key)

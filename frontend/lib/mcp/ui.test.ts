@@ -13,6 +13,9 @@ import {
   searchWidgetFromContent,
   tripWidgetFromContent,
   widgetModelFromContent,
+  sourceAttribution,
+  withCtaOncePerHref,
+  type SourceCardModel,
 } from "./ui-views"
 import { openExternalUrl } from "./ui-open-link"
 import { MCP_WIDGET_MIME, MCP_WIDGET_URI, widgetResourceMeta, widgetToolMeta } from "./ui/resource"
@@ -449,6 +452,67 @@ assert.equal(MCP_INSTRUCTIONS.includes("nunca un enlace genérico"), false)
   })
   assert.ok(model && model.kind === "trip")
   assert.equal(model.startDate, "2026-12-28")
+}
+
+// El CTA sale una vez por destino: `review_trip` cita muchos sitios de pocas
+// fuentes y sin esto salían treinta botones idénticos seguidos.
+{
+  const card = (place: string, cta: SourceCardModel["cta"]): SourceCardModel => ({
+    author: "saltaconmigo",
+    articleTitle: "Qué ver en Ourense",
+    place,
+    quote: null,
+    cta,
+  })
+  const article = (href: string) => ({ kind: "article" as const, href, label: "Leer" })
+  const out = withCtaOncePerHref([
+    card("As Burgas", article("https://blog.example/ourense")),
+    card("A Taberna", article("https://blog.example/ourense")),
+    card("Allariz", article("https://otro.example/galicia")),
+    card("Cañón del Sil", article("https://blog.example/ourense")),
+  ])
+  assert.equal(out[0].cta.kind, "article", "la primera de cada href conserva el botón")
+  assert.equal(out[1].cta.kind, "none", "la repetida lo pierde")
+  assert.equal(out[2].cta.kind, "article", "otro href vuelve a mostrarlo")
+  assert.equal(out[3].cta.kind, "none")
+  // Se dedupe por href, no por fuente: «Verlo en tu viaje» y «Leer el artículo»
+  // apuntan a sitios distintos y agrupar por fuente escondería uno de los dos.
+  const mixed = withCtaOncePerHref([
+    card("As Burgas", { kind: "trip", href: "https://wanderplanner.ai/trips/a", label: "Verlo" }),
+    card("A Taberna", article("https://blog.example/ourense")),
+  ])
+  assert.equal(mixed[0].cta.kind, "trip")
+  assert.equal(mixed[1].cta.kind, "article", "un CTA de otro tipo no se pisa")
+  // El autor no se toca: la atribución vive en la tarjeta, no en el botón.
+  assert.equal(out[1].author, "saltaconmigo")
+  // Sin CTA no hay nada que deduplicar y el objeto se devuelve tal cual.
+  const none = withCtaOncePerHref([card("X", { kind: "none" }), card("Y", { kind: "none" })])
+  assert.equal(none[1].cta.kind, "none")
+}
+
+// La atribución no repite al autor si el título del artículo ya lo nombra.
+{
+  assert.equal(
+    sourceAttribution("Qué ver en Ourense: la ciudad de las termas", "saltaconmigo"),
+    "Qué ver en Ourense: la ciudad de las termas vía saltaconmigo",
+  )
+  // El caso real: el blog firma en su propio título.
+  assert.equal(
+    sourceAttribution("Ourense, la Galicia sin playa ❤️ La Cosmopolilla", "lacosmopolilla"),
+    "Ourense, la Galicia sin playa ❤️ La Cosmopolilla",
+    "espacios y mayúsculas no cuentan",
+  )
+  assert.equal(
+    sourceAttribution("Ruta por Japón — Japonismo", "japonismo"),
+    "Ruta por Japón — Japonismo",
+  )
+  // Acentos: el host va sin ellos y la marca con ellos.
+  assert.equal(
+    sourceAttribution("Qué ver en Japón, por Viajeros30", "viajeros30"),
+    "Qué ver en Japón, por Viajeros30",
+  )
+  assert.equal(sourceAttribution("Artículo", ""), "Artículo", "sin autor, solo el título")
+  assert.equal(sourceAttribution("Artículo", "   "), "Artículo")
 }
 
 console.log("mcp-ui: ok")

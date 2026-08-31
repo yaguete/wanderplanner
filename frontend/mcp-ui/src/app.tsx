@@ -6,7 +6,9 @@ import {
   dayDateLabel,
   formatWidgetAmount,
   reviewCheckLabel,
+  sourceAttribution,
   widgetModelFromContent,
+  withCtaOncePerHref,
   type BudgetWidgetModel,
   type ReviewWidgetModel,
   type SearchWidgetModel,
@@ -104,11 +106,14 @@ function itemAttribution(item: TripDayItemView): string {
 }
 
 function SourceCard({ card }: { card: SourceCardModel }) {
+  // El titular es EL SITIO, no el artículo. Quien lee la tarjeta busca «qué hay
+  // en mi viaje»; el artículo es de dónde sale el dato, o sea la atribución.
+  // Antes iba al revés y el mismo título se repetía en cada tarjeta, así que la
+  // única línea que distinguía una de otra era la pequeña de abajo.
   return (
     <article className="source">
-      <p className="source-author">{card.author}</p>
-      <h2 className="source-title">{card.articleTitle}</h2>
-      <p className="source-place">{card.place}</p>
+      <h2 className="source-place">{card.place}</h2>
+      <p className="source-via">{sourceAttribution(card.articleTitle, card.author)}</p>
       {card.quote ? <blockquote>{card.quote}</blockquote> : null}
       {card.cta.kind === "none" ? null : (
         <p className="btn-row">
@@ -139,7 +144,7 @@ function SearchView({ model }: { model: SearchWidgetModel }) {
     }
     return (
       <div className="widget">
-        {model.cards.map((card, i) => (
+        {withCtaOncePerHref(model.cards).map((card, i) => (
           <SourceCard key={`${card.place}-${i}`} card={card} />
         ))}
       </div>
@@ -301,7 +306,7 @@ function ReviewView({ model }: { model: ReviewWidgetModel }) {
       {model.evidence.length > 0 ? (
         <section className="evidence">
           <p className="section-kicker">En tus fuentes</p>
-          {model.evidence.map((card, i) => (
+          {withCtaOncePerHref(model.evidence).map((card, i) => (
             <SourceCard key={`${card.place}-${i}`} card={card} />
           ))}
         </section>

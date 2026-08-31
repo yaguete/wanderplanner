@@ -163,6 +163,12 @@ body {
   border-top: 1px solid var(--wp-border);
   padding-top: 14px;
 }
+/*
+ * `.source-author` + `.source-title` los conserva la lista de SUGERENCIAS web,
+ * donde el titular sí es el artículo porque el resultado ES un artículo.
+ * En las tarjetas de fuentes del viaje manda el sitio (`.source-place`) y el
+ * artículo baja a la atribución (`.source-via`).
+ */
 .source-author {
   margin: 0 0 4px;
   font-size: 0.72rem;
@@ -179,8 +185,16 @@ body {
   line-height: 1.25;
 }
 .source-place {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.source-via {
   margin: 0;
   font-size: 0.9rem;
+  line-height: 1.4;
   color: var(--wp-muted);
 }
 blockquote {
