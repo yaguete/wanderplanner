@@ -5,17 +5,19 @@ import {
   FLIGHT_SEARCH_AFFILIATE_ID,
   type FlightSearchHit,
 } from "@/lib/flight-search"
-import { outbound } from "@/lib/funnel-analytics"
+import { outbound, type OutboundSurface } from "@/lib/funnel-analytics"
 import { cn } from "@/lib/utils"
 
 export function FlightSearchLink({
   search,
   showCodes = false,
   className,
+  surface = "flight_search",
 }: {
   search: FlightSearchHit
   showCodes?: boolean
   className?: string
+  surface?: OutboundSurface
 }) {
   const label = `Buscar vuelos ${search.from} → ${search.to}`
   const affiliated = Boolean(FLIGHT_SEARCH_AFFILIATE_ID)
@@ -35,7 +37,7 @@ export function FlightSearchLink({
       )}
       onClick={() => {
         outbound(search.href, {
-          surface: "flight_search",
+          surface,
           // Hop Impact propio; el badge UI es otro flag (`FLIGHT_SEARCH_AFFILIATE_ID`).
           affiliate: "own",
         })

@@ -10,7 +10,7 @@
  * no modela «tengo el coche N días»; eso sería otro tipo de ítem, no
  * alargar este formulario.
  */
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { Loader2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -93,6 +93,20 @@ export type TransportRouteFormProps = {
   formId?: string
   onValidityChange?: (canSubmit: boolean) => void
   onSubmit: (value: TransportRouteFormValue) => void
+  /**
+   * Tras el bloque completo de Destino (campo + hubs). El padre pinta
+   * Skyscanner; este form no conoce el viaje.
+   */
+  renderAfterDestination?: (ctx: {
+    from: RoutePlace | null
+    to: RoutePlace | null
+    mode: RouteMode | null
+  }) => ReactNode
+  onLiveContext?: (ctx: {
+    from: RoutePlace | null
+    to: RoutePlace | null
+    mode: RouteMode | null
+  }) => void
 }
 
 export function emptyEndpoint(seed?: {
@@ -146,6 +160,8 @@ export function TransportRouteForm({
   formId,
   onValidityChange,
   onSubmit,
+  renderAfterDestination,
+  onLiveContext,
 }: TransportRouteFormProps) {
   const id = useId()
   const [from, setFrom] = useState<EndpointState>(initial.from)
@@ -166,6 +182,7 @@ export function TransportRouteForm({
   const hubToAbortRef = useRef<AbortController | null>(null)
   const fromDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const toDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onLiveContextRef = useRef(onLiveContext)
 
   const cityFromRef = useRef<RoutePlace | null>(
     initial.from.selected && isCityOrAddressKind(initial.from.selected.kind)
@@ -184,6 +201,18 @@ export function TransportRouteForm({
   useEffect(() => {
     onValidityChange?.(canSubmit)
   }, [canSubmit, onValidityChange])
+
+  useEffect(() => {
+    onLiveContextRef.current = onLiveContext
+  }, [onLiveContext])
+
+  useEffect(() => {
+    onLiveContextRef.current?.({
+      from: from.selected,
+      to: to.selected,
+      mode: mode === "undecided" ? null : mode,
+    })
+  }, [from.selected, to.selected, mode])
 
   usePlaceSuggest({
     endpoint: from,
@@ -465,6 +494,12 @@ export function TransportRouteForm({
           onPick={(h) => applyHub("to", h)}
         />
       </div>
+
+      {renderAfterDestination?.({
+        from: from.selected,
+        to: to.selected,
+        mode: mode === "undecided" ? null : mode,
+      })}
 
       {showVendor ? (
         <div className="space-y-2">

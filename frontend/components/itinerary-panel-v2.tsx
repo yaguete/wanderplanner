@@ -1303,17 +1303,35 @@ export default function ItineraryPanel({
         destinationHint={mapDestHint}
         existingItem={manualDialogExisting}
         existingDayId={manualDialogExisting ? manualDialogDayId : null}
-        onSubmit={(item, dayId) => {
+        numTravelers={trip.numTravelers}
+        currency={trip.currency}
+        existingTask={
+          manualDialogExisting
+            ? trip.tasks[taskKeyForItem(manualDialogExisting)] ?? null
+            : null
+        }
+        onSubmit={(item, dayId, taskPatch) => {
           if (manualDialogExisting) {
             const result = updateDayItem(tripId, { dayId, item })
-            if (!result.ok) toast.error(result.error)
+            if (!result.ok) {
+              toast.error(result.error)
+              return
+            }
+            if (taskPatch) setTaskState(tripId, taskKeyForItem(item), taskPatch)
             return
           }
           addItemToDay(tripId, dayId, item)
+          if (taskPatch) setTaskState(tripId, taskKeyForItem(item), taskPatch)
         }}
         onSubmitTransport={(data) => {
           const result = upsertTransportRouteItem(tripId, data)
-          if (!result.ok) toast.error(result.error)
+          if (!result.ok) {
+            toast.error(result.error)
+            return
+          }
+          if (data.taskPatch) {
+            setTaskState(tripId, result.taskKey, data.taskPatch)
+          }
         }}
       />
 
@@ -1326,6 +1344,11 @@ export default function ItineraryPanel({
           leg={routeLegDialog.leg}
           trip={trip}
           existingItem={routeLegDialog.existingItem}
+          existingTask={
+            routeLegDialog.existingItem
+              ? trip.tasks[taskKeyForItem(routeLegDialog.existingItem)] ?? null
+              : null
+          }
           onSubmit={(data) => {
             const result = upsertRouteLeg(tripId, {
               leg: data.leg,
@@ -1335,7 +1358,13 @@ export default function ItineraryPanel({
               origin: data.origin,
               createMirrorReturn: data.createMirrorReturn,
             })
-            if (!result.ok) toast.error(result.error)
+            if (!result.ok) {
+              toast.error(result.error)
+              return
+            }
+            if (data.taskPatch) {
+              setTaskState(tripId, result.taskKey, data.taskPatch)
+            }
           }}
         />
       ) : null}
@@ -1348,11 +1377,24 @@ export default function ItineraryPanel({
           }}
           days={trip.days}
           startDate={trip.startDate}
+          numTravelers={trip.numTravelers}
+          currency={trip.currency}
           initialDayId={transportDialog.dayId}
           existingItem={transportDialog.existingItem}
+          existingTask={
+            transportDialog.existingItem
+              ? trip.tasks[taskKeyForItem(transportDialog.existingItem)] ?? null
+              : null
+          }
           onSubmit={(data) => {
             const result = upsertTransportRouteItem(tripId, data)
-            if (!result.ok) toast.error(result.error)
+            if (!result.ok) {
+              toast.error(result.error)
+              return
+            }
+            if (data.taskPatch) {
+              setTaskState(tripId, result.taskKey, data.taskPatch)
+            }
           }}
         />
       ) : null}

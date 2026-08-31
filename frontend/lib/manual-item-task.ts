@@ -1,0 +1,72 @@
+/**
+ * Borrador de tarea en el alta/edición de un ítem. El importe es local hasta
+ * guardar: no se escribe `trip.tasks` por tecla (el ítem aún no existe y
+ * `withPrunedTasks` lo borraría). Una sola escritura al submit, después del ítem,
+ * con `taskKeyForItem` del ítem nuevo.
+ *
+ * Trampas:
+ * - `notNeeded` + coste = dinero invisible (bucket dismissed). Si hay importe,
+ *   nunca se escribe `notNeeded`. Editar un ítem ya marcado «No hace falta»
+ *   **con un importe** lo resucita a `pending`: el coste manda, para que
+ *   cuente en el presupuesto. Es lo querido.
+ * - Ida/vuelta en avión espejadas: `foldMirroredFlightReturnCost` borra la
+ *   clave entera `leg:return` (no solo el coste). El diálogo de vuelta no
+ *   pinta el bloque de tarea ni escribe `taskPatch`; estado y cancelabilidad
+ *   se evaporarían igual.
+ */
+import type { RouteLeg, TripTaskState, TripTaskStatus } from "@/types/itinerary"
+
+export type ManualTaskDraft = {
+  cost: number | null
+  /** `null` = sin tocar (no es `pending`). */
+  status: "booked" | "paid" | null
+  cancellable: boolean | null
+  /** Solo activity/food. `null` = sin tocar. */
+  needsReservation: boolean | null
+}
+
+/** Ocultar el bloque entero de tarea (no solo el coste) en la vuelta espejada. */
+export function omitReturnLegTask(params: {
+  mirrored: boolean
+  leg?: RouteLeg | null
+}): boolean {
+  return params.mirrored && params.leg === "return"
+}
+
+/**
+ * Estado persistible del borrador. Reservado/Pagado gana. Con coste, nunca
+ * `notNeeded` («No hace falta» + 12 € → `pending`, para que cuente).
+ */
+export function resolveManualDraftStatus(
+  draft: ManualTaskDraft,
+): TripTaskStatus | undefined {
+  if (draft.status === "booked" || draft.status === "paid") return draft.status
+  if (draft.cost != null) return "pending"
+  if (draft.needsReservation === false) return "notNeeded"
+  if (draft.needsReservation === true) return "pending"
+  if (draft.cancellable != null) return "pending"
+  return undefined
+}
+
+export type TaskPatchFromDraftOpts = {
+  /** En edición: escribe `cost: null` / `cancellable: null` si el borrador los vació. */
+  includeCleared?: boolean
+}
+
+/** `null` si no hay nada que persistir (alta sin tocar el bloque). */
+export function taskPatchFromManualDraft(
+  draft: ManualTaskDraft,
+  opts?: TaskPatchFromDraftOpts,
+): Partial<TripTaskState> | null {
+  const status = resolveManualDraftStatus(draft)
+  const patch: Partial<TripTaskState> = {}
+  if (status) patch.status = status
+  else if (opts?.includeCleared) patch.status = "pending"
+  if (draft.cost != null) patch.cost = draft.cost
+  else if (opts?.includeCleared) patch.cost = null
+  if (draft.cancellable != null) patch.cancellable = draft.cancellable
+  else if (opts?.includeCleared) patch.cancellable = null
+
+  if (Object.keys(patch).length === 0) return null
+  return patch
+}

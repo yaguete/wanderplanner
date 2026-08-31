@@ -70,7 +70,7 @@ Dos capas, no una:
 
 `track()` de Vercel (landing, onboarding, sugerencias de fuente) **existe en código** y **no se puede consultar** en el plan actual (API eventos custom → 402). Ignóralo. El denominador del CTA es `funnel_events`, no Analytics.
 
-Nombres de embudo: `start_opened`, `outbound_click`, `account_created`, `gate_shown`. Meta de clic: `target` (booking/skyscanner/getyourguide/kayak/stay22/other), `affiliate` (partner/own/none), `surface`. Meta de alta: `onboarding`. Meta de `gate_shown`: `reason`.
+Nombres de embudo: `start_opened`, `outbound_click`, `account_created`, `gate_shown`. Meta de clic: `target` (booking/skyscanner/getyourguide/civitatis/kayak/stay22/other), `affiliate` (partner/own/none), `surface` (task_row/budget_row/route_card/assistant/flight_search/inspiration/manual_item). Meta de alta: `onboarding`. Meta de `gate_shown`: `reason`.
 
 ### `gate_shown` — la petición de cuenta (desde el 28 ago 2026)
 

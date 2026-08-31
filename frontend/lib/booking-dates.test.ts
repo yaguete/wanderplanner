@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import {
+  bookingOmitsStayDates,
   bookingStayHref,
   isBookingStayUrl,
   stayDatesFromDayIndexes,
@@ -68,6 +69,11 @@ assert.deepEqual(stayDatesFromDayIndexes("2027-09-14", [0]), {
 })
 assert.equal(stayDatesFromDayIndexes(null, [0]), null)
 assert.equal(stayDatesFromDayIndexes("2027-09-14", []), null)
+
+assert.equal(bookingOmitsStayDates(null, [0]), true)
+assert.equal(bookingOmitsStayDates("2027-09-14", []), true)
+assert.equal(bookingOmitsStayDates("2027-09-14", [0]), false)
+assert.equal(bookingOmitsStayDates("2020-01-01", [0]), true)
 
 function stay(name: string): UserDayItem {
   return {

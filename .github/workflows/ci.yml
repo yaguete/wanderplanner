@@ -59,6 +59,8 @@ jobs:
       - run: npm run test:airports
       - run: npm run test:booking-dates
       - run: npm run test:booking-search
+      - run: npm run test:activity-search
+      - run: npm run test:manual-item-task
       - run: npm run test:flight-search
       - run: npm run test:partner-trip
       - run: npm run test:partner-button

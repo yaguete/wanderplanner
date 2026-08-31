@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
-import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
+import { isSyntheticSourceId, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import {
   geocodeFreeText,
   resolvePermanentCoords,
@@ -33,7 +33,14 @@ import {
   type GeocodeSuggestion,
   type LngLat,
 } from "@/lib/mapbox"
-import type { ItemType, TransportRoute, UserDay, UserDayItem } from "@/types/itinerary"
+import type {
+  ItemType,
+  RouteMode,
+  TransportRoute,
+  TripTaskState,
+  UserDay,
+  UserDayItem,
+} from "@/types/itinerary"
 import { formatDayPickerLabel } from "@/lib/day-heading"
 import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
 import {
@@ -47,6 +54,17 @@ import {
   parseSpanDays,
   spanDaysForWrite,
 } from "@/lib/item-span"
+import { stayFormSearchHref } from "@/lib/booking-search"
+import { bookingOmitsStayDates } from "@/lib/booking-dates"
+import { activityDiscoveryHrefs } from "@/lib/activity-search"
+import { taskPatchFromManualDraft, type ManualTaskDraft } from "@/lib/manual-item-task"
+import { PartnerSearchLink } from "@/components/partner-search-link"
+import { ManualFlightSearch } from "@/components/manual-flight-search"
+import {
+  draftFromTaskState,
+  emptyManualTaskDraft,
+  ManualItemTaskFields,
+} from "@/components/manual-item-task-fields"
 
 const ITEM_TYPES: ItemType[] = ["activity", "stay", "food", "transport"]
 
@@ -80,7 +98,14 @@ export type AddManualItemDialogProps = {
   destinationHint?: string | null
   /** Fecha de inicio del viaje; sin ella el selector no muestra el paréntesis. */
   startDate?: string | null
-  onSubmit: (item: UserDayItem, dayId: string) => void
+  numTravelers?: number | null
+  currency?: string
+  existingTask?: TripTaskState | null
+  onSubmit: (
+    item: UserDayItem,
+    dayId: string,
+    taskPatch?: Partial<TripTaskState> | null,
+  ) => void
   /** Alta de traslado desde el mismo diálogo (el tipo sigue visible). */
   onSubmitTransport?: (data: {
     dayId: string
@@ -90,6 +115,7 @@ export type AddManualItemDialogProps = {
     }
     detail: string | null
     vendor: string | null
+    taskPatch?: Partial<TripTaskState> | null
   }) => void
   /** Si está, el formulario edita este ítem (conserva id y procedencia). */
   existingItem?: UserDayItem | null
@@ -105,6 +131,9 @@ export function AddManualItemDialog({
   countryCodes = [],
   destinationHint = null,
   startDate = null,
+  numTravelers = null,
+  currency = "EUR",
+  existingTask = null,
   onSubmit,
   onSubmitTransport,
   existingItem = null,
@@ -127,11 +156,14 @@ export function AddManualItemDialog({
   const [placeFieldActive, setPlaceFieldActive] = useState(false)
   const [nights, setNights] = useState(1)
   const [transportCanSubmit, setTransportCanSubmit] = useState(false)
+  const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(emptyManualTaskDraft)
+  const [liveTransportMode, setLiveTransportMode] = useState<RouteMode | null>(null)
 
   const proximityRef = useRef<[number, number] | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const placeBlurRef = useRef<number | null>(null)
+  const costRef = useRef<number | null>(null)
 
   const nameId = `${id}-name`
   const dayFieldId = `${id}-day`
@@ -145,6 +177,8 @@ export function AddManualItemDialog({
   const editing = existingItem != null
   const addingTransport = type === "transport" && !editing
   const durationKind = itemTakesCalendarSpan(type)
+  const showDiscovery =
+    !existingItem || isSyntheticSourceId(existingItem.sourceId)
 
   useEffect(() => {
     if (!open) return
@@ -171,6 +205,10 @@ export function AddManualItemDialog({
     }
     setNights(parseSpanDays(seed?.spanDays) ?? 1)
     setTransportCanSubmit(false)
+    setLiveTransportMode(null)
+    const seededDraft = draftFromTaskState(existingTask)
+    setTaskDraft(seededDraft)
+    costRef.current = seededDraft.cost
     const preferred =
       (seed && existingDayId && days.some((d) => d.id === existingDayId) && existingDayId) ||
       (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
@@ -270,6 +308,12 @@ export function AddManualItemDialog({
     setListOpen(true)
   }
 
+  const currentTaskPatch = (persistEmpty: boolean) =>
+    taskPatchFromManualDraft(
+      { ...taskDraft, cost: costRef.current },
+      persistEmpty ? { includeCleared: true } : undefined,
+    )
+
   const handleSubmit = () => {
     if (!canSubmit) return
     const item: UserDayItem = existingItem
@@ -298,7 +342,7 @@ export function AddManualItemDialog({
     } else {
       delete item.spanDays
     }
-    onSubmit(item, dayId)
+    onSubmit(item, dayId, currentTaskPatch(existingTask != null))
     onOpenChange(false)
   }
 
@@ -313,6 +357,7 @@ export function AddManualItemDialog({
       },
       detail: value.detail,
       vendor: value.vendor,
+      taskPatch: currentTaskPatch(false),
     })
     onOpenChange(false)
   }
@@ -328,6 +373,39 @@ export function AddManualItemDialog({
           : type === "transport"
             ? "Añadir traslado"
             : "Añadir ítem"
+
+  const stayDestination = selectedPlace?.label?.trim() || placeQuery.trim() || destinationHint?.trim() || ""
+  const stayDayIndexes = Array.from(
+    { length: Math.min(nights, maxNights) },
+    (_, i) => selectedDayIndex + i,
+  )
+  const stayHref =
+    showDiscovery && type === "stay"
+      ? stayFormSearchHref({
+          destination: stayDestination,
+          startDate,
+          dayIndexes: stayDayIndexes,
+          currency,
+          numTravelers: numTravelers ?? 1,
+          affiliateUrl: existingItem?.affiliateUrl,
+          sourceId: existingItem?.sourceId ?? MANUAL_SOURCE_ID,
+        })
+      : null
+  const activityHrefs =
+    showDiscovery && type === "activity"
+      ? activityDiscoveryHrefs({
+          sourceId: existingItem?.sourceId ?? MANUAL_SOURCE_ID,
+          affiliateUrl: existingItem?.affiliateUrl,
+          selectedPlaceLabel: selectedPlace?.label ?? null,
+          destinationHint,
+          addressHint: placeQuery.trim() || null,
+          coords: selectedPlace?.coords ?? null,
+          startDate,
+          dayIndex: selectedDayIndex,
+          spanDays: nights,
+          numTravelers: numTravelers ?? 1,
+        })
+      : null
 
   const dayField = (
     <div className="space-y-2">
@@ -350,6 +428,128 @@ export function AddManualItemDialog({
         </SelectContent>
       </Select>
     </div>
+  )
+
+  const placeField = (
+    <div className="relative space-y-2">
+      <Label htmlFor={placeId}>Ciudad o dirección (opcional)</Label>
+      <div className="relative">
+        <MapPin
+          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          id={placeId}
+          value={placeQuery}
+          onChange={(e) => handlePlaceChange(e.target.value)}
+          onFocus={() => {
+            if (placeBlurRef.current != null) {
+              window.clearTimeout(placeBlurRef.current)
+              placeBlurRef.current = null
+            }
+            setPlaceFieldActive(true)
+          }}
+          onBlur={() => {
+            placeBlurRef.current = window.setTimeout(() => {
+              placeBlurRef.current = null
+              setListOpen(false)
+              setPlaceFieldActive(false)
+            }, 150)
+          }}
+          placeholder={type === "stay" ? "Király utca 15, Budapest" : "p. ej. Budapest"}
+          className="pl-8"
+          autoComplete="off"
+          autoFocus={!isMobileViewport()}
+          aria-autocomplete="list"
+          aria-expanded={listOpen && suggestions.length > 0}
+        />
+        {suggestLoading ? (
+          <Loader2
+            className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
+            aria-hidden
+          />
+        ) : null}
+      </div>
+      {listOpen && suggestions.length > 0 ? (
+        <ul
+          className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
+          role="listbox"
+        >
+          {suggestions.map((s) => (
+            <li key={s.id} role="option">
+              <button
+                type="button"
+                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleSelectSuggestion(s)}
+              >
+                <span className="font-medium text-foreground">{s.text}</span>
+                {s.placeName !== s.text ? (
+                  <span className="line-clamp-1 text-xs text-muted-foreground">
+                    {s.placeName}
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {selectedPlace ? (
+        <p className="text-xs text-muted-foreground">
+          {type === "stay" || type === "activity"
+            ? "Ubicación fijada en el mapa."
+            : "Ubicación guardada."}
+        </p>
+      ) : durationKind && nights >= 2 ? (
+        <p className="text-xs text-muted-foreground">
+          Sin una dirección concreta no ancla la jornada en el mapa.
+        </p>
+      ) : null}
+    </div>
+  )
+
+  const durationField = durationKind ? (
+    <div className="space-y-2">
+      <Label htmlFor={nightsId}>{type === "stay" ? "Noches" : "Días"}</Label>
+      <Input
+        id={nightsId}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={maxNights}
+        value={nights}
+        onChange={(e) => {
+          const n = Number.parseInt(e.target.value, 10)
+          if (!Number.isFinite(n)) {
+            setNights(1)
+            return
+          }
+          setNights(Math.min(Math.max(1, n), maxNights))
+        }}
+      />
+      <p className="text-xs text-muted-foreground">
+        {maxNights === 1
+          ? type === "stay"
+            ? "El viaje acaba este día: 1 noche."
+            : "El viaje acaba este día: 1 día."
+          : type === "stay"
+            ? `Hasta ${maxNights} desde el día de entrada.`
+            : `Hasta ${maxNights} desde el día de inicio. Se muestra esos días en la Ruta.`}
+      </p>
+    </div>
+  ) : null
+
+  const budgetFields = (
+    <ManualItemTaskFields
+      type={addingTransport ? "transport" : type}
+      routeMode={addingTransport ? liveTransportMode : existingItem?.route?.mode}
+      currency={currency}
+      draft={taskDraft}
+      onChange={(next) => {
+        costRef.current = next.cost
+        setTaskDraft(next)
+      }}
+    />
   )
 
   return (
@@ -426,11 +626,72 @@ export function AddManualItemDialog({
                 fromLabel="Origen"
                 toLabel="Destino"
                 onValidityChange={setTransportCanSubmit}
+                onLiveContext={({ mode }) => setLiveTransportMode(mode)}
                 onSubmit={handleTransportSubmit}
+                renderAfterDestination={({ from, to, mode }) => (
+                  <ManualFlightSearch
+                    from={from}
+                    to={to}
+                    mode={mode}
+                    trip={{
+                      startDate,
+                      numDays: days.length,
+                      numTravelers: numTravelers ?? 1,
+                    }}
+                    dayIndex={selectedDayIndex}
+                    days={days}
+                  />
+                )}
               />
+              {budgetFields}
             </>
           ) : (
             <>
+          {placeField}
+
+          {dayField}
+
+          {durationField}
+
+          {type === "stay" && showDiscovery ? (
+            <div className="space-y-1.5">
+              <PartnerSearchLink
+                href={stayHref}
+                label="Buscar en Booking.com"
+                disabledHint="Escribe una ciudad para buscar alojamiento."
+              />
+              {bookingOmitsStayDates(startDate, stayDayIndexes) ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Sin fechas en el viaje, o con el check-in ya pasado, Booking
+                  abre el destino sin check-in.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {type === "activity" && showDiscovery ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <PartnerSearchLink
+                href={activityHrefs?.civitatis ?? null}
+                label="Buscar en Civitatis"
+                disabledHint={
+                  activityHrefs?.civitatis
+                    ? null
+                    : "Elige una ciudad del desplegable para buscar en Civitatis."
+                }
+              />
+              <PartnerSearchLink
+                href={activityHrefs?.getYourGuide ?? null}
+                label="Buscar en GetYourGuide"
+                disabledHint={
+                  activityHrefs?.getYourGuide
+                    ? null
+                    : "Escribe un destino para buscar en GetYourGuide."
+                }
+              />
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor={nameId}>Nombre</Label>
             <Input
@@ -438,118 +699,8 @@ export function AddManualItemDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={NAME_PLACEHOLDERS[type]}
-              autoFocus={!isMobileViewport()}
             />
           </div>
-
-          <div className="relative space-y-2">
-            <Label htmlFor={placeId}>Ciudad o dirección (opcional)</Label>
-            <div className="relative">
-              <MapPin
-                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                id={placeId}
-                value={placeQuery}
-                onChange={(e) => handlePlaceChange(e.target.value)}
-                onFocus={() => {
-                  if (placeBlurRef.current != null) {
-                    window.clearTimeout(placeBlurRef.current)
-                    placeBlurRef.current = null
-                  }
-                  setPlaceFieldActive(true)
-                }}
-                onBlur={() => {
-                  // Delay so click on suggestion registers.
-                  placeBlurRef.current = window.setTimeout(() => {
-                    placeBlurRef.current = null
-                    setListOpen(false)
-                    setPlaceFieldActive(false)
-                  }, 150)
-                }}
-                placeholder={type === "stay" ? "Király utca 15, Budapest" : "p. ej. Budapest"}
-                className="pl-8"
-                autoComplete="off"
-                aria-autocomplete="list"
-                aria-expanded={listOpen && suggestions.length > 0}
-              />
-              {suggestLoading ? (
-                <Loader2
-                  className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
-                  aria-hidden
-                />
-              ) : null}
-            </div>
-            {listOpen && suggestions.length > 0 ? (
-              <ul
-                className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
-                role="listbox"
-              >
-                {suggestions.map((s) => (
-                  <li key={s.id} role="option">
-                    <button
-                      type="button"
-                      className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelectSuggestion(s)}
-                    >
-                      <span className="font-medium text-foreground">{s.text}</span>
-                      {s.placeName !== s.text ? (
-                        <span className="line-clamp-1 text-xs text-muted-foreground">
-                          {s.placeName}
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {selectedPlace ? (
-              <p className="text-xs text-muted-foreground">
-                {type === "stay" || type === "activity"
-                  ? "Ubicación fijada en el mapa."
-                  : "Ubicación guardada."}
-              </p>
-            ) : durationKind && nights >= 2 ? (
-              <p className="text-xs text-muted-foreground">
-                Sin una dirección concreta no ancla la jornada en el mapa.
-              </p>
-            ) : null}
-          </div>
-
-          {dayField}
-
-          {durationKind ? (
-            <div className="space-y-2">
-              <Label htmlFor={nightsId}>{type === "stay" ? "Noches" : "Días"}</Label>
-              <Input
-                id={nightsId}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={maxNights}
-                value={nights}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10)
-                  if (!Number.isFinite(n)) {
-                    setNights(1)
-                    return
-                  }
-                  setNights(Math.min(Math.max(1, n), maxNights))
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {maxNights === 1
-                  ? type === "stay"
-                    ? "El viaje acaba este día: 1 noche."
-                    : "El viaje acaba este día: 1 día."
-                  : type === "stay"
-                    ? `Hasta ${maxNights} desde el día de entrada.`
-                    : `Hasta ${maxNights} desde el día de inicio. Se muestra esos días en la Ruta.`}
-              </p>
-            </div>
-          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor={detailId}>Nota (opcional)</Label>
@@ -562,6 +713,8 @@ export function AddManualItemDialog({
               className="min-h-[80px] resize-y text-sm"
             />
           </div>
+
+          {budgetFields}
             </>
           )}
         </div>

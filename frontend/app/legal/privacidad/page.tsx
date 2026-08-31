@@ -154,7 +154,10 @@ export default function PrivacidadPage() {
           legalmente. Y si pulsas «Buscar vuelos», sales a Skyscanner con los datos del vuelo
           en la dirección; si el enlace de un alojamiento es de Booking —el del bloguero o
           el que generamos para el asistente y para los que añades tú— y el viaje tiene
-          fechas, van en ese mismo enlace,
+          fechas, van en ese mismo enlace; si buscas una actividad que has añadido tú o te
+          ha propuesto el asistente, sales a Civitatis o a GetYourGuide a través de Stay22
+          con destino y fechas en la dirección. Stay22 es un intermediario: ve destino y
+          fechas para redirigirte,
           como cuenta el{" "}
           <Link href="/legal/aviso-legal#enlaces-comerciales" className="font-medium text-foreground underline underline-offset-4">
             aviso legal

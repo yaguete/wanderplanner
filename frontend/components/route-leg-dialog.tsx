@@ -5,7 +5,7 @@
  * Aporta suggestLegEndpoints, originPatch y copy de casa.
  * Al crear una ida sin retorno: atajo «Solo ida / Ida y vuelta» (no se persiste).
  */
-import { useId, useMemo, useState } from "react"
+import { useId, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,13 +20,27 @@ import {
   TransportRouteForm,
   type TransportRouteFormValue,
 } from "@/components/transport-route-form"
+import { ManualFlightSearch } from "@/components/manual-flight-search"
+import {
+  draftFromTaskState,
+  ManualItemTaskFields,
+} from "@/components/manual-item-task-fields"
 import { cn } from "@/lib/utils"
+import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
+import { isSyntheticSourceId } from "@/lib/item-provenance"
+import {
+  omitReturnLegTask,
+  taskPatchFromManualDraft,
+  type ManualTaskDraft,
+} from "@/lib/manual-item-task"
 import { hasRouteLeg, suggestLegEndpoints, tripOriginFromCityAnchor } from "@/lib/route-legs"
 import type {
   RouteLeg,
+  RouteMode,
   TransportRoute,
   Trip,
   TripOrigin,
+  TripTaskState,
   UserDayItem,
 } from "@/types/itinerary"
 
@@ -34,8 +48,12 @@ export type RouteLegDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   leg: RouteLeg
-  trip: Pick<Trip, "id" | "origin" | "countries" | "name" | "days">
+  trip: Pick<
+    Trip,
+    "id" | "origin" | "countries" | "name" | "days" | "startDate" | "numDays" | "numTravelers" | "currency"
+  >
   existingItem?: UserDayItem | null
+  existingTask?: TripTaskState | null
   onSubmit: (data: {
     leg: RouteLeg
     route: Omit<TransportRoute, "leg"> & { from: TransportRoute["from"]; to: TransportRoute["to"] }
@@ -44,6 +62,7 @@ export type RouteLegDialogProps = {
     origin: TripOrigin | null
     /** Al crear ida: también crea el retorno espejado. No se persiste. */
     createMirrorReturn?: boolean
+    taskPatch?: Partial<TripTaskState> | null
   }) => void
 }
 
@@ -53,11 +72,19 @@ export function RouteLegDialog({
   leg,
   trip,
   existingItem = null,
+  existingTask = null,
   onSubmit,
 }: RouteLegDialogProps) {
   const formId = useId()
   const [canSubmit, setCanSubmit] = useState(false)
   const [tripKind, setTripKind] = useState<"oneway" | "roundtrip">("roundtrip")
+  const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(() =>
+    draftFromTaskState(existingTask),
+  )
+  const costRef = useRef<number | null>(taskDraft.cost)
+  const [liveMode, setLiveMode] = useState<RouteMode | null>(
+    existingItem?.route?.mode ?? null,
+  )
 
   const initial = useMemo(() => {
     if (existingItem?.route) {
@@ -87,6 +114,15 @@ export function RouteLegDialog({
   const editing = Boolean(existingItem?.route?.leg)
   const canOfferRoundtrip =
     isOutbound && !editing && !hasRouteLeg(trip.days, "return")
+  const showDiscovery = !existingItem || isSyntheticSourceId(existingItem.sourceId)
+  const mirroredFlights = isMirroredFlightRoundtrip(trip.days)
+  const hideReturnTask = omitReturnLegTask({ mirrored: mirroredFlights, leg })
+  const roundtripFlightLabel =
+    liveMode === "flight" &&
+    (mirroredFlights || (canOfferRoundtrip && tripKind === "roundtrip"))
+  const flightLeg: RouteLeg | undefined =
+    canOfferRoundtrip && tripKind === "oneway" ? undefined : leg
+  const dayIndex = isOutbound ? 0 : Math.max(0, trip.days.length - 1)
 
   const handleFormSubmit = (value: TransportRouteFormValue) => {
     // trip.origin = ancla de casa: ciudad elegida ANTES del hub, nunca el aeropuerto.
@@ -106,6 +142,12 @@ export function RouteLegDialog({
       vendor: value.vendor,
       origin: originPatch,
       createMirrorReturn: canOfferRoundtrip && tripKind === "roundtrip",
+      taskPatch: hideReturnTask
+        ? null
+        : taskPatchFromManualDraft(
+            { ...taskDraft, cost: costRef.current },
+            existingTask ? { includeCleared: true } : undefined,
+          ),
     })
     onOpenChange(false)
   }
@@ -123,10 +165,10 @@ export function RouteLegDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
           {canOfferRoundtrip ? (
             <div
-              className="mb-4 flex flex-wrap gap-1.5"
+              className="flex flex-wrap gap-1.5"
               role="radiogroup"
               aria-label="Solo ida o ida y vuelta"
             >
@@ -166,8 +208,46 @@ export function RouteLegDialog({
               isOutbound ? "Indica tu ciudad de destino" : "¿A qué ciudad llegas?"
             }
             onValidityChange={setCanSubmit}
+            onLiveContext={({ mode }) => setLiveMode(mode)}
             onSubmit={handleFormSubmit}
+            renderAfterDestination={
+              showDiscovery
+                ? ({ from, to, mode }) => (
+                    <ManualFlightSearch
+                      from={from}
+                      to={to}
+                      mode={mode}
+                      trip={{
+                        startDate: trip.startDate,
+                        numDays: trip.numDays,
+                        numTravelers: trip.numTravelers,
+                      }}
+                      dayIndex={dayIndex}
+                      days={trip.days}
+                      leg={flightLeg}
+                    />
+                  )
+                : undefined
+            }
           />
+
+          {hideReturnTask ? (
+            <p className="text-xs text-muted-foreground rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+              El billete de ida y vuelta se apunta en el tramo de ida.
+            </p>
+          ) : (
+            <ManualItemTaskFields
+              type="transport"
+              routeMode={liveMode}
+              currency={trip.currency}
+              draft={taskDraft}
+              onChange={(next) => {
+                costRef.current = next.cost
+                setTaskDraft(next)
+              }}
+              costAriaLabel={roundtripFlightLabel ? "Coste ida y vuelta" : "Coste"}
+            />
+          )}
         </div>
 
         <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

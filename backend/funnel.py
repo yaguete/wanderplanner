@@ -35,11 +35,27 @@ ALLOWED_META_KEYS = frozenset(
 )
 ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
     "target": frozenset(
-        {"booking", "skyscanner", "getyourguide", "kayak", "stay22", "other"}
+        {
+            "booking",
+            "skyscanner",
+            "getyourguide",
+            "civitatis",
+            "kayak",
+            "stay22",
+            "other",
+        }
     ),
     "affiliate": frozenset({"partner", "own", "none"}),
     "surface": frozenset(
-        {"task_row", "budget_row", "route_card", "assistant", "flight_search", "inspiration"}
+        {
+            "task_row",
+            "budget_row",
+            "route_card",
+            "assistant",
+            "flight_search",
+            "inspiration",
+            "manual_item",
+        }
     ),
     "onboarding": frozenset({"completed", "skipped", "unseen"}),
     "sourceKind": frozenset({"instagram", "article"}),

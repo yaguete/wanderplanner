@@ -364,7 +364,7 @@ interface TripContextValue {
       /** Al crear ida: también crea el retorno espejado en el último día. */
       createMirrorReturn?: boolean
     },
-  ) => { ok: true } | { ok: false; error: string }
+  ) => { ok: true; taskKey: string } | { ok: false; error: string }
   /**
    * Crea o edita un traslado interno estructurado (sin `leg`).
    * Migra la clave de tarea legacy → `route:${id}` en el mismo setTrips.
@@ -378,7 +378,7 @@ interface TripContextValue {
       detail?: string | null
       vendor?: string | null
     },
-  ) => { ok: true } | { ok: false; error: string }
+  ) => { ok: true; itemId: string; taskKey: string } | { ok: false; error: string }
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -1789,7 +1789,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         origin?: TripOrigin | null
         createMirrorReturn?: boolean
       },
-    ): { ok: true } | { ok: false; error: string } => {
+    ): { ok: true; taskKey: string } | { ok: false; error: string } => {
       const trip = tripsRef.current.find((t) => t.id === tripId)
       if (!trip) return { ok: false, error: "Viaje no encontrado." }
       if (trip.days.length === 0) return { ok: false, error: "El viaje no tiene días." }
@@ -1860,7 +1860,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           return withPrunedTasks(syncTripSchedule({ ...t, origin: nextOrigin }, days))
         }),
       )
-      return { ok: true }
+      return { ok: true, taskKey: taskKeyForItem(item) }
     },
     [],
   )
@@ -1878,7 +1878,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         detail?: string | null
         vendor?: string | null
       },
-    ): { ok: true } | { ok: false; error: string } => {
+    ): { ok: true; itemId: string; taskKey: string } | { ok: false; error: string } => {
       const trip = tripsRef.current.find((t) => t.id === tripId)
       if (!trip) return { ok: false, error: "Viaje no encontrado." }
       if (!trip.days.some((d) => d.id === data.dayId)) {
@@ -1948,7 +1948,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           return withPrunedTasks(syncTripSchedule({ ...t, tasks }, days))
         }),
       )
-      return { ok: true }
+      return { ok: true, itemId: item.id, taskKey: newKey }
     },
     [],
   )

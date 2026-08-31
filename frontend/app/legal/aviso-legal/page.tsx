@@ -111,6 +111,14 @@ export default function AvisoLegalPage() {
           número de viajeros ya puestos, así que Skyscanner ve esos datos. Hoy no cobramos
           comisión por esos clics; si algún día lo hacemos, se dirá aquí.
         </p>
+        <p>
+          Si una actividad no venía de una fuente —te la recomienda el asistente o la
+          añades tú—, los botones de búsqueda te llevan a Civitatis y a GetYourGuide (a
+          través de Stay22) con nuestro identificador de afiliado: el destino y, en
+          GetYourGuide, las fechas y el número de viajeros van en la dirección. Stay22 es
+          un intermediario: ve destino y fechas para redirigirte. Eso no sustituye nunca el
+          enlace de un bloguero.
+        </p>
       </LegalSection>
 
       <LegalSection id="uso" title="Uso del servicio">

@@ -5,8 +5,10 @@ import {
   BOOKING_AFFILIATE_AID,
   BOOKING_AFFILIATE_LABEL,
   buildAssistantBookingSearchUrl,
+  buildDestinationBookingSearchUrl,
   isOwnBookingAffiliateUrl,
   resolveStayAffiliateUrl,
+  stayFormSearchHref,
   stayReserveHref,
 } from "./booking-search"
 
@@ -178,6 +180,91 @@ const checkinC = futureISO(90)
   assert.equal(q.get("checkout"), checkoutFor(checkinC, 1))
   assert.equal(q.get("selected_currency"), null)
   assert.equal(q.get("group_adults"), null)
+}
+
+{
+  assert.equal(buildDestinationBookingSearchUrl("   "), null)
+  const href = buildDestinationBookingSearchUrl("Budapest")
+  const q = params(href)
+  assert.equal(q.get("ss"), "Budapest")
+  assert.equal(q.get("aid"), BOOKING_AFFILIATE_AID)
+  assert.equal(q.get("label"), BOOKING_AFFILIATE_LABEL)
+  assert.equal(q.get("checkin"), null)
+}
+
+{
+  const href = stayFormSearchHref({
+    destination: "Budapest",
+    startDate: checkinA,
+    dayIndexes: [0, 1, 2],
+    currency: "EUR",
+    numTravelers: 2,
+  })
+  const q = params(href)
+  assert.equal(q.get("ss"), "Budapest")
+  assert.equal(q.get("aid"), BOOKING_AFFILIATE_AID)
+  assert.equal(q.get("checkin"), checkinA)
+  assert.equal(q.get("checkout"), checkoutFor(checkinA, 3))
+  assert.equal(q.get("selected_currency"), "EUR")
+  assert.equal(q.get("group_adults"), "2")
+}
+
+{
+  assert.equal(
+    stayFormSearchHref({
+      destination: "  ",
+      startDate: checkinA,
+      dayIndexes: [0],
+    }),
+    null,
+  )
+}
+
+{
+  assert.equal(
+    stayFormSearchHref({
+      destination: "Budapest",
+      startDate: checkinA,
+      dayIndexes: [0],
+      affiliateUrl: "https://www.booking.com/hotel/hu/foo.html?aid=99",
+    }),
+    null,
+  )
+}
+
+{
+  assert.equal(
+    stayFormSearchHref({
+      destination: "Budapest",
+      startDate: checkinA,
+      dayIndexes: [0],
+      sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    }),
+    null,
+  )
+}
+
+{
+  const href = stayFormSearchHref({
+    destination: "Budapest",
+    startDate: checkinA,
+    dayIndexes: [0],
+    sourceId: MANUAL_SOURCE_ID,
+  })
+  assert.ok(href)
+  assert.equal(params(href).get("ss"), "Budapest")
+}
+
+{
+  assert.equal(
+    resolveStayAffiliateUrl({
+      type: "stay",
+      name: "Hotel Fuente",
+      region: "Innsbruck",
+      sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    }),
+    null,
+  )
 }
 
 console.log("booking-search.test.ts: ok")

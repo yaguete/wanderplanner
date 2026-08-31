@@ -53,6 +53,15 @@ export function isOwnBookingAffiliateUrl(href: string | null | undefined): boole
   }
 }
 
+function bookingSearchUrl(ss: string): string {
+  const url = new URL(BOOKING_SEARCH_ORIGIN)
+  url.searchParams.set("ss", ss)
+  url.searchParams.set("aid", BOOKING_AFFILIATE_AID)
+  url.searchParams.set("label", BOOKING_AFFILIATE_LABEL)
+  url.searchParams.set("lang", "es")
+  return url.toString()
+}
+
 /**
  * URL de searchresults.es.html con `ss` (nombre ± región), `aid` y `label`.
  * Sin fechas ni viajeros: eso va al pintar.
@@ -63,12 +72,17 @@ export function buildAssistantBookingSearchUrl(params: {
 }): string | null {
   const ss = searchQuery(params.name, params.region)
   if (!ss) return null
-  const url = new URL(BOOKING_SEARCH_ORIGIN)
-  url.searchParams.set("ss", ss)
-  url.searchParams.set("aid", BOOKING_AFFILIATE_AID)
-  url.searchParams.set("label", BOOKING_AFFILIATE_LABEL)
-  url.searchParams.set("lang", "es")
-  return url.toString()
+  return bookingSearchUrl(ss)
+}
+
+/**
+ * Búsqueda por destino (alta manual, antes de nombrar el hotel).
+ * El `ss` es la ciudad o dirección; fechas y viajeros van al pintar.
+ */
+export function buildDestinationBookingSearchUrl(destination: string): string | null {
+  const ss = destination.trim()
+  if (!ss) return null
+  return bookingSearchUrl(ss)
 }
 
 /** Base persistible: el afiliado del ítem, o Booking nuestro si es propio.
@@ -129,5 +143,34 @@ export function stayReserveHref(params: StayReserveInput & {
     startDate: params.startDate,
     dayIndexes: params.dayIndexes,
   }) ?? base
+  return withOwnBookingPaintParams(dated, params.currency, params.numTravelers)
+}
+
+/**
+ * Href del CTA de Booking en el formulario de alta: destino + fechas del
+ * check-in/noches + viajeros/divisa. No se persiste en `affiliateUrl`.
+ *
+ * Misma tabla que `activityDiscoveryHrefs` / `resolveStayAffiliateUrl`:
+ * enlace guardado o procedencia de fuente → no generar búsqueda.
+ */
+export function stayFormSearchHref(params: {
+  destination: string
+  startDate: string | null
+  dayIndexes: readonly number[]
+  currency?: string | null
+  numTravelers?: number | null
+  affiliateUrl?: string | null
+  sourceId?: string | null
+}): string | null {
+  if (sanitizeAffiliateUrl(params.affiliateUrl)) return null
+  if (params.sourceId && !isSyntheticSourceId(params.sourceId)) return null
+  const base = buildDestinationBookingSearchUrl(params.destination)
+  if (!base) return null
+  const dated =
+    bookingStayHref({
+      href: base,
+      startDate: params.startDate,
+      dayIndexes: params.dayIndexes,
+    }) ?? base
   return withOwnBookingPaintParams(dated, params.currency, params.numTravelers)
 }

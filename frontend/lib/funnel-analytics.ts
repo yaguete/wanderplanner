@@ -28,6 +28,7 @@ export type OutboundTarget =
   | "booking"
   | "skyscanner"
   | "getyourguide"
+  | "civitatis"
   | "kayak"
   | "stay22"
   | "other"
@@ -41,6 +42,7 @@ export type OutboundSurface =
   | "assistant"
   | "flight_search"
   | "inspiration"
+  | "manual_item"
 
 /**
  * Motivos por los que se abre el RegistrationGate. Mismo conjunto que `GateReason`
@@ -241,6 +243,7 @@ export function classifyOutboundTarget(href: string): OutboundTarget {
   if (host === "booking.com" || host.endsWith(".booking.com")) return "booking"
   if (host === "stay22.com" || host.endsWith(".stay22.com")) return "stay22"
   if (host.includes("getyourguide.")) return "getyourguide"
+  if (host.includes("civitatis.")) return "civitatis"
   if (host.includes("kayak.")) return "kayak"
   if (host.includes("skyscanner.") || host === "pxf.io" || host.endsWith(".pxf.io")) {
     return "skyscanner"

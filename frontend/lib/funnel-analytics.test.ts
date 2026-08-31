@@ -191,6 +191,17 @@ assert.equal(
   classifyOutboundTarget("https://www.getyourguide.es/madrid-l152/tour"),
   "getyourguide",
 )
+assert.equal(
+  classifyOutboundTarget("https://www.civitatis.com/es/budapest/?aid=1006"),
+  "civitatis",
+)
+{
+  // Misma URL, distinta procedencia: el aid propio coincide con el de la partner.
+  const civitatis = "https://www.civitatis.com/es/budapest/?aid=1006"
+  assert.equal(classifyOutboundAffiliate(civitatis, "own"), "own")
+  assert.equal(classifyOutboundAffiliate(civitatis, "partner"), "partner")
+  assert.equal(classifyOutboundAffiliate(civitatis), "none")
+}
 assert.equal(classifyOutboundAffiliate("https://example.com/x", "partner"), "partner")
 assert.equal(classifyOutboundAffiliate("https://example.com/x", "none"), "none")
 assert.equal(

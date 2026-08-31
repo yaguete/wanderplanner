@@ -28,10 +28,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { EmptyState } from "@/components/empty-state"
+import { BookingStatusToggle } from "@/components/task-state-controls"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CostInput } from "@/components/cost-input"
 import { CountryTasksSection } from "@/components/country-tasks-section"
+import { EmptyState } from "@/components/empty-state"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { stayReserveHref } from "@/lib/booking-search"
 import { outbound } from "@/lib/funnel-analytics"
@@ -438,64 +439,6 @@ export function TripTasksPanel({
   )
 }
 
-/** Toggle unido Reservado | Pagado (mismo cromo que el antiguo Cancelable). */
-function BookingStatusToggle({
-  value,
-  onChange,
-}: {
-  value: "pending" | "booked" | "paid" | "notNeeded"
-  onChange: (next: "booked" | "paid") => void
-}) {
-  return (
-    <div
-      className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5"
-      role="group"
-      aria-label="Estado de reserva"
-    >
-      <button
-        type="button"
-        aria-pressed={value === "booked"}
-        onClick={() => onChange("booked")}
-        className={cn(
-          "inline-flex min-h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          value === "booked"
-            ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
-            : "font-medium text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <span
-          className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            value === "booked" ? "bg-muted-foreground" : "bg-muted-foreground/30",
-          )}
-          aria-hidden
-        />
-        Reservado
-      </button>
-      <button
-        type="button"
-        aria-pressed={value === "paid"}
-        onClick={() => onChange("paid")}
-        className={cn(
-          "inline-flex min-h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          value === "paid"
-            ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
-            : "font-medium text-muted-foreground hover:text-foreground",
-        )}
-      >
-        {value === "paid" ? (
-          <Check className="h-3 w-3 shrink-0 text-success" strokeWidth={2.4} aria-hidden />
-        ) : (
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
-        )}
-        Pagado
-      </button>
-    </div>
-  )
-}
-
 function DoneChip({
   active,
   onClick,
@@ -568,8 +511,8 @@ function TaskRow({
     (task.origin === "extra" && onRemoveExtraTask) ||
     (task.origin === "basic" && onRemoveBasic)
 
-  const toggleStatus = (next: "booked" | "paid") => {
-    onSetTaskState(task.id, { status: status === next ? "pending" : next })
+  const toggleStatus = (next: "booked" | "paid" | null) => {
+    onSetTaskState(task.id, { status: next ?? "pending" })
   }
 
   const flightSearch =

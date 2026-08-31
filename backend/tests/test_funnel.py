@@ -63,6 +63,8 @@ def test_sanitize_meta_drops_unknown_keys_and_bad_values():
     assert mod.sanitize_meta({"target": "not-a-target"}) == {}
     assert mod.sanitize_meta({"surface": "inspiration"}) == {"surface": "inspiration"}
     assert mod.sanitize_meta({"surface": "budget_row"}) == {"surface": "budget_row"}
+    assert mod.sanitize_meta({"surface": "manual_item"}) == {"surface": "manual_item"}
+    assert mod.sanitize_meta({"target": "civitatis"}) == {"target": "civitatis"}
     assert mod.sanitize_meta({"onboarding": "completed"}) == {"onboarding": "completed"}
     assert mod.sanitize_meta({"onboarding": "maybe"}) == {}
 

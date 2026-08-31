@@ -70,6 +70,16 @@ export function stayDatesFromDayIndexes(
   return { checkin, checkout }
 }
 
+/** True si `withBookingStayDates` no inyectaría checkin (sin fechas o check-in pasado). */
+export function bookingOmitsStayDates(
+  startDate: string | null,
+  dayIndexes: readonly number[],
+): boolean {
+  const dates = stayDatesFromDayIndexes(startDate, dayIndexes)
+  if (!dates) return true
+  return dates.checkin < todayISO()
+}
+
 /**
  * Misma URL (aid, label, hash…). Solo pisa `checkin` y `checkout` si es
  * Booking, hay fechas y el check-in no es pasado.
