@@ -313,7 +313,7 @@ export function ReferenceFeedPanel() {
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Sugerencias</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Blogs de viaje que conocemos. Añádelos como referencia para ver sus artículos aquí.
+              El mejor contenido de viajes en español. Añade tus fuentes favoritas.
             </p>
           </div>
           <SuggestedReferencesDirectory

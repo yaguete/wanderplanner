@@ -29,6 +29,10 @@ assert.equal(
   faviconUrlForHost("www.LaCosmopolilla.com"),
   "https://www.google.com/s2/favicons?domain=lacosmopolilla.com&sz=32",
 )
+assert.equal(
+  faviconUrlForHost("sinmapa.net", 128),
+  "https://www.google.com/s2/favicons?domain=sinmapa.net&sz=128",
+)
 assert.equal(hostIsFeedable("lacosmopolilla.com"), true)
 assert.equal(hostIsFeedable("sinmapa.net"), true)
 assert.equal(hostIsFeedable("booking.com"), false)

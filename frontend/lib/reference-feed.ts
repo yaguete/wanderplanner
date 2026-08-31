@@ -46,9 +46,10 @@ export type FeedListRow =
 export type TripFeedEligibility = "ok" | "full" | "busy" | "duplicate"
 
 /** Icono público del sitio (gstatic). `/favicon.ico` suele 404 en WordPress. */
-export function faviconUrlForHost(host: string): string {
+export function faviconUrlForHost(host: string, size = 32): string {
   const domain = host.replace(/^www\./i, "").toLowerCase().trim()
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`
+  const sz = Number.isFinite(size) && size > 0 ? Math.min(128, Math.round(size)) : 32
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${sz}`
 }
 
 export function hostIsFeedable(host: string): boolean {
