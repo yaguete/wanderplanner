@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import {
   buildAddArticleTripOptions,
+  blogHomeUrl,
+  buildFeedListRows,
   capFeedHosts,
   extractionFailureMessage,
   feedHostsFromReferences,
@@ -98,7 +100,47 @@ assert.equal(merged.length, 2)
 assert.equal(merged[0]?.title, "A")
 assert.equal(merged[1]?.title, "B")
 
-  const formatted = formatPublishedAt("2026-08-15T22:00:00Z")
+assert.equal(blogHomeUrl("www.lacosmopolilla.com"), "https://lacosmopolilla.com/")
+assert.equal(blogHomeUrl("sinmapa.net"), "https://sinmapa.net/")
+
+const grouped = buildFeedListRows([
+  {
+    host: "lacosmopolilla.com",
+    label: "La Cosmopolilla",
+    items: [
+      item({
+        url: "https://lacosmopolilla.com/a/",
+        host: "lacosmopolilla.com",
+        title: "A",
+        publishedAt: "2026-08-15T10:00:00Z",
+      }),
+    ],
+  },
+  { host: "vacio.com", label: "Vacío", items: [] },
+  {
+    host: "sinmapa.net",
+    label: "Sin Mapa",
+    items: [
+      item({
+        url: "https://sinmapa.net/b/",
+        host: "sinmapa.net",
+        title: "B",
+        publishedAt: "2026-08-10T10:00:00Z",
+      }),
+    ],
+  },
+])
+assert.equal(grouped.length, 4)
+assert.equal(grouped[0]?.type, "article")
+assert.equal(grouped[0]?.type === "article" && grouped[0].item.title, "A")
+assert.deepEqual(
+  grouped[1],
+  { type: "more", host: "lacosmopolilla.com", label: "La Cosmopolilla", href: "https://lacosmopolilla.com/" },
+)
+assert.equal(grouped[2]?.type === "article" && grouped[2].item.title, "B")
+assert.equal(grouped[3]?.type === "more" && grouped[3].label, "Sin Mapa")
+
+const formatted = formatPublishedAt("2026-08-15T22:00:00Z")
 assert.match(formatted, /15/)
 assert.match(formatted, /2026/)
 assert.equal(formatPublishedAt(null), "")

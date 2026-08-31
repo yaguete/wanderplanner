@@ -1,27 +1,42 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Plus } from "lucide-react"
+import { BookOpen, ExternalLink, Map as MapIcon, MoreHorizontal, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/lib/auth-context"
 import { domainFromUrl } from "@/lib/db/profile-repo"
 import { SOURCES_HOME_REF } from "@/lib/partner-trip"
 import {
   buildAddArticleTripOptions,
+  buildFeedListRows,
   capFeedHosts,
   extractionFailureMessage,
   feedHostsFromReferences,
   fetchReferenceFeed,
   formatPublishedAt,
   hostIsFeedable,
-  mergeFeedItems,
   readStoredFeedFilter,
   resolveFeedFilter,
   tripsWithArticle,
@@ -36,6 +51,81 @@ import { cn } from "@/lib/utils"
 type FeedState =
   | { status: "loading" }
   | { status: "ok"; payload: ReferenceFeedResponse }
+
+const FEED_ACTION_BTN_CLASS = cn(
+  "h-8 w-8 rounded-md bg-background/90",
+  "opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/row:opacity-100",
+)
+
+function openExternal(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer")
+}
+
+function FeedRowAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={FEED_ACTION_BTN_CLASS}
+          aria-label={label}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function FeedRowMenu({
+  onRead,
+  onAdd,
+  onCreate,
+}: {
+  onRead: () => void
+  onAdd: () => void
+  onCreate: () => void
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted"
+          aria-label="Más acciones"
+        >
+          <MoreHorizontal className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[10.5rem]">
+        <DropdownMenuItem onSelect={onRead}>
+          Leer
+          <BookOpen className="ml-auto" strokeWidth={1.8} aria-hidden />
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onAdd}>
+          Añadir
+          <Plus className="ml-auto" strokeWidth={1.8} aria-hidden />
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onCreate}>
+          Crear viaje
+          <MapIcon className="ml-auto" strokeWidth={1.8} aria-hidden />
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 function ReferenceFeedRow({
   item,
@@ -59,40 +149,68 @@ function ReferenceFeedRow({
 
   return (
     <li className="group/row relative">
-      <div className="flex w-full flex-col gap-2 py-3 pl-3 pr-3 sm:flex-row sm:items-center sm:gap-4 sm:pl-4 sm:pr-4">
-        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
-          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted sm:h-14 sm:w-14">
-            {showImage ? (
-              <img
-                src={item.imageUrl ?? ""}
-                alt=""
-                loading="lazy"
-                referrerPolicy="no-referrer"
-                onError={() => setBroken(true)}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            ) : null}
-          </div>
-          <div className="min-w-0 flex-1 text-left">
-            <h3 className="truncate text-sm font-semibold tracking-tight">{item.title}</h3>
-            <p className="mt-1 text-[12px] leading-snug tabular-nums text-muted-foreground">
-              {meta}
-              {alreadyIn ? ` · ${alreadyIn}` : ""}
-            </p>
-          </div>
+      <div className="flex w-full items-start gap-3 py-3 pl-3 pr-14 sm:gap-4 sm:pl-4 md:pr-48">
+        <div className="relative mt-0.5 h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted sm:h-14 sm:w-14">
+          {showImage ? (
+            <img
+              src={item.imageUrl ?? ""}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setBroken(true)}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : null}
         </div>
-        <div className="flex flex-wrap gap-1 sm:shrink-0">
-          <Button type="button" size="sm" variant="ghost" onClick={onRead}>
-            Leer
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onAdd}>
-            Añadir
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onCreate}>
-            Crear viaje
-          </Button>
+        <div className="min-w-0 flex-1 text-left">
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug tracking-tight">
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline"
+            >
+              {item.title}
+            </a>
+          </h3>
+          <p className="mt-1 text-[12px] leading-snug tabular-nums text-muted-foreground">
+            {meta}
+            {alreadyIn ? ` · ${alreadyIn}` : ""}
+          </p>
         </div>
       </div>
+      <div className="absolute right-2 top-3 sm:right-3">
+        <div className="md:hidden">
+          <FeedRowMenu onRead={onRead} onAdd={onAdd} onCreate={onCreate} />
+        </div>
+        <div className="hidden items-center gap-1 md:flex">
+          <FeedRowAction label="Leer" onClick={onRead}>
+            <BookOpen className="h-3.5 w-3.5" />
+          </FeedRowAction>
+          <FeedRowAction label="Añadir" onClick={onAdd}>
+            <Plus className="h-3.5 w-3.5" />
+          </FeedRowAction>
+          <FeedRowAction label="Crear viaje" onClick={onCreate}>
+            <MapIcon className="h-3.5 w-3.5" />
+          </FeedRowAction>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function FeedMoreRow({ label, href }: { label: string; href: string }) {
+  return (
+    <li>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex w-full items-center justify-between gap-3 px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground sm:px-4"
+      >
+        <span>Ver más de {label}</span>
+        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      </a>
     </li>
   )
 }
@@ -120,6 +238,7 @@ export function ReferenceFeedPanel() {
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
   const [pickerOptions, setPickerOptions] = useState<AddArticleTripOption[]>([])
+  const [creating, setCreating] = useState<ReferenceFeedItem | null>(null)
 
   useEffect(() => {
     setSelected(resolveFeedFilter(feedableDomains, readStoredFeedFilter()))
@@ -128,7 +247,7 @@ export function ReferenceFeedPanel() {
   }, [feedableKey])
 
   const hostsToFetch = useMemo(
-    () => capFeedHosts(selected.filter((d) => feedableDomains.includes(d))),
+    () => capFeedHosts(feedableDomains.filter((d) => selected.includes(d))),
     [selected, feedableDomains],
   )
   const fetchKey = hostsToFetch.join(",")
@@ -152,14 +271,20 @@ export function ReferenceFeedPanel() {
     return map
   }, [sources])
 
-  const merged = useMemo(() => {
+  const listRows = useMemo(() => {
     const groups = hostsToFetch.flatMap((host) => {
       const state = feeds[host]
       if (!state || state.status !== "ok") return []
-      return [{ host, items: state.payload.items }]
+      return [
+        {
+          host,
+          label: chips.find((c) => c.domain === host)?.label || host,
+          items: state.payload.items,
+        },
+      ]
     })
-    return mergeFeedItems(groups)
-  }, [feeds, hostsToFetch])
+    return buildFeedListRows(groups)
+  }, [feeds, hostsToFetch, chips])
 
   const loading = hostsToFetch.some((host) => feeds[host]?.status !== "ok")
   const allEmpty =
@@ -317,7 +442,7 @@ export function ReferenceFeedPanel() {
             Activa uno o varios chips para ver sus últimos artículos.
           </p>
         </div>
-      ) : loading && merged.length === 0 ? (
+      ) : loading && listRows.length === 0 ? (
         <div className="flex justify-center rounded-xl border border-dashed border-border px-6 py-14">
           <Spinner className="size-5 text-muted-foreground" />
         </div>
@@ -332,7 +457,11 @@ export function ReferenceFeedPanel() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-border">
           <ul className="divide-y divide-border">
-            {merged.map((item) => {
+            {listRows.map((row) => {
+              if (row.type === "more") {
+                return <FeedMoreRow key={`more:${row.host}`} label={row.label} href={row.href} />
+              }
+              const item = row.item
               const names = tripsWithArticle(trips, sourcesById, item.url)
               const alreadyIn =
                 names.length === 1
@@ -345,11 +474,9 @@ export function ReferenceFeedPanel() {
                   key={item.url}
                   item={item}
                   alreadyIn={alreadyIn}
-                  onRead={() =>
-                    window.open(item.url, "_blank", "noopener,noreferrer")
-                  }
+                  onRead={() => openExternal(item.url)}
                   onAdd={() => openPicker(item)}
-                  onCreate={() => createTripFrom(item)}
+                  onCreate={() => setCreating(item)}
                 />
               )
             })}
@@ -366,6 +493,33 @@ export function ReferenceFeedPanel() {
         }}
         onPick={pickTrip}
       />
+
+      <Dialog open={Boolean(creating)} onOpenChange={(open) => !open && setCreating(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Crear viaje</DialogTitle>
+            <DialogDescription>
+              ¿Quieres crear un nuevo viaje a partir de «{creating?.title}»?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setCreating(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!creating) return
+                const item = creating
+                setCreating(null)
+                createTripFrom(item)
+              }}
+            >
+              Crear viaje
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

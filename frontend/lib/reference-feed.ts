@@ -37,6 +37,10 @@ export type FeedHostChip = {
   feedable: boolean
 }
 
+export type FeedListRow =
+  | { type: "article"; item: ReferenceFeedItem }
+  | { type: "more"; host: string; label: string; href: string }
+
 export type TripFeedEligibility = "ok" | "full" | "busy" | "duplicate"
 
 export function hostIsFeedable(host: string): boolean {
@@ -104,6 +108,32 @@ export function writeStoredFeedFilter(domains: readonly string[]): void {
   } catch {
     /* private mode */
   }
+}
+
+export function blogHomeUrl(host: string): string {
+  const h = host.replace(/^www\./i, "").toLowerCase().trim()
+  return h ? `https://${h}/` : ""
+}
+
+/** Filas del listado: artículos de cada blog (fecha desc.) y «Ver más» al cierre del grupo. */
+export function buildFeedListRows(
+  groups: readonly { host: string; label: string; items: readonly ReferenceFeedItem[] }[],
+): FeedListRow[] {
+  const rows: FeedListRow[] = []
+  for (const group of groups) {
+    const items = mergeFeedItems([{ host: group.host, items: group.items }])
+    if (items.length === 0) continue
+    for (const item of items) rows.push({ type: "article", item })
+    const href = blogHomeUrl(group.host)
+    if (!href) continue
+    rows.push({
+      type: "more",
+      host: group.host,
+      label: group.label.trim() || group.host,
+      href,
+    })
+  }
+  return rows
 }
 
 export function mergeFeedItems(
