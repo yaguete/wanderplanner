@@ -22,7 +22,7 @@ export function TripsHomeHeading({
           className={cn(
             TITLE_CLASS,
             section === "trips"
-              ? "font-semibold text-foreground"
+              ? "font-semibold text-[hsl(var(--brand-ink))]"
               : "font-light text-muted-foreground",
           )}
         >
@@ -35,7 +35,7 @@ export function TripsHomeHeading({
           className={cn(
             TITLE_CLASS,
             section === "sources"
-              ? "font-semibold text-foreground"
+              ? "font-semibold text-[hsl(var(--brand-ink))]"
               : "font-light text-muted-foreground",
           )}
         >

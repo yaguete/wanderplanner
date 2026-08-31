@@ -1,6 +1,7 @@
 /**
  * Cliente y helpers puros del feed de referencias (`GET /sources/reference-feed`).
  */
+import { parseApiDetail } from "@/lib/api"
 import { authHeaders } from "@/lib/api-auth"
 import { domainFromUrl, type FavoriteReference } from "@/lib/db/profile-repo"
 import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
@@ -379,18 +380,73 @@ export function writeCachedFeed(host: string, payload: ReferenceFeedResponse): v
   }
 }
 
+function hostFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "").toLowerCase()
+  } catch {
+    return ""
+  }
+}
+
 function parseFeedItem(raw: unknown, host: string): ReferenceFeedItem | null {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null
   const row = raw as Record<string, unknown>
   if (typeof row.url !== "string" || !row.url) return null
+  const resolved =
+    typeof row.host === "string" && row.host.trim()
+      ? row.host.replace(/^www\./i, "").toLowerCase()
+      : host
   return {
     url: row.url,
-    title: typeof row.title === "string" && row.title.trim() ? row.title : host,
+    title: typeof row.title === "string" && row.title.trim() ? row.title : resolved,
     publishedAt: typeof row.published_at === "string" ? row.published_at : null,
     imageUrl: typeof row.image_url === "string" && row.image_url ? row.image_url : null,
     instant: row.instant === true,
-    host,
+    host: resolved,
   }
+}
+
+/** Respuesta de `GET /sources/reference-search` → filas del feed. */
+export function parseReferenceSearchItems(body: unknown): ReferenceFeedItem[] {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) return []
+  const itemsRaw = (body as Record<string, unknown>).items
+  if (!Array.isArray(itemsRaw)) return []
+  const out: ReferenceFeedItem[] = []
+  for (const raw of itemsRaw) {
+    const item = parseFeedItem(raw, "")
+    if (!item) continue
+    out.push({
+      ...item,
+      host: item.host || hostFromUrl(item.url),
+    })
+  }
+  return out
+}
+
+export async function searchReferenceSources(
+  query: string,
+  domains: readonly string[],
+  signal?: AbortSignal,
+): Promise<ReferenceFeedItem[]> {
+  const hosts = capFeedHosts(
+    domains
+      .map((d) => normalizeFeedHost(d) ?? "")
+      .filter((h): h is string => h.length > 0),
+  )
+  if (hosts.length === 0) return []
+
+  const params = new URLSearchParams({ q: query })
+  for (const host of hosts) params.append("domain", host)
+  const headers = await authHeaders()
+  const res = await fetch(`${API_BASE}/sources/reference-search?${params}`, {
+    headers,
+    signal,
+  })
+  const body = (await res.json().catch(() => null)) as unknown
+  if (!res.ok) {
+    throw new Error(parseApiDetail(body, res.status).message)
+  }
+  return parseReferenceSearchItems(body)
 }
 
 export async function fetchReferenceFeed(domain: string): Promise<ReferenceFeedResponse> {

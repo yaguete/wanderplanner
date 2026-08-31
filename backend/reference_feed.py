@@ -1,8 +1,9 @@
 """
 GET /sources/reference-feed — últimos artículos de un blog de referencia.
+GET /sources/reference-search — búsqueda WP en las referencias del usuario.
 
-Un host por petición (cacheable; el fallo de un blog no arrastra a los demás).
-WP REST primero; RSS/Atom de respaldo. No gasta Tavily ni extraction.
+Un host por petición de feed (cacheable; el fallo de un blog no arrastra a los demás).
+La búsqueda recorre hasta 8 hosts en paralelo, fail-open. WP REST; no gasta Tavily.
 """
 
 from __future__ import annotations
@@ -15,11 +16,11 @@ import re
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from time import monotonic
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from lxml import etree
 from pydantic import BaseModel, Field
 
@@ -30,6 +31,7 @@ from blog_suggest import (
     apply_instant_from_cache,
     has_excluded_category,
     is_denied_guide_slug,
+    rank_score,
     strip_html,
 )
 from extraction_cache import list_extraction_metas
@@ -38,7 +40,9 @@ from obs import log_kv
 from partners import is_public_http_url
 from source_suggest import (
     SuggestHit,
+    fold_text,
     rewrite_feed_amp_url,
+    sanitize_suggest_query,
     url_has_junk_path,
 )
 
@@ -49,8 +53,14 @@ POSTS_PER_HOST = 5
 WP_FETCH_PER_PAGE = 20
 MAX_BODY_BYTES = 512_000
 MAX_FEED_CACHE = 64
+MAX_SEARCH_CACHE = 64
+MAX_SEARCH_HOSTS = 8
+PER_HOST_SEARCH = 4
+MAX_SEARCH_RESULTS = 8
 CACHE_SCOPE_PREFIX = "feed:"
+SEARCH_CACHE_PREFIX = "refsearch:"
 WP_FEED_FIELDS = "id,slug,link,title,date,date_gmt,categories,_links,_embedded"
+WP_SEARCH_FIELDS = "id,slug,link,title,date,date_gmt,categories"
 
 FeedReason = Literal["not_blog", "unavailable", "empty"] | None
 
@@ -58,7 +68,10 @@ _HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 _IMG_SRC = re.compile(r"""<img[^>]+src=["']([^"']+)["']""", re.I)
 _DAY: date | None = None
 _ip_counts: dict[str, int] = {}
+_search_day: date | None = None
+_search_ip_counts: dict[str, int] = {}
 _feed_cache: dict[str, tuple[float, "FeedResponse"]] = {}
+_search_cache: dict[str, tuple[float, "SearchResponse"]] = {}
 
 
 class FeedItem(BaseModel):
@@ -67,6 +80,11 @@ class FeedItem(BaseModel):
     published_at: str | None = None
     image_url: str | None = None
     instant: bool = False
+    host: str = ""
+
+
+class SearchResponse(BaseModel):
+    items: list[FeedItem] = Field(default_factory=list)
 
 
 class FeedResponse(BaseModel):
@@ -210,6 +228,7 @@ def map_wp_post_to_item(post: dict[str, Any], host: str) -> FeedItem | None:
         published_at=published,
         image_url=image,
         instant=False,
+        host=display_host,
     )
 
 
@@ -345,6 +364,7 @@ def parse_feed_bytes(content: bytes, host: str, limit: int = POSTS_PER_HOST) -> 
                 published_at=published,
                 image_url=_entry_image(entry),
                 instant=False,
+                host=display_host,
             )
         )
         if len(kept) >= max(0, limit):
@@ -388,6 +408,32 @@ def set_cached_feed(host: str, resp: FeedResponse) -> None:
         _feed_cache.pop(oldest, None)
 
 
+def _search_cache_key(query: str, hosts: list[str], cap: int) -> str:
+    return f"{SEARCH_CACHE_PREFIX}{fold_text(query)}:{','.join(hosts)}:{cap}"
+
+
+def get_cached_search(query: str, hosts: list[str], cap: int) -> SearchResponse | None:
+    key = _search_cache_key(query, hosts, cap)
+    entry = _search_cache.get(key)
+    if entry is None:
+        return None
+    ts, resp = entry
+    if monotonic() - ts > _response_ttl_sec():
+        _search_cache.pop(key, None)
+        return None
+    return resp.model_copy(deep=True)
+
+
+def set_cached_search(query: str, hosts: list[str], cap: int, resp: SearchResponse) -> None:
+    key = _search_cache_key(query, hosts, cap)
+    stored = resp.model_copy(deep=True)
+    stored.items = [item.model_copy(update={"instant": False}) for item in stored.items]
+    _search_cache[key] = (monotonic(), stored)
+    while len(_search_cache) > MAX_SEARCH_CACHE:
+        oldest = min(_search_cache, key=lambda k: _search_cache[k][0])
+        _search_cache.pop(oldest, None)
+
+
 def allow_reference_feed_ip(ip: str | None) -> bool:
     global _DAY, _ip_counts
     today = date.today()
@@ -405,11 +451,31 @@ def allow_reference_feed_ip(ip: str | None) -> bool:
     return True
 
 
+def allow_reference_search_ip(ip: str | None) -> bool:
+    global _search_day, _search_ip_counts
+    today = date.today()
+    if _search_day != today:
+        _search_day = today
+        _search_ip_counts = {}
+    limit = _env_int("REFERENCE_SEARCH_MAX_IP_DAY", 40)
+    if limit == 0:
+        return False
+    key = (ip or "").strip() or "unknown"
+    used = _search_ip_counts.get(key, 0)
+    if used >= limit:
+        return False
+    _search_ip_counts[key] = used + 1
+    return True
+
+
 def clear_reference_feed_runtime_state() -> None:
-    global _DAY, _ip_counts
+    global _DAY, _ip_counts, _search_day, _search_ip_counts
     _DAY = None
     _ip_counts = {}
+    _search_day = None
+    _search_ip_counts = {}
     _feed_cache.clear()
+    _search_cache.clear()
 
 
 def _client_ip(request: Request) -> str | None:
@@ -534,6 +600,111 @@ async def load_feed_items(host: str) -> tuple[list[FeedItem], str]:
     return items, ("rss" if items else "none")
 
 
+def parse_search_hosts(raw: list[str] | None) -> list[str]:
+    """Normaliza, descarta OTAs/no-blogs y recorta al tope de referencias."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw or []:
+        host = normalize_feed_host(item)
+        if not host or host in seen:
+            continue
+        if not host_is_feedable(host):
+            continue
+        seen.add(host)
+        out.append(host)
+        if len(out) >= MAX_SEARCH_HOSTS:
+            break
+    return out
+
+
+def wp_search_posts_url(host: str, query: str, *, title_only: bool) -> str:
+    params: dict[str, str] = {
+        "search": query,
+        "per_page": str(WP_FETCH_PER_PAGE),
+        "_fields": WP_SEARCH_FIELDS,
+    }
+    if title_only:
+        params["search_columns"] = "post_title"
+    return f"https://{host}/wp-json/wp/v2/posts?{urlencode(params)}"
+
+
+def select_search_items(
+    posts: list[dict[str, Any]],
+    query: str,
+    host: str,
+    exclude_category_ids: tuple[int, ...],
+    limit: int = PER_HOST_SEARCH,
+) -> list[tuple[int, FeedItem]]:
+    kept: list[tuple[int, FeedItem]] = []
+    seen: set[str] = set()
+    for post in posts:
+        if not isinstance(post, dict):
+            continue
+        if has_excluded_category(_category_ids(post.get("categories")), exclude_category_ids):
+            continue
+        item = map_wp_post_to_item(post, host)
+        if not item:
+            continue
+        key = item.url.rstrip("/")
+        if key in seen:
+            continue
+        seen.add(key)
+        slug = str(post.get("slug") or "") or slug_from_url(item.url)
+        kept.append((rank_score(query, slug, item.title), item))
+    kept.sort(key=lambda row: row[0])
+    return kept[: max(0, limit)]
+
+
+def merge_ranked_feed_items(
+    groups: list[list[tuple[int, FeedItem]]],
+    limit: int = MAX_SEARCH_RESULTS,
+) -> list[FeedItem]:
+    flat: list[tuple[int, str, FeedItem]] = []
+    seen: set[str] = set()
+    for group in groups:
+        for score, item in group:
+            key = item.url.rstrip("/")
+            if key in seen:
+                continue
+            seen.add(key)
+            flat.append((score, item.host or "", item))
+    flat.sort(key=lambda row: (row[0], row[1], row[2].title.casefold()))
+    return [item for _, _, item in flat[: max(0, limit)]]
+
+
+async def fetch_wp_search_posts(
+    host: str, query: str, *, title_only: bool
+) -> list[dict[str, Any]] | None:
+    fetched = await _http_get(wp_search_posts_url(host, query, title_only=title_only), "application/json")
+    if fetched is None:
+        return None
+    status, body = fetched
+    if status != 200:
+        return None
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(data, list):
+        return None
+    return [row for row in data if isinstance(row, dict)]
+
+
+async def search_one_host(host: str, query: str) -> list[tuple[int, FeedItem]]:
+    try:
+        landing = get_blog_landing_by_host(host)
+        exclude = landing.exclude_category_ids if landing and landing.enabled else ()
+        posts = await fetch_wp_search_posts(host, query, title_only=True)
+        if not posts:
+            posts = await fetch_wp_search_posts(host, query, title_only=False)
+        if not posts:
+            return []
+        return select_search_items(posts, query, host, exclude, PER_HOST_SEARCH)
+    except Exception:
+        log_kv(logger, event="reference_search", err="host", host=host)
+        return []
+
+
 @router.get("/sources/reference-feed", response_model=FeedResponse)
 async def sources_reference_feed(
     request: Request,
@@ -576,6 +747,67 @@ async def sources_reference_feed(
         event="reference_feed",
         n=len(payload.items),
         origin=origin,
+        instant=sum(1 for item in payload.items if item.instant),
+    )
+    return payload
+
+
+@router.get("/sources/reference-search", response_model=SearchResponse)
+async def sources_reference_search(
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=120),
+    domain: Annotated[list[str] | None, Query()] = None,
+    _user: AuthUser | None = Depends(require_user),
+) -> SearchResponse:
+    query = sanitize_suggest_query(q)
+    if not query:
+        raise HTTPException(
+            status_code=400,
+            detail="Escribe al menos 3 letras del destino.",
+        )
+
+    hosts = parse_search_hosts(domain)
+    if not hosts:
+        return SearchResponse(items=[])
+
+    cached = get_cached_search(query, hosts, MAX_SEARCH_RESULTS)
+    payload = cached
+    origin = "response_cache"
+    if payload is None:
+        if not allow_reference_search_ip(_client_ip(request)):
+            raise HTTPException(
+                status_code=429,
+                detail="Has buscado demasiado seguido. Prueba en un rato.",
+            )
+        groups = await asyncio.gather(
+            *(search_one_host(host, query) for host in hosts),
+            return_exceptions=True,
+        )
+        ranked: list[list[tuple[int, FeedItem]]] = []
+        for host, group in zip(hosts, groups, strict=True):
+            if isinstance(group, BaseException):
+                log_kv(logger, event="reference_search", err="host", host=host)
+                ranked.append([])
+            else:
+                ranked.append(group)
+        items = merge_ranked_feed_items(ranked, MAX_SEARCH_RESULTS)
+        payload = SearchResponse(items=items)
+        set_cached_search(query, hosts, MAX_SEARCH_RESULTS, payload)
+        origin = "wp"
+
+    try:
+        rows = await list_extraction_metas(limit=400)
+        payload = payload.model_copy(update={"items": mark_instant(payload.items, rows)})
+    except Exception:
+        log_kv(logger, event="reference_search_cache", err="list_extraction_metas")
+
+    log_kv(
+        logger,
+        event="reference_search",
+        n=len(payload.items),
+        hosts=len(hosts),
+        origin=origin,
+        q_len=len(query),
         instant=sum(1 for item in payload.items if item.instant),
     )
     return payload

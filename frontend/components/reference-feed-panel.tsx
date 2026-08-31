@@ -1,13 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpen, ChevronDown, ExternalLink, Map as MapIcon, MoreHorizontal, Plus } from "lucide-react"
+import { ChevronDown, ExternalLink, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { AddReferenceDialog } from "@/components/add-reference-dialog"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
+import { ReferenceFeedRow } from "@/components/reference-feed-row"
+import { SearchReferenceDestinationDialog } from "@/components/search-reference-destination-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,7 +28,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/lib/auth-context"
 import { SOURCES_HOME_REF } from "@/lib/partner-trip"
 import {
@@ -37,7 +38,6 @@ import {
   faviconUrlForHost,
   feedHostsFromReferences,
   fetchReferenceFeed,
-  formatPublishedAt,
   hostIsFeedable,
   allFeedFilterSelected,
   readStoredFeedFilter,
@@ -57,9 +57,12 @@ type FeedState =
   | { status: "loading" }
   | { status: "ok"; payload: ReferenceFeedResponse }
 
-const FEED_ACTION_BTN_CLASS = cn(
-  "h-8 w-8 rounded-md bg-background/90",
-  "opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/row:opacity-100",
+const GHOST_TOOLBAR_BTN = cn(
+  "inline-flex h-10 items-center justify-center gap-2 rounded-md px-3",
+  "max-md:w-10 max-md:gap-0 max-md:px-0",
+  "text-sm font-medium text-muted-foreground transition-colors",
+  "hover:bg-sidebar-accent hover:text-foreground",
+  "outline-none focus-visible:ring-2 focus-visible:ring-ring",
 )
 
 function openExternal(url: string) {
@@ -103,144 +106,6 @@ function SourceFilterLabel({ domain, label }: { domain: string; label: string })
   )
 }
 
-function FeedRowAction({
-  label,
-  onClick,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={FEED_ACTION_BTN_CLASS}
-          aria-label={label}
-          onClick={onClick}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function FeedRowMenu({
-  onRead,
-  onAdd,
-  onCreate,
-}: {
-  onRead: () => void
-  onAdd: () => void
-  onCreate: () => void
-}) {
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-foreground/70 transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted"
-          aria-label="Más acciones"
-        >
-          <MoreHorizontal className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[10.5rem]">
-        <DropdownMenuItem onSelect={onRead}>
-          Leer
-          <BookOpen className="ml-auto" strokeWidth={1.8} aria-hidden />
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onAdd}>
-          Añadir
-          <Plus className="ml-auto" strokeWidth={1.8} aria-hidden />
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onCreate}>
-          Crear viaje
-          <MapIcon className="ml-auto" strokeWidth={1.8} aria-hidden />
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function ReferenceFeedRow({
-  item,
-  alreadyIn,
-  onRead,
-  onAdd,
-  onCreate,
-}: {
-  item: ReferenceFeedItem
-  alreadyIn: string | null
-  onRead: () => void
-  onAdd: () => void
-  onCreate: () => void
-}) {
-  const [broken, setBroken] = useState(false)
-  const showImage = Boolean(item.imageUrl) && !broken
-  const dateLabel = formatPublishedAt(item.publishedAt)
-  const meta = [dateLabel, item.host, item.instant ? "Listo para consolidar" : null]
-    .filter(Boolean)
-    .join(" · ")
-
-  return (
-    <li className="group/row relative">
-      <div className="flex w-full items-start gap-3 py-3 pl-3 pr-14 sm:gap-4 sm:pl-4 md:pr-48">
-        <div className="relative mt-0.5 h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted sm:h-14 sm:w-14">
-          {showImage ? (
-            <img
-              src={item.imageUrl ?? ""}
-              alt=""
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              onError={() => setBroken(true)}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          ) : null}
-        </div>
-        <div className="min-w-0 flex-1 text-left">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-snug tracking-tight">
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
-            >
-              {item.title}
-            </a>
-          </h3>
-          <p className="mt-1 text-[12px] leading-snug tabular-nums text-muted-foreground">
-            {meta}
-            {alreadyIn ? ` · ${alreadyIn}` : ""}
-          </p>
-        </div>
-      </div>
-      <div className="absolute right-2 top-3 sm:right-3">
-        <div className="md:hidden">
-          <FeedRowMenu onRead={onRead} onAdd={onAdd} onCreate={onCreate} />
-        </div>
-        <div className="hidden items-center gap-1 md:flex">
-          <FeedRowAction label="Leer" onClick={onRead}>
-            <BookOpen className="h-3.5 w-3.5" />
-          </FeedRowAction>
-          <FeedRowAction label="Añadir" onClick={onAdd}>
-            <Plus className="h-3.5 w-3.5" />
-          </FeedRowAction>
-          <FeedRowAction label="Crear viaje" onClick={onCreate}>
-            <MapIcon className="h-3.5 w-3.5" />
-          </FeedRowAction>
-        </div>
-      </div>
-    </li>
-  )
-}
-
 function FeedMoreRow({ label, href }: { label: string; href: string }) {
   return (
     <li>
@@ -276,6 +141,7 @@ export function ReferenceFeedPanel() {
 
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
+  const [searching, setSearching] = useState(false)
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
   const [pickerOptions, setPickerOptions] = useState<AddArticleTripOption[]>([])
@@ -414,6 +280,13 @@ export function ReferenceFeedPanel() {
     createTripFromUrl(item.url)
   }
 
+  const alreadyInFor = (item: ReferenceFeedItem) => {
+    const names = tripsWithArticle(trips, sourcesById, item.url)
+    if (names.length === 1) return `Ya está en ${names[0]}`
+    if (names.length > 1) return `Ya está en ${names.length} viajes`
+    return null
+  }
+
   const emptyHosts = hostsToFetch.filter((host) => {
     const state = feeds[host]
     return state?.status === "ok" && state.payload.items.length === 0
@@ -483,16 +356,23 @@ export function ReferenceFeedPanel() {
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className={cn(
-            "inline-flex h-10 items-center justify-center gap-2 rounded-md px-3",
-            "text-sm font-medium text-muted-foreground transition-colors",
-            "hover:bg-sidebar-accent hover:text-foreground",
-            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
+          aria-label="Añadir fuente"
+          className={GHOST_TOOLBAR_BTN}
         >
           <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-          Añadir fuente
+          <span className="hidden md:inline">Añadir fuente</span>
         </button>
+        {feedableDomains.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setSearching(true)}
+            aria-label="Buscar destino"
+            className={GHOST_TOOLBAR_BTN}
+          >
+            <Search className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+            <span className="hidden md:inline">Buscar destino</span>
+          </button>
+        ) : null}
       </div>
 
       {chips.length === 0 ? (
@@ -529,13 +409,7 @@ export function ReferenceFeedPanel() {
                 return <FeedMoreRow key={`more:${row.host}`} label={row.label} href={row.href} />
               }
               const item = row.item
-              const names = tripsWithArticle(trips, sourcesById, item.url)
-              const alreadyIn =
-                names.length === 1
-                  ? `Ya está en ${names[0]}`
-                  : names.length > 1
-                    ? `Ya está en ${names.length} viajes`
-                    : null
+              const alreadyIn = alreadyInFor(item)
               return (
                 <ReferenceFeedRow
                   key={item.url}
@@ -557,6 +431,24 @@ export function ReferenceFeedPanel() {
         knownDomains={chips.map((c) => c.domain)}
         onAddReference={persistFavorite}
         onCreateTrip={createTripFromUrl}
+      />
+
+      <SearchReferenceDestinationDialog
+        open={searching}
+        onOpenChange={(open) => {
+          if (!open) setSearching(false)
+        }}
+        domains={feedableDomains}
+        alreadyInFor={alreadyInFor}
+        onRead={(item) => openExternal(item.url)}
+        onAdd={(item) => {
+          setSearching(false)
+          window.setTimeout(() => openPicker(item), 200)
+        }}
+        onCreate={(item) => {
+          setSearching(false)
+          window.setTimeout(() => setCreating(item), 200)
+        }}
       />
 
       <AddArticleToTripDialog

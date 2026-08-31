@@ -5,8 +5,9 @@
 #
 # Comprueba:
 #   1) GET / responde 2xx
-#   2) POST /itinerary, GET /thumb, GET /country-tasks, POST /trips/{uuid}/invites
-#      y GET /sources/reference-feed sin Authorization → 401 (REQUIRE_AUTH=true)
+#   2) POST /itinerary, GET /thumb, GET /country-tasks, POST /trips/{uuid}/invites,
+#      GET /sources/reference-feed y GET /sources/reference-search sin Authorization → 401
+#      (REQUIRE_AUTH=true)
 #   3) CORS rechaza un Origin no permitido (sin Access-Control-Allow-Origin)
 #   4) POST /partners/prewarm: URL inválida → 400; sin captcha → 403 o 503
 #      (503 = TURNSTILE_SECRET_KEY olvidada con REQUIRE_AUTH)
@@ -153,6 +154,21 @@ else
   bad "GET /sources/reference-feed sin Authorization esperaba 401, obtuvo '${FEED_CODE:-error de red}'"
   if [[ -s "$FEED_BODY" ]]; then
     echo "  body: $(head -c 200 "$FEED_BODY")" >&2
+  fi
+fi
+
+SEARCH_BODY="$TMPDIR/reference-search.body"
+SEARCH_CODE="$(
+  http_code "$SEARCH_BODY" \
+    "$BASE/sources/reference-search?q=islandia&domain=example.com" \
+  || true
+)"
+if [[ "$SEARCH_CODE" == "401" ]]; then
+  ok "GET /sources/reference-search sin Authorization → 401"
+else
+  bad "GET /sources/reference-search sin Authorization esperaba 401, obtuvo '${SEARCH_CODE:-error de red}'"
+  if [[ -s "$SEARCH_BODY" ]]; then
+    echo "  body: $(head -c 200 "$SEARCH_BODY")" >&2
   fi
 fi
 

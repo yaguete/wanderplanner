@@ -6,23 +6,31 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from blog_landings import get_blog_landing_by_host
 from inspirational_source import host_is_feedable
 from reference_feed import (
     FeedItem,
+    MAX_SEARCH_HOSTS,
     WP_FEED_FIELDS,
+    WP_SEARCH_FIELDS,
     clear_reference_feed_runtime_state,
     featured_media_url,
     map_wp_post_to_item,
     mark_instant,
+    merge_ranked_feed_items,
     normalize_feed_host,
     parse_feed_bytes,
+    parse_search_hosts,
     parse_wp_gmt,
+    select_search_items,
     select_wp_feed_items,
     slug_from_url,
     sources_reference_feed,
+    sources_reference_search,
     wp_latest_posts_url,
+    wp_search_posts_url,
 )
 from source_suggest import url_has_junk_path
 
@@ -116,6 +124,7 @@ def test_map_wp_drops_denied_slug_and_junk_path():
     assert item is not None
     assert item.published_at == "2026-08-15T10:00:00Z"
     assert item.image_url == "https://cdn.example/ruta-islandia-en-10-dias.jpg"
+    assert item.host == "sinmapa.net"
 
     assert map_wp_post_to_item(_wp_post("opiniones-heymondo-seguros-de-viaje"), "sinmapa.net") is None
     junk = _wp_post("islandia")
@@ -225,3 +234,130 @@ async def test_endpoint_returns_wp_items():
     assert len(payload.items) == 1
     assert payload.items[0].title == "ruta japon 20 dias"
     assert payload.reason is None
+
+
+def test_parse_search_hosts_skips_otas_dedupes_and_caps():
+    assert MAX_SEARCH_HOSTS == 8
+    hosts = parse_search_hosts(
+        [
+            "https://www.lacosmopolilla.com/ruta/",
+            "booking.com",
+            "SINMAPA.net",
+            "lacosmopolilla.com",
+            "instagram.com",
+            *[f"blog{i}.com" for i in range(10)],
+        ]
+    )
+    assert hosts[0] == "lacosmopolilla.com"
+    assert hosts[1] == "sinmapa.net"
+    assert "booking.com" not in hosts
+    assert "instagram.com" not in hosts
+    assert len(hosts) == MAX_SEARCH_HOSTS
+
+
+def test_wp_search_url_title_only_and_dates():
+    url = wp_search_posts_url("sinmapa.net", "islandia", title_only=True)
+    assert "search=islandia" in url
+    assert "search_columns=post_title" in url
+    assert "date_gmt" in WP_SEARCH_FIELDS
+    wide = wp_search_posts_url("sinmapa.net", "islandia", title_only=False)
+    assert "search_columns" not in wide
+
+
+def test_select_search_ranks_slug_over_title_and_drops_denied():
+    posts = [
+        _wp_post("opiniones-heymondo-seguros-de-viaje"),
+        _wp_post("verano-en-el-norte", date_gmt="2026-08-01T10:00:00"),
+        _wp_post("ruta-islandia-en-10-dias"),
+    ]
+    posts[1]["title"] = {"rendered": "Qué ver en Islandia"}
+    ranked = select_search_items(posts, "islandia", "sinmapa.net", (), limit=4)
+    assert [item.url for _, item in ranked] == [
+        "https://sinmapa.net/ruta-islandia-en-10-dias/",
+        "https://sinmapa.net/verano-en-el-norte/",
+    ]
+    assert ranked[0][0] == 0
+    assert ranked[1][0] == 1
+
+
+def test_merge_ranked_feed_items_caps_and_dedupes():
+    a = FeedItem(url="https://a.com/ruta-islandia/", title="Otra", host="a.com")
+    b = FeedItem(url="https://b.com/verano/", title="Islandia en verano", host="b.com")
+    dup = FeedItem(url="https://a.com/ruta-islandia/", title="Dup", host="a.com")
+    c = FeedItem(url="https://c.com/filler/", title="Filler", host="c.com")
+    merged = merge_ranked_feed_items(
+        [[(0, a), (2, dup)], [(1, b)], [(2, c)]],
+        limit=2,
+    )
+    assert [item.url for item in merged] == [a.url, b.url]
+
+
+@pytest.mark.asyncio
+async def test_search_short_query_400():
+    request = type("Req", (), {"headers": {}, "client": None})()
+    with pytest.raises(HTTPException) as exc:
+        await sources_reference_search(request, q="ab", domain=["sinmapa.net"])
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_search_skips_non_blogs_without_fetch():
+    request = type("Req", (), {"headers": {}, "client": None})()
+    with patch("reference_feed.search_one_host", new_callable=AsyncMock) as fetch:
+        payload = await sources_reference_search(
+            request, q="islandia", domain=["booking.com", "instagram.com"]
+        )
+    fetch.assert_not_called()
+    assert payload.items == []
+
+
+@pytest.mark.asyncio
+async def test_search_merges_hosts_and_survives_one_failure():
+    request = type("Req", (), {"headers": {}, "client": None})()
+
+    async def fake_fetch(host: str, query: str, *, title_only: bool):
+        assert query == "islandia"
+        if host == "sinmapa.net":
+            raise RuntimeError("boom")
+        if host == "lacosmopolilla.com":
+            return [
+                {
+                    "slug": "ruta-islandia-en-10-dias",
+                    "link": "https://lacosmopolilla.com/ruta-islandia-en-10-dias/",
+                    "title": {"rendered": "Ruta por Islandia en 10 días"},
+                    "date_gmt": "2026-08-01T10:00:00",
+                    "categories": [26],
+                }
+            ]
+        return []
+
+    with (
+        patch("reference_feed.allow_reference_search_ip", return_value=True),
+        patch("reference_feed.fetch_wp_search_posts", new_callable=AsyncMock, side_effect=fake_fetch),
+        patch("reference_feed.list_extraction_metas", new_callable=AsyncMock, return_value=[]),
+    ):
+        payload = await sources_reference_search(
+            request,
+            q="islandia",
+            domain=["booking.com", "lacosmopolilla.com", "sinmapa.net"],
+        )
+    assert [item.url for item in payload.items] == [
+        "https://lacosmopolilla.com/ruta-islandia-en-10-dias/"
+    ]
+    assert payload.items[0].host == "lacosmopolilla.com"
+
+
+@pytest.mark.asyncio
+async def test_search_429_when_ip_exhausted():
+    request = type("Req", (), {"headers": {}, "client": None})()
+    with (
+        patch("reference_feed.allow_reference_search_ip", return_value=False),
+        patch("reference_feed.search_one_host", new_callable=AsyncMock) as fetch,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await sources_reference_search(
+                request, q="islandia", domain=["sinmapa.net"]
+            )
+    assert exc.value.status_code == 429
+    fetch.assert_not_called()
+

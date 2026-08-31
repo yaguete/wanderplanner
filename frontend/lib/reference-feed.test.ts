@@ -12,6 +12,7 @@ import {
   hostIsFeedable,
   MAX_REFERENCE_FEED_HOSTS,
   mergeFeedItems,
+  parseReferenceSearchItems,
   resolveFeedFilter,
   toggleAllFeedFilter,
   toggleOneFeedFilter,
@@ -252,5 +253,30 @@ assert.equal(
 
 assert.equal(extractionFailureMessage("max-sources"), "Este viaje ya tiene 5 fuentes.")
 assert.equal(extractionFailureMessage("already-loading"), "Este viaje ya está extrayendo una fuente.")
+
+const parsedSearch = parseReferenceSearchItems({
+  items: [
+    {
+      url: "https://sinmapa.net/ruta-islandia/",
+      title: "Ruta por Islandia",
+      published_at: "2026-08-15T10:00:00Z",
+      image_url: null,
+      instant: true,
+      host: "www.sinmapa.net",
+    },
+    { title: "sin url" },
+    {
+      url: "https://lacosmopolilla.com/japon/",
+      title: "Japón",
+      instant: false,
+    },
+  ],
+})
+assert.equal(parsedSearch.length, 2)
+assert.equal(parsedSearch[0]?.host, "sinmapa.net")
+assert.equal(parsedSearch[0]?.instant, true)
+assert.equal(parsedSearch[1]?.host, "lacosmopolilla.com")
+assert.deepEqual(parseReferenceSearchItems(null), [])
+assert.deepEqual(parseReferenceSearchItems({ results: [] }), [])
 
 console.log("reference-feed: ok")
