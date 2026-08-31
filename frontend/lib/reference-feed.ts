@@ -4,6 +4,7 @@
 import { authHeaders } from "@/lib/api-auth"
 import { domainFromUrl, type FavoriteReference } from "@/lib/db/profile-repo"
 import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
+import { unsupportedSourceUrlMessage } from "@/lib/instagram-url"
 import { canAddSource, sourceMatchKey } from "@/lib/trip-sources"
 import type { Source, Trip } from "@/types/itinerary"
 
@@ -143,6 +144,71 @@ export function writeStoredFeedFilter(domains: readonly string[]): void {
 export function blogHomeUrl(host: string): string {
   const h = host.replace(/^www\./i, "").toLowerCase().trim()
   return h ? `https://${h}/` : ""
+}
+
+export type ClassifiedReferencePaste =
+  | { kind: "invalid"; message: string }
+  | {
+      kind: "homepage"
+      url: string
+      domain: string
+      homeUrl: string
+      duplicate: boolean
+    }
+  | {
+      kind: "article"
+      articleUrl: string
+      domain: string
+      homeUrl: string
+      duplicate: boolean
+      canFollow: boolean
+    }
+
+function withHttps(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ""
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+}
+
+/** Home del blog vs artículo extraíble, y si ese dominio ya está en el perfil. */
+export function classifyReferencePaste(
+  raw: string,
+  knownDomains: readonly string[],
+): ClassifiedReferencePaste {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return { kind: "invalid", message: "Pega la URL de un blog o de un artículo." }
+  }
+  const url = withHttps(trimmed)
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { kind: "invalid", message: "La URL no es válida." }
+    }
+  } catch {
+    return { kind: "invalid", message: "La URL no es válida." }
+  }
+  const domain = domainFromUrl(url)
+  if (!domain || !domain.includes(".")) {
+    return { kind: "invalid", message: "La URL no es válida." }
+  }
+  const blocked = unsupportedSourceUrlMessage(url)
+  if (blocked) return { kind: "invalid", message: blocked }
+
+  const known = new Set(knownDomains.map((d) => d.replace(/^www\./i, "").toLowerCase()))
+  const duplicate = known.has(domain)
+  const homeUrl = blogHomeUrl(domain)
+  if (isInspirationalSourceUrl(url)) {
+    return {
+      kind: "article",
+      articleUrl: url,
+      domain,
+      homeUrl,
+      duplicate,
+      canFollow: hostIsFeedable(domain),
+    }
+  }
+  return { kind: "homepage", url, domain, homeUrl, duplicate }
 }
 
 /** Filas del listado: artículos de cada blog (fecha desc.) y «Ver más» al cierre del grupo. */

@@ -4,6 +4,7 @@ import {
   blogHomeUrl,
   buildFeedListRows,
   capFeedHosts,
+  classifyReferencePaste,
   extractionFailureMessage,
   faviconUrlForHost,
   feedHostsFromReferences,
@@ -68,6 +69,50 @@ assert.deepEqual(toggleAllFeedFilter(["a.com", "b.com"], ["a.com", "b.com"]), []
 assert.deepEqual(toggleAllFeedFilter(["a.com", "b.com"], []), ["a.com", "b.com"])
 assert.deepEqual(toggleOneFeedFilter(["a.com"], "b.com"), ["a.com", "b.com"])
 assert.deepEqual(toggleOneFeedFilter(["a.com", "b.com"], "a.com"), ["b.com"])
+
+assert.equal(classifyReferencePaste("", []).kind, "invalid")
+assert.equal(classifyReferencePaste("nope", []).kind, "invalid")
+
+const home = classifyReferencePaste("www.sinmapa.net", [])
+assert.equal(home.kind, "homepage")
+if (home.kind === "homepage") {
+  assert.equal(home.domain, "sinmapa.net")
+  assert.equal(home.homeUrl, "https://sinmapa.net/")
+  assert.equal(home.duplicate, false)
+}
+
+const homeDup = classifyReferencePaste("https://www.sinmapa.net/", ["sinmapa.net"])
+assert.equal(homeDup.kind, "homepage")
+if (homeDup.kind === "homepage") assert.equal(homeDup.duplicate, true)
+
+const article = classifyReferencePaste(
+  "https://www.sinmapa.net/que-visitar-en-la-costa-amalfitana/",
+  [],
+)
+assert.equal(article.kind, "article")
+if (article.kind === "article") {
+  assert.equal(article.domain, "sinmapa.net")
+  assert.equal(article.homeUrl, "https://sinmapa.net/")
+  assert.equal(article.canFollow, true)
+  assert.equal(article.duplicate, false)
+}
+
+const articleDup = classifyReferencePaste(
+  "https://www.sinmapa.net/que-visitar-en-la-costa-amalfitana/",
+  ["sinmapa.net"],
+)
+assert.equal(articleDup.kind, "article")
+if (articleDup.kind === "article") assert.equal(articleDup.duplicate, true)
+
+const ig = classifyReferencePaste("https://www.instagram.com/p/DblDYKZjOhx/", [])
+assert.equal(ig.kind, "article")
+if (ig.kind === "article") {
+  assert.equal(ig.domain, "instagram.com")
+  assert.equal(ig.canFollow, false)
+}
+
+const igProfile = classifyReferencePaste("https://www.instagram.com/lacosmopolilla", [])
+assert.equal(igProfile.kind, "invalid")
 
 function item(patch: Partial<ReferenceFeedItem> & Pick<ReferenceFeedItem, "url" | "host">): ReferenceFeedItem {
   return {

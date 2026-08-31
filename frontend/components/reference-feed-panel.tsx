@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { BookOpen, ChevronDown, ExternalLink, Map as MapIcon, MoreHorizontal, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
+import { AddReferenceDialog } from "@/components/add-reference-dialog"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { Button } from "@/components/ui/button"
@@ -24,11 +25,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/lib/auth-context"
-import { domainFromUrl } from "@/lib/db/profile-repo"
 import { SOURCES_HOME_REF } from "@/lib/partner-trip"
 import {
   buildAddArticleTripOptions,
@@ -276,8 +275,7 @@ export function ReferenceFeedPanel() {
   const feedableKey = feedableDomains.join(",")
 
   const [selected, setSelected] = useState<string[]>([])
-  const [url, setUrl] = useState("")
-  const [saving, setSaving] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
   const [pickerOptions, setPickerOptions] = useState<AddArticleTripOption[]>([])
@@ -355,18 +353,13 @@ export function ReferenceFeedPanel() {
     })
   }
 
-  const addReference = async () => {
-    const trimmed = url.trim()
-    if (!trimmed) return
-    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-    const domain = domainFromUrl(withScheme)
-    if (domain && chips.some((c) => c.domain === domain)) {
-      toast.error("Ya tienes esta referencia")
-      return
+  const persistFavorite = async (homeUrl: string, domain: string): Promise<boolean> => {
+    if (chips.some((c) => c.domain === domain)) {
+      toast.error("Esa fuente ya está añadida.")
+      return false
     }
-    setSaving(true)
     const prevSelected = selected
-    if (domain && hostIsFeedable(domain)) {
+    if (hostIsFeedable(domain)) {
       const nextSelected = selected.includes(domain) ? selected : [...selected, domain]
       writeStoredFeedFilter(nextSelected)
       setSelected(nextSelected)
@@ -374,17 +367,24 @@ export function ReferenceFeedPanel() {
     const result = await updateProfile({
       favoriteReferences: [
         ...favoriteReferences.map((r) => ({ label: r.label, url: r.url })),
-        { label: "", url: withScheme },
+        { label: "", url: homeUrl },
       ],
     })
-    setSaving(false)
     if (!result.ok) {
       writeStoredFeedFilter(prevSelected)
       setSelected(prevSelected)
       toast.error(result.error)
-      return
+      return false
     }
-    setUrl("")
+    return true
+  }
+
+  const createTripFromUrl = (articleUrl: string) => {
+    const hasTrip = trips.some((t) => !t.archived)
+    if (isGuest && hasTrip && !requireAccount("new-trip")) return
+    setAdding(false)
+    const params = new URLSearchParams({ source: articleUrl, ref: SOURCES_HOME_REF })
+    router.push(`/start?${params.toString()}`)
   }
 
   const openPicker = (item: ReferenceFeedItem) => {
@@ -411,10 +411,7 @@ export function ReferenceFeedPanel() {
   }
 
   const createTripFrom = (item: ReferenceFeedItem) => {
-    const hasTrip = trips.some((t) => !t.archived)
-    if (isGuest && hasTrip && !requireAccount("new-trip")) return
-    const params = new URLSearchParams({ source: item.url, ref: SOURCES_HOME_REF })
-    router.push(`/start?${params.toString()}`)
+    createTripFromUrl(item.url)
   }
 
   const emptyHosts = hostsToFetch.filter((host) => {
@@ -424,27 +421,8 @@ export function ReferenceFeedPanel() {
 
   return (
     <div className="flex flex-col gap-5">
-      <form
-        className="flex flex-col gap-2 sm:flex-row sm:items-center"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void addReference()
-        }}
-      >
-        <Input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://mibloguerafavorita.com"
-          aria-label="URL de una nueva referencia"
-          className="sm:max-w-md"
-        />
-        <Button type="submit" disabled={saving || !url.trim()}>
-          {saving ? <Spinner className="size-4" /> : <Plus className="h-4 w-4" />}
-          Añadir referencia
-        </Button>
-      </form>
-
-      {chips.length > 0 ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {chips.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -508,13 +486,17 @@ export function ReferenceFeedPanel() {
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
+        <Button type="button" variant="outline" onClick={() => setAdding(true)}>
+          <Plus className="h-4 w-4" />
+          Añadir fuente
+        </Button>
+      </div>
 
       {chips.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
           <p className="text-sm font-medium text-foreground">Aún no tienes referencias</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pega la URL de un bloguero o una revista en la que confíes para ver aquí sus últimos
-            artículos.
+            Pulsa Añadir fuente y pega la URL de un bloguero o una revista en la que confíes.
           </p>
         </div>
       ) : selected.length === 0 ? (
@@ -565,6 +547,14 @@ export function ReferenceFeedPanel() {
           </ul>
         </div>
       )}
+
+      <AddReferenceDialog
+        open={adding}
+        onOpenChange={setAdding}
+        knownDomains={chips.map((c) => c.domain)}
+        onAddReference={persistFavorite}
+        onCreateTrip={createTripFromUrl}
+      />
 
       <AddArticleToTripDialog
         open={Boolean(picking)}
