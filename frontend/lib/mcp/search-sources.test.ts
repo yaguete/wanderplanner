@@ -312,7 +312,23 @@ const trip: SearchTripRow = {
 
   const noneLayer = resolveSearchLayer([], [])
   assert.equal(noneLayer.layer, "none")
-  assert.match(searchSourcesToolText("alaska", "none", [], [], 0), /no tengo fuentes/i)
+  // El texto de `none` NOMBRA el viaje. Sin nombre, un tripId equivocado se
+  // convierte en una negativa rotunda: pasó de verdad con dos viajes abiertos
+  // (buscó Santa Catalina en Orense y dijo que no había fuentes).
+  {
+    const none = searchSourcesToolText("santa catalina", "none", [], [], 2, "Orense")
+    assert.match(none, /Orense/, "dice en qué viaje ha buscado")
+    assert.match(none, /list_trips/, "le dice al modelo cómo corregirse")
+    assert.doesNotMatch(none, /^no tengo fuentes$/i)
+    // Sin nombre no se rompe: cae al genérico de siempre.
+    assert.match(searchSourcesToolText("alaska", "none", [], [], 0), /este viaje/i)
+  }
+  // Y también en la capa `trip`, para que un acierto diga de dónde sale.
+  {
+    const empty = searchSourcesText("tokyo tower", [], 1, "Japón")
+    assert.match(empty, /Japón/)
+    assert.match(searchSourcesText("x", [], 0, "Japón"), /El viaje «Japón» no tiene fuentes/)
+  }
 
   const ranked = rankSuggestionsByFavoriteHosts(
     [slimSuggestHit(web), slimSuggestHit(curated)],

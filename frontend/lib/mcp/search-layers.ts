@@ -158,12 +158,19 @@ export function searchSourcesToolText(
   results: readonly SearchHit[],
   suggestions: readonly SearchSuggestion[],
   tripSourceCount: number,
+  tripName?: string | null,
 ): string {
+  const trip = (tripName ?? "").trim()
+  const where = trip ? `«${trip}»` : "este viaje"
   if (layer === "trip") {
-    return searchSourcesText(query, [...results], tripSourceCount)
+    return searchSourcesText(query, [...results], tripSourceCount, tripName)
   }
   if (layer === "none") {
-    return "no tengo fuentes"
+    // Antes decía solo «no tengo fuentes»: ambiguo entre «el viaje no tiene
+    // ninguna» y «no hay resultados», y sin decir DÓNDE ha buscado. Con dos
+    // viajes abiertos, eso convierte un tripId equivocado en una negativa
+    // rotunda.
+    return `No hay recomendaciones para «${query}» en las fuentes de ${where} (${tripSourceCount}) ni en los artículos curados de WanderPlanner. Si el usuario preguntaba por otro viaje, compruébalo con list_trips y vuelve a buscar. Si no, no inventes sitios: ofrece añadir una fuente.`
   }
   const heading =
     layer === "curated"

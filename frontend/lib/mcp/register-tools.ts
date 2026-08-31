@@ -276,7 +276,7 @@ export function registerWanderplannerTools(server: McpServer): void {
     {
       title: "Buscar en las fuentes del viaje",
       description:
-        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad, o por horarios, cómo llegar, qué hace falta o las condiciones de algo que ya está en el plan. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. Una sola llamada por pregunta. No la uses para opinar sobre el plan completo: eso es review_trip. Las fuentes del usuario y la web se complementan.",
+        "Úsala cuando el usuario pregunte qué recomiendan sus artículos, blogs o fuentes sobre un sitio, hotel, restaurante o actividad, o por horarios, cómo llegar, qué hace falta o las condiciones de algo que ya está en el plan. Primero busca en las fuentes del viaje; si no hay, consulta artículos curados de WanderPlanner. Una sola llamada por pregunta. Si el usuario no dice de qué viaje habla y tiene más de uno, resuélvelo antes con list_trips: buscar en el viaje equivocado devuelve vacío y parece que no tiene fuentes. No la uses para opinar sobre el plan completo: eso es review_trip. Las fuentes del usuario y la web se complementan.",
       inputSchema: searchSourcesInput,
       outputSchema: searchSourcesToolOutput,
       annotations: {
@@ -323,7 +323,14 @@ export function registerWanderplannerTools(server: McpServer): void {
           fetchArticleHtml(supabase, sourceId, signal),
         )
         return mcpOk(
-          searchSourcesToolText(query, "trip", withQuotes, [], sources.rows.length),
+          searchSourcesToolText(
+            query,
+            "trip",
+            withQuotes,
+            [],
+            sources.rows.length,
+            loaded.row.name,
+          ),
           applyMcpAffiliateGate({
             layer: "trip" as const,
             results: withQuotes,
@@ -380,6 +387,7 @@ export function registerWanderplannerTools(server: McpServer): void {
           composed.results,
           suggestions,
           sources.rows.length,
+          loaded.row.name,
         ),
         applyMcpAffiliateGate({
           layer: composed.layer,

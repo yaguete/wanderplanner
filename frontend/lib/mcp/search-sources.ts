@@ -393,12 +393,28 @@ export function searchSources(
   return scored.slice(0, SEARCH_MAX_RESULTS).map((s) => s.hit)
 }
 
-export function searchSourcesText(query: string, hits: SearchHit[], sourceCount: number): string {
+/**
+ * Texto que LEE EL MODELO. Nombra siempre el viaje.
+ *
+ * Decir «este viaje» sin nombre convierte un `tripId` equivocado en una
+ * respuesta segura y falsa: con dos viajes abiertos, ChatGPT buscó Santa
+ * Catalina en el de Orense y contestó que el usuario no tenía fuentes, con las
+ * fuentes de Panamá delante. Con el nombre, el modelo ve el desajuste y
+ * reintenta solo.
+ */
+export function searchSourcesText(
+  query: string,
+  hits: SearchHit[],
+  sourceCount: number,
+  tripName?: string | null,
+): string {
+  const trip = (tripName ?? "").trim()
+  const where = trip ? `«${trip}»` : "este viaje"
   if (sourceCount === 0) {
-    return "Este viaje no tiene fuentes. Añade un artículo en WanderPlanner para poder buscar recomendaciones."
+    return `El viaje ${where} no tiene fuentes. Si el usuario preguntaba por otro viaje, compruébalo con list_trips y vuelve a buscar. Si no, ofrece añadir un artículo en WanderPlanner.`
   }
   if (hits.length === 0) {
-    return `No hay recomendaciones en las fuentes de este viaje para «${query}». No inventes sitios: ofrece añadir una fuente.`
+    return `No hay recomendaciones para «${query}» en las fuentes de ${where}. Si el usuario preguntaba por otro viaje, compruébalo con list_trips y vuelve a buscar. Si no, no inventes sitios: ofrece añadir una fuente.`
   }
   const lines = hits.slice(0, 8).map((h) => {
     const via = h.sourceAuthor ? `vía ${h.sourceAuthor}` : h.sourceTitle
@@ -412,5 +428,5 @@ export function searchSourcesText(query: string, hits: SearchHit[], sourceCount:
           : `días ${h.days[0]}–${h.days[h.days.length - 1]}`
     return `- ${h.name} (${h.type}, ${day}) · ${via}`
   })
-  return `Lo que recomiendan las fuentes para «${query}»:\n${lines.join("\n")}`
+  return `Lo que recomiendan las fuentes de ${where} para «${query}»:\n${lines.join("\n")}`
 }
