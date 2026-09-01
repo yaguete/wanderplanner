@@ -295,17 +295,24 @@ function TripsHomePage() {
   }
 
   return (
-    // Móvil: scrollea el documento (ver `trips-shell`), no este contenedor.
-    <div className="flex-1 md:overflow-auto">
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
-        <div className="mb-6 sm:mb-8">
-          <TripsHomeHeading
-            section={homeSection}
-            directory={homeSection === "sources" && sourcesDirectory}
-            onSectionChange={setHomeSection}
-          />
+    // Móvil: scrollea el documento (ver `trips-shell`). La cabecera se pega
+    // bajo el AppHeader (`sticky`); el resto va en flujo. Desktop: la cabecera
+    // queda fuera del scroller (`md:overflow-auto`).
+    <div className="flex flex-1 flex-col md:min-h-0">
+      <div className="sticky top-[var(--wp-header-height)] z-20 bg-canvas md:static">
+        <div className="mx-auto max-w-5xl px-4 pt-8 sm:px-8 sm:pt-10">
+          <div className="pb-6 sm:pb-8">
+            <TripsHomeHeading
+              section={homeSection}
+              directory={homeSection === "sources" && sourcesDirectory}
+              onSectionChange={setHomeSection}
+            />
+          </div>
         </div>
+      </div>
 
+      <div className="flex-1 md:min-h-0 md:overflow-auto">
+        <div className="mx-auto max-w-5xl px-4 pb-8 sm:px-8 sm:pb-10">
         {invites.length > 0 ? (
           <ul className="mb-6 space-y-2">
             {invites.map((inv) => (
@@ -671,7 +678,7 @@ function TripsHomePage() {
             onDirectoryChange={setSourcesDirectory}
           />
         )}
-      </div>
+        </div>
 
       {tripToInvite ? (
         <InviteTripDialog
@@ -785,6 +792,7 @@ function TripsHomePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   )
 }
