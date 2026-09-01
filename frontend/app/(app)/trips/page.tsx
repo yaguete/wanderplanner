@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   List,
   LogOut,
+  MoreHorizontal,
   Pencil,
   Plus,
   Trash2,
@@ -17,6 +18,12 @@ import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ReferenceFeedPanel } from "@/components/reference-feed-panel"
 import { TripsHomeHeading } from "@/components/trips-home-heading"
 import {
@@ -85,6 +92,30 @@ function tripStatsLine(trip: Trip, itemCount: number): string {
   return parts.join(" · ")
 }
 
+function TripStatBadges({
+  trip,
+  itemCount,
+}: {
+  trip: Trip
+  itemCount: number
+}) {
+  return (
+    <>
+      {trip.numDays != null && (
+        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
+          {trip.numDays} {trip.numDays === 1 ? "día" : "días"}
+        </Badge>
+      )}
+      <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
+        {trip.sourceIds.length} {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
+      </Badge>
+      <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
+        {itemCount} ítems
+      </Badge>
+    </>
+  )
+}
+
 function TripActions({
   trip,
   isOwner,
@@ -93,6 +124,7 @@ function TripActions({
   onEdit,
   onDelete,
   onLeave,
+  variant = "overlay",
 }: {
   trip: Trip
   isOwner: boolean
@@ -101,94 +133,68 @@ function TripActions({
   onEdit: () => void
   onDelete: () => void
   onLeave: () => void
+  /** `ghost` = filas de Inicio; `overlay` = chips sobre la portada en cuadrícula. */
+  variant?: "overlay" | "ghost"
 }) {
   const archived = Boolean(trip.archived)
-  const btnClass = cn(
-    "h-8 w-8 rounded-md bg-background/90",
-    "opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/card:opacity-100 sm:group-hover/row:opacity-100",
-  )
 
   return (
-    <div className="flex items-center gap-1">
-      {isOwner ? (
-        <>
-          {archived ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={btnClass}
-              aria-label={`Desarchivar ${trip.name}`}
-              title="Desarchivar"
-              onClick={(e) => {
-                e.stopPropagation()
-                onUnarchive()
-              }}
-            >
-              <ArchiveRestore className="h-3.5 w-3.5" />
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={btnClass}
-              aria-label={`Archivar ${trip.name}`}
-              title="Archivar"
-              onClick={(e) => {
-                e.stopPropagation()
-                onArchive()
-              }}
-            >
-              <Archive className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={btnClass}
-            aria-label={`Editar ${trip.name}`}
-            title="Editar"
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit()
-            }}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(btnClass, "hover:bg-destructive hover:text-destructive-foreground")}
-            aria-label={`Eliminar ${trip.name}`}
-            title="Eliminar"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      ) : (
-        <Button
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
           type="button"
-          variant="ghost"
-          size="icon"
-          className={btnClass}
-          aria-label={`Salir de ${trip.name}`}
-          title="Salir del viaje"
-          onClick={(e) => {
-            e.stopPropagation()
-            onLeave()
-          }}
+          className={cn(
+            "inline-flex items-center justify-center transition-colors",
+            "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            variant === "ghost"
+              ? "h-7 w-7 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-foreground"
+              : "h-8 w-8 rounded-lg bg-background/90 text-foreground/70 shadow-sm hover:bg-muted hover:text-foreground data-[state=open]:bg-muted",
+          )}
+          aria-label={`Más acciones de ${trip.name}`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
-          <LogOut className="h-3.5 w-3.5" />
-        </Button>
-      )}
-    </div>
+          <MoreHorizontal className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[10.5rem]"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        {isOwner ? (
+          <>
+            {archived ? (
+              <DropdownMenuItem onSelect={onUnarchive}>
+                Desarchivar
+                <ArchiveRestore className="ml-auto" strokeWidth={1.8} aria-hidden />
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={onArchive}>
+                Archivar
+                <Archive className="ml-auto" strokeWidth={1.8} aria-hidden />
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onSelect={onEdit}>
+              Editar
+              <Pencil className="ml-auto" strokeWidth={1.8} aria-hidden />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+              onSelect={onDelete}
+            >
+              Eliminar
+              <Trash2 className="ml-auto" strokeWidth={1.8} aria-hidden />
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <DropdownMenuItem onSelect={onLeave}>
+            Salir del viaje
+            <LogOut className="ml-auto" strokeWidth={1.8} aria-hidden />
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -492,7 +498,7 @@ function TripsHomePage() {
                 <div
                   key={trip.id}
                   className={cn(
-                    "group/card relative",
+                    "relative",
                     openingTrip?.id === trip.id && "z-[1]",
                   )}
                 >
@@ -519,8 +525,11 @@ function TripsHomePage() {
                           </span>
                         </div>
                       )}
+                      <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1.5 p-2">
+                        <TripStatBadges trip={trip} itemCount={itemCount} />
+                      </div>
                     </div>
-                    <div className="p-4">
+                    <div className="px-4 py-3">
                       <h3 className="text-[15px] font-semibold tracking-tight">{trip.name}</h3>
                       <div className="mt-0.5 flex items-center justify-between gap-2">
                         <p className="min-w-0 truncate text-[13px] tabular-nums text-muted-foreground">
@@ -532,20 +541,6 @@ function TripsHomePage() {
                           className="shrink-0"
                           onOpenInvite={() => openInvite(trip)}
                         />
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {trip.numDays != null && (
-                          <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                            {trip.numDays} {trip.numDays === 1 ? "día" : "días"}
-                          </Badge>
-                        )}
-                        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                          {trip.sourceIds.length}{" "}
-                          {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-                          {itemCount} ítems
-                        </Badge>
                       </div>
                     </div>
                   </Link>
@@ -575,10 +570,11 @@ function TripsHomePage() {
                 </div>
                 <span className="text-center text-sm">
                   <span className="text-muted-foreground group-hover:text-foreground">
-                    ¿Tienes otro viaje en mente?
+                  ¿Dándole vueltas a tu siguiente viaje?
+
                   </span>
                   <br />
-                  <span className="font-medium text-foreground">Empieza a planificarlo</span>
+                  <span className="font-medium text-foreground">Hazlo realidad</span>
                 </span>
               </button>
             ) : null}
@@ -591,14 +587,14 @@ function TripsHomePage() {
                 return (
                   <li
                     key={trip.id}
-                    className={cn("group/row relative", openingTrip?.id === trip.id && "z-[1]")}
+                    className={cn("relative", openingTrip?.id === trip.id && "z-[1]")}
                   >
                     <Link
                       href={`/trips/${trip.id}`}
                       onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                       aria-busy={openingTrip?.id === trip.id || undefined}
                       className={cn(
-                        "flex w-full items-center gap-3 py-3 pl-3 pr-40 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4 sm:pr-48",
+                        "flex w-full items-center gap-3 py-3 pl-3 pr-24 text-left transition-colors hover:bg-muted/40 sm:gap-4 sm:pl-4 sm:pr-28",
                         openingTrip?.id === trip.id && "bg-muted/40",
                       )}
                     >
@@ -639,6 +635,7 @@ function TripsHomePage() {
                         <TripActions
                           trip={trip}
                           isOwner={isOwnerOf(trip)}
+                          variant="ghost"
                           onArchive={() => archiveTrip(trip.id)}
                           onUnarchive={() => unarchiveTrip(trip.id)}
                           onEdit={() => setEditingTripId(trip.id)}
@@ -662,10 +659,10 @@ function TripsHomePage() {
                 </span>
                 <span>
                   <span className="text-muted-foreground group-hover:text-foreground">
-                    ¿Tienes otro viaje en mente?
+                    ¿Dándole vueltas a tu siguiente viaje?
                   </span>
                   <br />
-                  <span className="font-medium text-foreground">Empieza a planificarlo</span>
+                  <span className="font-medium text-foreground">Hazlo realidad</span>
                 </span>
               </button>
             ) : null}

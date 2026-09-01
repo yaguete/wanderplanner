@@ -44,22 +44,26 @@ export function TripMemberAvatars({
 
   if (members.length < 2) {
     return (
-      <button
-        type="button"
-        aria-label="Invitar"
-        title="Invitar"
-        className={cn(
-          "relative z-[1] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-          "text-muted-foreground transition-colors",
-          "hover:bg-muted hover:text-foreground",
-          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          className,
-        )}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={openInvite}
-      >
-        <UserPlus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label="Invitar"
+            className={cn(
+              "relative z-[1] inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+              "text-muted-foreground transition-colors",
+              "hover:bg-sidebar-accent hover:text-foreground",
+              "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              className,
+            )}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={openInvite}
+          >
+            <UserPlus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">Invitar</TooltipContent>
+      </Tooltip>
     )
   }
 
