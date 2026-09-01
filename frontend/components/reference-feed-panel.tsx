@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Binoculars, ChevronDown, ExternalLink, Lightbulb, Minus, Plus } from "lucide-react"
+import { ArrowLeft, ChevronDown, ExternalLink, Lightbulb, Minus, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { AddReferenceDialog } from "@/components/add-reference-dialog"
@@ -10,7 +10,7 @@ import { RemoveReferenceDialog } from "@/components/remove-reference-dialog"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ReferenceFeedRow } from "@/components/reference-feed-row"
-import { SearchReferenceDestinationDialog } from "@/components/search-reference-destination-dialog"
+import { SourceFilterLabel } from "@/components/source-filter-label"
 import { SuggestedReferencesDirectory } from "@/components/suggested-references-directory"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -38,7 +38,6 @@ import {
   buildFeedListRows,
   capFeedHosts,
   extractionFailureMessage,
-  faviconUrlForHost,
   favoriteInputsWithoutHost,
   feedHostsFromReferences,
   fetchReferenceFeed,
@@ -107,43 +106,6 @@ function openExternal(url: string) {
   window.open(url, "_blank", "noopener,noreferrer")
 }
 
-function SiteFavicon({ host }: { host: string }) {
-  const [failed, setFailed] = useState(false)
-  const letter = host.replace(/^www\./i, "").charAt(0).toUpperCase() || "?"
-  if (failed) {
-    return (
-      <span
-        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-muted text-[9px] font-medium text-muted-foreground"
-        aria-hidden
-      >
-        {letter}
-      </span>
-    )
-  }
-  return (
-    <img
-      src={faviconUrlForHost(host)}
-      alt=""
-      width={16}
-      height={16}
-      className="h-4 w-4 shrink-0 rounded-sm"
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-    />
-  )
-}
-
-function SourceFilterLabel({ domain, label }: { domain: string; label: string }) {
-  return (
-    <span className="flex min-w-0 items-center gap-2">
-      <SiteFavicon host={domain} />
-      <span className="truncate">{label}</span>
-    </span>
-  )
-}
-
 function FeedMoreRow({ label, href }: { label: string; href: string }) {
   return (
     <li>
@@ -187,7 +149,6 @@ export function ReferenceFeedPanel({
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
-  const [searching, setSearching] = useState(false)
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
   const [pickerOptions, setPickerOptions] = useState<AddArticleTripOption[]>([])
@@ -466,15 +427,6 @@ export function ReferenceFeedPanel({
               >
                 <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
               </FeedToolbarIconButton>
-              {feedableDomains.length > 0 ? (
-                <FeedToolbarIconButton
-                  label="Buscar destino"
-                  tooltip="Busca un destino entre tus fuentes"
-                  onClick={() => setSearching(true)}
-                >
-                  <Binoculars className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                </FeedToolbarIconButton>
-              ) : null}
             </div>
           </div>
 
@@ -547,24 +499,6 @@ export function ReferenceFeedPanel({
           setRemoving(open)
         }}
         onRemove={(domain) => void removeFavorite(domain)}
-      />
-
-      <SearchReferenceDestinationDialog
-        open={searching}
-        onOpenChange={(open) => {
-          if (!open) setSearching(false)
-        }}
-        domains={feedableDomains}
-        alreadyInFor={alreadyInFor}
-        onRead={(item) => openExternal(item.url)}
-        onAdd={(item) => {
-          setSearching(false)
-          window.setTimeout(() => openPicker(item), 200)
-        }}
-        onCreate={(item) => {
-          setSearching(false)
-          window.setTimeout(() => setCreating(item), 200)
-        }}
       />
 
       <AddArticleToTripDialog

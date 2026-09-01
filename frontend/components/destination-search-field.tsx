@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Cápsula de búsqueda de destino (landing, «Añadir fuente» y «Tus fuentes»).
+ * Cápsula de búsqueda de destino (landing, «Añadir fuente» y «Tus viajes»).
  * El fetch y el listado viven en el padre: aquí solo el campo.
  */
 import type { FormEvent, Ref } from "react"

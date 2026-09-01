@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ReferenceFeedPanel } from "@/components/reference-feed-panel"
+import { SearchReferenceDestinationButton } from "@/components/search-reference-destination-dialog"
 import { TripsHomeHeading } from "@/components/trips-home-heading"
 import {
   Dialog,
@@ -431,41 +432,44 @@ function TripsHomePage() {
             </button>
           </div>
 
-          <div
-            className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
-            role="group"
-            aria-label="Modo de vista"
-          >
-            <button
-              type="button"
-              onClick={() => setView("grid")}
-              aria-pressed={viewMode === "grid"}
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
-                viewMode === "grid"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-label="Vista en cuadrícula"
-              title="Cuadrícula"
+          <div className="flex items-center gap-2">
+            <SearchReferenceDestinationButton />
+            <div
+              className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5"
+              role="group"
+              aria-label="Modo de vista"
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              aria-pressed={viewMode === "list"}
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
-                viewMode === "list"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-label="Vista en lista"
-              title="Lista"
-            >
-              <List className="h-3.5 w-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={() => setView("grid")}
+                aria-pressed={viewMode === "grid"}
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                  viewMode === "grid"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                aria-label="Vista en cuadrícula"
+                title="Cuadrícula"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                aria-pressed={viewMode === "list"}
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                  viewMode === "list"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                aria-label="Vista en lista"
+                title="Lista"
+              >
+                <List className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
