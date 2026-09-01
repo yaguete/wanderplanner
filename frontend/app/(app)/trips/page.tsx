@@ -171,6 +171,10 @@ function TripActions({
       >
         {isOwner ? (
           <>
+            <DropdownMenuItem onSelect={onEdit}>
+              Editar
+              <Pencil className="ml-auto" strokeWidth={1.8} aria-hidden />
+            </DropdownMenuItem>
             {archived ? (
               <DropdownMenuItem onSelect={onUnarchive}>
                 Desarchivar
@@ -182,10 +186,6 @@ function TripActions({
                 <Archive className="ml-auto" strokeWidth={1.8} aria-hidden />
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onSelect={onEdit}>
-              Editar
-              <Pencil className="ml-auto" strokeWidth={1.8} aria-hidden />
-            </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:bg-destructive/10 focus:text-destructive"
               onSelect={onDelete}
