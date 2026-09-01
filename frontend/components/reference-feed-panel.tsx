@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ChevronDown, ExternalLink, Lightbulb, Minus, Plus, Search } from "lucide-react"
+import { ArrowLeft, Binoculars, ChevronDown, ExternalLink, Lightbulb, Minus, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { AddReferenceDialog } from "@/components/add-reference-dialog"
@@ -71,11 +71,13 @@ const GHOST_TOOLBAR_BTN = cn(
 
 function FeedToolbarIconButton({
   label,
+  tooltip,
   disabled,
   onClick,
   children,
 }: {
   label: string
+  tooltip?: string
   disabled?: boolean
   onClick: () => void
   children: ReactNode
@@ -96,7 +98,7 @@ function FeedToolbarIconButton({
       <TooltipTrigger asChild>
         {disabled ? <span className="inline-flex">{button}</span> : button}
       </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
+      <TooltipContent side="top">{tooltip ?? label}</TooltipContent>
     </Tooltip>
   )
 }
@@ -382,6 +384,7 @@ export function ReferenceFeedPanel({
           <SuggestedReferencesDirectory
             knownDomains={chips.map((c) => c.domain)}
             onAdd={persistFavorite}
+            onRemove={(domain) => removeFavorite(domain)}
           />
         </>
       ) : (
@@ -456,12 +459,20 @@ export function ReferenceFeedPanel({
               >
                 <Minus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
               </FeedToolbarIconButton>
-              <FeedToolbarIconButton label="Sugerencias" onClick={() => onDirectoryChange(true)}>
+              <FeedToolbarIconButton
+                label="Sugerencias"
+                tooltip="Encuentra inspiración"
+                onClick={() => onDirectoryChange(true)}
+              >
                 <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
               </FeedToolbarIconButton>
               {feedableDomains.length > 0 ? (
-                <FeedToolbarIconButton label="Buscar destino" onClick={() => setSearching(true)}>
-                  <Search className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                <FeedToolbarIconButton
+                  label="Buscar destino"
+                  tooltip="Busca un destino entre tus fuentes"
+                  onClick={() => setSearching(true)}
+                >
+                  <Binoculars className="h-4 w-4" strokeWidth={1.8} aria-hidden />
                 </FeedToolbarIconButton>
               ) : null}
             </div>

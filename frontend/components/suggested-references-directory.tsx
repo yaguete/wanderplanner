@@ -26,12 +26,15 @@ import { cn } from "@/lib/utils"
  * encuadre distinto (foto, garabato, logotipo), así que a tamaño grande la
  * rejilla se vuelve un muestrario de calidades. Pequeño, todos leen igual.
  */
-function CatalogMark({ host }: { host: string }) {
+function CatalogMark({ host, added }: { host: string; added?: boolean }) {
   const [failed, setFailed] = useState(false)
   const letter = host.replace(/^www\./i, "").charAt(0).toUpperCase() || "?"
   return (
     <span
-      className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted"
+      className={cn(
+        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg",
+        added ? "bg-white" : "border border-border bg-muted",
+      )}
       aria-hidden
     >
       {failed ? (
@@ -56,9 +59,11 @@ function CatalogMark({ host }: { host: string }) {
 export function SuggestedReferencesDirectory({
   knownDomains,
   onAdd,
+  onRemove,
 }: {
   knownDomains: readonly string[]
   onAdd: (homeUrl: string, domain: string, label: string) => Promise<boolean>
+  onRemove: (domain: string) => Promise<void>
 }) {
   const [pendingHost, setPendingHost] = useState<string | null>(null)
   const [lang, setLang] = useState<SuggestedLang>(readStoredSuggestedLang)
@@ -74,6 +79,16 @@ export function SuggestedReferencesDirectory({
     setPendingHost(item.host)
     try {
       await onAdd(suggestedReferenceHomeUrl(item.host), item.host, item.label)
+    } finally {
+      setPendingHost(null)
+    }
+  }
+
+  const remove = async (item: SuggestedReference) => {
+    if (pendingHost) return
+    setPendingHost(item.host)
+    try {
+      await onRemove(item.host)
     } finally {
       setPendingHost(null)
     }
@@ -107,7 +122,7 @@ export function SuggestedReferencesDirectory({
                 added ? "bg-muted/40" : "bg-card hover:border-foreground/20",
               )}
             >
-              <CatalogMark host={item.host} />
+              <CatalogMark host={item.host} added={added} />
               <div className="min-w-0 flex-1">
                 <a
                   href={href}
@@ -139,12 +154,28 @@ export function SuggestedReferencesDirectory({
                 {added ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex h-8 w-8 items-center justify-center text-muted-foreground">
-                        <Check className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-                        <span className="sr-only">En tus fuentes</span>
-                      </span>
+                      <button
+                        type="button"
+                        disabled={pendingHost !== null}
+                        aria-busy={busy}
+                        aria-label={`Quitar ${item.label}`}
+                        onClick={() => void remove(item)}
+                        className={cn(
+                          "inline-flex h-8 w-8 items-center justify-center rounded-md",
+                          "text-success transition-colors",
+                          "hover:bg-sidebar-accent hover:text-success",
+                          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          "disabled:pointer-events-none disabled:opacity-50",
+                        )}
+                      >
+                        {busy ? (
+                          <Spinner className="size-4" />
+                        ) : (
+                          <Check className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+                        )}
+                      </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">En tus fuentes</TooltipContent>
+                    <TooltipContent side="top">En tus fuentes (haz clic para quitar)</TooltipContent>
                   </Tooltip>
                 ) : (
                   <Tooltip>
