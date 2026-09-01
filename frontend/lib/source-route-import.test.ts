@@ -256,7 +256,7 @@ assert.equal(sourceItemDayIndex({ dayHint: -2 }), 0)
   )
   assert.equal(
     isSourceDayCompleteOnTrip([day("d1"), day("d2", [already])], 1, [src("a", 1)]),
-    false,
+    true,
   )
   assert.equal(
     isSourceDayCompleteOnTrip([day("d1", [already])], null, [src("a", null)]),

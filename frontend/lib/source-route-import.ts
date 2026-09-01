@@ -31,22 +31,20 @@ export function sourceItemDayIndex(item: Pick<SourceItem, "dayHint">): number {
 }
 
 /**
- * True si todos los ítems de un día de la fuente ya están en el día
- * correspondiente del viaje (día N → índice N−1; sin pista → día 1).
+ * True si todos los ítems de un grupo de la fuente ya están en la ruta
+ * del viaje (cualquier día, por `sourceItemId`). El día de la fuente no
+ * importa: «Añadir día» también salta lo que ya está copiado, esté donde esté.
  */
 export function isSourceDayCompleteOnTrip(
   days: readonly { items: { sourceItemId: string }[] }[],
-  sourceDay: number | null,
+  _sourceDay: number | null,
   items: readonly Pick<SourceItem, "id">[],
 ): boolean {
   if (!items.length) return true
-  const index =
-    sourceDay == null || !Number.isFinite(sourceDay) || sourceDay < 1
-      ? 0
-      : Math.floor(sourceDay) - 1
-  const tripDay = days[index]
-  if (!tripDay) return false
-  const present = new Set(tripDay.items.map((item) => item.sourceItemId))
+  const present = new Set<string>()
+  for (const day of days) {
+    for (const item of day.items) present.add(item.sourceItemId)
+  }
   return items.every((item) => present.has(item.id))
 }
 

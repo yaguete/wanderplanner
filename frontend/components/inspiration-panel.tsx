@@ -1131,11 +1131,11 @@ export default function InspirationPanel({
                         aria-label={
                           pendingRouteCount === 0
                             ? "Todos los ítems de esta ruta ya están en tu viaje"
-                            : "Añadir Ruta a Mi viaje"
+                            : "Añadir toda la ruta a Mi viaje"
                         }
                       >
                         <ListPlus className="h-3.5 w-3.5" />
-                        Añadir Ruta a Mi viaje
+                        Añadir toda la ruta a Mi viaje
                       </Button>
                     ) : null
                   }
@@ -1407,13 +1407,10 @@ function DayGroupHeading({
   const labelClass =
     "text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
   const label = day == null ? "Sitios de esta fuente" : `Día ${day}`
-  const addDayAria = complete
-    ? day == null
-      ? "Todos los sitios de esta fuente ya están en tu viaje"
-      : `Todos los ítems del día ${day} ya están en tu viaje`
-    : day == null
-      ? "Añadir estos sitios al día 1"
-      : `Añadir el día ${day} a tu viaje`
+  const addDayAria =
+    day == null
+      ? "Añadir a Mi viaje"
+      : `Añadir el día ${day} a Mi viaje`
 
   if (!onAddAll) {
     if (day == null) return null
@@ -1432,16 +1429,17 @@ function DayGroupHeading({
       )}
     >
       <p className={labelClass}>{label}</p>
-      <button
-        type="button"
-        onClick={() => onAddAll({ day, items })}
-        disabled={complete}
-        className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground disabled:pointer-events-none disabled:opacity-50"
-        aria-label={addDayAria}
-      >
-        <Plus className="h-3.5 w-3.5 shrink-0" />
-        Añadir día
-      </button>
+      {complete ? null : (
+        <button
+          type="button"
+          onClick={() => onAddAll({ day, items })}
+          className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
+          aria-label={addDayAria}
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0" />
+          {day == null ? "Añadir a Mi viaje" : "Añadir día a Mi viaje"}
+        </button>
+      )}
     </div>
   )
 }
