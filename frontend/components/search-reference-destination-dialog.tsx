@@ -170,10 +170,10 @@ export function SearchReferenceDestinationDialog({
           <div className="shrink-0 space-y-4 px-6 pb-4 pt-6">
             <DialogHeader className="space-y-1.5 text-left">
               <DialogTitle className="text-lg font-semibold tracking-tight">
-                Buscar destino
+                Encuentra tu siguiente destino
               </DialogTitle>
               <DialogDescription>
-                Busca un destino en las fuentes que sigues.
+                Búscalo en las fuentes que sigues.
               </DialogDescription>
             </DialogHeader>
             <div>

@@ -709,6 +709,68 @@ li[data-wp-draggable] {
   }
 
   /*
+   * Tarjeta de viaje (cuadrícula de Inicio). La junta entre la portada y la
+   * ficha blanca NO se resuelve difuminando la foto: un `mask-image` la deja
+   * transparente y lo que asoma por debajo es el fondo de la tarjeta, así que
+   * cualquier tinte de hover (`hover:bg-muted/40`) tiñe justo la zona del
+   * fundido y el degradado cambia de color al pasar el ratón. Aquí la ficha
+   * es una superficie opaca que cabalga sobre la portada con esquinas
+   * redondeadas y sombra hacia arriba: la transición es profundidad, no
+   * borrosidad, y la foto conserva su cuerpo entero.
+   *
+   * Por eso el hover tampoco tiñe el fondo: sube la tarjeta y acerca la foto.
+   */
+  .trip-card-sheet {
+    background: hsl(var(--card));
+    box-shadow: 0 -8px 20px -8px hsl(0 0% 0% / 0.28);
+  }
+
+  /*
+   * Velo bajo las píldoras. Multi-parada en curva (no lineal): un degradado
+   * lineal de dos paradas banda a simple vista sobre cielos y nieve. Solo
+   * ocupa la mitad inferior, así que las fotos oscuras no se apagan.
+   */
+  .trip-cover-scrim {
+    background: linear-gradient(
+      to top,
+      hsl(0 0% 0% / 0.52) 0%,
+      hsl(0 0% 0% / 0.44) 12%,
+      hsl(0 0% 0% / 0.32) 26%,
+      hsl(0 0% 0% / 0.2) 40%,
+      hsl(0 0% 0% / 0.1) 55%,
+      hsl(0 0% 0% / 0.035) 72%,
+      transparent 100%
+    );
+  }
+
+  /*
+   * Píldoras y botón de acciones sobre la portada: velo oscuro plano. El
+   * cristal claro con texto gris desaparece sobre una portada de nieve o de
+   * cielo, que es justo el caso que más se repite en viajes.
+   *
+   * Sin `backdrop-filter` a propósito: son cuatro por tarjeta y el listado
+   * puede traer decenas, dentro del scroller del documento en móvil. El
+   * contraste lo da el relleno (0.46 sobre el velo), no el desenfoque, así
+   * que el blur solo aportaría capas que recomponer en cada frame — el mismo
+   * motivo por el que `assistant-status-loader` evita `filter`.
+   */
+  .trip-cover-chip {
+    background: hsl(0 0% 0% / 0.46);
+    color: hsl(0 0% 100%);
+    box-shadow: inset 0 0 0 0.5px hsl(0 0% 100% / 0.16);
+  }
+
+  /*
+   * Solo el botón reacciona. Las píldoras llevan la misma clase pero viven
+   * dentro del `<a>`, así que un `:hover` en `.trip-cover-chip` las oscurecería
+   * al pasar por cualquier punto de la tarjeta.
+   */
+  .trip-cover-chip-button:hover,
+  .trip-cover-chip-button[data-state="open"] {
+    background: hsl(0 0% 0% / 0.66);
+  }
+
+  /*
    * Loader del StatusPill del asistente: punto pulsante en el color primario.
    * Sin filter/mix-blend-mode: iOS Safari los composita mal (halos, tono desviado)
    * y son caros en GPU animándose en bucle.
@@ -918,6 +980,17 @@ html.landing-header-scrolled .landing-header::before {
 
 .dark .cover-fallback {
   background: linear-gradient(145deg, hsl(28 6% 18%), hsl(28 7% 8%));
+}
+
+/*
+ * En oscuro la ficha es casi negra: una sombra negra hacia arriba no se ve y
+ * la junta vuelve a ser un corte seco. Lo que separa ahí es un filo de luz en
+ * el borde superior, más una sombra bastante más honda para el mismo gesto.
+ */
+.dark .trip-card-sheet {
+  box-shadow:
+    0 -10px 24px -8px hsl(0 0% 0% / 0.55),
+    inset 0 1px 0 hsl(0 0% 100% / 0.07);
 }
 
 /* Grid fino tipo Vercel para el hero; se desvanece radialmente hacia abajo. */

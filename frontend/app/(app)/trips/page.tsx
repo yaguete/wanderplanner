@@ -16,7 +16,6 @@ import {
   Trash2,
 } from "lucide-react"
 import { NewTripDialog, type NewTripData } from "@/components/new-trip-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -101,19 +100,25 @@ function TripStatBadges({
   trip: Trip
   itemCount: number
 }) {
+  /*
+   * Cristal oscuro (`trip-cover-chip`), no `Badge variant="secondary"`: estas
+   * píldoras van sobre la portada y el gris claro del secondary desaparece en
+   * cuanto la foto es de nieve, playa o cielo.
+   */
+  const chip =
+    "trip-cover-chip inline-flex items-center rounded-md px-2 py-[5px] text-[11px] font-medium leading-none"
+
   return (
     <>
       {trip.numDays != null && (
-        <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
+        <span className={chip}>
           {trip.numDays} {trip.numDays === 1 ? "día" : "días"}
-        </Badge>
+        </span>
       )}
-      <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
+      <span className={chip}>
         {trip.sourceIds.length} {trip.sourceIds.length === 1 ? "fuente" : "fuentes"}
-      </Badge>
-      <Badge variant="secondary" className="rounded-md text-[11px] font-medium">
-        {itemCount} ítems
-      </Badge>
+      </span>
+      <span className={chip}>{itemCount} ítems</span>
     </>
   )
 }
@@ -150,7 +155,7 @@ function TripActions({
             "outline-none focus-visible:ring-2 focus-visible:ring-ring",
             variant === "ghost"
               ? "h-7 w-7 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-foreground"
-              : "h-8 w-8 rounded-lg bg-background/90 text-foreground/70 shadow-sm hover:bg-muted hover:text-foreground data-[state=open]:bg-muted",
+              : "trip-cover-chip trip-cover-chip-button h-8 w-8 rounded-lg",
           )}
           aria-label={`Más acciones de ${trip.name}`}
           onPointerDown={(e) => e.stopPropagation()}
@@ -503,39 +508,59 @@ function TripsHomePage() {
                 <div
                   key={trip.id}
                   className={cn(
-                    "relative",
-                    openingTrip?.id === trip.id && "z-[1]",
+                    "group relative overflow-hidden rounded-2xl bg-card",
+                    "shadow-[0_0_0_1px_hsl(var(--foreground)/0.07),0_1px_2px_hsl(var(--foreground)/0.05)]",
+                    "transition-[transform,box-shadow] duration-300 [transition-timing-function:cubic-bezier(.2,.7,.3,1)]",
+                    "hover:-translate-y-[3px] hover:shadow-[0_0_0_1px_hsl(var(--foreground)/0.07),0_14px_30px_-8px_hsl(var(--foreground)/0.2),0_4px_10px_-4px_hsl(var(--foreground)/0.1)]",
+                    "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+                    openingTrip?.id === trip.id && "z-[1] ring-2 ring-foreground/15",
                   )}
                 >
                   <Link
                     href={`/trips/${trip.id}`}
                     onClick={(e) => beginOpenTrip({ id: trip.id, name: trip.name }, e)}
                     aria-busy={openingTrip?.id === trip.id || undefined}
-                    className={cn(
-                      "block w-full overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:bg-muted/40",
-                      openingTrip?.id === trip.id && "ring-2 ring-foreground/15",
-                    )}
+                    className="block w-full text-left"
                   >
-                    <div className="relative h-28 overflow-hidden bg-muted sm:h-32">
+                    {/*
+                      El ratio es responsive porque el ancho de la tarjeta se
+                      mueve al revés que el del viewport: en móvil la rejilla da
+                      una sola columna a todo lo ancho (~343 px) y un 4:3 se
+                      come media pantalla por viaje; a partir de `sm` las
+                      columnas bajan a 240-300 px y el mismo ratio se queda
+                      corto. Panorámica abajo, más cuadrada arriba.
+                    */}
+                    <div className="relative aspect-[16/9] overflow-hidden bg-muted sm:aspect-[3/2]">
                       {trip.coverUrl ? (
                         <img
                           src={trip.coverUrl}
                           alt={countriesPlainList(trip.countries) || trip.name}
-                          className="absolute inset-0 h-full w-full object-cover"
+                          className={cn(
+                            "absolute inset-0 h-full w-full object-cover",
+                            "transition-transform duration-700 [transition-timing-function:cubic-bezier(.2,.7,.3,1)]",
+                            "group-hover:scale-[1.06]",
+                            "motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+                          )}
                         />
                       ) : (
-                        <div className="cover-fallback flex h-full items-center justify-center">
-                          <span className="text-3xl opacity-80" aria-hidden>
+                        // `pb-6`: la ficha tapa el filo inferior, así que el emoji
+                        // se centra en lo que queda a la vista, no en la caja.
+                        <div className="cover-fallback flex h-full items-center justify-center pb-6">
+                          <span className="text-5xl opacity-80" aria-hidden>
                             {trip.cover || "✈️"}
                           </span>
                         </div>
                       )}
-                      <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1.5 p-2">
+                      <div className="trip-cover-scrim pointer-events-none absolute inset-x-0 bottom-0 h-1/2" />
+                      {/* `bottom-6`: las píldoras rematan justo encima del filo de la ficha. */}
+                      <div className="absolute inset-x-0 bottom-6 z-[1] flex flex-wrap gap-1.5 px-3">
                         <TripStatBadges trip={trip} itemCount={itemCount} />
                       </div>
                     </div>
-                    <div className="px-4 py-3">
-                      <h3 className="text-[15px] font-semibold tracking-tight">{trip.name}</h3>
+                    <div className="trip-card-sheet relative z-[2] -mt-4 rounded-t-2xl px-4 pb-3.5 pt-3">
+                      <h3 className="truncate text-[15px] font-semibold tracking-tight">
+                        {trip.name}
+                      </h3>
                       <div className="mt-0.5 flex items-center justify-between gap-2">
                         <p className="min-w-0 truncate text-[13px] tabular-nums text-muted-foreground">
                           {formatTripDates(trip.startDate, trip.endDate) ?? "Sin fechas"}
@@ -549,7 +574,7 @@ function TripsHomePage() {
                       </div>
                     </div>
                   </Link>
-                  <div className="absolute right-2 top-2">
+                  <div className="absolute right-2.5 top-2.5 z-[3]">
                     <TripActions
                       trip={trip}
                       isOwner={isOwnerOf(trip)}
@@ -568,7 +593,14 @@ function TripsHomePage() {
               <button
                 type="button"
                 onClick={openNewTripDialog}
-                className="group flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-transparent p-8 transition-colors hover:border-foreground/30 hover:bg-muted/30"
+                /*
+                 * `min-h` por debajo de la altura de una tarjeta (≈206 px en la
+                 * columna más estrecha): los items de grid se estiran, así que
+                 * si esta supera a las demás infla toda su fila y las tarjetas
+                 * de esa fila salen con un zócalo vacío bajo la ficha. Solo es
+                 * el suelo para cuando este botón va solo en su fila.
+                 */
+                className="group flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-transparent p-8 transition-colors hover:border-foreground/30 hover:bg-muted/30"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
                   <MapIcon className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.8} />
