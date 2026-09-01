@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -192,7 +192,7 @@ function TripActions({
   )
 }
 
-export default function TripsHomePage() {
+function TripsHomePage() {
   const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, reloadTrips } =
     useTrips()
   const { user, isGuest } = useAuth()
@@ -786,5 +786,13 @@ export default function TripsHomePage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function TripsPage() {
+  return (
+    <Suspense fallback={null}>
+      <TripsHomePage />
+    </Suspense>
   )
 }
