@@ -116,8 +116,7 @@ export function SearchReferenceDestinationDialog({
                 Buscar destino
               </DialogTitle>
               <DialogDescription>
-                Busca un destino en todas las webs que sigues, aunque no estén
-                marcadas en Fuentes.
+                Busca un destino en las fuentes que sigues.
               </DialogDescription>
             </DialogHeader>
             <div>

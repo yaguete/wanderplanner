@@ -3,7 +3,11 @@
  */
 import { parseApiDetail } from "@/lib/api"
 import { authHeaders } from "@/lib/api-auth"
-import { domainFromUrl, type FavoriteReference } from "@/lib/db/profile-repo"
+import {
+  domainFromUrl,
+  type FavoriteReference,
+  type FavoriteReferenceInput,
+} from "@/lib/db/profile-repo"
 import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
 import { unsupportedSourceUrlMessage } from "@/lib/instagram-url"
 import { canAddSource, sourceMatchKey } from "@/lib/trip-sources"
@@ -80,6 +84,25 @@ export function feedHostsFromReferences(
     })
   }
   return out
+}
+
+function hostOfReference(ref: FavoriteReference): string | null {
+  const domain = (ref.domain ?? domainFromUrl(ref.url))
+    ?.replace(/^www\./i, "")
+    .toLowerCase()
+  if (!domain || !domain.includes(".")) return null
+  return domain
+}
+
+/** Quita todas las filas de un host (el chip del feed deduplica por dominio). */
+export function favoriteInputsWithoutHost(
+  refs: readonly FavoriteReference[],
+  host: string,
+): FavoriteReferenceInput[] {
+  const target = host.replace(/^www\./i, "").toLowerCase().trim()
+  return refs
+    .filter((ref) => hostOfReference(ref) !== target)
+    .map((ref) => ({ label: ref.label, url: ref.url }))
 }
 
 export function capFeedHosts(domains: readonly string[]): string[] {

@@ -1,17 +1,19 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ChevronDown, ExternalLink, Lightbulb, Plus, Search } from "lucide-react"
+import { ArrowLeft, ChevronDown, ExternalLink, Lightbulb, Minus, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import { AddArticleToTripDialog } from "@/components/add-article-to-trip-dialog"
 import { AddReferenceDialog } from "@/components/add-reference-dialog"
+import { RemoveReferenceDialog } from "@/components/remove-reference-dialog"
 import { useOpeningTrip } from "@/components/opening-trip"
 import { useRegistrationGate } from "@/components/auth/registration-gate"
 import { ReferenceFeedRow } from "@/components/reference-feed-row"
 import { SearchReferenceDestinationDialog } from "@/components/search-reference-destination-dialog"
 import { SuggestedReferencesDirectory } from "@/components/suggested-references-directory"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,7 @@ import {
   capFeedHosts,
   extractionFailureMessage,
   faviconUrlForHost,
+  favoriteInputsWithoutHost,
   feedHostsFromReferences,
   fetchReferenceFeed,
   hostIsFeedable,
@@ -59,12 +62,44 @@ type FeedState =
   | { status: "ok"; payload: ReferenceFeedResponse }
 
 const GHOST_TOOLBAR_BTN = cn(
-  "inline-flex h-10 items-center justify-center gap-2 rounded-md px-3",
-  "max-md:w-10 max-md:gap-0 max-md:px-0",
-  "text-sm font-medium text-muted-foreground transition-colors",
+  "inline-flex h-10 w-10 items-center justify-center rounded-md",
+  "text-muted-foreground transition-colors",
   "hover:bg-sidebar-accent hover:text-foreground",
   "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  "disabled:pointer-events-none disabled:opacity-40",
 )
+
+function FeedToolbarIconButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string
+  disabled?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  const button = (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      className={GHOST_TOOLBAR_BTN}
+    >
+      {children}
+    </button>
+  )
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {disabled ? <span className="inline-flex">{button}</span> : button}
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 function openExternal(url: string) {
   window.open(url, "_blank", "noopener,noreferrer")
@@ -148,6 +183,8 @@ export function ReferenceFeedPanel({
 
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
@@ -256,6 +293,33 @@ export function ReferenceFeedPanel({
     return true
   }
 
+  const removeFavorite = async (domain: string) => {
+    if (pendingRemove) return
+    setPendingRemove(domain)
+    const prevSelected = selected
+    const nextSelected = selected.filter((d) => d !== domain)
+    writeStoredFeedFilter(nextSelected)
+    setSelected(nextSelected)
+    const remaining = chips.filter((c) => c.domain !== domain)
+    const result = await updateProfile({
+      favoriteReferences: favoriteInputsWithoutHost(favoriteReferences, domain),
+    })
+    setPendingRemove(null)
+    if (!result.ok) {
+      writeStoredFeedFilter(prevSelected)
+      setSelected(prevSelected)
+      toast.error(result.error)
+      return
+    }
+    setFeeds((prev) => {
+      if (!(domain in prev)) return prev
+      const next = { ...prev }
+      delete next[domain]
+      return next
+    })
+    if (remaining.length === 0) setRemoving(false)
+  }
+
   const createTripFromUrl = (articleUrl: string) => {
     const hasTrip = trips.some((t) => !t.archived)
     if (isGuest && hasTrip && !requireAccount("new-trip")) return
@@ -322,7 +386,7 @@ export function ReferenceFeedPanel({
         </>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             {chips.length > 0 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -381,35 +445,26 @@ export function ReferenceFeedPanel({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              aria-label="Añadir fuente"
-              className={GHOST_TOOLBAR_BTN}
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-              <span className="hidden md:inline">Añadir fuente</span>
-            </button>
-            {feedableDomains.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setSearching(true)}
-                aria-label="Buscar destino"
-                className={GHOST_TOOLBAR_BTN}
+            <div className="ml-auto flex items-center">
+              <FeedToolbarIconButton label="Añadir fuente" onClick={() => setAdding(true)}>
+                <Plus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+              </FeedToolbarIconButton>
+              <FeedToolbarIconButton
+                label="Eliminar fuente"
+                disabled={chips.length === 0}
+                onClick={() => setRemoving(true)}
               >
-                <Search className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-                <span className="hidden md:inline">Buscar destino</span>
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => onDirectoryChange(true)}
-              aria-label="Sugerencias"
-              className={GHOST_TOOLBAR_BTN}
-            >
-              <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
-              <span className="hidden md:inline">Sugerencias</span>
-            </button>
+                <Minus className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+              </FeedToolbarIconButton>
+              <FeedToolbarIconButton label="Sugerencias" onClick={() => onDirectoryChange(true)}>
+                <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+              </FeedToolbarIconButton>
+              {feedableDomains.length > 0 ? (
+                <FeedToolbarIconButton label="Buscar destino" onClick={() => setSearching(true)}>
+                  <Search className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                </FeedToolbarIconButton>
+              ) : null}
+            </div>
           </div>
 
           {chips.length === 0 ? (
@@ -470,6 +525,17 @@ export function ReferenceFeedPanel({
         knownDomains={chips.map((c) => c.domain)}
         onAddReference={persistFavorite}
         onCreateTrip={createTripFromUrl}
+      />
+
+      <RemoveReferenceDialog
+        open={removing}
+        items={chips}
+        pendingDomain={pendingRemove}
+        onOpenChange={(open) => {
+          if (!open && pendingRemove) return
+          setRemoving(open)
+        }}
+        onRemove={(domain) => void removeFavorite(domain)}
       />
 
       <SearchReferenceDestinationDialog

@@ -7,6 +7,7 @@ import {
   classifyReferencePaste,
   extractionFailureMessage,
   faviconUrlForHost,
+  favoriteInputsWithoutHost,
   feedHostsFromReferences,
   formatPublishedAt,
   hostIsFeedable,
@@ -52,6 +53,14 @@ assert.deepEqual(
 )
 assert.equal(chips[0]?.feedable, true)
 assert.equal(chips[2]?.feedable, false)
+
+const withoutCosmo = favoriteInputsWithoutHost(refs, "www.lacosmopolilla.com")
+assert.equal(
+  withoutCosmo.some((r) => (r.url ?? "").includes("lacosmopolilla")),
+  false,
+)
+assert.ok(withoutCosmo.some((r) => r.label === "Sin Mapa"))
+assert.equal(withoutCosmo.length, refs.length - 2)
 
 assert.deepEqual(capFeedHosts(["a", "b", "c", "d", "e", "f", "g", "h", "i"]), [
   "a",
