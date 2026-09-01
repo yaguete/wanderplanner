@@ -105,7 +105,7 @@ export function SuggestedReferencesDirectory({
           ariaLabel="Idioma de las sugerencias"
           size="compact"
           emphasis
-          className="w-fit"
+          fit
         />
       </div>
       {/* Columnas por breakpoint, no `auto-fill`: el contenedor es `max-w-5xl`. */}

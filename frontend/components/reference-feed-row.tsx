@@ -11,37 +11,44 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatPublishedAt, type ReferenceFeedItem } from "@/lib/reference-feed"
+import { useTrips } from "@/lib/trip-context"
 import { cn } from "@/lib/utils"
 
 function FeedRowAction({
   label,
   onClick,
   alwaysVisible = false,
+  disabled = false,
   children,
 }: {
   label: string
   onClick: () => void
   alwaysVisible?: boolean
+  disabled?: boolean
   children: ReactNode
 }) {
+  const button = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      disabled={disabled}
+      className={cn(
+        "h-8 w-8 rounded-md bg-background/90",
+        alwaysVisible
+          ? "opacity-100"
+          : "opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/row:opacity-100",
+      )}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  )
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "h-8 w-8 rounded-md bg-background/90",
-            alwaysVisible
-              ? "opacity-100"
-              : "opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover/row:opacity-100",
-          )}
-          aria-label={label}
-          onClick={onClick}
-        >
-          {children}
-        </Button>
+        {disabled ? <span className="inline-flex">{button}</span> : button}
       </TooltipTrigger>
       <TooltipContent side="top">{label}</TooltipContent>
     </Tooltip>
@@ -52,10 +59,12 @@ function FeedRowMenu({
   onRead,
   onAdd,
   onCreate,
+  canAdd,
 }: {
   onRead: () => void
   onAdd: () => void
   onCreate: () => void
+  canAdd: boolean
 }) {
   return (
     <DropdownMenu modal={false}>
@@ -73,8 +82,8 @@ function FeedRowMenu({
           Leer
           <BookOpen className="ml-auto" strokeWidth={1.8} aria-hidden />
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onAdd}>
-          Añadir
+        <DropdownMenuItem disabled={!canAdd} onSelect={onAdd}>
+          Añadir a un viaje
           <Plus className="ml-auto" strokeWidth={1.8} aria-hidden />
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onCreate}>
@@ -102,12 +111,12 @@ export function ReferenceFeedRow({
   /** En el modal de búsqueda: las acciones se ven sin hover. */
   actionsAlwaysVisible?: boolean
 }) {
+  const { trips } = useTrips()
+  const canAdd = trips.some((trip) => !trip.archived)
   const [broken, setBroken] = useState(false)
   const showImage = Boolean(item.imageUrl) && !broken
   const dateLabel = formatPublishedAt(item.publishedAt)
-  const meta = [dateLabel, item.host, item.instant ? "Listo para consolidar" : null]
-    .filter(Boolean)
-    .join(" · ")
+  const meta = [dateLabel, item.host].filter(Boolean).join(" · ")
 
   return (
     <li className="group/row relative">
@@ -143,13 +152,18 @@ export function ReferenceFeedRow({
       </div>
       <div className="absolute right-2 top-3 sm:right-3">
         <div className="md:hidden">
-          <FeedRowMenu onRead={onRead} onAdd={onAdd} onCreate={onCreate} />
+          <FeedRowMenu onRead={onRead} onAdd={onAdd} onCreate={onCreate} canAdd={canAdd} />
         </div>
         <div className="hidden items-center gap-1 md:flex">
           <FeedRowAction label="Leer" onClick={onRead} alwaysVisible={actionsAlwaysVisible}>
             <BookOpen className="h-3.5 w-3.5" />
           </FeedRowAction>
-          <FeedRowAction label="Añadir" onClick={onAdd} alwaysVisible={actionsAlwaysVisible}>
+          <FeedRowAction
+            label="Añadir a un viaje"
+            onClick={onAdd}
+            alwaysVisible={actionsAlwaysVisible}
+            disabled={!canAdd}
+          >
             <Plus className="h-3.5 w-3.5" />
           </FeedRowAction>
           <FeedRowAction label="Crear viaje" onClick={onCreate} alwaysVisible={actionsAlwaysVisible}>

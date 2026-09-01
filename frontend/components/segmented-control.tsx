@@ -20,6 +20,11 @@ type SegmentedControlProps<T extends string> = {
   size?: "default" | "compact"
   /** Selección en semibold/tinta; el resto, gris más suave. */
   emphasis?: boolean
+  /**
+   * El control se ajusta al texto y no lo trunca.
+   * Úsalo cuando las etiquetas tienen que leerse enteras (p. ej. «En español»).
+   */
+  fit?: boolean
   className?: string
 }
 
@@ -34,6 +39,7 @@ export function SegmentedControl<T extends string>({
   ariaLabel,
   size = "compact",
   emphasis = false,
+  fit = false,
   className,
 }: SegmentedControlProps<T>) {
   const compact = size === "compact"
@@ -47,7 +53,7 @@ export function SegmentedControl<T extends string>({
       ref={containerRef}
       className={cn(
         "relative inline-flex items-center gap-0 rounded-lg bg-muted p-0.5",
-        "w-full @md:w-fit",
+        fit ? "w-fit" : "w-full @md:w-fit",
         compact ? "min-h-7" : "min-h-8",
         className,
       )}
@@ -69,9 +75,9 @@ export function SegmentedControl<T extends string>({
             title={label}
             onClick={() => onValueChange(id)}
             className={cn(
-              "relative z-[1] inline-flex min-w-0 items-center justify-center rounded-md transition-colors duration-150 ease-out",
+              "relative z-[1] inline-flex items-center justify-center rounded-md transition-colors duration-150 ease-out",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              "flex-1 @md:flex-none",
+              fit ? "flex-none" : "min-w-0 flex-1 @md:flex-none",
               compact
                 ? "min-h-7 gap-1 px-2 py-1 text-xs @md:min-w-[4rem]"
                 : "min-h-7 gap-1 px-1.5 text-[11px] @md:gap-1.5 @md:px-3 @md:text-xs",
@@ -88,7 +94,17 @@ export function SegmentedControl<T extends string>({
             {Icon ? (
               <Icon className={cn("shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
             ) : null}
-            <span className={cn("min-w-0", compact ? "inline truncate" : "hidden truncate @md:inline")}>{label}</span>
+            <span
+              className={cn(
+                fit
+                  ? "whitespace-nowrap"
+                  : compact
+                    ? "inline min-w-0 truncate"
+                    : "hidden min-w-0 truncate @md:inline",
+              )}
+            >
+              {label}
+            </span>
           </button>
         )
       })}

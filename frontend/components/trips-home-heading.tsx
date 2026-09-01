@@ -25,7 +25,7 @@ export function TripsHomeHeading({
             TITLE_CLASS,
             section === "trips"
               ? "font-semibold text-[hsl(var(--brand-ink))]"
-              : "font-light text-muted-foreground",
+              : "font-light text-[hsl(var(--brand-ink))]",
           )}
         >
           Tus viajes
@@ -38,7 +38,7 @@ export function TripsHomeHeading({
             TITLE_CLASS,
             section === "sources"
               ? "font-semibold text-[hsl(var(--brand-ink))]"
-              : "font-light text-muted-foreground",
+              : "font-light text-[hsl(var(--brand-ink))]",
           )}
         >
           Tus fuentes

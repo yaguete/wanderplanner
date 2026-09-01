@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   List,
   LogOut,
+  Map as MapIcon,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -570,7 +571,7 @@ function TripsHomePage() {
                 className="group flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-transparent p-8 transition-colors hover:border-foreground/30 hover:bg-muted/30"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-muted text-foreground transition-colors group-hover:border-foreground group-hover:bg-foreground group-hover:text-background">
-                  <Plus className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.5} />
+                  <MapIcon className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.8} />
                 </div>
                 <span className="text-center text-sm">
                   <span className="text-muted-foreground group-hover:text-foreground">
@@ -659,7 +660,7 @@ function TripsHomePage() {
                 className="group flex w-full items-center gap-3 border-t border-dashed border-border px-3 py-3 text-left text-sm transition-colors hover:bg-muted/30 sm:px-4"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border text-foreground transition-colors group-hover:border-foreground/30 sm:h-14 sm:w-14">
-                  <Plus className="h-[1.125rem] w-[1.125rem]" strokeWidth={2.5} />
+                  <MapIcon className="h-[1.125rem] w-[1.125rem]" strokeWidth={1.8} />
                 </span>
                 <span>
                   <span className="text-muted-foreground group-hover:text-foreground">
