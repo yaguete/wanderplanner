@@ -3,14 +3,19 @@
 import { useState } from "react"
 import { Check, ExternalLink, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SegmentedControl } from "@/components/segmented-control"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { faviconUrlForHost } from "@/lib/reference-feed"
 import {
   isSuggestedReferenceAdded,
+  readStoredSuggestedLang,
   sortSuggestedReferences,
-  SUGGESTED_REFERENCES,
+  SUGGESTED_LANGS,
   suggestedReferenceHomeUrl,
+  suggestedReferencesForLang,
+  writeStoredSuggestedLang,
+  type SuggestedLang,
   type SuggestedReference,
 } from "@/lib/suggested-references"
 import { cn } from "@/lib/utils"
@@ -56,7 +61,13 @@ export function SuggestedReferencesDirectory({
   onAdd: (homeUrl: string, domain: string, label: string) => Promise<boolean>
 }) {
   const [pendingHost, setPendingHost] = useState<string | null>(null)
-  const items = sortSuggestedReferences(SUGGESTED_REFERENCES, knownDomains)
+  const [lang, setLang] = useState<SuggestedLang>(readStoredSuggestedLang)
+  const items = sortSuggestedReferences(suggestedReferencesForLang(lang), knownDomains)
+
+  const setSuggestedLang = (next: SuggestedLang) => {
+    setLang(next)
+    writeStoredSuggestedLang(next)
+  }
 
   const add = async (item: SuggestedReference) => {
     if (pendingHost) return
@@ -69,86 +80,96 @@ export function SuggestedReferencesDirectory({
   }
 
   return (
-    // Columnas por breakpoint, no `auto-fill`: el contenedor es `max-w-5xl`, así
-    // que el ancho disponible lo decide el viewport y a 3 ya se queda sin sitio
-    // el nombre del blog.
-    <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((item) => {
-        const added = isSuggestedReferenceAdded(item.host, knownDomains)
-        const busy = pendingHost === item.host
-        const href = suggestedReferenceHomeUrl(item.host)
-        return (
-          <li
-            key={item.host}
-            className={cn(
-              "flex items-center gap-3 rounded-xl border border-border p-3 transition-colors",
-              // Las ya seguidas van al final (`sortSuggestedReferences`) y se apagan:
-              // la rejilla es para descubrir, no para repasar lo que ya tienes.
-              added ? "bg-muted/40" : "bg-card hover:border-foreground/20",
-            )}
-          >
-            <CatalogMark host={item.host} />
-            <div className="min-w-0 flex-1">
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-sm font-semibold leading-snug tracking-tight hover:underline"
-              >
-                {item.label}
-              </a>
-              <p className="truncate text-[12px] leading-snug text-muted-foreground">
-                {item.host}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Abrir"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <ExternalLink className="h-4 w-4" aria-hidden />
-                  </a>
-                </TooltipTrigger>
-                <TooltipContent side="top">Abrir</TooltipContent>
-              </Tooltip>
-              {added ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex h-8 w-8 items-center justify-center text-muted-foreground">
-                      <Check className="h-4 w-4" strokeWidth={2.2} aria-hidden />
-                      <span className="sr-only">En tus fuentes</span>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">En tus fuentes</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={pendingHost !== null}
-                      aria-busy={busy}
-                      aria-label={`Añadir ${item.label}`}
-                      onClick={() => void add(item)}
-                    >
-                      {busy ? <Spinner className="size-4" /> : <Plus className="h-4 w-4" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Añadir a tus fuentes</TooltipContent>
-                </Tooltip>
+    <div className="@container flex flex-col gap-5">
+      <div className="flex flex-col gap-2.5">
+        <h2 className="text-lg font-semibold tracking-tight">Sugerencias</h2>
+        <SegmentedControl
+          items={SUGGESTED_LANGS}
+          value={lang}
+          onValueChange={setSuggestedLang}
+          ariaLabel="Idioma de las sugerencias"
+          size="compact"
+          emphasis
+          className="w-fit"
+        />
+      </div>
+      {/* Columnas por breakpoint, no `auto-fill`: el contenedor es `max-w-5xl`. */}
+      <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => {
+          const added = isSuggestedReferenceAdded(item.host, knownDomains)
+          const busy = pendingHost === item.host
+          const href = suggestedReferenceHomeUrl(item.host)
+          return (
+            <li
+              key={item.host}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border border-border p-3 transition-colors",
+                added ? "bg-muted/40" : "bg-card hover:border-foreground/20",
               )}
-            </div>
-          </li>
-        )
-      })}
-    </ul>
+            >
+              <CatalogMark host={item.host} />
+              <div className="min-w-0 flex-1">
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-sm font-semibold leading-snug tracking-tight hover:underline"
+                >
+                  {item.label}
+                </a>
+                <p className="truncate text-[12px] leading-snug text-muted-foreground">
+                  {item.host}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Abrir"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <ExternalLink className="h-4 w-4" aria-hidden />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Abrir</TooltipContent>
+                </Tooltip>
+                {added ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex h-8 w-8 items-center justify-center text-muted-foreground">
+                        <Check className="h-4 w-4" strokeWidth={2.2} aria-hidden />
+                        <span className="sr-only">En tus fuentes</span>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">En tus fuentes</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={pendingHost !== null}
+                        aria-busy={busy}
+                        aria-label={`Añadir ${item.label}`}
+                        onClick={() => void add(item)}
+                      >
+                        {busy ? <Spinner className="size-4" /> : <Plus className="h-4 w-4" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Añadir a tus fuentes</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

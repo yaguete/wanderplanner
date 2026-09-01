@@ -123,7 +123,13 @@ function FeedMoreRow({ label, href }: { label: string; href: string }) {
   )
 }
 
-export function ReferenceFeedPanel() {
+export function ReferenceFeedPanel({
+  directory,
+  onDirectoryChange,
+}: {
+  directory: boolean
+  onDirectoryChange: (open: boolean) => void
+}) {
   const router = useRouter()
   const { favoriteReferences, updateProfile, isGuest } = useAuth()
   const { trips, sources, startSourceExtraction, pendingSources } = useTrips()
@@ -143,7 +149,6 @@ export function ReferenceFeedPanel() {
   const [selected, setSelected] = useState<string[]>([])
   const [adding, setAdding] = useState(false)
   const [searching, setSearching] = useState(false)
-  const [directory, setDirectory] = useState(false)
   const [feeds, setFeeds] = useState<Record<string, FeedState>>({})
   const [picking, setPicking] = useState<ReferenceFeedItem | null>(null)
   const [pickerOptions, setPickerOptions] = useState<AddArticleTripOption[]>([])
@@ -304,18 +309,12 @@ export function ReferenceFeedPanel() {
         <>
           <button
             type="button"
-            onClick={() => setDirectory(false)}
+            onClick={() => onDirectoryChange(false)}
             className="inline-flex h-10 w-fit items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
             Volver a tus fuentes
           </button>
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Sugerencias</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              El mejor contenido de viajes en español. Añade tus fuentes favoritas.
-            </p>
-          </div>
           <SuggestedReferencesDirectory
             knownDomains={chips.map((c) => c.domain)}
             onAdd={persistFavorite}
@@ -404,7 +403,7 @@ export function ReferenceFeedPanel() {
             ) : null}
             <button
               type="button"
-              onClick={() => setDirectory(true)}
+              onClick={() => onDirectoryChange(true)}
               aria-label="Sugerencias"
               className={GHOST_TOOLBAR_BTN}
             >

@@ -8,6 +8,12 @@ export const TRIPS_HOME_VIEW_FUENTES = "fuentes"
 
 export type TripsHomeSection = "trips" | "sources"
 
+export const TRIPS_HOME_SUBTITLE = {
+  trips: "Consolida fuentes en las que confías en una ruta editable.",
+  sources: "El contenido más reciente de tus fuentes de inspiración",
+  directory: "Encuentra inspiración en estas referencias",
+} as const
+
 export function parseTripsHomeViewParam(
   raw: string | null | undefined,
 ): TripsHomeSection | null {
@@ -15,6 +21,22 @@ export function parseTripsHomeViewParam(
   if (t === "fuentes" || t === "sources") return "sources"
   if (t === "viajes" || t === "trips") return "trips"
   return null
+}
+
+export function tripsHomeSubtitle(
+  section: TripsHomeSection,
+  directory = false,
+): string {
+  if (section === "trips") return TRIPS_HOME_SUBTITLE.trips
+  if (directory) return TRIPS_HOME_SUBTITLE.directory
+  return TRIPS_HOME_SUBTITLE.sources
+}
+
+/** Primera pintura (SSR + hidratación). La query manda; el storage va después de montar. */
+export function initialTripsHomeSection(
+  viewParam: string | null | undefined,
+): TripsHomeSection {
+  return parseTripsHomeViewParam(viewParam) ?? "trips"
 }
 
 export function readStoredTripsHomeSection(): TripsHomeSection {

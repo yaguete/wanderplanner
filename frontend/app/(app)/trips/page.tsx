@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Archive,
   ArchiveRestore,
@@ -46,8 +46,11 @@ import type { Trip } from "@/types/itinerary"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  readTripsHomeSection,
+  initialTripsHomeSection,
+  parseTripsHomeViewParam,
+  readStoredTripsHomeSection,
   replaceTripsHomeViewInUrl,
+  TRIPS_HOME_VIEW_PARAM,
   writeStoredTripsHomeSection,
   type TripsHomeSection,
 } from "@/lib/trips-home-view"
@@ -208,16 +211,26 @@ export default function TripsHomePage() {
   const [filter, setFilter] = useState<TripFilter>("active")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [leavingTripId, setLeavingTripId] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const viewParam = searchParams.get(TRIPS_HOME_VIEW_PARAM)
+  // La query hidrata igual en servidor y cliente. El storage, tras montar.
   const [homeSection, setHomeSectionState] = useState<TripsHomeSection>(() =>
-    typeof window === "undefined" ? "trips" : readTripsHomeSection(),
+    initialTripsHomeSection(viewParam),
   )
+  const [sourcesDirectory, setSourcesDirectory] = useState(false)
 
   useEffect(() => {
     setViewMode(readViewMode())
   }, [])
 
+  useEffect(() => {
+    if (parseTripsHomeViewParam(viewParam)) return
+    setHomeSectionState(readStoredTripsHomeSection())
+  }, [viewParam])
+
   const setHomeSection = (next: TripsHomeSection) => {
     setHomeSectionState(next)
+    if (next === "trips") setSourcesDirectory(false)
     writeStoredTripsHomeSection(next)
     replaceTripsHomeViewInUrl(next)
   }
@@ -286,7 +299,11 @@ export default function TripsHomePage() {
     <div className="flex-1 md:overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
         <div className="mb-6 sm:mb-8">
-          <TripsHomeHeading section={homeSection} onSectionChange={setHomeSection} />
+          <TripsHomeHeading
+            section={homeSection}
+            directory={homeSection === "sources" && sourcesDirectory}
+            onSectionChange={setHomeSection}
+          />
         </div>
 
         {invites.length > 0 ? (
@@ -649,7 +666,10 @@ export default function TripsHomePage() {
         )}
         </>
         ) : (
-          <ReferenceFeedPanel />
+          <ReferenceFeedPanel
+            directory={sourcesDirectory}
+            onDirectoryChange={setSourcesDirectory}
+          />
         )}
       </div>
 

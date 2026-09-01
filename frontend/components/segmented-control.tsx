@@ -18,6 +18,8 @@ type SegmentedControlProps<T extends string> = {
   ariaLabel: string
   /** `compact`: Lista · Calendario · Mapa (modo de visualización). */
   size?: "default" | "compact"
+  /** Selección en semibold/tinta; el resto, gris más suave. */
+  emphasis?: boolean
   className?: string
 }
 
@@ -31,6 +33,7 @@ export function SegmentedControl<T extends string>({
   onValueChange,
   ariaLabel,
   size = "compact",
+  emphasis = false,
   className,
 }: SegmentedControlProps<T>) {
   const compact = size === "compact"
@@ -70,11 +73,16 @@ export function SegmentedControl<T extends string>({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "flex-1 @md:flex-none",
               compact
-                ? "min-h-7 gap-1 px-2 py-1 text-xs font-medium @md:min-w-[4rem]"
-                : "min-h-7 gap-1 px-1.5 text-[11px] font-medium @md:gap-1.5 @md:px-3 @md:text-xs",
+                ? "min-h-7 gap-1 px-2 py-1 text-xs @md:min-w-[4rem]"
+                : "min-h-7 gap-1 px-1.5 text-[11px] @md:gap-1.5 @md:px-3 @md:text-xs",
+              !emphasis && "font-medium",
               selected
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
+                ? emphasis
+                  ? "font-semibold text-foreground"
+                  : "text-foreground"
+                : emphasis
+                  ? "font-medium text-muted-foreground/55 hover:text-muted-foreground"
+                  : "text-muted-foreground hover:text-foreground",
             )}
           >
             {Icon ? (

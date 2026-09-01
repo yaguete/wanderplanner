@@ -1,15 +1,17 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import type { TripsHomeSection } from "@/lib/trips-home-view"
+import { tripsHomeSubtitle, type TripsHomeSection } from "@/lib/trips-home-view"
 
 const TITLE_CLASS = "text-2xl tracking-tight sm:text-3xl"
 
 export function TripsHomeHeading({
   section,
+  directory = false,
   onSectionChange,
 }: {
   section: TripsHomeSection
+  directory?: boolean
   onSectionChange: (next: TripsHomeSection) => void
 }) {
   return (
@@ -43,9 +45,7 @@ export function TripsHomeHeading({
         </button>
       </h1>
       <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-        {section === "trips"
-          ? "Consolida fuentes en las que confías en una ruta editable."
-          : "El contenido más reciente de tus fuentes de inspiración"}
+        {tripsHomeSubtitle(section, directory)}
       </p>
     </div>
   )
