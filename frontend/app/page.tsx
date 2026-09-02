@@ -34,7 +34,7 @@ export default function RootPage() {
           <ValueProps />
           <ClosingCta />
         </main>
-        <LandingFooter />
+        <LandingFooter showKiwiMango />
       </div>
     </>
   )
