@@ -75,6 +75,7 @@ from extraction_cache import (  # noqa: E402
     store_extraction,
     touch_validation,
 )
+from extraction_errors import public_extraction_detail  # noqa: E402
 from funnel import router as funnel_router  # noqa: E402
 from instagram import (  # noqa: E402
     INSTAGRAM_PROMPT_PATH,
@@ -1152,7 +1153,7 @@ async def _stream_itinerary(
             output_tokens=output_tokens,
             error_type=type(e).__name__,
         )
-        yield _sse("error", {"detail": str(e)})
+        yield _sse("error", {"detail": public_extraction_detail(e)})
 
 
 # ── FastAPI endpoints ──────────────────────────────────────────────────────────
@@ -1300,7 +1301,7 @@ async def _stream_prewarm(
             },
         )
     except Exception as e:
-        yield _sse("error", {"detail": str(e)})
+        yield _sse("error", {"detail": public_extraction_detail(e)})
 
 
 class PrewarmRequest(BaseModel):

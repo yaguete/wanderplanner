@@ -27,6 +27,10 @@ import { useTripSourceSuggestions } from "@/hooks/use-trip-source-suggestions"
 import { isMobileViewport } from "@/hooks/use-mobile"
 import type { ItineraryProgressStage } from "@/lib/api"
 import {
+  EXTRACTION_PROVIDER_BUSY,
+  looksLikeProviderDump,
+} from "@/lib/extraction-errors"
+import {
   buildQuipDecks,
   msUntilNextQuip,
   quipAt,
@@ -174,14 +178,19 @@ export function AddSourceErrorState({
   onSelectSuggestion?: (url: string) => void
 }) {
   const dest = destination?.trim() || null
+  const providerBusy =
+    Boolean(message) &&
+    (message === EXTRACTION_PROVIDER_BUSY || looksLikeProviderDump(message))
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <AlertCircle className="size-6 text-destructive" aria-hidden />
       <div className="space-y-1.5">
-        <p className="text-sm font-medium text-foreground">
-          Algo ha salido mal. Inténtalo de nuevo.
+        <p className="max-w-sm text-balance text-sm font-medium text-foreground">
+          {providerBusy
+            ? EXTRACTION_PROVIDER_BUSY
+            : "Algo ha salido mal. Inténtalo de nuevo."}
         </p>
-        {message ? (
+        {!providerBusy && message ? (
           <p className="max-w-sm text-balance text-xs text-muted-foreground">{message}</p>
         ) : null}
       </div>

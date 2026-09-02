@@ -1,5 +1,6 @@
 import type { Itinerary } from "@/types/itinerary"
 import { authHeaders } from "@/lib/api-auth"
+import { friendlyExtractionMessage } from "@/lib/extraction-errors"
 import { parseSse } from "@/lib/sse"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -117,7 +118,7 @@ export async function fetchItinerary(
       response.status,
     )
     if (limitError) throw limitError
-    throw new ExtractError(message, { destination, permanent })
+    throw new ExtractError(friendlyExtractionMessage(message), { destination, permanent })
   }
 
   if (!response.body) {
@@ -140,7 +141,7 @@ export async function fetchItinerary(
       if (event === "error") {
         const detail = (data as { detail?: unknown })?.detail
         const parsed = parseApiDetail(detail)
-        throw new ExtractError(parsed.message, {
+        throw new ExtractError(friendlyExtractionMessage(parsed.message), {
           destination: parsed.destination,
           permanent: parsed.permanent,
         })

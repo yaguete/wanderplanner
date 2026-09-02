@@ -1,4 +1,5 @@
 import { parseApiDetail } from "@/lib/api"
+import { friendlyExtractionMessage } from "@/lib/extraction-errors"
 import { parseSse } from "@/lib/sse"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -137,7 +138,9 @@ export async function prewarmSource(
     if (event === "error") {
       const detail = (data as { detail?: unknown })?.detail
       throw new PrewarmError(
-        typeof detail === "string" ? detail : "Error al sintetizar la fuente",
+        typeof detail === "string"
+          ? friendlyExtractionMessage(detail)
+          : "Error al sintetizar la fuente",
         500,
       )
     }

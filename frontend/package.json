@@ -37,6 +37,7 @@
     "test:inspirational-source": "tsx lib/inspirational-source.test.ts",
     "test:instagram-url": "tsx lib/instagram-url.test.ts",
     "test:extraction-toast": "tsx lib/extraction-toast.test.ts",
+    "test:extraction-errors": "tsx lib/extraction-errors.test.ts",
     "test:extraction-quips": "tsx lib/extraction-quips.test.ts",
     "test:source-item-groups": "tsx lib/source-item-groups.test.ts",
     "test:source-route-import": "tsx lib/source-route-import.test.ts",

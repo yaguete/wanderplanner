@@ -35,6 +35,7 @@ import type {
 } from "@/types/itinerary"
 import { normalizeTripBudget } from "@/lib/trip-budget"
 import { fetchItinerary, ApiLimitError, ExtractError, isAbortError, type ItineraryProgressStage } from "@/lib/api"
+import { friendlyExtractionMessage } from "@/lib/extraction-errors"
 import { resolveMapsLinks } from "@/lib/maps-api"
 import { canonicalizeMapsUrl } from "@/lib/maps-links"
 import {
@@ -1129,11 +1130,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           errorKind = err.limit === "guest" ? "guest-limit" : "limit"
           message = err.message
         } else if (err instanceof ExtractError) {
-          message = err.message
+          message = friendlyExtractionMessage(err.message)
           errorDestination = err.destination
           if (err.permanent) errorKind = "permanent"
         } else if (err instanceof Error && err.message.trim()) {
-          message = err.message
+          message = friendlyExtractionMessage(err.message)
         }
 
         setPendingSources((prev) =>
