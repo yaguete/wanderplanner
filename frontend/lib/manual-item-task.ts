@@ -42,15 +42,16 @@ export function draftFromTaskState(
   } | null,
 ): ManualTaskDraft {
   if (!state) return emptyManualTaskDraft()
-  const bookedOrPaid = state.status === "booked" || state.status === "paid"
+  const status =
+    state.status === "booked" || state.status === "paid" ? state.status : null
   return {
     cost: state.cost,
-    status: bookedOrPaid ? state.status : null,
+    status,
     cancellable: state.cancellable,
     needsReservation:
       state.status === "notNeeded"
         ? false
-        : state.status === "pending" || bookedOrPaid
+        : state.status === "pending" || status !== null
           ? true
           : null,
   }
