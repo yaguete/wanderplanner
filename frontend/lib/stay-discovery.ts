@@ -157,3 +157,31 @@ export function stayDiscoveryHrefs(
     }),
   }
 }
+
+/** Separa ciudad y calle de un `region` de stay (alta a mano o legado). */
+export function splitStayPlace(region: string | null | undefined): {
+  city: string
+  address: string
+} {
+  const raw = region?.trim() ?? ""
+  if (!raw) return { city: "", address: "" }
+  if (!/\d/.test(raw)) return { city: raw, address: "" }
+  const comma = raw.lastIndexOf(",")
+  if (comma <= 0) return { city: "", address: raw }
+  return {
+    address: raw.slice(0, comma).trim(),
+    city: raw.slice(comma + 1).trim(),
+  }
+}
+
+/** Persiste ciudad ± calle en `UserDayItem.region`. */
+export function joinStayPlace(city: string, address: string): string | null {
+  const c = city.trim()
+  const a = address.trim()
+  if (!a && !c) return null
+  if (!a) return c
+  if (!c) return a
+  const cFold = c.toLocaleLowerCase("es")
+  if (a.toLocaleLowerCase("es").includes(cFold)) return a
+  return `${a}, ${c}`
+}

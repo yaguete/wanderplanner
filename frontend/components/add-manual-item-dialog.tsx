@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
-import { Loader2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,17 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { isMobileViewport } from "@/hooks/use-mobile"
 import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { isSyntheticSourceId, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
+import { geocodeFreeText } from "@/lib/mapbox"
 import {
-  geocodeFreeText,
-  resolvePermanentCoords,
-  seedGeocodeCache,
-  suggestPlaces,
-  type GeocodeSuggestion,
-  type LngLat,
-} from "@/lib/mapbox"
+  PlaceSuggestInput,
+  type SelectedPlace,
+} from "@/components/place-suggest-input"
 import type {
   ItemType,
   RouteMode,
@@ -54,7 +49,7 @@ import {
   parseSpanDays,
   spanDaysForWrite,
 } from "@/lib/item-span"
-import { stayDiscoveryHrefs } from "@/lib/stay-discovery"
+import { joinStayPlace, splitStayPlace, stayDiscoveryHrefs } from "@/lib/stay-discovery"
 import { bookingOmitsStayDates } from "@/lib/booking-dates"
 import { activityDiscoveryHrefs } from "@/lib/activity-search"
 import { taskPatchFromManualDraft, type ManualTaskDraft } from "@/lib/manual-item-task"
@@ -81,9 +76,6 @@ const DAY_FIELD_LABELS: Record<ItemType, string> = {
   food: "Día",
   transport: "Día",
 }
-
-const SUGGEST_DEBOUNCE_MS = 300
-const SUGGEST_MIN_CHARS = 3
 
 export type AddManualItemDialogProps = {
   open: boolean
@@ -145,29 +137,21 @@ export function AddManualItemDialog({
   const [dayId, setDayId] = useState("")
   const [detail, setDetail] = useState("")
   const [placeQuery, setPlaceQuery] = useState("")
-  const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
-  const [suggestLoading, setSuggestLoading] = useState(false)
-  const [selectedPlace, setSelectedPlace] = useState<{
-    label: string
-    coords: LngLat
-  } | null>(null)
-  const [listOpen, setListOpen] = useState(false)
-  /** El autocompletado solo busca si el usuario ha tocado el campo. */
-  const [placeFieldActive, setPlaceFieldActive] = useState(false)
+  const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null)
+  const [addressQuery, setAddressQuery] = useState("")
+  const [selectedAddress, setSelectedAddress] = useState<SelectedPlace | null>(null)
+  const [tripProximity, setTripProximity] = useState<[number, number] | null>(null)
   const [nights, setNights] = useState(1)
   const [transportCanSubmit, setTransportCanSubmit] = useState(false)
   const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(emptyManualTaskDraft)
   const [liveTransportMode, setLiveTransportMode] = useState<RouteMode | null>(null)
 
-  const proximityRef = useRef<[number, number] | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const placeBlurRef = useRef<number | null>(null)
   const costRef = useRef<number | null>(null)
 
   const nameId = `${id}-name`
   const dayFieldId = `${id}-day`
   const placeId = `${id}-place`
+  const addressId = `${id}-address`
   const detailId = `${id}-detail`
   const nightsId = `${id}-nights`
   const transportFormId = `${id}-transport`
@@ -183,25 +167,39 @@ export function AddManualItemDialog({
   useEffect(() => {
     if (!open) return
     const seed = existingItem
-    setType(seed?.type ?? initialType ?? "activity")
+    const nextType = seed?.type ?? initialType ?? "activity"
+    setType(nextType)
     setName(seed?.name ?? "")
     setDetail(seed?.detail?.trim() ?? "")
-    setPlaceQuery(seed?.region?.trim() ?? "")
-    setSuggestions([])
-    setSelectedPlace(
-      seed && hasFiniteLngLat(seed.coords)
-        ? {
-            label: seed.region?.trim() || seed.name,
-            coords: seed.coords,
-          }
-        : null,
-    )
-    setListOpen(false)
-    setPlaceFieldActive(false)
-    setSuggestLoading(false)
-    if (placeBlurRef.current != null) {
-      window.clearTimeout(placeBlurRef.current)
-      placeBlurRef.current = null
+    const staySplit = nextType === "stay" ? splitStayPlace(seed?.region) : null
+    if (staySplit) {
+      setPlaceQuery(staySplit.city)
+      setAddressQuery(staySplit.address)
+      if (staySplit.address && seed && hasFiniteLngLat(seed.coords)) {
+        setSelectedAddress({ label: staySplit.address, coords: seed.coords })
+        setSelectedPlace(null)
+      } else if (seed && hasFiniteLngLat(seed.coords)) {
+        setSelectedPlace({
+          label: staySplit.city || seed.name,
+          coords: seed.coords,
+        })
+        setSelectedAddress(null)
+      } else {
+        setSelectedPlace(null)
+        setSelectedAddress(null)
+      }
+    } else {
+      setPlaceQuery(seed?.region?.trim() ?? "")
+      setAddressQuery("")
+      setSelectedAddress(null)
+      setSelectedPlace(
+        seed && hasFiniteLngLat(seed.coords)
+          ? {
+              label: seed.region?.trim() || seed.name,
+              coords: seed.coords,
+            }
+          : null,
+      )
     }
     setNights(parseSpanDays(seed?.spanDays) ?? 1)
     setTransportCanSubmit(false)
@@ -216,69 +214,16 @@ export function AddManualItemDialog({
       ""
     setDayId(preferred)
 
-    proximityRef.current = null
+    setTripProximity(null)
     const dest = destinationHint?.trim()
     const codes = countryCodes.filter((c) => c.trim().length === 2)
     if (dest) {
       void geocodeFreeText(dest, { countryCodes: codes.length ? codes : undefined }).then((p) => {
-        proximityRef.current = p
+        setTripProximity(p)
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open
   }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    abortRef.current?.abort()
-
-    if (!placeFieldActive) {
-      setSuggestLoading(false)
-      return
-    }
-
-    const q = placeQuery.trim()
-    if (selectedPlace && q === selectedPlace.label) {
-      setSuggestions([])
-      setSuggestLoading(false)
-      return
-    }
-    if (q.length < SUGGEST_MIN_CHARS) {
-      setSuggestions([])
-      setSuggestLoading(false)
-      return
-    }
-
-    setSuggestLoading(true)
-    debounceRef.current = setTimeout(() => {
-      const ac = new AbortController()
-      abortRef.current = ac
-      const codes = countryCodes.filter((c) => c.trim().length === 2)
-      void suggestPlaces(q, {
-        proximity: proximityRef.current,
-        countryCodes: codes.length ? codes : undefined,
-        limit: 6,
-        signal: ac.signal,
-      })
-        .then((list) => {
-          if (ac.signal.aborted) return
-          setSuggestions(list)
-          setListOpen(true)
-          setSuggestLoading(false)
-        })
-        .catch((err: unknown) => {
-          if (ac.signal.aborted) return
-          if (err instanceof DOMException && err.name === "AbortError") return
-          setSuggestions([])
-          setSuggestLoading(false)
-        })
-    }, SUGGEST_DEBOUNCE_MS)
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      abortRef.current?.abort()
-    }
-  }, [placeQuery, open, countryCodes, selectedPlace, placeFieldActive])
 
   useEffect(() => {
     if (!durationKind) return
@@ -287,25 +232,28 @@ export function AddManualItemDialog({
 
   const canSubmit = name.trim().length > 0 && dayId.length > 0 && days.some((d) => d.id === dayId)
 
-  const handleSelectSuggestion = (s: GeocodeSuggestion) => {
-    setSelectedPlace({ label: s.text, coords: s.center })
-    setPlaceQuery(s.text)
-    setSuggestions([])
-    setListOpen(false)
-    seedGeocodeCache(s.placeName, s.center, countryCodes)
-    // `s.center` es del dataset temporal y no se puede guardar. Pedimos la
-    // permanente por detrás; si no llega, se guarda la temporal como siempre.
-    void resolvePermanentCoords(s.placeName, s.center, { countryCodes }).then((coords) => {
-      if (coords === s.center) return
-      setSelectedPlace((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
-    })
+  const handleSelectCity = (place: SelectedPlace) => {
+    if (selectedPlace && selectedPlace.label !== place.label) {
+      setAddressQuery("")
+      setSelectedAddress(null)
+    }
+    setPlaceQuery(place.label)
+    setSelectedPlace(place)
   }
 
-  const handlePlaceChange = (value: string) => {
-    setPlaceFieldActive(true)
-    setPlaceQuery(value)
+  const handleCityChange = (next: string) => {
+    setPlaceQuery(next)
     setSelectedPlace(null)
-    setListOpen(true)
+  }
+
+  const handleSelectAddress = (place: SelectedPlace) => {
+    setAddressQuery(place.label)
+    setSelectedAddress(place)
+  }
+
+  const handleAddressChange = (next: string) => {
+    setAddressQuery(next)
+    setSelectedAddress(null)
   }
 
   const currentTaskPatch = (persistEmpty: boolean) =>
@@ -316,13 +264,24 @@ export function AddManualItemDialog({
 
   const handleSubmit = () => {
     if (!canSubmit) return
+    const city = selectedPlace?.label ?? placeQuery.trim()
+    const address =
+      type === "stay" ? (selectedAddress?.label ?? addressQuery.trim()) : ""
+    const region =
+      type === "stay"
+        ? joinStayPlace(city, address)
+        : selectedPlace?.label ?? (placeQuery.trim() || null)
+    const coords =
+      (type === "stay" ? selectedAddress?.coords : null) ??
+      selectedPlace?.coords ??
+      null
     const item: UserDayItem = existingItem
       ? {
           ...existingItem,
           name: name.trim(),
           detail: detail.trim() ? detail.trim() : null,
-          region: selectedPlace?.label ?? (placeQuery.trim() || null),
-          coords: selectedPlace?.coords ?? null,
+          region,
+          coords,
         }
       : {
           id: crypto.randomUUID(),
@@ -332,8 +291,8 @@ export function AddManualItemDialog({
           name: name.trim(),
           detail: detail.trim() ? detail.trim() : null,
           sourceAuthor: "Tú",
-          region: selectedPlace?.label ?? (placeQuery.trim() || null),
-          coords: selectedPlace?.coords ?? null,
+          region,
+          coords,
         }
     if (itemTakesCalendarSpan(item.type)) {
       const span = spanDaysForWrite(nights, selectedDayIndex, days.length)
@@ -434,83 +393,59 @@ export function AddManualItemDialog({
     </div>
   )
 
+  const addressProximity: [number, number] | null = selectedPlace
+    ? [selectedPlace.coords.lng, selectedPlace.coords.lat]
+    : tripProximity
+
+  const stayPinHint = selectedAddress ? (
+    <p className="text-xs text-muted-foreground">Ubicación fijada en el mapa.</p>
+  ) : durationKind && nights >= 2 && !selectedPlace ? (
+    <p className="text-xs text-muted-foreground">
+      Sin una dirección concreta no ancla la jornada en el mapa.
+    </p>
+  ) : null
+
+  const otherPinHint = selectedPlace ? (
+    <p className="text-xs text-muted-foreground">
+      {type === "activity" ? "Ubicación fijada en el mapa." : "Ubicación guardada."}
+    </p>
+  ) : durationKind && nights >= 2 ? (
+    <p className="text-xs text-muted-foreground">
+      Sin una dirección concreta no ancla la jornada en el mapa.
+    </p>
+  ) : null
+
   const placeField = (
-    <div className="relative space-y-2">
-      <Label htmlFor={placeId}>Ciudad o dirección (opcional)</Label>
-      <div className="relative">
-        <MapPin
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <Input
-          id={placeId}
-          value={placeQuery}
-          onChange={(e) => handlePlaceChange(e.target.value)}
-          onFocus={() => {
-            if (placeBlurRef.current != null) {
-              window.clearTimeout(placeBlurRef.current)
-              placeBlurRef.current = null
-            }
-            setPlaceFieldActive(true)
-          }}
-          onBlur={() => {
-            placeBlurRef.current = window.setTimeout(() => {
-              placeBlurRef.current = null
-              setListOpen(false)
-              setPlaceFieldActive(false)
-            }, 150)
-          }}
-          placeholder={type === "stay" ? "Király utca 15, Budapest" : "p. ej. Budapest"}
-          className="pl-8"
-          autoComplete="off"
-          autoFocus={!isMobileViewport()}
-          aria-autocomplete="list"
-          aria-expanded={listOpen && suggestions.length > 0}
-        />
-        {suggestLoading ? (
-          <Loader2
-            className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
-            aria-hidden
-          />
-        ) : null}
-      </div>
-      {listOpen && suggestions.length > 0 ? (
-        <ul
-          className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
-          role="listbox"
-        >
-          {suggestions.map((s) => (
-            <li key={s.id} role="option">
-              <button
-                type="button"
-                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleSelectSuggestion(s)}
-              >
-                <span className="font-medium text-foreground">{s.text}</span>
-                {s.placeName !== s.text ? (
-                  <span className="line-clamp-1 text-xs text-muted-foreground">
-                    {s.placeName}
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {selectedPlace ? (
-        <p className="text-xs text-muted-foreground">
-          {type === "stay" || type === "activity"
-            ? "Ubicación fijada en el mapa."
-            : "Ubicación guardada."}
-        </p>
-      ) : durationKind && nights >= 2 ? (
-        <p className="text-xs text-muted-foreground">
-          Sin una dirección concreta no ancla la jornada en el mapa.
-        </p>
-      ) : null}
-    </div>
+    <PlaceSuggestInput
+      id={placeId}
+      label={type === "stay" ? "Ciudad" : "Ciudad o dirección (opcional)"}
+      value={placeQuery}
+      onValueChange={handleCityChange}
+      selected={selectedPlace}
+      onSelect={handleSelectCity}
+      placeholder="p. ej. Budapest"
+      proximity={tripProximity}
+      countryCodes={countryCodes}
+      autoFocus
+      hint={type === "stay" ? null : otherPinHint}
+    />
   )
+
+  const addressField =
+    type === "stay" ? (
+      <PlaceSuggestInput
+        id={addressId}
+        label="Dirección (opcional)"
+        value={addressQuery}
+        onValueChange={handleAddressChange}
+        selected={selectedAddress}
+        onSelect={handleSelectAddress}
+        placeholder="p. ej. Király utca 15"
+        proximity={addressProximity}
+        countryCodes={countryCodes}
+        hint={stayPinHint}
+      />
+    ) : null
 
   const durationField = durationKind ? (
     <div className="space-y-2">
@@ -663,7 +598,7 @@ export function AddManualItemDialog({
                 <div className="flex flex-wrap items-center gap-2">
                   <PartnerSearchLink
                     href={stayHrefs.booking}
-                    label="Buscar en Booking.com"
+                    label="Buscar en Booking"
                   />
                   <PartnerSearchLink
                     href={stayHrefs.airbnb}
@@ -722,6 +657,8 @@ export function AddManualItemDialog({
               placeholder={NAME_PLACEHOLDERS[type]}
             />
           </div>
+
+          {addressField}
 
           <div className="space-y-2">
             <Label htmlFor={detailId}>Nota (opcional)</Label>

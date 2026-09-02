@@ -4,6 +4,8 @@ import { dateISOForDayIndex, toISODate } from "./trip-dates"
 import {
   buildAirbnbSearchUrl,
   buildHomeExchangeSearchUrl,
+  joinStayPlace,
+  splitStayPlace,
   stayDiscoveryHrefs,
 } from "./stay-discovery"
 
@@ -156,6 +158,27 @@ assert.equal(buildHomeExchangeSearchUrl({ destination: "  " }), null)
   assert.ok(hrefs.homeExchange)
   assert.equal(new URL(hrefs.airbnb).searchParams.get("checkin"), null)
   assert.equal(new URL(hrefs.homeExchange).searchParams.get("date_ranges"), null)
+}
+
+{
+  assert.deepEqual(splitStayPlace(null), { city: "", address: "" })
+  assert.deepEqual(splitStayPlace("Budapest"), { city: "Budapest", address: "" })
+  assert.deepEqual(splitStayPlace("Király utca 15"), {
+    city: "",
+    address: "Király utca 15",
+  })
+  assert.deepEqual(splitStayPlace("Király utca 15, Budapest"), {
+    city: "Budapest",
+    address: "Király utca 15",
+  })
+  assert.equal(joinStayPlace("Budapest", ""), "Budapest")
+  assert.equal(joinStayPlace("", "Király utca 15"), "Király utca 15")
+  assert.equal(joinStayPlace("Budapest", "Király utca 15"), "Király utca 15, Budapest")
+  assert.equal(
+    joinStayPlace("Budapest", "Király utca 15, Budapest"),
+    "Király utca 15, Budapest",
+  )
+  assert.equal(joinStayPlace("  ", "  "), null)
 }
 
 console.log("stay-discovery.test.ts: ok")
