@@ -463,13 +463,7 @@ export function AddManualItemDialog({
         }}
       />
       <p className="text-xs text-muted-foreground">
-        {maxNights === 1
-          ? type === "stay"
-            ? "El viaje acaba este día: 1 noche."
-            : "El viaje acaba este día: 1 día."
-          : type === "stay"
-            ? `Hasta ${maxNights} desde el día de entrada.`
-            : `Hasta ${maxNights} desde el día de inicio. Se muestra esos días en la Ruta.`}
+        {`Introduce un número del 1 al ${maxNights} (si necesitas más, añade días a tu viaje)`}
       </p>
     </div>
   ) : null
