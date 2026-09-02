@@ -1,7 +1,7 @@
 "use client"
 
 import { ExternalLink } from "lucide-react"
-import { outbound, type OutboundSurface } from "@/lib/funnel-analytics"
+import { outbound, type OutboundAffiliate, type OutboundSurface } from "@/lib/funnel-analytics"
 import { cn } from "@/lib/utils"
 
 export function PartnerSearchLink({
@@ -10,12 +10,14 @@ export function PartnerSearchLink({
   disabledHint,
   className,
   surface = "manual_item",
+  affiliate = "own",
 }: {
   href: string | null
   label: string
   disabledHint?: string | null
   className?: string
   surface?: OutboundSurface
+  affiliate?: OutboundAffiliate
 }) {
   if (!href) {
     return disabledHint ? (
@@ -35,7 +37,7 @@ export function PartnerSearchLink({
         className,
       )}
       onClick={() => {
-        outbound(href, { surface, affiliate: "own" })
+        outbound(href, { surface, affiliate })
       }}
     >
       {label}

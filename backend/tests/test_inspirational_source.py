@@ -27,6 +27,8 @@ NOISE = (
     "https://www.stephansdom.at",
     "https://tickets.belvedere.at/vienna",
     "https://www.booking.com/hotel/at/sacher.html",
+    "https://www.airbnb.es/s/Vienna/homes",
+    "https://www.homeexchange.com/search-v2/Vienna",
     "https://www.getyourguide.com/vienna-l26/",
     "https://en.wikipedia.org/wiki/Belvedere,_Vienna",
     "https://www.tripadvisor.es/Attraction_Review-g190454-d195147",

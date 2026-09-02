@@ -104,7 +104,10 @@ export default function AvisoLegalPage() {
           añades tú—, el enlace de reserva va a Booking con nuestro identificador de
           afiliado: el nombre del hotel, el destino, las fechas y el número de viajeros
           viajan en la dirección. Si reservas por ahí, Booking puede pagarnos una
-          comisión. Eso no sustituye nunca el enlace de un bloguero.
+          comisión. Eso no sustituye nunca el enlace de un bloguero. En el mismo formulario
+          hay búsquedas a Airbnb y a HomeExchange con el destino, las fechas y el número
+          de viajeros ya puestos; hoy no cobramos comisión por esos clics, y si algún día
+          lo hacemos se dirá aquí.
         </p>
         <p>
           «Buscar vuelos» te lleva a Skyscanner con el origen, el destino, las fechas y el

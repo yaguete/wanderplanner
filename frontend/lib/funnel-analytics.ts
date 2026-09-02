@@ -31,6 +31,8 @@ export type OutboundTarget =
   | "civitatis"
   | "kayak"
   | "stay22"
+  | "airbnb"
+  | "homeexchange"
   | "other"
 
 export type OutboundAffiliate = "partner" | "own" | "none"
@@ -244,6 +246,8 @@ export function classifyOutboundTarget(href: string): OutboundTarget {
   if (host === "stay22.com" || host.endsWith(".stay22.com")) return "stay22"
   if (host.includes("getyourguide.")) return "getyourguide"
   if (host.includes("civitatis.")) return "civitatis"
+  if (host.includes("airbnb.")) return "airbnb"
+  if (host.includes("homeexchange.")) return "homeexchange"
   if (host.includes("kayak.")) return "kayak"
   if (host.includes("skyscanner.") || host === "pxf.io" || host.endsWith(".pxf.io")) {
     return "skyscanner"

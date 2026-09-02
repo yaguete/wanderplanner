@@ -49,6 +49,8 @@ const REFERENCE_HOST_SUFFIXES = [
   "expedia.com",
   "hotels.com",
   "airbnb.com",
+  "airbnb.es",
+  "homeexchange.com",
   "agoda.com",
   "kayak.com",
   "skyscanner.com",

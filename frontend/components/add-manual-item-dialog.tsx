@@ -54,7 +54,7 @@ import {
   parseSpanDays,
   spanDaysForWrite,
 } from "@/lib/item-span"
-import { stayFormSearchHref } from "@/lib/booking-search"
+import { stayDiscoveryHrefs } from "@/lib/stay-discovery"
 import { bookingOmitsStayDates } from "@/lib/booking-dates"
 import { activityDiscoveryHrefs } from "@/lib/activity-search"
 import { taskPatchFromManualDraft, type ManualTaskDraft } from "@/lib/manual-item-task"
@@ -379,9 +379,9 @@ export function AddManualItemDialog({
     { length: Math.min(nights, maxNights) },
     (_, i) => selectedDayIndex + i,
   )
-  const stayHref =
+  const stayHrefs =
     showDiscovery && type === "stay"
-      ? stayFormSearchHref({
+      ? stayDiscoveryHrefs({
           destination: stayDestination,
           startDate,
           dayIndexes: stayDayIndexes,
@@ -391,6 +391,10 @@ export function AddManualItemDialog({
           sourceId: existingItem?.sourceId ?? MANUAL_SOURCE_ID,
         })
       : null
+  // Los tres cuelgan del mismo destino: o hay buscadores, o hay pista.
+  const hasStayLinks = Boolean(
+    stayHrefs && (stayHrefs.booking || stayHrefs.airbnb || stayHrefs.homeExchange),
+  )
   const activityHrefs =
     showDiscovery && type === "activity"
       ? activityDiscoveryHrefs({
@@ -653,17 +657,34 @@ export function AddManualItemDialog({
 
           {durationField}
 
-          {type === "stay" && showDiscovery ? (
+          {type === "stay" && stayHrefs ? (
             <div className="space-y-1.5">
-              <PartnerSearchLink
-                href={stayHref}
-                label="Buscar en Booking.com"
-                disabledHint="Escribe una ciudad para buscar alojamiento."
-              />
-              {bookingOmitsStayDates(startDate, stayDayIndexes) ? (
+              {hasStayLinks ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <PartnerSearchLink
+                    href={stayHrefs.booking}
+                    label="Buscar en Booking.com"
+                  />
+                  <PartnerSearchLink
+                    href={stayHrefs.airbnb}
+                    label="Buscar en Airbnb"
+                    affiliate="none"
+                  />
+                  <PartnerSearchLink
+                    href={stayHrefs.homeExchange}
+                    label="Buscar en HomeExchange"
+                    affiliate="none"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Escribe una ciudad para buscar alojamiento.
+                </p>
+              )}
+              {hasStayLinks && bookingOmitsStayDates(startDate, stayDayIndexes) ? (
                 <p className="text-[11px] text-muted-foreground">
-                  Sin fechas en el viaje, o con el check-in ya pasado, Booking
-                  abre el destino sin check-in.
+                  Sin fechas en el viaje, o con el check-in ya pasado, los
+                  buscadores abren el destino sin fechas.
                 </p>
               ) : null}
             </div>

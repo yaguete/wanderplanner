@@ -42,6 +42,8 @@ ALLOWED_META_VALUES: dict[str, frozenset[str]] = {
             "civitatis",
             "kayak",
             "stay22",
+            "airbnb",
+            "homeexchange",
             "other",
         }
     ),

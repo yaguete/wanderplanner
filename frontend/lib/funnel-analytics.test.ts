@@ -195,6 +195,24 @@ assert.equal(
   classifyOutboundTarget("https://www.civitatis.com/es/budapest/?aid=1006"),
   "civitatis",
 )
+assert.equal(
+  classifyOutboundTarget("https://www.airbnb.es/s/Edimburgo/homes?checkin=2026-12-28"),
+  "airbnb",
+)
+assert.equal(
+  classifyOutboundTarget("https://www.homeexchange.com/es/search-v2/Edimburgo"),
+  "homeexchange",
+)
+// Airbnb y HomeExchange son multi-TLD (.es/.com, .com/.fr/.it): igual que
+// getyourguide o civitatis, la marca se reconoce por etiqueta, no por sufijo.
+assert.equal(
+  classifyOutboundTarget("https://www.airbnb.com/s/Edinburgh/homes"),
+  "airbnb",
+)
+assert.equal(
+  classifyOutboundTarget("https://www.homeexchange.fr/search-v2/Edimbourg"),
+  "homeexchange",
+)
 {
   // Misma URL, distinta procedencia: el aid propio coincide con el de la partner.
   const civitatis = "https://www.civitatis.com/es/budapest/?aid=1006"
