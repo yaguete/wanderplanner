@@ -57,6 +57,18 @@ def _error_type(exc: BaseException) -> str | None:
     return raw if isinstance(raw, str) and raw.strip() else None
 
 
+def log_detail(exc: BaseException, limit: int = 300) -> str | None:
+    """Mensaje real de la excepción para el log de una línea de `log_kv`.
+
+    El cliente ya solo ve copy nuestro: si esto no se registra, un fallo
+    inesperado no deja rastro más allá del nombre de la clase.
+    """
+    text = " ".join(str(exc).split())
+    if not text:
+        return None
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def public_extraction_detail(exc: BaseException) -> str:
     """Copy seguro para el evento SSE `error`. El tipo real va en los logs."""
     if isinstance(exc, (anthropic.APIConnectionError, anthropic.APITimeoutError)):

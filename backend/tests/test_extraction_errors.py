@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import anthropic
 import httpx
 import pytest
@@ -7,8 +10,13 @@ import main as main_mod
 from extraction_errors import (
     EXTRACTION_GENERIC_FAILURE,
     EXTRACTION_PROVIDER_BUSY,
+    log_detail,
     looks_like_provider_dump,
     public_extraction_detail,
+)
+
+FRONTEND_COPY = (
+    Path(__file__).resolve().parents[2] / "frontend" / "lib" / "extraction-errors.ts"
 )
 
 
@@ -74,6 +82,29 @@ def test_anthropic_bad_request_is_generic():
     assert public_extraction_detail(exc) == EXTRACTION_GENERIC_FAILURE
 
 
+def test_log_detail_fits_in_one_line():
+    assert log_detail(RuntimeError("boom\n  en dos líneas")) == "boom en dos líneas"
+    assert log_detail(RuntimeError("   ")) is None
+    long = log_detail(RuntimeError("x" * 500))
+    assert long is not None
+    assert len(long) == 300
+    assert long.endswith("…")
+
+
+def test_copy_is_mirrored_in_the_frontend():
+    """`friendlyExtractionMessage` compara por igualdad: si el copy diverge,
+    el front deja de reconocer el mensaje que manda el backend."""
+    ts = FRONTEND_COPY.read_text(encoding="utf-8")
+
+    def literal(name: str) -> str:
+        found = re.search(rf'export const {name} =\s*"([^"]*)"', ts)
+        assert found is not None, f"{name} no está en {FRONTEND_COPY.name}"
+        return found.group(1)
+
+    assert literal("EXTRACTION_PROVIDER_BUSY") == EXTRACTION_PROVIDER_BUSY
+    assert literal("EXTRACTION_GENERIC_FAILURE") == EXTRACTION_GENERIC_FAILURE
+
+
 @pytest.mark.asyncio
 async def test_stream_itinerary_does_not_leak_provider_dump():
     dump = Exception(DUMP)
@@ -86,3 +117,17 @@ async def test_stream_itinerary_does_not_leak_provider_dump():
     assert EXTRACTION_PROVIDER_BUSY in body
     assert "overloaded_error" not in body
     assert "req_011" not in body
+
+
+@pytest.mark.asyncio
+async def test_stream_itinerary_logs_the_real_message():
+    with patch.object(
+        main_mod, "_distill_article", new=AsyncMock(side_effect=Exception(DUMP))
+    ):
+        with patch.object(main_mod, "_log_extraction") as log:
+            await _collect_sse(
+                main_mod._stream_itinerary(
+                    "https://example.com/a", entry=None, user=None, refresh=False
+                )
+            )
+    assert "overloaded_error" in log.call_args.kwargs["error_detail"]

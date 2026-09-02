@@ -75,7 +75,11 @@ from extraction_cache import (  # noqa: E402
     store_extraction,
     touch_validation,
 )
-from extraction_errors import public_extraction_detail  # noqa: E402
+from extraction_errors import (  # noqa: E402
+    EXTRACTION_GENERIC_FAILURE,
+    log_detail,
+    public_extraction_detail,
+)
 from funnel import router as funnel_router  # noqa: E402
 from instagram import (  # noqa: E402
     INSTAGRAM_PROMPT_PATH,
@@ -202,9 +206,7 @@ def call_claude(
             stop_reason=getattr(final, "stop_reason", None),
             blocks=len(final.content or []),
         )
-        raise ValueError(
-            "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
-        )
+        raise ValueError(EXTRACTION_GENERIC_FAILURE)
     try:
         payload = json.loads(raw)
         coerce_optional_blanks(payload)
@@ -216,9 +218,7 @@ def call_claude(
             error=type(exc).__name__,
             raw_len=len(raw),
         )
-        raise ValueError(
-            "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
-        ) from exc
+        raise ValueError(EXTRACTION_GENERIC_FAILURE) from exc
 
 
 HEARTBEAT_INTERVAL_S = 10.0
@@ -299,6 +299,7 @@ def _log_extraction(
     output_tokens: int | None = None,
     items: int | None = None,
     error_type: str | None = None,
+    error_detail: str | None = None,
     freshness: str | None = None,
     source_kind: str | None = None,
     structured: bool | None = None,
@@ -322,6 +323,8 @@ def _log_extraction(
     }
     if error_type is not None:
         fields["error_type"] = error_type
+    if error_detail is not None:
+        fields["error_detail"] = error_detail
     if freshness is not None:
         fields["freshness"] = freshness
     if source_kind is not None:
@@ -1136,12 +1139,7 @@ async def _stream_itinerary(
             output_tokens=output_tokens,
             error_type=type(e).__name__,
         )
-        yield _sse(
-            "error",
-            {
-                "detail": "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
-            },
-        )
+        yield _sse("error", {"detail": EXTRACTION_GENERIC_FAILURE})
     except Exception as e:
         _log_extraction(
             url=url,
@@ -1152,6 +1150,7 @@ async def _stream_itinerary(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             error_type=type(e).__name__,
+            error_detail=log_detail(e),
         )
         yield _sse("error", {"detail": public_extraction_detail(e)})
 
@@ -1293,13 +1292,8 @@ async def _stream_prewarm(
         yield _sse("error", {"detail": _instagram_error_detail(e)})
     except httpx.HTTPError as e:
         yield _sse("error", {"detail": f"Error fetching article: {e}"})
-    except json.JSONDecodeError as e:
-        yield _sse(
-            "error",
-            {
-                "detail": "No hemos podido destilar esta fuente. Prueba otra vez en unos segundos."
-            },
-        )
+    except json.JSONDecodeError:
+        yield _sse("error", {"detail": EXTRACTION_GENERIC_FAILURE})
     except Exception as e:
         yield _sse("error", {"detail": public_extraction_detail(e)})
 

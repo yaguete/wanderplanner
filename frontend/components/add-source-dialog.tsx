@@ -178,9 +178,10 @@ export function AddSourceErrorState({
   onSelectSuggestion?: (url: string) => void
 }) {
   const dest = destination?.trim() || null
-  const providerBusy =
-    Boolean(message) &&
-    (message === EXTRACTION_PROVIDER_BUSY || looksLikeProviderDump(message))
+  const providerBusy = Boolean(
+    message &&
+      (message === EXTRACTION_PROVIDER_BUSY || looksLikeProviderDump(message)),
+  )
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <AlertCircle className="size-6 text-destructive" aria-hidden />
