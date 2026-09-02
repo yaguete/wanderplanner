@@ -2,6 +2,7 @@
 
 import { CostInput } from "@/components/cost-input"
 import {
+  BookedOrNotChips,
   BookingStatusToggle,
   CancellableDropdown,
   ReservationNeededChips,
@@ -28,6 +29,45 @@ export function ManualItemTaskFields({
   const category = categoryFromItemType(type)
   const showCancellable = cancellableControlVisible(category, routeMode, draft.status)
   const showReservation = type === "activity" || type === "food"
+
+  if (showReservation) {
+    return (
+      <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+        <p className="text-xs font-medium text-foreground">Reserva (opcional)</p>
+        <ReservationNeededChips
+          value={draft.needsReservation}
+          onChange={(needsReservation) =>
+            onChange({
+              ...draft,
+              needsReservation,
+              status:
+                needsReservation === true
+                  ? draft.status === "booked" || draft.status === "paid"
+                    ? draft.status
+                    : null
+                  : null,
+            })
+          }
+        />
+        {draft.needsReservation === true ? (
+          <BookedOrNotChips
+            booked={draft.status === "booked" || draft.status === "paid"}
+            onChange={(booked) =>
+              onChange({
+                ...draft,
+                needsReservation: true,
+                status: booked
+                  ? draft.status === "paid"
+                    ? "paid"
+                    : "booked"
+                  : null,
+              })
+            }
+          />
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
@@ -57,37 +97,6 @@ export function ManualItemTaskFields({
           />
         ) : null}
       </div>
-      {showReservation ? (
-        <ReservationNeededChips
-          value={draft.needsReservation}
-          onChange={(needsReservation) => onChange({ ...draft, needsReservation })}
-        />
-      ) : null}
     </div>
   )
-}
-
-export function emptyManualTaskDraft(): ManualTaskDraft {
-  return {
-    cost: null,
-    status: null,
-    cancellable: null,
-    needsReservation: null,
-  }
-}
-
-export function draftFromTaskState(
-  state: {
-    cost: number | null
-    status: string
-    cancellable: boolean | null
-  } | null,
-): ManualTaskDraft {
-  if (!state) return emptyManualTaskDraft()
-  return {
-    cost: state.cost,
-    status: state.status === "booked" || state.status === "paid" ? state.status : null,
-    cancellable: state.cancellable,
-    needsReservation: state.status === "notNeeded" ? false : null,
-  }
 }

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import {
+  draftFromTaskState,
+  emptyManualTaskDraft,
   omitReturnLegTask,
   resolveManualDraftStatus,
   taskPatchFromManualDraft,
@@ -66,6 +68,72 @@ import {
     needsReservation: true,
   })
   assert.deepEqual(patch, { status: "pending" })
+}
+
+{
+  const booked = taskPatchFromManualDraft({
+    cost: null,
+    status: "booked",
+    cancellable: null,
+    needsReservation: true,
+  })
+  assert.deepEqual(booked, { status: "booked" })
+}
+
+{
+  assert.deepEqual(draftFromTaskState(null), emptyManualTaskDraft())
+  assert.deepEqual(
+    draftFromTaskState({
+      cost: null,
+      status: "pending",
+      cancellable: null,
+    }),
+    {
+      cost: null,
+      status: null,
+      cancellable: null,
+      needsReservation: true,
+    },
+  )
+  assert.deepEqual(
+    draftFromTaskState({
+      cost: 12,
+      status: "booked",
+      cancellable: null,
+    }),
+    {
+      cost: 12,
+      status: "booked",
+      cancellable: null,
+      needsReservation: true,
+    },
+  )
+  assert.deepEqual(
+    draftFromTaskState({
+      cost: 40,
+      status: "paid",
+      cancellable: false,
+    }),
+    {
+      cost: 40,
+      status: "paid",
+      cancellable: false,
+      needsReservation: true,
+    },
+  )
+  assert.deepEqual(
+    draftFromTaskState({
+      cost: null,
+      status: "notNeeded",
+      cancellable: null,
+    }),
+    {
+      cost: null,
+      status: null,
+      cancellable: null,
+      needsReservation: false,
+    },
+  )
 }
 
 assert.equal(omitReturnLegTask({ mirrored: true, leg: "return" }), true)

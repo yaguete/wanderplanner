@@ -21,14 +21,12 @@ import {
   type TransportRouteFormValue,
 } from "@/components/transport-route-form"
 import { ManualFlightSearch } from "@/components/manual-flight-search"
-import {
-  draftFromTaskState,
-  ManualItemTaskFields,
-} from "@/components/manual-item-task-fields"
+import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
 import { cn } from "@/lib/utils"
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { isSyntheticSourceId } from "@/lib/item-provenance"
 import {
+  draftFromTaskState,
   omitReturnLegTask,
   taskPatchFromManualDraft,
   type ManualTaskDraft,

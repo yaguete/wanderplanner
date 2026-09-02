@@ -28,13 +28,14 @@ import {
   type TransportRouteFormValue,
 } from "@/components/transport-route-form"
 import { ManualFlightSearch } from "@/components/manual-flight-search"
-import {
-  draftFromTaskState,
-  ManualItemTaskFields,
-} from "@/components/manual-item-task-fields"
+import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
 import { formatDayPickerLabel } from "@/lib/day-heading"
 import { isSyntheticSourceId } from "@/lib/item-provenance"
-import { taskPatchFromManualDraft, type ManualTaskDraft } from "@/lib/manual-item-task"
+import {
+  draftFromTaskState,
+  taskPatchFromManualDraft,
+  type ManualTaskDraft,
+} from "@/lib/manual-item-task"
 import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
 import { seedTransportForm } from "@/lib/transport-routes"
 import type {

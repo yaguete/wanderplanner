@@ -25,6 +25,37 @@ export type ManualTaskDraft = {
   needsReservation: boolean | null
 }
 
+export function emptyManualTaskDraft(): ManualTaskDraft {
+  return {
+    cost: null,
+    status: null,
+    cancellable: null,
+    needsReservation: null,
+  }
+}
+
+export function draftFromTaskState(
+  state: {
+    cost: number | null
+    status: string
+    cancellable: boolean | null
+  } | null,
+): ManualTaskDraft {
+  if (!state) return emptyManualTaskDraft()
+  const bookedOrPaid = state.status === "booked" || state.status === "paid"
+  return {
+    cost: state.cost,
+    status: bookedOrPaid ? state.status : null,
+    cancellable: state.cancellable,
+    needsReservation:
+      state.status === "notNeeded"
+        ? false
+        : state.status === "pending" || bookedOrPaid
+          ? true
+          : null,
+  }
+}
+
 /** Ocultar el bloque entero de tarea (no solo el coste) en la vuelta espejada. */
 export function omitReturnLegTask(params: {
   mirrored: boolean

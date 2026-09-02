@@ -149,3 +149,44 @@ export function ReservationNeededChips({
     </div>
   )
 }
+
+/** Reservado | No reservado. Siempre hay uno marcado mientras el grupo está visible. */
+export function BookedOrNotChips({
+  booked,
+  onChange,
+}: {
+  booked: boolean
+  onChange: (booked: boolean) => void
+}) {
+  return (
+    <div
+      className="inline-flex items-center gap-0.5 rounded-md bg-muted p-0.5"
+      role="group"
+      aria-label="¿Ya está reservado?"
+    >
+      <button
+        type="button"
+        aria-pressed={booked}
+        onClick={() => onChange(true)}
+        className={chipClass(booked)}
+      >
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            booked ? "bg-muted-foreground" : "bg-muted-foreground/30",
+          )}
+          aria-hidden
+        />
+        Reservado
+      </button>
+      <button
+        type="button"
+        aria-pressed={!booked}
+        onClick={() => onChange(false)}
+        className={chipClass(!booked)}
+      >
+        No reservado
+      </button>
+    </div>
+  )
+}

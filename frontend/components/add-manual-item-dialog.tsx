@@ -52,14 +52,15 @@ import {
 import { joinStayPlace, splitStayPlace, stayDiscoveryHrefs } from "@/lib/stay-discovery"
 import { bookingOmitsStayDates } from "@/lib/booking-dates"
 import { activityDiscoveryHrefs } from "@/lib/activity-search"
-import { taskPatchFromManualDraft, type ManualTaskDraft } from "@/lib/manual-item-task"
-import { PartnerSearchLink } from "@/components/partner-search-link"
-import { ManualFlightSearch } from "@/components/manual-flight-search"
 import {
   draftFromTaskState,
   emptyManualTaskDraft,
-  ManualItemTaskFields,
-} from "@/components/manual-item-task-fields"
+  taskPatchFromManualDraft,
+  type ManualTaskDraft,
+} from "@/lib/manual-item-task"
+import { PartnerSearchLink } from "@/components/partner-search-link"
+import { ManualFlightSearch } from "@/components/manual-flight-search"
+import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
 
 const ITEM_TYPES: ItemType[] = ["activity", "stay", "food", "transport"]
 
@@ -531,7 +532,15 @@ export function AddManualItemDialog({
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    onClick={() => setType(t)}
+                    onClick={() => {
+                      const simple = t === "activity" || t === "food"
+                      const wasSimple = type === "activity" || type === "food"
+                      if (simple !== wasSimple) {
+                        costRef.current = null
+                        setTaskDraft(emptyManualTaskDraft())
+                      }
+                      setType(t)
+                    }}
                     className={cn(
                       "inline-flex min-w-0 flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-center transition-colors sm:px-2 sm:py-2",
                       selected
