@@ -11,6 +11,7 @@ import { reanchorSpannedStays } from "./item-span"
 import {
   buildTripTasks,
   cancellableApplies,
+  cancellableControlVisible,
   categoryFromBasic,
   categoryFromItemType,
   computeTripTaskTotals,
@@ -166,6 +167,15 @@ assert.equal(cancellableApplies("transport", "car"), false)
 assert.equal(cancellableApplies("transport"), false)
 assert.equal(cancellableApplies("activity"), false)
 assert.equal(cancellableApplies("basic"), false)
+
+assert.equal(cancellableControlVisible("accommodation", null, "paid"), true)
+assert.equal(cancellableControlVisible("accommodation", null, "booked"), false)
+assert.equal(cancellableControlVisible("accommodation", null, "pending"), false)
+assert.equal(cancellableControlVisible("accommodation", null, null), false)
+assert.equal(cancellableControlVisible("transport", "flight", "paid"), true)
+assert.equal(cancellableControlVisible("transport", "flight", "booked"), false)
+assert.equal(cancellableControlVisible("transport", "car", "paid"), false)
+assert.equal(cancellableControlVisible("activity", null, "paid"), false)
 
 assert.equal(isBookableTransportMode("flight"), true)
 assert.equal(isBookableTransportMode("train"), true)

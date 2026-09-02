@@ -96,4 +96,36 @@ assert.equal(omitReturnLegTask({ mirrored: true, leg: null }), false)
   assert.deepEqual(cleared, { status: "pending", cost: null, cancellable: null })
 }
 
+{
+  const bookedWithCancellable = taskPatchFromManualDraft({
+    cost: null,
+    status: "booked",
+    cancellable: true,
+    needsReservation: null,
+  })
+  assert.deepEqual(bookedWithCancellable, { status: "booked" })
+
+  const paidWithCancellable = taskPatchFromManualDraft({
+    cost: 80,
+    status: "paid",
+    cancellable: false,
+    needsReservation: null,
+  })
+  assert.deepEqual(paidWithCancellable, {
+    status: "paid",
+    cost: 80,
+    cancellable: false,
+  })
+
+  const clearedBooked = taskPatchFromManualDraft(
+    { cost: null, status: "booked", cancellable: true, needsReservation: null },
+    { includeCleared: true },
+  )
+  assert.deepEqual(clearedBooked, {
+    status: "booked",
+    cost: null,
+    cancellable: null,
+  })
+}
+
 console.log("manual-item-task.test.ts: ok")

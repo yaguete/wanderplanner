@@ -21,14 +21,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { BookingStatusToggle } from "@/components/task-state-controls"
+import { BookingStatusToggle, CancellableDropdown } from "@/components/task-state-controls"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { CostInput } from "@/components/cost-input"
 import { CountryTasksSection } from "@/components/country-tasks-section"
@@ -50,7 +43,7 @@ import {
 import { groupTasksByCategory } from "@/lib/trip-budget"
 import {
   buildTripTasks,
-  cancellableApplies,
+  cancellableControlVisible,
   computeTripTaskTotals,
   isBookableTransportMode,
   isTaskManaged,
@@ -501,9 +494,11 @@ function TaskRow({
     dayMeta,
     detail: task.detail,
   })
-  const showCancellable =
-    cancellableApplies(task.category, task.route?.mode) &&
-    (status === "booked" || status === "paid")
+  const showCancellable = cancellableControlVisible(
+    task.category,
+    task.route?.mode,
+    status,
+  )
   const cost = task.state?.cost ?? null
   const nights = task.nights && task.nights > 1 ? task.nights : null
   const perNight = cost != null && nights != null ? cost / nights : null
@@ -512,7 +507,10 @@ function TaskRow({
     (task.origin === "basic" && onRemoveBasic)
 
   const toggleStatus = (next: "booked" | "paid" | null) => {
-    onSetTaskState(task.id, { status: next ?? "pending" })
+    onSetTaskState(task.id, {
+      status: next ?? "pending",
+      ...(next !== "paid" ? { cancellable: null } : {}),
+    })
   }
 
   const flightSearch =
@@ -643,58 +641,6 @@ function TaskRow({
         ) : null}
       </div>
     </div>
-  )
-}
-
-function CancellableDropdown({
-  value,
-  onChange,
-}: {
-  value: boolean | null
-  onChange: (next: boolean | null) => void
-}) {
-  const radioValue = value === true ? "yes" : value === false ? "no" : "unset"
-  const triggerLabel =
-    value === true ? "Cancelable" : value === false ? "No cancelable" : "Cancelabilidad"
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
-            "text-muted-foreground hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            value != null && "text-foreground",
-          )}
-          aria-label="Cancelabilidad"
-        >
-          {triggerLabel}
-          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[10.5rem]">
-        <DropdownMenuRadioGroup
-          value={radioValue}
-          onValueChange={(v) => {
-            if (v === "yes") onChange(true)
-            else if (v === "no") onChange(false)
-            else onChange(null)
-          }}
-        >
-          <DropdownMenuRadioItem value="yes" className="text-xs">
-            Cancelable
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="no" className="text-xs">
-            No cancelable
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="unset" className="text-xs">
-            Sin indicar
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }
 

@@ -155,8 +155,8 @@ export interface TripTaskState {
   status: TripTaskStatus
   cost: number | null
   /**
-   * Si la reserva es cancelable. `null` = no aplica o no indicado.
-   * La UI solo lo enseñará en alojamiento y transporte.
+   * Si el pago es cancelable. `null` = no aplica o no indicado.
+   * La UI solo lo enseña en alojamiento y transporte con billete, y solo en Pagado.
    */
   cancellable: boolean | null
   notes: string | null

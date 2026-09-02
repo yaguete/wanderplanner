@@ -210,6 +210,15 @@ export function cancellableApplies(
   return false
 }
 
+/** El control solo se enseña en Pagado; Reservado no lo pinta. */
+export function cancellableControlVisible(
+  category: TripTaskCategory,
+  routeMode: RouteMode | null | undefined,
+  status: TripTaskStatus | null,
+): boolean {
+  return cancellableApplies(category, routeMode) && status === "paid"
+}
+
 function needsTriage(category: TripTaskCategory): boolean {
   return !ALWAYS_ACTIONABLE.has(category)
 }

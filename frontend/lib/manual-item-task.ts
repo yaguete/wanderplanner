@@ -64,7 +64,7 @@ export function taskPatchFromManualDraft(
   else if (opts?.includeCleared) patch.status = "pending"
   if (draft.cost != null) patch.cost = draft.cost
   else if (opts?.includeCleared) patch.cost = null
-  if (draft.cancellable != null) patch.cancellable = draft.cancellable
+  if (status === "paid" && draft.cancellable != null) patch.cancellable = draft.cancellable
   else if (opts?.includeCleared) patch.cancellable = null
 
   if (Object.keys(patch).length === 0) return null

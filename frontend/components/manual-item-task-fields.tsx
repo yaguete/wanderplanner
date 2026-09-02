@@ -3,12 +3,12 @@
 import { CostInput } from "@/components/cost-input"
 import {
   BookingStatusToggle,
-  CancellableChips,
+  CancellableDropdown,
   ReservationNeededChips,
 } from "@/components/task-state-controls"
 import type { ManualTaskDraft } from "@/lib/manual-item-task"
 import type { ItemType, RouteMode } from "@/types/itinerary"
-import { cancellableApplies, categoryFromItemType } from "@/lib/trip-tasks"
+import { cancellableControlVisible, categoryFromItemType } from "@/lib/trip-tasks"
 
 export function ManualItemTaskFields({
   type,
@@ -26,7 +26,7 @@ export function ManualItemTaskFields({
   costAriaLabel?: string
 }) {
   const category = categoryFromItemType(type)
-  const showCancellable = cancellableApplies(category, routeMode)
+  const showCancellable = cancellableControlVisible(category, routeMode, draft.status)
   const showReservation = type === "activity" || type === "food"
 
   return (
@@ -35,7 +35,13 @@ export function ManualItemTaskFields({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <BookingStatusToggle
           value={draft.status}
-          onChange={(status) => onChange({ ...draft, status })}
+          onChange={(status) =>
+            onChange({
+              ...draft,
+              status,
+              cancellable: status === "paid" ? draft.cancellable : null,
+            })
+          }
         />
         <CostInput
           value={draft.cost}
@@ -44,13 +50,13 @@ export function ManualItemTaskFields({
           onChange={(cost) => onChange({ ...draft, cost })}
           ariaLabel={costAriaLabel}
         />
+        {showCancellable ? (
+          <CancellableDropdown
+            value={draft.cancellable}
+            onChange={(cancellable) => onChange({ ...draft, cancellable })}
+          />
+        ) : null}
       </div>
-      {showCancellable ? (
-        <CancellableChips
-          value={draft.cancellable}
-          onChange={(cancellable) => onChange({ ...draft, cancellable })}
-        />
-      ) : null}
       {showReservation ? (
         <ReservationNeededChips
           value={draft.needsReservation}
