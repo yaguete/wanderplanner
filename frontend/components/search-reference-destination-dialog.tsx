@@ -19,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAuth } from "@/lib/auth-context"
 import { SOURCES_HOME_REF } from "@/lib/partner-trip"
 import {
@@ -294,24 +293,21 @@ export function SearchReferenceDestinationButton() {
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            aria-label="Buscar destino"
-            onClick={() => setOpen(true)}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md",
-              "text-muted-foreground transition-colors",
-              "hover:bg-sidebar-accent hover:text-foreground",
-              "outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            )}
-          >
-            <Binoculars className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top">Busca un destino entre tus fuentes</TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        aria-label="Buscar destino"
+        onClick={() => setOpen(true)}
+        className={cn(
+          "inline-flex h-8 w-8 items-center justify-center rounded-md",
+          "text-muted-foreground transition-colors",
+          "hover:bg-sidebar-accent hover:text-foreground",
+          "outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "md:w-auto md:gap-1.5 md:px-2.5",
+        )}
+      >
+        <Binoculars className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden />
+        <span className="hidden text-xs font-medium md:inline">Buscar destino</span>
+      </button>
 
       <SearchReferenceDestinationDialog
         open={open}
