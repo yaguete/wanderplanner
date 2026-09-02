@@ -158,7 +158,7 @@ export function stayDiscoveryHrefs(
   }
 }
 
-/** Separa ciudad y calle de un `region` de stay (alta a mano o legado). */
+/** Separa ciudad y calle de un `region` (stay / activity / food). */
 export function splitStayPlace(region: string | null | undefined): {
   city: string
   address: string

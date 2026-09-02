@@ -162,6 +162,7 @@ export function AddManualItemDialog({
   const editing = existingItem != null
   const addingTransport = type === "transport" && !editing
   const durationKind = itemTakesCalendarSpan(type)
+  const splitsPlace = type === "stay" || type === "activity" || type === "food"
   const showDiscovery =
     !existingItem || isSyntheticSourceId(existingItem.sourceId)
 
@@ -172,16 +173,19 @@ export function AddManualItemDialog({
     setType(nextType)
     setName(seed?.name ?? "")
     setDetail(seed?.detail?.trim() ?? "")
-    const staySplit = nextType === "stay" ? splitStayPlace(seed?.region) : null
-    if (staySplit) {
-      setPlaceQuery(staySplit.city)
-      setAddressQuery(staySplit.address)
-      if (staySplit.address && seed && hasFiniteLngLat(seed.coords)) {
-        setSelectedAddress({ label: staySplit.address, coords: seed.coords })
+    const splitPlace =
+      nextType === "stay" || nextType === "activity" || nextType === "food"
+        ? splitStayPlace(seed?.region)
+        : null
+    if (splitPlace) {
+      setPlaceQuery(splitPlace.city)
+      setAddressQuery(splitPlace.address)
+      if (splitPlace.address && seed && hasFiniteLngLat(seed.coords)) {
+        setSelectedAddress({ label: splitPlace.address, coords: seed.coords })
         setSelectedPlace(null)
       } else if (seed && hasFiniteLngLat(seed.coords)) {
         setSelectedPlace({
-          label: staySplit.city || seed.name,
+          label: splitPlace.city || seed.name,
           coords: seed.coords,
         })
         setSelectedAddress(null)
@@ -266,14 +270,12 @@ export function AddManualItemDialog({
   const handleSubmit = () => {
     if (!canSubmit) return
     const city = selectedPlace?.label ?? placeQuery.trim()
-    const address =
-      type === "stay" ? (selectedAddress?.label ?? addressQuery.trim()) : ""
-    const region =
-      type === "stay"
-        ? joinStayPlace(city, address)
-        : selectedPlace?.label ?? (placeQuery.trim() || null)
+    const address = selectedAddress?.label ?? addressQuery.trim()
+    const region = splitsPlace
+      ? joinStayPlace(city, address)
+      : selectedPlace?.label ?? (placeQuery.trim() || null)
     const coords =
-      (type === "stay" ? selectedAddress?.coords : null) ??
+      (splitsPlace ? selectedAddress?.coords : null) ??
       selectedPlace?.coords ??
       null
     const item: UserDayItem = existingItem
@@ -363,13 +365,16 @@ export function AddManualItemDialog({
           selectedPlaceLabel: selectedPlace?.label ?? null,
           destinationHint,
           addressHint: placeQuery.trim() || null,
-          coords: selectedPlace?.coords ?? null,
+          coords: selectedAddress?.coords ?? selectedPlace?.coords ?? null,
           startDate,
           dayIndex: selectedDayIndex,
           spanDays: nights,
           numTravelers: numTravelers ?? 1,
         })
       : null
+  const hasActivityLinks = Boolean(
+    activityHrefs && (activityHrefs.civitatis || activityHrefs.getYourGuide),
+  )
 
   const dayField = (
     <div className="space-y-2">
@@ -398,19 +403,11 @@ export function AddManualItemDialog({
     ? [selectedPlace.coords.lng, selectedPlace.coords.lat]
     : tripProximity
 
-  const stayPinHint = selectedAddress ? (
-    <p className="text-xs text-muted-foreground">Ubicación fijada en el mapa.</p>
+  const addressPinHint = selectedAddress ? (
+    <p className="text-xs text-muted-foreground">
+      {type === "food" ? "Ubicación guardada." : "Ubicación fijada en el mapa."}
+    </p>
   ) : durationKind && nights >= 2 && !selectedPlace ? (
-    <p className="text-xs text-muted-foreground">
-      Sin una dirección concreta no ancla la jornada en el mapa.
-    </p>
-  ) : null
-
-  const otherPinHint = selectedPlace ? (
-    <p className="text-xs text-muted-foreground">
-      {type === "activity" ? "Ubicación fijada en el mapa." : "Ubicación guardada."}
-    </p>
-  ) : durationKind && nights >= 2 ? (
     <p className="text-xs text-muted-foreground">
       Sin una dirección concreta no ancla la jornada en el mapa.
     </p>
@@ -419,7 +416,7 @@ export function AddManualItemDialog({
   const placeField = (
     <PlaceSuggestInput
       id={placeId}
-      label={type === "stay" ? "Ciudad" : "Ciudad o dirección (opcional)"}
+      label={splitsPlace ? "Ciudad" : "Ciudad o dirección (opcional)"}
       value={placeQuery}
       onValueChange={handleCityChange}
       selected={selectedPlace}
@@ -428,25 +425,23 @@ export function AddManualItemDialog({
       proximity={tripProximity}
       countryCodes={countryCodes}
       autoFocus
-      hint={type === "stay" ? null : otherPinHint}
     />
   )
 
-  const addressField =
-    type === "stay" ? (
-      <PlaceSuggestInput
-        id={addressId}
-        label="Dirección (opcional)"
-        value={addressQuery}
-        onValueChange={handleAddressChange}
-        selected={selectedAddress}
-        onSelect={handleSelectAddress}
-        placeholder="p. ej. Király utca 15"
-        proximity={addressProximity}
-        countryCodes={countryCodes}
-        hint={stayPinHint}
-      />
-    ) : null
+  const addressField = splitsPlace ? (
+    <PlaceSuggestInput
+      id={addressId}
+      label="Dirección (opcional)"
+      value={addressQuery}
+      onValueChange={handleAddressChange}
+      selected={selectedAddress}
+      onSelect={handleSelectAddress}
+      placeholder="p. ej. Király utca 15"
+      proximity={addressProximity}
+      countryCodes={countryCodes}
+      hint={addressPinHint}
+    />
+  ) : null
 
   const durationField = durationKind ? (
     <div className="space-y-2">
@@ -634,26 +629,24 @@ export function AddManualItemDialog({
             </div>
           ) : null}
 
-          {type === "activity" && showDiscovery ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <PartnerSearchLink
-                href={activityHrefs?.civitatis ?? null}
-                label="Buscar en Civitatis"
-                disabledHint={
-                  activityHrefs?.civitatis
-                    ? null
-                    : "Elige una ciudad del desplegable para buscar en Civitatis."
-                }
-              />
-              <PartnerSearchLink
-                href={activityHrefs?.getYourGuide ?? null}
-                label="Buscar en GetYourGuide"
-                disabledHint={
-                  activityHrefs?.getYourGuide
-                    ? null
-                    : "Escribe un destino para buscar en GetYourGuide."
-                }
-              />
+          {type === "activity" && activityHrefs ? (
+            <div className="space-y-1.5">
+              {hasActivityLinks ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <PartnerSearchLink
+                    href={activityHrefs.civitatis}
+                    label="Buscar en Civitatis"
+                  />
+                  <PartnerSearchLink
+                    href={activityHrefs.getYourGuide}
+                    label="Buscar en GetYourGuide"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Escribe una ciudad para buscar actividades.
+                </p>
+              )}
             </div>
           ) : null}
 
