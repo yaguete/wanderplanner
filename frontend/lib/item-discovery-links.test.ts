@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { ASSISTANT_SOURCE_ID, MANUAL_SOURCE_ID } from "./item-provenance"
 import { dateISOForDayIndex, toISODate } from "./trip-dates"
 import { BOOKING_AFFILIATE_AID } from "./booking-search"
-import { itemDiscoveryLinks, partnerCtaLabel } from "./item-discovery-links"
+import { itemDiscoveryLinks, partnerCtaLabel, taskReserveAction } from "./item-discovery-links"
 
 function futureISO(daysFromToday: number): string {
   const d = new Date()
@@ -192,6 +192,45 @@ assert.equal(partnerCtaLabel("https://operator.example/tour"), "Ver reserva")
   assert.equal(links.kind, "own")
   if (links.kind !== "own") throw new Error("expected own")
   assert.equal(links.hint, "Escribe una ciudad para buscar alojamiento.")
+}
+
+{
+  assert.equal(
+    taskReserveAction({
+      type: "stay",
+      sourceId: SOURCE_ID,
+      affiliateUrl: "https://www.booking.com/hotel/x.html?aid=99",
+    }),
+    "partner",
+  )
+  assert.equal(
+    taskReserveAction({ type: "stay", sourceId: SOURCE_ID, affiliateUrl: null }),
+    "own-search",
+  )
+  assert.equal(
+    taskReserveAction({ type: "stay", sourceId: MANUAL_SOURCE_ID, affiliateUrl: null }),
+    "own-search",
+  )
+  assert.equal(
+    taskReserveAction({ type: "activity", sourceId: ASSISTANT_SOURCE_ID, affiliateUrl: null }),
+    "own-search",
+  )
+  assert.equal(
+    taskReserveAction({
+      type: "stay",
+      sourceId: MANUAL_SOURCE_ID,
+      affiliateUrl: "https://www.booking.com/hotel/x.html?aid=99",
+    }),
+    "partner",
+  )
+  assert.equal(
+    taskReserveAction({ type: "food", sourceId: MANUAL_SOURCE_ID, affiliateUrl: null }),
+    "none",
+  )
+  assert.equal(
+    taskReserveAction({ type: "activity", sourceId: SOURCE_ID, affiliateUrl: "n/a" }),
+    "own-search",
+  )
 }
 
 console.log("item-discovery-links.test.ts: ok")

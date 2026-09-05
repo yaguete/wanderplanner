@@ -54,10 +54,7 @@ export const TASK_STATUS_LABELS: Record<TripTaskStatus, string> = {
   notNeeded: "Sin reserva",
 }
 
-const ITEM_VERBS: Record<ItemType, string> = {
-  stay: "Reservar",
-  activity: "Reservar",
-  food: "Reservar",
+const ITEM_VERBS: Record<Extract<ItemType, "transport">, string> = {
   transport: "Comprar",
 }
 
@@ -119,8 +116,8 @@ function legActionTitle(mode: RouteMode | null | undefined, dest: string): strin
   }
 }
 
-/** Título de fila como acción («Reservar Full Moon Budapest»). Extras: texto del usuario.
- * Las activities (lugar o tour) no llevan verbo: el enlace a la derecha ya lo dice.
+/** Título de fila. Stay / activity / food: solo el nombre (el CTA a la derecha
+ * ya dice «Reservar»). Transporte: verbo según medio. Extras: texto del usuario.
  */
 export function taskActionTitle(
   task: Pick<
@@ -143,7 +140,7 @@ export function taskActionTitle(
 
   const kind = task.sourceKind
   if (isItemType(kind)) {
-    if (kind === "activity") return task.title
+    if (kind === "stay" || kind === "activity" || kind === "food") return task.title
     return `${ITEM_VERBS[kind]} ${task.title}`
   }
   if (task.origin === "basic" && isBasicCategory(kind)) {

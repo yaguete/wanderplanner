@@ -1,6 +1,9 @@
 /**
- * Precedencia de CTAs de reserva en el formulario de ítem: el enlace del
- * autor XOR los buscadores propios. Puro; el diálogo solo pinta.
+ * Precedencia de CTAs de reserva: el enlace del autor XOR los buscadores
+ * propios. Puro; el diálogo solo pinta.
+ *
+ * Superficies: formulario de ítem, y «Reservar» en Tareas (`taskReserveAction`:
+ * partner → href; stay/activity sin enlace → diálogo con el pack).
  *
  * `affiliate="partner"` va a mano — `classifyOutboundAffiliate` en `auto`
  * marcaría un Civitatis del bloguero como `"none"`, y el `aid=1006` de La
@@ -145,4 +148,19 @@ export function itemDiscoveryLinks(input: ItemDiscoveryLinksInput): ItemDiscover
   }
 
   return { kind: "none" }
+}
+
+/**
+ * Qué pinta «Reservar» en Tareas: un href del autor, o el pack propio en un
+ * diálogo. Stay y activity sin `affiliateUrl` (fuente, asistente o a mano)
+ * abren el diálogo; food/transport/básicos sin enlace no tienen pack.
+ */
+export function taskReserveAction(params: {
+  type: string
+  sourceId?: string | null
+  affiliateUrl?: string | null
+}): "partner" | "own-search" | "none" {
+  if (sanitizeAffiliateUrl(params.affiliateUrl)) return "partner"
+  if (params.type === "stay" || params.type === "activity") return "own-search"
+  return "none"
 }

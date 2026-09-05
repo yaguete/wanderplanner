@@ -24,7 +24,7 @@ function task(
 // Verbos por ItemType.
 assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "stay", title: "Full Moon Budapest" })),
-  "Reservar Full Moon Budapest",
+  "Full Moon Budapest",
 )
 assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "transport", title: "el coche" })),
@@ -150,7 +150,7 @@ assert.equal(
 )
 assert.equal(
   taskActionTitle(task({ origin: "dayItem", sourceKind: "food", title: "Borkonyha" })),
-  "Reservar Borkonyha",
+  "Borkonyha",
 )
 
 // Verbos por BasicCategory.

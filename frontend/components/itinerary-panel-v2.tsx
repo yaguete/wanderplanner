@@ -1270,6 +1270,7 @@ export default function ItineraryPanel({
             onAddExtraTask={handleAddExtraTask}
             onRemoveExtraTask={handleRemoveExtraTask}
             onRemoveBasic={handleRemoveBasic}
+            sources={tripSources}
             countryTasks={
               categoryView === "basics"
                 ? {

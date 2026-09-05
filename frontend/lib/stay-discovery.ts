@@ -41,6 +41,7 @@ import { isSyntheticSourceId } from "@/lib/item-provenance"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
 import { bookingOmitsStayDates, stayDatesFromDayIndexes } from "@/lib/booking-dates"
 import { stayFormSearchHref } from "@/lib/booking-search"
+import { collectCountryCodesFromHint, getCountryByCode } from "@/lib/countries"
 
 const AIRBNB_SEARCH_ORIGIN = "https://www.airbnb.es/s/homes"
 const HOME_EXCHANGE_SEARCH_ORIGIN = "https://www.homeexchange.com"
@@ -190,6 +191,56 @@ export function splitStayPlace(region: string | null | undefined): {
     address: raw.slice(0, comma).trim(),
     city: raw.slice(comma + 1).trim(),
   }
+}
+
+function englishCountryName(code: string): string | null {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) ?? null
+  } catch {
+    return null
+  }
+}
+
+function captionAlreadyHasCountry(place: string, code: string): boolean {
+  const names = [getCountryByCode(code)?.name, englishCountryName(code)].filter(
+    (n): n is string => Boolean(n),
+  )
+  const n = place.toLocaleLowerCase("es")
+  return names.some((name) => n.includes(name.toLocaleLowerCase("es")))
+}
+
+/**
+ * Subtítulo de lugar: ciudad (primer segmento de `region`) + país en español.
+ * El país sale de la propia región si se reconoce; si no, de `extraHints`
+ * (p. ej. el área de la fuente) o del código único del viaje.
+ */
+export function formatItemPlaceCaption(params: {
+  region?: string | null
+  countryCodes?: readonly string[] | null
+  extraHints?: readonly (string | null | undefined)[]
+}): string {
+  const { city: regionCity } = splitStayPlace(params.region)
+  const city = firstCommaSegment(regionCity || params.region?.trim() || "")
+  const hintCodes = [
+    ...new Set(
+      [params.region, ...(params.extraHints ?? [])].flatMap((h) =>
+        collectCountryCodesFromHint(h).map((c) => c.toUpperCase()),
+      ),
+    ),
+  ]
+  const tripCodes = [
+    ...new Set(
+      (params.countryCodes ?? [])
+        .map((c) => c.trim().toUpperCase())
+        .filter((c) => c.length === 2),
+    ),
+  ]
+  const code =
+    hintCodes.length === 1 ? hintCodes[0]! : tripCodes.length === 1 ? tripCodes[0]! : null
+  const country = code ? (getCountryByCode(code)?.name ?? "") : ""
+  if (!city) return country
+  if (!country || captionAlreadyHasCountry(city, code)) return city
+  return `${city}, ${country}`
 }
 
 /** Persiste ciudad ± calle en `UserDayItem.region`. */

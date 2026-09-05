@@ -23,11 +23,13 @@ import {
 } from "@/components/ui/collapsible"
 import { BookingStatusToggle, CancellableDropdown } from "@/components/task-state-controls"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
+import { ReserveSearchDialog } from "@/components/reserve-search-dialog"
 import { CostInput } from "@/components/cost-input"
 import { CountryTasksSection } from "@/components/country-tasks-section"
 import { EmptyState } from "@/components/empty-state"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { stayReserveHref } from "@/lib/booking-search"
+import { taskReserveAction } from "@/lib/item-discovery-links"
 import { outbound } from "@/lib/funnel-analytics"
 import { TASK_CATEGORY_ICONS, itemTypeIcon } from "@/lib/item-styles"
 import { cn } from "@/lib/utils"
@@ -51,6 +53,7 @@ import {
   type TripTaskTotals,
 } from "@/lib/trip-tasks"
 import { flightSearchHrefForItem } from "@/lib/flight-search"
+import { resolveTripCountryCodes } from "@/lib/countries"
 import type { Source, Trip, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
 
 export type TripTasksPanelProps = {
@@ -102,6 +105,8 @@ export type TripTasksPanelProps = {
     onDismiss: (taskId: string) => void
     onReevaluate: (activeCountryCodes: string[]) => void
   }
+  /** Fuentes del viaje: país del subtítulo de «Reservar» y área de cada ítem. */
+  sources?: Pick<Source, "id" | "area" | "items">[]
 }
 
 function useTaskTotals(
@@ -276,10 +281,12 @@ export function TripTasksPanel({
   extraDialogOpen: controlledOpen,
   onExtraDialogOpenChange,
   countryTasks,
+  sources = [],
 }: TripTasksPanelProps) {
   const [internalOpen, setInternalOpen] = useState(false)
   const extraDialogOpen = controlledOpen ?? internalOpen
   const setExtraDialogOpen = onExtraDialogOpenChange ?? setInternalOpen
+  const [reserveTask, setReserveTask] = useState<DerivedTripTask | null>(null)
 
   const categorySet = useMemo(() => new Set(categories), [categories])
 
@@ -393,6 +400,15 @@ export function TripTasksPanel({
                                 }
                               : undefined
                           }
+                          onOpenReserveSearch={
+                            taskReserveAction({
+                              type: task.sourceKind,
+                              sourceId: task.sourceId,
+                              affiliateUrl: task.affiliateUrl,
+                            }) === "own-search"
+                              ? () => setReserveTask(task)
+                              : undefined
+                          }
                         />
                       </li>
                     ))}
@@ -428,6 +444,26 @@ export function TripTasksPanel({
         onSubmit={onAddExtraTask}
         defaultCategory={defaultCategory}
       />
+      {reserveTask &&
+      (reserveTask.sourceKind === "stay" || reserveTask.sourceKind === "activity") ? (
+        <ReserveSearchDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setReserveTask(null)
+          }}
+          title={reserveTask.title}
+          type={reserveTask.sourceKind}
+          sourceId={reserveTask.sourceId}
+          item={findTaskDayItem(trip, reserveTask)?.item ?? null}
+          startDate={trip.startDate}
+          dayIndexes={reserveTask.dayIndexes}
+          nights={reserveTask.nights}
+          currency={trip.currency || "EUR"}
+          numTravelers={trip.numTravelers}
+          countryCodes={resolveTripCountryCodes(trip, sources)}
+          extraHints={sources.map((s) => s.area)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -472,6 +508,7 @@ function TaskRow({
   onRemoveExtraTask,
   onRemoveBasic,
   onEditTransport,
+  onOpenReserveSearch,
 }: {
   task: DerivedTripTask
   trip: Pick<Trip, "startDate" | "numDays" | "numTravelers" | "days">
@@ -483,6 +520,7 @@ function TaskRow({
   onRemoveExtraTask?: (taskId: string) => void
   onRemoveBasic?: (basicIds: string[]) => void
   onEditTransport?: () => void
+  onOpenReserveSearch?: () => void
 }) {
   const status = task.state?.status ?? "pending"
   const managed = isTaskManaged(task.state)
@@ -523,17 +561,30 @@ function TaskRow({
         })
       : null
 
+  const reserveAction = taskReserveAction({
+    type: task.sourceKind,
+    sourceId: task.sourceId,
+    affiliateUrl: task.affiliateUrl,
+  })
   const reserveHref =
-    stayReserveHref({
-      type: task.sourceKind,
-      name: task.title,
-      sourceId: task.sourceId,
-      affiliateUrl: task.affiliateUrl,
-      startDate,
-      dayIndexes: task.dayIndexes,
-      currency,
-      numTravelers: trip.numTravelers,
-    }) ?? task.affiliateUrl
+    reserveAction === "partner"
+      ? stayReserveHref({
+          type: task.sourceKind,
+          name: task.title,
+          sourceId: task.sourceId,
+          affiliateUrl: task.affiliateUrl,
+          startDate,
+          dayIndexes: task.dayIndexes,
+          currency,
+          numTravelers: trip.numTravelers,
+        }) ?? task.affiliateUrl
+      : null
+  const reserveLabel =
+    task.category === "basic" || task.origin === "basic"
+      ? "Contratar"
+      : task.category === "activity"
+        ? "Comprar o reservar"
+        : "Reservar"
 
   return (
     <div className={cn("flex flex-col gap-2 pb-3", compactTop ? "pt-1" : "pt-3")}>
@@ -548,7 +599,7 @@ function TaskRow({
             >
               {taskActionTitle(task)}
             </p>
-            {reserveHref ? (
+            {!managed && reserveHref ? (
               <a
                 href={reserveHref}
                 target="_blank"
@@ -557,19 +608,26 @@ function TaskRow({
                 onClick={() =>
                   outbound(reserveHref, {
                     surface: "task_row",
-                    affiliate: task.affiliateUrl ? "partner" : "auto",
+                    affiliate: "partner",
                   })
                 }
               >
-                {task.category === "basic" || task.origin === "basic"
-                  ? "Contratar"
-                  : task.category === "activity"
-                    ? "Comprar o reservar"
-                    : "Reservar"}
+                {reserveLabel}
                 <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
               </a>
+            ) : !managed && onOpenReserveSearch ? (
+              <button
+                type="button"
+                className="wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium"
+                onClick={onOpenReserveSearch}
+              >
+                {reserveLabel}
+                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+              </button>
             ) : null}
-            {flightSearch ? <FlightSearchLink search={flightSearch} showCodes /> : null}
+            {!managed && flightSearch ? (
+              <FlightSearchLink search={flightSearch} showCodes />
+            ) : null}
           </div>
           {meta ? (
             <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{meta}</p>

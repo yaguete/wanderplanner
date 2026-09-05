@@ -4,6 +4,7 @@ import { dateISOForDayIndex, toISODate } from "./trip-dates"
 import {
   buildAirbnbSearchUrl,
   buildHomeExchangeSearchUrl,
+  formatItemPlaceCaption,
   joinStayPlace,
   splitStayPlace,
   stayDiscoveryHrefs,
@@ -210,6 +211,52 @@ assert.equal(buildHomeExchangeSearchUrl({ destination: "  " }), null)
     "Király utca 15, Budapest",
   )
   assert.equal(joinStayPlace("  ", "  "), null)
+}
+
+{
+  assert.equal(formatItemPlaceCaption({ region: null, countryCodes: [] }), "")
+  assert.equal(
+    formatItemPlaceCaption({ region: "Budapest", countryCodes: ["HU"] }),
+    "Budapest, Hungría",
+  )
+  assert.equal(
+    formatItemPlaceCaption({ region: "Budapest, Hungría", countryCodes: ["HU"] }),
+    "Budapest, Hungría",
+  )
+  assert.equal(
+    formatItemPlaceCaption({
+      region: "Király utca 15, Budapest",
+      countryCodes: ["HU"],
+    }),
+    "Budapest, Hungría",
+  )
+  assert.equal(
+    formatItemPlaceCaption({
+      region: "Anchorage, Alaska, United States",
+      countryCodes: ["US"],
+    }),
+    "Anchorage, Estados Unidos",
+  )
+  assert.equal(
+    formatItemPlaceCaption({ region: "Edimburgo", countryCodes: [] }),
+    "Edimburgo",
+  )
+  assert.equal(
+    formatItemPlaceCaption({ region: "Vancouver", countryCodes: ["US", "CA"] }),
+    "Vancouver",
+  )
+  assert.equal(
+    formatItemPlaceCaption({ region: "", countryCodes: ["ES"] }),
+    "España",
+  )
+  assert.equal(
+    formatItemPlaceCaption({
+      region: "Anchorage",
+      countryCodes: [],
+      extraHints: ["Alaska, Estados Unidos"],
+    }),
+    "Anchorage, Estados Unidos",
+  )
 }
 
 console.log("stay-discovery.test.ts: ok")
