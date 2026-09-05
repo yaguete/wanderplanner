@@ -1,5 +1,6 @@
 "use client"
 
+import { createElement } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,7 +13,7 @@ import {
 import { PartnerSearchLink } from "@/components/partner-search-link"
 import { bookingOmitsStayDates } from "@/lib/booking-dates"
 import { itemDiscoveryLinks } from "@/lib/item-discovery-links"
-import { ITEM_COLORS, ITEM_LABELS, itemTypeIcon } from "@/lib/item-styles"
+import { ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { formatItemPlaceCaption, splitStayPlace } from "@/lib/stay-discovery"
 import { cn } from "@/lib/utils"
 import type { ItemType, UserDayItem } from "@/types/itinerary"
@@ -46,7 +47,6 @@ export function ReserveSearchDialog({
   countryCodes?: readonly string[] | null
   extraHints?: readonly (string | null | undefined)[]
 }) {
-  const TitleIcon = itemTypeIcon(type, { affiliateUrl: item?.affiliateUrl })
   const placeCaption = formatItemPlaceCaption({
     region: item?.region,
     countryCodes,
@@ -90,10 +90,10 @@ export function ReserveSearchDialog({
       <DialogContent className="sm:max-w-md" hideClose>
         <DialogHeader>
           <DialogTitle className="flex items-start gap-2 text-lg font-semibold leading-snug tracking-tight">
-            <TitleIcon
-              className={cn("mt-0.5 h-5 w-5 shrink-0", ITEM_COLORS[type].text)}
-              aria-hidden
-            />
+            {createElement(ITEM_TYPE_ICONS[type], {
+              className: cn("mt-0.5 h-5 w-5 shrink-0", ITEM_COLORS[type].text),
+              "aria-hidden": true,
+            })}
             <span>
               <span className="sr-only">{ITEM_LABELS[type]}. </span>
               {title}
