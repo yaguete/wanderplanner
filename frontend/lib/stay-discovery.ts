@@ -1,8 +1,15 @@
 /**
- * CTAs de alojamiento en el alta a mano (y edición de ítems propios).
- * Booking sigue en [`booking-search.ts`](./booking-search.ts) — tiene `aid`
- * propio. Airbnb y HomeExchange son búsqueda prerellenada **sin** comisión
- * hasta que haya enganche; analogía de Skyscanner en vuelos.
+ * CTAs de alojamiento en el formulario (alta a mano, edición y consolidar
+ * desde fuente). Booking sigue en [`booking-search.ts`](./booking-search.ts)
+ * — tiene `aid` propio. Airbnb y HomeExchange son búsqueda prerellenada
+ * **sin** comisión hasta que haya enganche; analogía de Skyscanner en vuelos.
+ *
+ * Precedencia del formulario:
+ * 1. `affiliateUrl` guardado → no generar búsqueda (el enlace del autor gana).
+ * 2. Sin enlace → nuestros buscadores. En un ítem de fuente hace falta
+ *    `allowFromSource` (solo el diálogo lo pasa). `resolveStayAffiliateUrl`
+ *    de la tarjeta **no** lleva el flag: un stay de fuente sin afiliado no
+ *    pinta Booking en Ruta.
  *
  * El href **no se persiste** en `affiliateUrl`. Fechas y viajeros se pintan
  * aquí, igual que en Booking.
@@ -72,6 +79,11 @@ export type StayDiscoveryInput = {
   numTravelers?: number | null
   affiliateUrl?: string | null
   sourceId?: string | null
+  /**
+   * Enciende los buscadores propios en un ítem de fuente **sin** `affiliateUrl`.
+   * Default off: sin flag, `sourceId` real → `null` (la tarjeta no cambia).
+   */
+  allowFromSource?: boolean
 }
 
 /**
@@ -129,14 +141,20 @@ export function buildHomeExchangeSearchUrl(params: {
 }
 
 /**
- * CTAs de descubrimiento. `null` = no pintar (enlace guardado o ítem de fuente).
- * Cada href interno puede ser `null` si falta destino.
+ * CTAs de descubrimiento. `null` = no pintar (enlace guardado, o fuente
+ * sin `allowFromSource`). Cada href interno puede ser `null` si falta destino.
  */
 export function stayDiscoveryHrefs(
   params: StayDiscoveryInput,
 ): StayDiscoveryHrefs | null {
   if (sanitizeAffiliateUrl(params.affiliateUrl)) return null
-  if (params.sourceId && !isSyntheticSourceId(params.sourceId)) return null
+  if (
+    params.sourceId &&
+    !isSyntheticSourceId(params.sourceId) &&
+    !params.allowFromSource
+  ) {
+    return null
+  }
 
   const dates = paintDates(params.startDate, params.dayIndexes)
   const adults = params.numTravelers ?? 1

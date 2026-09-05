@@ -1301,8 +1301,10 @@ export default function ItineraryPanel({
         initialType={manualDialogInitialType}
         countryCodes={mapCountries}
         destinationHint={mapDestHint}
-        existingItem={manualDialogExisting}
+        seedItem={manualDialogExisting}
         existingDayId={manualDialogExisting ? manualDialogDayId : null}
+        mode={manualDialogExisting ? "edit" : "add"}
+        onAddDay={() => addDay(tripId)}
         numTravelers={trip.numTravelers}
         currency={trip.currency}
         existingTask={

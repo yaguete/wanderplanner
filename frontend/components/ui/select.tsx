@@ -113,23 +113,66 @@ SelectLabel.displayName = SelectPrimitive.Label.displayName
 
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    /** Fuera de `ItemText`: Radix no lo clona en el trigger. */
+    hint?: React.ReactNode
+    alreadyHere?: boolean
+  }
+>(({ className, children, hint, alreadyHere, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
+    aria-label={
+      alreadyHere && typeof children === 'string'
+        ? `${children}, ya añadido`
+        : undefined
+    }
     className={cn(
-      'relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex w-full cursor-default select-none rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      hint ? 'items-start' : 'items-center',
+      alreadyHere && 'data-[disabled]:opacity-100',
       className,
     )}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span
+      className={cn(
+        'absolute left-2 flex h-3.5 w-3.5 items-center justify-center',
+        hint ? 'top-1.5' : 'top-1/2 -translate-y-1/2',
+      )}
+    >
       <SelectPrimitive.ItemIndicator>
         <Check className="h-4 w-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
 
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <span className="min-w-0 flex-1">
+      <SelectPrimitive.ItemText>
+        <span className={alreadyHere ? 'text-muted-foreground/70' : undefined}>
+          {children}
+        </span>
+      </SelectPrimitive.ItemText>
+      {hint ? (
+        <span
+          className={cn(
+            'mt-0.5 line-clamp-1 block text-xs',
+            alreadyHere ? 'text-muted-foreground/50' : 'text-muted-foreground',
+          )}
+        >
+          {hint}
+        </span>
+      ) : null}
+    </span>
+    {alreadyHere ? (
+      <span
+        className={cn(
+          'ml-2 inline-flex shrink-0 items-center gap-1 text-xs font-medium text-success',
+          hint ? 'self-start pt-0.5' : 'self-center',
+        )}
+      >
+        <Check className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+        ya añadido
+      </span>
+    ) : null}
   </SelectPrimitive.Item>
 ))
 SelectItem.displayName = SelectPrimitive.Item.displayName

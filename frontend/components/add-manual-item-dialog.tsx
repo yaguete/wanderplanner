@@ -1,7 +1,13 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
+import { ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -13,21 +19,16 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
+import { ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { isSyntheticSourceId, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import { geocodeFreeText } from "@/lib/mapbox"
 import {
   PlaceSuggestInput,
   type SelectedPlace,
 } from "@/components/place-suggest-input"
+import { DayPickerSelect } from "@/components/day-picker-select"
+import { firstDayIdWithoutSourceItem } from "@/lib/day-heading"
 import type {
   ItemType,
   RouteMode,
@@ -36,8 +37,6 @@ import type {
   UserDay,
   UserDayItem,
 } from "@/types/itinerary"
-import { formatDayPickerLabel } from "@/lib/day-heading"
-import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
 import {
   emptyEndpoint,
   TransportRouteForm,
@@ -49,9 +48,9 @@ import {
   parseSpanDays,
   spanDaysForWrite,
 } from "@/lib/item-span"
-import { joinStayPlace, splitStayPlace, stayDiscoveryHrefs } from "@/lib/stay-discovery"
+import { joinStayPlace, splitStayPlace } from "@/lib/stay-discovery"
 import { bookingOmitsStayDates } from "@/lib/booking-dates"
-import { activityDiscoveryHrefs } from "@/lib/activity-search"
+import { itemDiscoveryLinks } from "@/lib/item-discovery-links"
 import {
   draftFromTaskState,
   emptyManualTaskDraft,
@@ -61,6 +60,7 @@ import {
 import { PartnerSearchLink } from "@/components/partner-search-link"
 import { ManualFlightSearch } from "@/components/manual-flight-search"
 import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
+import type { OutboundSurface } from "@/lib/funnel-analytics"
 
 const ITEM_TYPES: ItemType[] = ["activity", "stay", "food", "transport"]
 
@@ -78,11 +78,24 @@ const DAY_FIELD_LABELS: Record<ItemType, string> = {
   transport: "Día",
 }
 
+function allDaysOccupiedHint(type: ItemType): string {
+  switch (type) {
+    case "stay":
+      return "Este alojamiento ya está añadido a todos los días de tu viaje."
+    case "activity":
+      return "Esta actividad ya está añadida a todos los días de tu viaje."
+    case "food":
+      return "Este restaurante ya está añadido a todos los días de tu viaje."
+    case "transport":
+      return "Este traslado ya está añadido a todos los días de tu viaje."
+  }
+}
+
 export type AddManualItemDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   days: UserDay[]
-  /** Día preseleccionado al abrir (p. ej. desde empty state). */
+  /** Día preseleccionado al abrir (p. ej. desde empty state o `dayHint`). */
   initialDayId?: string | null
   /** Tipo preseleccionado (p. ej. desde pestaña Actividades / Alojamientos). */
   initialType?: ItemType | null
@@ -110,9 +123,16 @@ export type AddManualItemDialogProps = {
     vendor: string | null
     taskPatch?: Partial<TripTaskState> | null
   }) => void
-  /** Si está, el formulario edita este ítem (conserva id y procedencia). */
-  existingItem?: UserDayItem | null
+  /**
+   * Ítem de partida: edición de uno ya en el viaje, o semilla al consolidar
+   * desde fuente (`userDayItemFromSource`). Conserva id y procedencia.
+   */
+  seedItem?: UserDayItem | null
   existingDayId?: string | null
+  /** `edit` = ya vive en el viaje. Default `add`. */
+  mode?: "add" | "edit"
+  onAddDay?: () => void
+  outboundSurface?: OutboundSurface
 }
 
 export function AddManualItemDialog({
@@ -129,12 +149,15 @@ export function AddManualItemDialog({
   existingTask = null,
   onSubmit,
   onSubmitTransport,
-  existingItem = null,
+  seedItem = null,
   existingDayId = null,
+  mode = "add",
+  onAddDay,
+  outboundSurface = "manual_item",
 }: AddManualItemDialogProps) {
   const id = useId()
   const [type, setType] = useState<ItemType>("activity")
-  const [name, setName] = useState("")
+  const [name, setName] = useState(seedItem?.name ?? "")
   const [dayId, setDayId] = useState("")
   const [detail, setDetail] = useState("")
   const [placeQuery, setPlaceQuery] = useState("")
@@ -146,6 +169,7 @@ export function AddManualItemDialog({
   const [transportCanSubmit, setTransportCanSubmit] = useState(false)
   const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(emptyManualTaskDraft)
   const [liveTransportMode, setLiveTransportMode] = useState<RouteMode | null>(null)
+  const [placeOpen, setPlaceOpen] = useState(false)
 
   const costRef = useRef<number | null>(null)
 
@@ -159,16 +183,29 @@ export function AddManualItemDialog({
 
   const selectedDayIndex = Math.max(0, days.findIndex((d) => d.id === dayId))
   const maxNights = Math.max(1, days.length - selectedDayIndex)
-  const editing = existingItem != null
-  const addingTransport = type === "transport" && !editing
+  const seeded = seedItem != null
+  const persisted = mode === "edit" && existingDayId != null
+  const addingTransport = type === "transport" && !seeded
   const durationKind = itemTakesCalendarSpan(type)
   const splitsPlace = type === "stay" || type === "activity" || type === "food"
-  const showDiscovery =
-    !existingItem || isSyntheticSourceId(existingItem.sourceId)
+  const fromSource = Boolean(seedItem && !isSyntheticSourceId(seedItem.sourceId))
+  const fromSourceAdd = fromSource && !persisted
+  const TitleIcon = ITEM_TYPE_ICONS[type]
+  const alreadyOnSelectedDay =
+    fromSourceAdd &&
+    seedItem != null &&
+    (days.find((d) => d.id === dayId)?.items.some(
+      (it) => it.sourceItemId === seedItem.sourceItemId,
+    ) ?? false)
+  const allDaysOccupied =
+    fromSourceAdd &&
+    seedItem != null &&
+    days.length > 0 &&
+    firstDayIdWithoutSourceItem(days, seedItem.sourceItemId) == null
 
   useEffect(() => {
     if (!open) return
-    const seed = existingItem
+    const seed = seedItem
     const nextType = seed?.type ?? initialType ?? "activity"
     setType(nextType)
     setName(seed?.name ?? "")
@@ -212,20 +249,29 @@ export function AddManualItemDialog({
     const seededDraft = draftFromTaskState(existingTask)
     setTaskDraft(seededDraft)
     costRef.current = seededDraft.cost
-    const preferred =
-      (seed && existingDayId && days.some((d) => d.id === existingDayId) && existingDayId) ||
-      (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
-      days[0]?.id ||
-      ""
+    setPlaceOpen(false)
+    const fromSourceSeed =
+      Boolean(seed && !isSyntheticSourceId(seed.sourceId)) &&
+      !(mode === "edit" && existingDayId != null)
+    const preferred = fromSourceSeed
+      ? (firstDayIdWithoutSourceItem(days, seed?.sourceItemId) ?? "")
+      : (seed && existingDayId && days.some((d) => d.id === existingDayId) && existingDayId) ||
+        (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
+        days[0]?.id ||
+        ""
     setDayId(preferred)
 
     setTripProximity(null)
-    const dest = destinationHint?.trim()
-    const codes = countryCodes.filter((c) => c.trim().length === 2)
-    if (dest) {
-      void geocodeFreeText(dest, { countryCodes: codes.length ? codes : undefined }).then((p) => {
-        setTripProximity(p)
-      })
+    if (seed && hasFiniteLngLat(seed.coords)) {
+      setTripProximity([seed.coords.lng, seed.coords.lat])
+    } else {
+      const dest = destinationHint?.trim()
+      const codes = countryCodes.filter((c) => c.trim().length === 2)
+      if (dest) {
+        void geocodeFreeText(dest, { countryCodes: codes.length ? codes : undefined }).then((p) => {
+          setTripProximity(p)
+        })
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open
   }, [open])
@@ -235,7 +281,12 @@ export function AddManualItemDialog({
     setNights((n) => Math.min(Math.max(1, n), maxNights))
   }, [durationKind, maxNights])
 
-  const canSubmit = name.trim().length > 0 && dayId.length > 0 && days.some((d) => d.id === dayId)
+  const canSubmit =
+    name.trim().length > 0 &&
+    dayId.length > 0 &&
+    days.some((d) => d.id === dayId) &&
+    !alreadyOnSelectedDay &&
+    !allDaysOccupied
 
   const handleSelectCity = (place: SelectedPlace) => {
     if (selectedPlace && selectedPlace.label !== place.label) {
@@ -278,9 +329,9 @@ export function AddManualItemDialog({
       (splitsPlace ? selectedAddress?.coords : null) ??
       selectedPlace?.coords ??
       null
-    const item: UserDayItem = existingItem
+    const item: UserDayItem = seedItem
       ? {
-          ...existingItem,
+          ...seedItem,
           name: name.trim(),
           detail: detail.trim() ? detail.trim() : null,
           region,
@@ -324,79 +375,81 @@ export function AddManualItemDialog({
     onOpenChange(false)
   }
 
-  const title = editing
+  const title = persisted
     ? `Editar ${ITEM_LABELS[type].toLowerCase()}`
-    : type === "stay"
-      ? "Añadir alojamiento"
-      : type === "activity"
-        ? "Añadir actividad"
-        : type === "food"
-          ? "Añadir restaurante"
-          : type === "transport"
-            ? "Añadir traslado"
-            : "Añadir ítem"
+    : fromSourceAdd && name.trim()
+      ? name.trim()
+      : type === "stay"
+        ? "Añadir alojamiento"
+        : type === "activity"
+          ? "Añadir actividad"
+          : type === "food"
+            ? "Añadir restaurante"
+            : type === "transport"
+              ? "Añadir traslado"
+              : "Añadir ítem"
+
+  const descriptionText = persisted
+    ? durationKind
+      ? "Cambia el nombre, el día, el lugar o la duración."
+      : "Cambia el nombre, el día o el lugar."
+    : addingTransport
+      ? "Define origen, destino y medio de transporte si lo sabes."
+      : seeded
+        ? type === "stay"
+          ? "Elige el día de entrada y, si quieres, reserva o anota el coste."
+          : type === "activity"
+            ? "Elige el día de inicio y, si quieres, reserva o deja una nota."
+            : "Elige el día y, si quieres, deja una nota o el estado de la reserva."
+        : "Añade a tu viaje elementos que no encuentras en tus fuentes."
 
   const stayDestination = selectedPlace?.label?.trim() || placeQuery.trim() || destinationHint?.trim() || ""
   const stayDayIndexes = Array.from(
     { length: Math.min(nights, maxNights) },
     (_, i) => selectedDayIndex + i,
   )
-  const stayHrefs =
-    showDiscovery && type === "stay"
-      ? stayDiscoveryHrefs({
-          destination: stayDestination,
-          startDate,
-          dayIndexes: stayDayIndexes,
-          currency,
-          numTravelers: numTravelers ?? 1,
-          affiliateUrl: existingItem?.affiliateUrl,
-          sourceId: existingItem?.sourceId ?? MANUAL_SOURCE_ID,
-        })
-      : null
-  // Los tres cuelgan del mismo destino: o hay buscadores, o hay pista.
+  const discovery = addingTransport
+    ? { kind: "none" as const }
+    : itemDiscoveryLinks({
+        type,
+        affiliateUrl: seedItem?.affiliateUrl,
+        vendor: seedItem?.vendor,
+        sourceId: seedItem?.sourceId ?? MANUAL_SOURCE_ID,
+        allowFromSource: fromSource,
+        destination: stayDestination,
+        selectedPlaceLabel: selectedPlace?.label ?? null,
+        destinationHint,
+        addressHint: placeQuery.trim() || null,
+        coords: selectedAddress?.coords ?? selectedPlace?.coords ?? null,
+        startDate,
+        dayIndexes: stayDayIndexes,
+        dayIndex: selectedDayIndex,
+        spanDays: nights,
+        currency,
+        numTravelers: numTravelers ?? 1,
+      })
+  const ownStay = discovery.kind === "own" ? discovery.stay : undefined
+  const ownActivity = discovery.kind === "own" ? discovery.activity : undefined
   const hasStayLinks = Boolean(
-    stayHrefs && (stayHrefs.booking || stayHrefs.airbnb || stayHrefs.homeExchange),
+    ownStay && (ownStay.booking || ownStay.airbnb || ownStay.homeExchange),
   )
-  const activityHrefs =
-    showDiscovery && type === "activity"
-      ? activityDiscoveryHrefs({
-          sourceId: existingItem?.sourceId ?? MANUAL_SOURCE_ID,
-          affiliateUrl: existingItem?.affiliateUrl,
-          selectedPlaceLabel: selectedPlace?.label ?? null,
-          destinationHint,
-          addressHint: placeQuery.trim() || null,
-          coords: selectedAddress?.coords ?? selectedPlace?.coords ?? null,
-          startDate,
-          dayIndex: selectedDayIndex,
-          spanDays: nights,
-          numTravelers: numTravelers ?? 1,
-        })
-      : null
   const hasActivityLinks = Boolean(
-    activityHrefs && (activityHrefs.civitatis || activityHrefs.getYourGuide),
+    ownActivity && (ownActivity.civitatis || ownActivity.getYourGuide),
   )
 
   const dayField = (
-    <div className="space-y-2">
-      <Label htmlFor={dayFieldId}>
-        {addingTransport ? "Día del traslado" : DAY_FIELD_LABELS[type]}
-      </Label>
-      <Select value={dayId} onValueChange={setDayId}>
-        <SelectTrigger id={dayFieldId} className="w-full">
-          <SelectValue placeholder="Elige un día" />
-        </SelectTrigger>
-        <SelectContent>
-          {days.map((day, index) => (
-            <SelectItem key={day.id} value={day.id}>
-              {formatDayPickerLabel(
-                index,
-                formatDayDateShort(dateISOForDayIndex(startDate, index)),
-              )}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <DayPickerSelect
+      id={dayFieldId}
+      label={addingTransport ? "Día del traslado" : DAY_FIELD_LABELS[type]}
+      days={days}
+      startDate={startDate}
+      value={dayId}
+      onValueChange={setDayId}
+      sourceItemId={fromSourceAdd && seedItem ? seedItem.sourceItemId : null}
+      onAddDay={onAddDay}
+      disabled={allDaysOccupied}
+      occupiedHint={allDaysOccupied ? allDaysOccupiedHint(type) : null}
+    />
   )
 
   const addressProximity: [number, number] | null = selectedPlace
@@ -424,7 +477,7 @@ export function AddManualItemDialog({
       placeholder="p. ej. Budapest"
       proximity={tripProximity}
       countryCodes={countryCodes}
-      autoFocus
+      autoFocus={!seeded}
     />
   )
 
@@ -442,6 +495,42 @@ export function AddManualItemDialog({
       hint={addressPinHint}
     />
   ) : null
+
+  const placeSummary = [placeQuery.trim(), addressQuery.trim()].filter(Boolean).join(" · ")
+  const placeCollapsible = (
+    <Collapsible open={placeOpen} onOpenChange={setPlaceOpen}>
+      <div className="rounded-lg border border-border/70 bg-muted/20">
+        <CollapsibleTrigger
+          className={cn(
+            "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">
+              {splitsPlace ? "Ciudad y dirección" : "Ciudad o dirección"}
+            </span>
+            {!placeOpen ? (
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {placeSummary || "Opcional"}
+              </span>
+            ) : null}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              placeOpen && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 px-3 pb-3">
+          {placeField}
+          {addressField}
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  )
 
   const durationField = durationKind ? (
     <div className="space-y-2">
@@ -471,7 +560,7 @@ export function AddManualItemDialog({
   const budgetFields = (
     <ManualItemTaskFields
       type={addingTransport ? "transport" : type}
-      routeMode={addingTransport ? liveTransportMode : existingItem?.route?.mode}
+      routeMode={addingTransport ? liveTransportMode : seedItem?.route?.mode}
       currency={currency}
       draft={taskDraft}
       onChange={(next) => {
@@ -481,6 +570,69 @@ export function AddManualItemDialog({
     />
   )
 
+  const discoveryBlock =
+    discovery.kind === "partner" ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <PartnerSearchLink
+          href={discovery.href}
+          label={discovery.label}
+          affiliate="partner"
+          surface={outboundSurface}
+        />
+      </div>
+    ) : discovery.kind === "own" && ownStay ? (
+      <div className="space-y-1.5">
+        {hasStayLinks ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <PartnerSearchLink
+              href={ownStay.booking}
+              label="Buscar en Booking"
+              surface={outboundSurface}
+            />
+            <PartnerSearchLink
+              href={ownStay.airbnb}
+              label="Buscar en Airbnb"
+              affiliate="none"
+              surface={outboundSurface}
+            />
+            <PartnerSearchLink
+              href={ownStay.homeExchange}
+              label="Buscar en HomeExchange"
+              affiliate="none"
+              surface={outboundSurface}
+            />
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">{discovery.hint}</p>
+        )}
+        {hasStayLinks && bookingOmitsStayDates(startDate, stayDayIndexes) ? (
+          <p className="text-[11px] text-muted-foreground">
+            Sin fechas en el viaje, o con el check-in ya pasado, los
+            buscadores abren el destino sin fechas.
+          </p>
+        ) : null}
+      </div>
+    ) : discovery.kind === "own" && ownActivity ? (
+      <div className="space-y-1.5">
+        {hasActivityLinks ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <PartnerSearchLink
+              href={ownActivity.civitatis}
+              label="Buscar en Civitatis"
+              surface={outboundSurface}
+            />
+            <PartnerSearchLink
+              href={ownActivity.getYourGuide}
+              label="Buscar en GetYourGuide"
+              surface={outboundSurface}
+            />
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">{discovery.hint}</p>
+        )}
+      </div>
+    ) : null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -489,22 +641,27 @@ export function AddManualItemDialog({
         className={addingTransport ? "sm:max-w-lg" : "sm:max-w-md"}
       >
         <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
-          <DialogTitle className="text-lg font-semibold tracking-tight">
-            {title}
+          <DialogTitle className="flex items-start gap-2 text-lg font-semibold leading-snug tracking-tight text-balance">
+            {fromSourceAdd ? (
+              <>
+                <TitleIcon
+                  className={cn("mt-0.5 h-5 w-5 shrink-0", ITEM_COLORS[type].text)}
+                  aria-hidden
+                />
+                <span>
+                  <span className="sr-only">{ITEM_LABELS[type]}. </span>
+                  {title}
+                </span>
+              </>
+            ) : (
+              title
+            )}
           </DialogTitle>
-          <DialogDescription>
-            {editing
-              ? durationKind
-                ? "Cambia el nombre, el día, el lugar o la duración."
-                : "Cambia el nombre, el día o el lugar."
-              : addingTransport
-                ? "Define origen, destino y medio de transporte si lo sabes."
-                : "Añade a tu viaje elementos que no encuentras en tus fuentes."}
-          </DialogDescription>
+          <DialogDescription>{descriptionText}</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 pb-10">
-          {!editing ? (
+          {!seeded ? (
           <div className="space-y-2">
             <Label>Tipo</Label>
             <div
@@ -582,6 +739,30 @@ export function AddManualItemDialog({
               />
               {budgetFields}
             </>
+          ) : fromSourceAdd ? (
+            <>
+          {placeCollapsible}
+
+          {dayField}
+
+          {durationField}
+
+          {discoveryBlock}
+
+          <div className="space-y-2">
+            <Label htmlFor={detailId}>Nota (opcional)</Label>
+            <Textarea
+              id={detailId}
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              placeholder="Horario, reserva, tip…"
+              rows={3}
+              className="min-h-[80px] resize-y text-sm"
+            />
+          </div>
+
+          {budgetFields}
+            </>
           ) : (
             <>
           {placeField}
@@ -590,59 +771,7 @@ export function AddManualItemDialog({
 
           {durationField}
 
-          {type === "stay" && stayHrefs ? (
-            <div className="space-y-1.5">
-              {hasStayLinks ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <PartnerSearchLink
-                    href={stayHrefs.booking}
-                    label="Buscar en Booking"
-                  />
-                  <PartnerSearchLink
-                    href={stayHrefs.airbnb}
-                    label="Buscar en Airbnb"
-                    affiliate="none"
-                  />
-                  <PartnerSearchLink
-                    href={stayHrefs.homeExchange}
-                    label="Buscar en HomeExchange"
-                    affiliate="none"
-                  />
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Escribe una ciudad para buscar alojamiento.
-                </p>
-              )}
-              {hasStayLinks && bookingOmitsStayDates(startDate, stayDayIndexes) ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Sin fechas en el viaje, o con el check-in ya pasado, los
-                  buscadores abren el destino sin fechas.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {type === "activity" && activityHrefs ? (
-            <div className="space-y-1.5">
-              {hasActivityLinks ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <PartnerSearchLink
-                    href={activityHrefs.civitatis}
-                    label="Buscar en Civitatis"
-                  />
-                  <PartnerSearchLink
-                    href={activityHrefs.getYourGuide}
-                    label="Buscar en GetYourGuide"
-                  />
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Escribe una ciudad para buscar actividades.
-                </p>
-              )}
-            </div>
-          ) : null}
+          {discoveryBlock}
 
           <div className="space-y-2">
             <Label htmlFor={nameId}>Nombre</Label>
@@ -687,7 +816,7 @@ export function AddManualItemDialog({
             </Button>
           ) : (
             <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
-              {editing ? "Guardar" : "Añadir al plan"}
+              {persisted ? "Guardar" : "Añadir al plan"}
             </Button>
           )}
         </DialogFooter>

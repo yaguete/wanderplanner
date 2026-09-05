@@ -1,9 +1,9 @@
 /**
- * Enlace de búsqueda de Booking para alojamientos propios (asistente o
- * alta a mano). Analogía de [`flight-search.ts`](./flight-search.ts):
- * búsqueda prerellenada, sin API ni precios. El `aid` es el identificador
- * de afiliado propio (Partner Hub). Nunca pisa el `affiliateUrl` de una
- * fuente: el bloguero conserva el suyo.
+ * Enlace de búsqueda de Booking para el formulario (alta a mano, edición y
+ * consolidar desde fuente si no hay afiliado). Analogía de
+ * [`flight-search.ts`](./flight-search.ts): búsqueda prerellenada, sin API
+ * ni precios. El `aid` es el identificador de afiliado propio (Partner Hub).
+ * Nunca pisa el `affiliateUrl` de una fuente: el bloguero conserva el suyo.
  *
  * Las fechas (`checkin`/`checkout`) y el número de viajeros se añaden al
  * pintar, no se persisten — ver [`booking-dates.ts`](./booking-dates.ts).
@@ -147,11 +147,12 @@ export function stayReserveHref(params: StayReserveInput & {
 }
 
 /**
- * Href del CTA de Booking en el formulario de alta: destino + fechas del
+ * Href del CTA de Booking en el formulario: destino + fechas del
  * check-in/noches + viajeros/divisa. No se persiste en `affiliateUrl`.
  *
- * Misma tabla que `activityDiscoveryHrefs` / `resolveStayAffiliateUrl`:
- * enlace guardado o procedencia de fuente → no generar búsqueda.
+ * Precedencia del formulario: enlace guardado → nada; sin enlace → búsqueda
+ * propia. En un ítem de fuente hace falta `allowFromSource`. La tarjeta
+ * (`resolveStayAffiliateUrl`) no lleva el flag.
  */
 export function stayFormSearchHref(params: {
   destination: string
@@ -161,9 +162,16 @@ export function stayFormSearchHref(params: {
   numTravelers?: number | null
   affiliateUrl?: string | null
   sourceId?: string | null
+  allowFromSource?: boolean
 }): string | null {
   if (sanitizeAffiliateUrl(params.affiliateUrl)) return null
-  if (params.sourceId && !isSyntheticSourceId(params.sourceId)) return null
+  if (
+    params.sourceId &&
+    !isSyntheticSourceId(params.sourceId) &&
+    !params.allowFromSource
+  ) {
+    return null
+  }
   const base = buildDestinationBookingSearchUrl(params.destination)
   if (!base) return null
   const dated =

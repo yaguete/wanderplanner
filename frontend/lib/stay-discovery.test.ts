@@ -132,6 +132,37 @@ assert.equal(buildHomeExchangeSearchUrl({ destination: "  " }), null)
 
 {
   const hrefs = stayDiscoveryHrefs({
+    destination: "Edimburgo",
+    startDate: checkin,
+    dayIndexes: [0, 1],
+    currency: "EUR",
+    numTravelers: 2,
+    sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    allowFromSource: true,
+  })
+  assert.ok(hrefs)
+  assert.ok(hrefs.booking)
+  assert.ok(hrefs.airbnb)
+  assert.ok(hrefs.homeExchange)
+  assert.equal(new URL(hrefs.booking).searchParams.get("ss"), "Edimburgo")
+}
+
+{
+  assert.equal(
+    stayDiscoveryHrefs({
+      destination: "Edimburgo",
+      startDate: checkin,
+      dayIndexes: [0],
+      sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      allowFromSource: true,
+      affiliateUrl: "https://www.booking.com/hotel/gb/foo.html?aid=99",
+    }),
+    null,
+  )
+}
+
+{
+  const hrefs = stayDiscoveryHrefs({
     destination: "  ",
     startDate: checkin,
     dayIndexes: [0],

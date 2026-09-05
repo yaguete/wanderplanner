@@ -53,6 +53,7 @@
     "test:booking-search": "tsx lib/booking-search.test.ts",
     "test:stay-discovery": "tsx lib/stay-discovery.test.ts",
     "test:activity-search": "tsx lib/activity-search.test.ts",
+    "test:item-discovery-links": "tsx lib/item-discovery-links.test.ts",
     "test:manual-item-task": "tsx lib/manual-item-task.test.ts",
     "test:flight-search": "tsx lib/flight-search.test.ts",
     "test:start-session": "tsx lib/start-session.test.ts",

@@ -1,8 +1,9 @@
 /**
- * Búsqueda de actividades para ítems propios (asistente o alta a mano).
- * Analogía de [`booking-search.ts`](./booking-search.ts): prerellenada, sin
- * API ni precios. Los `aid` son enganche de afiliación PROPIO (Patri /
- * WanderPlanner), nunca fuentes.
+ * Búsqueda de actividades para el formulario (alta a mano, edición y
+ * consolidar desde fuente si no hay afiliado). Analogía de
+ * [`booking-search.ts`](./booking-search.ts): prerellenada, sin API ni
+ * precios. Los `aid` son enganche de afiliación PROPIO (Patri /
+ * WanderPlanner).
  *
  * El `aid` de Civitatis (`1006`) coincide con el que viaja en los artículos
  * de La Cosmopolilla **porque es la misma cuenta**, no por error. Stay22
@@ -10,12 +11,11 @@
  * en modo `auto` no puede distinguirlos: los CTAs pasan `affiliate: "own"`
  * a mano; un ítem de fuente con el mismo `aid` sigue `partner` por procedencia.
  *
- * Precedencia (misma tabla que `resolveStayAffiliateUrl`):
+ * Precedencia del formulario:
  * 1. `affiliateUrl` guardado → no generar búsqueda (el tour concreto gana).
- * 2. Sin enlace y procedencia sintética (`manual` | `assistant`) → nuestros `aid`.
- * 3. Sin enlace y viene de una fuente → nada. Un tour que la guía menciona
- *    pero no enlaza **no** cae a nuestro `aid`: canibalizar al partner rompe
- *    el canal de distribución.
+ * 2. Sin enlace → nuestros `aid`. En un ítem de fuente hace falta
+ *    `allowFromSource` (solo el diálogo lo pasa). La tarjeta de Ruta no
+ *    pinta Civitatis/GYG en un tour de fuente sin enlace.
  *
  * El href **no se persiste** en `affiliateUrl`. El CTA es del formulario.
  *
@@ -54,6 +54,11 @@ export type ActivityDiscoveryInput = {
   /** Días de calendario de la actividad (≥ 1). Un día → checkout = checkin + 1. */
   spanDays?: number
   numTravelers?: number | null
+  /**
+   * Enciende los buscadores propios en un ítem de fuente **sin** `affiliateUrl`.
+   * Default off: sin flag, `sourceId` ausente o real → `null`.
+   */
+  allowFromSource?: boolean
 }
 
 export type ActivityDiscoveryHrefs = {
@@ -163,15 +168,20 @@ function gygDateRange(params: {
 }
 
 /**
- * CTAs de descubrimiento. `null` = no pintar (enlace guardado o ítem de fuente).
- * Cada href interno puede ser `null` si falta destino.
+ * CTAs de descubrimiento. `null` = no pintar (enlace guardado, o fuente
+ * sin `allowFromSource`). Cada href interno puede ser `null` si falta destino.
  */
 export function activityDiscoveryHrefs(
   params: ActivityDiscoveryInput,
 ): ActivityDiscoveryHrefs | null {
   const stored = sanitizeAffiliateUrl(params.affiliateUrl)
   if (stored) return null
-  if (!params.sourceId || !isSyntheticSourceId(params.sourceId)) return null
+  if (
+    (!params.sourceId || !isSyntheticSourceId(params.sourceId)) &&
+    !params.allowFromSource
+  ) {
+    return null
+  }
 
   const civitatisLabel = civitatisPlaceLabel({
     selectedPlaceLabel: params.selectedPlaceLabel,

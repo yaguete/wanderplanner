@@ -107,6 +107,38 @@ assert.equal(buildGetYourGuideSearchUrl({ address: "  " }), null)
 }
 
 {
+  const allowed = activityDiscoveryHrefs({
+    sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    selectedPlaceLabel: "Budapest",
+    allowFromSource: true,
+  })
+  assert.ok(allowed)
+  assert.ok(allowed.civitatis)
+  assert.ok(allowed.getYourGuide)
+}
+
+{
+  assert.equal(
+    activityDiscoveryHrefs({
+      sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      selectedPlaceLabel: "Budapest",
+      allowFromSource: true,
+      affiliateUrl: "https://www.civitatis.com/es/budapest/paseo/?aid=1006",
+    }),
+    null,
+  )
+}
+
+{
+  assert.equal(activityDiscoveryHrefs({ selectedPlaceLabel: "Budapest" }), null)
+  const missingId = activityDiscoveryHrefs({
+    selectedPlaceLabel: "Budapest",
+    allowFromSource: true,
+  })
+  assert.ok(missingId?.civitatis)
+}
+
+{
   const manual = activityDiscoveryHrefs({
     sourceId: MANUAL_SOURCE_ID,
     selectedPlaceLabel: "Múnich",

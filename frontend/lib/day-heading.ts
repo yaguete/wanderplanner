@@ -55,3 +55,37 @@ export function formatDayPickerLabel(
   const date = dateLabel?.trim() || null
   return date ? `Día ${n} (${date})` : `Día ${n}`
 }
+
+/**
+ * Segunda línea de una opción del selector de día: descripción del día,
+ * o recuento / vacío. «ya añadido» va aparte (fuera de `ItemText`: si
+ * viajara ahí, Radix lo clonaría en el trigger).
+ */
+export function formatDayPickerHint(params: {
+  description: string
+  itemCount: number
+}): string {
+  const desc = params.description.trim()
+  if (desc) return desc
+  if (params.itemCount <= 0) return "Sin planes todavía"
+  return params.itemCount === 1 ? "1 ítem" : `${params.itemCount} ítems`
+}
+
+export function dayHasSourceItem(
+  day: { items: readonly { sourceItemId?: string | null }[] },
+  sourceItemId: string,
+): boolean {
+  return day.items.some((it) => it.sourceItemId === sourceItemId)
+}
+
+/** Primer día del viaje que aún no tiene ese `sourceItemId`. `null` si está en todos. */
+export function firstDayIdWithoutSourceItem(
+  days: readonly { id: string; items: readonly { sourceItemId?: string | null }[] }[],
+  sourceItemId: string | null | undefined,
+): string | null {
+  if (!sourceItemId) return days[0]?.id ?? null
+  for (const day of days) {
+    if (!dayHasSourceItem(day, sourceItemId)) return day.id
+  }
+  return null
+}

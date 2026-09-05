@@ -100,27 +100,9 @@ export default function AvisoLegalPage() {
           las añadimos al mismo enlace; el afiliado del autor no cambia.
         </p>
         <p>
-          Si un alojamiento no venía de una fuente —te lo recomienda el asistente o lo
-          añades tú—, el enlace de reserva va a Booking con nuestro identificador de
-          afiliado: el nombre del hotel, el destino, las fechas y el número de viajeros
-          viajan en la dirección. Si reservas por ahí, Booking puede pagarnos una
-          comisión. Eso no sustituye nunca el enlace de un bloguero. En el mismo formulario
-          hay búsquedas a Airbnb y a HomeExchange con el destino, las fechas y el número
-          de viajeros ya puestos; hoy no cobramos comisión por esos clics, y si algún día
-          lo hacemos se dirá aquí.
-        </p>
-        <p>
-          «Buscar vuelos» te lleva a Skyscanner con el origen, el destino, las fechas y el
-          número de viajeros ya puestos, así que Skyscanner ve esos datos. Hoy no cobramos
-          comisión por esos clics; si algún día lo hacemos, se dirá aquí.
-        </p>
-        <p>
-          Si una actividad no venía de una fuente —te la recomienda el asistente o la
-          añades tú—, los botones de búsqueda te llevan a Civitatis y a GetYourGuide (a
-          través de Stay22) con nuestro identificador de afiliado: el destino y, en
-          GetYourGuide, las fechas y el número de viajeros van en la dirección. Stay22 es
-          un intermediario: ve destino y fechas para redirigirte. Eso no sustituye nunca el
-          enlace de un bloguero.
+          Si un alojamiento, vuelo o actividad no viene de ninguna —te lo recomienda el asistente o lo
+          añades tú—, los enlaces de afiliado son nuestros, y los proveedores pueden pagarnos una pequeña comisión (booking, skyscanner, civitatis, getyourguide, etc.).
+          Eso no sustituye nunca el enlace de un bloguero. Los usuarios no pagan ningún recargo por reservar desde nuestra página, en ningún caso.
         </p>
       </LegalSection>
 

@@ -249,6 +249,33 @@ const checkinC = futureISO(90)
     destination: "Budapest",
     startDate: checkinA,
     dayIndexes: [0],
+    sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    allowFromSource: true,
+  })
+  assert.ok(href)
+  assert.equal(params(href).get("ss"), "Budapest")
+  assert.equal(params(href).get("aid"), BOOKING_AFFILIATE_AID)
+}
+
+{
+  assert.equal(
+    stayFormSearchHref({
+      destination: "Budapest",
+      startDate: checkinA,
+      dayIndexes: [0],
+      sourceId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      allowFromSource: true,
+      affiliateUrl: "https://www.booking.com/hotel/hu/foo.html?aid=99",
+    }),
+    null,
+  )
+}
+
+{
+  const href = stayFormSearchHref({
+    destination: "Budapest",
+    startDate: checkinA,
+    dayIndexes: [0],
     sourceId: MANUAL_SOURCE_ID,
   })
   assert.ok(href)

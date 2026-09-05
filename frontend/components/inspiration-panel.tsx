@@ -34,7 +34,7 @@ import {
   AddSourceErrorState,
   MaxSourcesDialog,
 } from "@/components/add-source-dialog"
-import { AddToDayDialog } from "@/components/add-to-day-dialog"
+import { AddManualItemDialog } from "@/components/add-manual-item-dialog"
 import { PanelTabs } from "@/components/panel-tabs"
 import { CollapsedChromeReveal } from "@/components/collapsed-chrome-reveal"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
@@ -51,6 +51,7 @@ import { REVEAL_SOURCES_EVENT, type RevealSourcesDetail } from "@/lib/onboarding
 import { prefetchTripSourceSuggestions } from "@/lib/trip-source-suggestions"
 import { extractionToastLabel } from "@/lib/extraction-toast"
 import { groupItemsByDayHint } from "@/lib/source-item-groups"
+import { firstDayIdWithoutSourceItem } from "@/lib/day-heading"
 import { isSourceDayCompleteOnTrip, sourceRouteItems } from "@/lib/source-route-import"
 import { isInstagramMediaUrl } from "@/lib/instagram-url"
 import { InstagramEmbed } from "@/components/instagram-embed"
@@ -63,6 +64,8 @@ import { chronicleSearchNeedles } from "@/lib/chronicle-search"
 import { curateArticleHtml, guardChronicleImages } from "@/lib/chronicle-html"
 import type { Source, SourceBasicItem, SourceItem } from "@/types/itinerary"
 import { userDayItemFromSource } from "@/lib/item-provenance"
+import { mapCountryCodes, mapDestinationHint } from "@/lib/map-destination"
+import { taskKeyForItem } from "@/lib/trip-tasks"
 import { toast } from "sonner"
 
 function sourceItemMatchesQuery(item: SourceItem, needle: string): boolean {
@@ -139,6 +142,7 @@ export default function InspirationPanel({
     addSourceRouteToTrip,
     addBasicToTrip,
     addDay,
+    setTaskState,
   } = useTrips()
   const { requireAccount } = useRegistrationGate()
   const trip = getTrip(tripId)
@@ -217,6 +221,27 @@ export default function InspirationPanel({
   const currentSource = activePending
     ? null
     : (sources.find((s) => s.id === activeSourceId) ?? sources[0] ?? null)
+
+  const pickingSeed = useMemo(() => {
+    if (!picking || !currentSource) return null
+    return userDayItemFromSource(picking, currentSource)
+  }, [picking, currentSource])
+
+  const pickingDayId = useMemo(() => {
+    if (!picking || !trip?.days.length) return null
+    return firstDayIdWithoutSourceItem(trip.days, picking.id)
+  }, [picking, trip?.days])
+
+  const pickingIsOpen = picking != null
+  const pickingGeo = useMemo(() => {
+    if (!pickingIsOpen || !trip) {
+      return { destinationHint: null as string | null, countryCodes: [] as string[] }
+    }
+    return {
+      destinationHint: mapDestinationHint(trip, sources),
+      countryCodes: mapCountryCodes(trip, sources),
+    }
+  }, [pickingIsOpen, trip, sources])
 
   const loadingPendingCount = tripPendings.filter((p) => p.status === "loading").length
   const atSourceCap = !canAddSource({
@@ -537,13 +562,6 @@ export default function InspirationPanel({
         e instanceof Error ? e.message : "No se pudo recargar el artículo. Inténtalo de nuevo.",
       )
     }
-  }
-
-  const handleAddItem = (item: SourceItem, dayId: string, spanDays?: number) => {
-    if (!currentSource) return
-    const userItem = userDayItemFromSource(item, currentSource)
-    if (spanDays != null) userItem.spanDays = spanDays
-    addItemToDay(tripId, dayId, userItem)
   }
 
   const handleAddAllForSourceDay = (group: {
@@ -1158,23 +1176,33 @@ export default function InspirationPanel({
         </div>
       </div>
 
-      {picking && trip ? (
-        <AddToDayDialog
+      {pickingSeed && trip ? (
+        <AddManualItemDialog
           open
           onOpenChange={(open) => {
             if (!open) setPicking(null)
           }}
           days={trip.days}
-          tripStartDate={trip.startDate ?? null}
-          itemName={picking.name}
-          itemType={picking.type}
-          itemAffiliateUrl={picking.affiliateUrl}
-          addedDayNumbers={addedItemDaysBySourceItemId.get(picking.id) ?? []}
-          onSelect={(dayId, spanDays) => {
-            handleAddItem(picking, dayId, spanDays)
+          startDate={trip.startDate}
+          initialDayId={pickingDayId}
+          seedItem={pickingSeed}
+          mode="add"
+          countryCodes={pickingGeo.countryCodes}
+          destinationHint={pickingGeo.destinationHint}
+          numTravelers={trip.numTravelers}
+          currency={trip.currency}
+          existingTask={
+            picking
+              ? trip.tasks[taskKeyForItem({ type: picking.type, name: picking.name })] ?? null
+              : null
+          }
+          outboundSurface="inspiration"
+          onAddDay={() => addDay(trip.id)}
+          onSubmit={(item, dayId, taskPatch) => {
+            addItemToDay(tripId, dayId, item)
+            if (taskPatch) setTaskState(tripId, taskKeyForItem(item), taskPatch)
             setPicking(null)
           }}
-          onAddDay={() => addDay(trip.id)}
         />
       ) : null}
 
