@@ -239,7 +239,7 @@ export function formatItemPlaceCaption(params: {
     hintCodes.length === 1 ? hintCodes[0]! : tripCodes.length === 1 ? tripCodes[0]! : null
   const country = code ? (getCountryByCode(code)?.name ?? "") : ""
   if (!city) return country
-  if (!country || captionAlreadyHasCountry(city, code)) return city
+  if (!code || !country || captionAlreadyHasCountry(city, code)) return city
   return `${city}, ${country}`
 }
 
