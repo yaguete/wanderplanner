@@ -165,6 +165,25 @@ export function taskKeyForItem(
 }
 
 /**
+ * Clave de estado que pinta la Ruta. Ida y vuelta en avión espejadas son
+ * una sola reserva (`leg:outbound`); la tarjeta de vuelta no mira `leg:return`.
+ * `taskKeyForItem` no cambia: sigue siendo la clave de persistencia del ítem.
+ */
+export function taskKeyForRouteItem(
+  item: Pick<UserDayItem, "type" | "name" | "route"> & { id?: string },
+  days: UserDay[],
+): string {
+  if (
+    isMirroredFlightRoundtrip(days) &&
+    item.type === "transport" &&
+    item.route?.leg === "return"
+  ) {
+    return OUTBOUND_TASK_KEY
+  }
+  return taskKeyForItem(item)
+}
+
+/**
  * Clave de un básico. Incluye categoría + nombre normalizado para deduplicar
  * el mismo seguro/SIM/… llegado desde dos fuentes (no el uuid del ítem).
  */

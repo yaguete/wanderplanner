@@ -26,6 +26,7 @@ import {
   taskBucket,
   taskKeyForBasic,
   taskKeyForItem,
+  taskKeyForRouteItem,
   withPrunedTasks,
 } from "./trip-tasks"
 
@@ -974,6 +975,10 @@ assert.equal(isBookableTransportMode(null), false)
   assert.equal(onlyOut[0]!.occurrences, 1)
   assert.equal(onlyOut[0]!.roundtripFlight, undefined)
 
+  assert.equal(taskKeyForItem(ret), "leg:return")
+  assert.equal(taskKeyForRouteItem(ret, mirroredTrip.days), "leg:outbound")
+  assert.equal(taskKeyForRouteItem(outbound, mirroredTrip.days), "leg:outbound")
+
   // Vuelta en tren → dos tareas.
   const trainReturn = makeTrip({
     days: [
@@ -996,6 +1001,13 @@ assert.equal(isBookableTransportMode(null), false)
   const splitTrain = buildTripTasks(trainReturn).filter((t) => t.category === "transport")
   assert.equal(splitTrain.length, 2)
   assert.equal(computeTripTaskTotals(buildTripTasks(trainReturn)).totalCost, 215)
+  assert.equal(
+    taskKeyForRouteItem(
+      { ...ret, route: { from: vie, to: bcn, mode: "train", leg: "return" } },
+      trainReturn.days,
+    ),
+    "leg:return",
+  )
 
   // Open-jaw (BCN→VIE, VIE→BUD) → dos tareas.
   const openJaw = makeTrip({
@@ -1019,6 +1031,17 @@ assert.equal(isBookableTransportMode(null), false)
   })
   const splitJaw = buildTripTasks(openJaw).filter((t) => t.category === "transport")
   assert.equal(splitJaw.length, 2)
+  assert.equal(
+    taskKeyForRouteItem(
+      {
+        ...ret,
+        name: "Viena → Budapest",
+        route: { from: vie, to: bud, mode: "flight", leg: "return" },
+      },
+      openJaw.days,
+    ),
+    "leg:return",
+  )
 }
 
 // ── Stay manual con spanDays: 1 ocurrencia, 3 noches ─────────────────────────

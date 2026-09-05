@@ -51,9 +51,11 @@ import { ApiLimitError } from "@/lib/api"
 import { toast } from "sonner"
 import {
   categoryFromItemType,
+  isTaskManaged,
   resolveTaskStatus,
   taskBucket,
   taskKeyForItem,
+  taskKeyForRouteItem,
   buildTripTasks,
   computeTripTaskTotals,
 } from "@/lib/trip-tasks"
@@ -1349,7 +1351,9 @@ export default function ItineraryPanel({
           existingItem={routeLegDialog.existingItem}
           existingTask={
             routeLegDialog.existingItem
-              ? trip.tasks[taskKeyForItem(routeLegDialog.existingItem)] ?? null
+              ? trip.tasks[
+                  taskKeyForRouteItem(routeLegDialog.existingItem, trip.days)
+                ] ?? null
               : null
           }
           onSubmit={(data) => {
@@ -1497,7 +1501,7 @@ function DayItineraryTimeline({
       <ul className="relative z-[1] m-0 list-none space-y-2.5 p-0">
         {slots.map((slot, index) => {
           const { item, isEcho, spanIndex, spanTotal } = slot
-          const taskKey = taskKeyForItem(item)
+          const taskKey = taskKeyForRouteItem(item, days)
           const state = taskStates[taskKey] ?? null
           const status = resolveTaskStatus(state)
           const bucket = taskBucket(categoryFromItemType(item.type), state, "dayItem", {
@@ -1594,7 +1598,7 @@ function DayItineraryTimeline({
                 outboundSurface="route_card"
                 outboundAffiliate={item.affiliateUrl ? "partner" : "auto"}
                 flightSearch={
-                  isEcho
+                  isEcho || isTaskManaged(state)
                     ? null
                     : item.route
                       ? flightSearchHrefForItem({
