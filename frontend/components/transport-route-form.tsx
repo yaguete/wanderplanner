@@ -18,30 +18,25 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { Loader2, MapPin } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { PlaceSuggestInput } from "@/components/place-suggest-input"
 import {
-  resolvePermanentCoords,
-  seedGeocodeCache,
-  suggestPlaces,
   searchTransportHubs,
   clearTransportHubCache,
-  type GeocodeSuggestion,
   type TransportHubSuggestion,
 } from "@/lib/mapbox"
 import {
   canSpendHub,
-  canSpendSuggest,
   createPlaceSearchBudget,
   isPlaceSearchEnabled,
   PLACE_SEARCH_BUDGET_MESSAGE,
   PLACE_SEARCH_DISABLED_MESSAGE,
   recordHub,
-  recordSuggest,
   stripPersistMeta,
   toPersistableRoutePlace,
   type PlaceSearchBudget,
@@ -61,13 +56,10 @@ import {
   TRANSPORT_MODE_OPTIONS,
 } from "@/lib/item-styles"
 
-const SUGGEST_DEBOUNCE_MS = 450
-const SUGGEST_MIN_CHARS = 3
-
 export type EndpointState = {
   query: string
   selected: RoutePlace | null
-  suggestions: GeocodeSuggestion[]
+  suggestions: unknown[]
   loading: boolean
   listOpen: boolean
   error: string | null
@@ -294,12 +286,8 @@ export const TransportRouteForm = forwardRef<
   )
   const budgetRef = useRef<PlaceSearchBudget>(createPlaceSearchBudget())
 
-  const fromAbortRef = useRef<AbortController | null>(null)
-  const toAbortRef = useRef<AbortController | null>(null)
   const hubFromAbortRef = useRef<AbortController | null>(null)
   const hubToAbortRef = useRef<AbortController | null>(null)
-  const fromDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const toDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onLiveContextRef = useRef(onLiveContext)
 
   const cityFromRef = useRef<RoutePlace | null>(
@@ -339,29 +327,8 @@ export const TransportRouteForm = forwardRef<
     hubToAbortRef.current?.abort()
   }, [mode])
 
-  usePlaceSuggest({
-    endpoint: from,
-    setEndpoint: setFrom,
-    debounceRef: fromDebounceRef,
-    abortRef: fromAbortRef,
-    budgetRef,
-    setSearchNotice,
-    enabled: !paused,
-  })
-  usePlaceSuggest({
-    endpoint: to,
-    setEndpoint: setTo,
-    debounceRef: toDebounceRef,
-    abortRef: toAbortRef,
-    budgetRef,
-    setSearchNotice,
-    enabled: !paused,
-  })
-
   useEffect(() => {
     if (!paused) return
-    fromAbortRef.current?.abort()
-    toAbortRef.current?.abort()
     hubFromAbortRef.current?.abort()
     hubToAbortRef.current?.abort()
   }, [paused])
@@ -585,6 +552,9 @@ export const TransportRouteForm = forwardRef<
           onCityCoordsUpgraded={(place) => {
             if (cityFromRef.current?.label === place.label) cityFromRef.current = place
           }}
+          budgetRef={budgetRef}
+          onBudgetNotice={setSearchNotice}
+          enabled={!paused}
         />
         <HubSidePanel
           kind={hubKind}
@@ -616,6 +586,9 @@ export const TransportRouteForm = forwardRef<
           onCityCoordsUpgraded={(place) => {
             if (cityToRef.current?.label === place.label) cityToRef.current = place
           }}
+          budgetRef={budgetRef}
+          onBudgetNotice={setSearchNotice}
+          enabled={!paused}
         />
         <HubSidePanel
           kind={hubKind}
@@ -772,6 +745,11 @@ export function EndpointField({
   onCitySelected,
   onCityCleared,
   onCityCoordsUpgraded,
+  budgetRef,
+  onBudgetNotice,
+  proximity = null,
+  countryCodes = [],
+  enabled = true,
 }: {
   id: string
   label: string
@@ -781,183 +759,63 @@ export function EndpointField({
   required?: boolean
   onCitySelected?: (place: RoutePlace) => void
   onCityCleared?: () => void
-  /** Llega tarde, con la coordenada permanente. Solo reapunta el ancla; no toca hubs. */
   onCityCoordsUpgraded?: (place: RoutePlace) => void
-}) {
-  return (
-    <div className="relative space-y-2">
-      <Label htmlFor={id}>
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </Label>
-      <div className="relative">
-        <MapPin
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-          aria-hidden
-        />
-        <Input
-          id={id}
-          value={endpoint.query}
-          onChange={(e) => {
-            onCityCleared?.()
-            setEndpoint((s) => ({
-              ...s,
-              query: e.target.value,
-              selected: null,
-              listOpen: true,
-              error: null,
-            }))
-          }}
-          onFocus={() => {
-            // Abrir (y disparar suggest si hay texto pendiente) solo con interacción del usuario.
-            setEndpoint((s) => ({ ...s, listOpen: true }))
-          }}
-          onBlur={() => {
-            window.setTimeout(() => setEndpoint((s) => ({ ...s, listOpen: false })), 150)
-          }}
-          placeholder={placeholder}
-          className="pl-8"
-          autoComplete="off"
-          aria-autocomplete="list"
-          aria-expanded={endpoint.listOpen && endpoint.suggestions.length > 0}
-        />
-        {endpoint.loading ? (
-          <Loader2
-            className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground"
-            aria-hidden
-          />
-        ) : null}
-      </div>
-      {endpoint.listOpen && endpoint.suggestions.length > 0 ? (
-        <ul
-          className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 text-sm shadow-md"
-          role="listbox"
-        >
-          {endpoint.suggestions.map((s) => (
-            <li key={s.id} role="option" aria-selected={endpoint.selected?.label === s.text}>
-              <button
-                type="button"
-                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-muted"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const place: RoutePlace = {
-                    label: s.text,
-                    coords: s.center,
-                    kind: "city",
-                  }
-                  onCitySelected?.(place)
-                  setEndpoint({
-                    query: s.text,
-                    selected: place,
-                    suggestions: [],
-                    loading: false,
-                    listOpen: false,
-                    error: null,
-                  })
-                  seedGeocodeCache(s.placeName, s.center)
-                  // La coordenada de arriba es del dataset temporal: sirve para la
-                  // UI pero no se puede guardar. Pedimos la permanente en segundo
-                  // plano y la sustituimos si llega; si no, se persiste la temporal.
-                  void resolvePermanentCoords(s.placeName, s.center).then((coords) => {
-                    if (coords === s.center) return
-                    const upgraded: RoutePlace = { ...place, coords }
-                    setEndpoint((prev) =>
-                      prev.selected?.kind === "city" && prev.selected.label === place.label
-                        ? { ...prev, selected: upgraded }
-                        : prev,
-                    )
-                    onCityCoordsUpgraded?.(upgraded)
-                  })
-                }}
-              >
-                <span className="font-medium text-foreground">{s.text}</span>
-                {s.placeName !== s.text ? (
-                  <span className="line-clamp-1 text-xs text-muted-foreground">{s.placeName}</span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {endpoint.selected ? (
-        <p className="text-xs text-muted-foreground">Ubicación fijada.</p>
-      ) : null}
-      {endpoint.error ? <p className="text-xs text-destructive">{endpoint.error}</p> : null}
-    </div>
-  )
-}
-
-export function usePlaceSuggest({
-  endpoint,
-  setEndpoint,
-  debounceRef,
-  abortRef,
-  budgetRef,
-  setSearchNotice,
-  enabled = true,
-}: {
-  endpoint: EndpointState
-  setEndpoint: React.Dispatch<React.SetStateAction<EndpointState>>
-  debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
-  abortRef: React.MutableRefObject<AbortController | null>
-  budgetRef: React.MutableRefObject<PlaceSearchBudget>
-  setSearchNotice: (msg: string | null) => void
+  budgetRef?: React.MutableRefObject<PlaceSearchBudget>
+  onBudgetNotice?: (msg: string | null) => void
+  proximity?: [number, number] | null
+  countryCodes?: string[]
   enabled?: boolean
 }) {
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    abortRef.current?.abort()
-
-    if (!enabled) {
-      return
-    }
-
-    // No buscar al montar con texto de hint: esperar a que el usuario enfoque o escriba.
-    if (!endpoint.listOpen) {
-      return
-    }
-
-    const q = endpoint.query.trim()
-    if (endpoint.selected && q === endpoint.selected.label) {
-      return
-    }
-    if (q.length < SUGGEST_MIN_CHARS) {
-      return
-    }
-    if (!isPlaceSearchEnabled()) {
-      setSearchNotice(PLACE_SEARCH_DISABLED_MESSAGE)
-      return
-    }
-
-    debounceRef.current = setTimeout(() => {
-      if (!canSpendSuggest(budgetRef.current)) {
-        setSearchNotice(PLACE_SEARCH_BUDGET_MESSAGE)
-        return
+  return (
+    <PlaceSuggestInput
+      id={id}
+      label={label}
+      value={endpoint.query}
+      onValueChange={(next) => {
+        onCityCleared?.()
+        setEndpoint((s) => ({
+          ...s,
+          query: next,
+          selected: null,
+          listOpen: true,
+          error: null,
+        }))
+      }}
+      selected={
+        endpoint.selected
+          ? { label: endpoint.selected.label, coords: endpoint.selected.coords }
+          : null
       }
-      const ac = new AbortController()
-      abortRef.current = ac
-      budgetRef.current = recordSuggest(budgetRef.current)
-      setEndpoint((s) => ({ ...s, loading: true }))
-      void suggestPlaces(q, { limit: 6, signal: ac.signal })
-        .then((list) => {
-          if (ac.signal.aborted) return
-          setEndpoint((s) => ({
-            ...s,
-            suggestions: list,
+      onSelect={(p) => {
+        const place: RoutePlace = {
+          label: p.label,
+          coords: p.coords,
+          kind: "city",
+        }
+        setEndpoint((prev) => {
+          const sameLabel = prev.selected?.kind === "city" && prev.selected.label === place.label
+          if (sameLabel) onCityCoordsUpgraded?.(place)
+          else onCitySelected?.(place)
+          return {
+            query: place.label,
+            selected: place,
+            suggestions: [],
             loading: false,
-          }))
+            listOpen: false,
+            error: null,
+          }
         })
-        .catch((err: unknown) => {
-          if (ac.signal.aborted) return
-          if (err instanceof DOMException && err.name === "AbortError") return
-          setEndpoint((s) => ({ ...s, suggestions: [], loading: false }))
-        })
-    }, SUGGEST_DEBOUNCE_MS)
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      abortRef.current?.abort()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint.query, endpoint.selected, endpoint.listOpen, enabled])
+      }}
+      placeholder={placeholder}
+      proximity={proximity}
+      countryCodes={countryCodes}
+      purpose="city"
+      required={required}
+      error={endpoint.error}
+      budgetRef={budgetRef}
+      onBudgetNotice={onBudgetNotice}
+      enabled={enabled}
+      showFixedHint
+    />
+  )
 }

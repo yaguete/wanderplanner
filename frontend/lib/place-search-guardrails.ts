@@ -103,28 +103,41 @@ export function stripPersistMeta(place: PersistableRoutePlace): RoutePlace {
 
 /** Contadores por sesión de modal (reset al montar el formulario). */
 export type PlaceSearchBudget = {
+  /** Peticiones de autocompletado: /suggest, /forward y fallback v5. */
   suggests: number
+  /** Sesiones Search Box abiertas (no incluye retrieve). */
+  sessions: number
+  /** Retrieves: diagnóstico; no cuenta como otra sesión. */
+  retrieves: number
   hubs: number
   maxSuggests: number
+  maxSessions: number
   maxHubs: number
 }
 
 export function createPlaceSearchBudget(options?: {
   maxSuggests?: number
+  maxSessions?: number
   maxHubs?: number
 }): PlaceSearchBudget {
   if (isPlaceSearchBudgetUnlimited()) {
     return {
       suggests: 0,
+      sessions: 0,
+      retrieves: 0,
       hubs: 0,
       maxSuggests: Number.MAX_SAFE_INTEGER,
+      maxSessions: Number.MAX_SAFE_INTEGER,
       maxHubs: Number.MAX_SAFE_INTEGER,
     }
   }
   return {
     suggests: 0,
+    sessions: 0,
+    retrieves: 0,
     hubs: 0,
     maxSuggests: options?.maxSuggests ?? 24,
+    maxSessions: options?.maxSessions ?? 12,
     maxHubs: options?.maxHubs ?? 8,
   }
 }
@@ -144,12 +157,24 @@ export function canSpendSuggest(budget: PlaceSearchBudget): boolean {
   return isPlaceSearchEnabled() && budget.suggests < budget.maxSuggests
 }
 
+export function canStartSession(budget: PlaceSearchBudget): boolean {
+  return isPlaceSearchEnabled() && budget.sessions < budget.maxSessions
+}
+
 export function canSpendHub(budget: PlaceSearchBudget): boolean {
   return isPlaceSearchEnabled() && budget.hubs < budget.maxHubs
 }
 
 export function recordSuggest(budget: PlaceSearchBudget): PlaceSearchBudget {
   return { ...budget, suggests: budget.suggests + 1 }
+}
+
+export function recordSession(budget: PlaceSearchBudget): PlaceSearchBudget {
+  return { ...budget, sessions: budget.sessions + 1 }
+}
+
+export function recordRetrieve(budget: PlaceSearchBudget): PlaceSearchBudget {
+  return { ...budget, retrieves: budget.retrieves + 1 }
 }
 
 export function recordHub(budget: PlaceSearchBudget): PlaceSearchBudget {

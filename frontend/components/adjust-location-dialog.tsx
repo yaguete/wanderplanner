@@ -19,7 +19,7 @@ import {
   haversineKm,
   resolvePermanentCoords,
   seedGeocodeCache,
-  suggestPlaces,
+  suggestPlacesResult,
   type GeocodeSuggestion,
   type LngLat,
 } from "@/lib/mapbox"
@@ -27,6 +27,12 @@ import {
   rankPlaceSuggestions,
   type PlaceSuggestKind,
 } from "@/lib/place-suggest-rank"
+import {
+  bboxForAnchor,
+  emptyScopeMessage,
+  type PlaceSearchAnchor,
+  type PlaceSearchScope,
+} from "@/lib/place-search-purpose"
 import { formatKm } from "@/lib/map-route-geometry"
 import { getCountryByCode } from "@/lib/countries"
 
@@ -65,6 +71,10 @@ export function AdjustLocationDialog({
     coords: LngLat
   } | null>(null)
   const [listOpen, setListOpen] = useState(false)
+  const [scope, setScope] = useState<PlaceSearchScope>("anchored")
+  const [destAnchor, setDestAnchor] = useState<PlaceSearchAnchor | null>(null)
+  const [status, setStatus] = useState<"idle" | "empty" | "error">("idle")
+  const genRef = useRef(0)
 
   const proximityRef = useRef<[number, number] | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -87,17 +97,31 @@ export function AdjustLocationDialog({
     setListOpen(false)
     setSuggestLoading(false)
     setSaving(false)
+    setScope("anchored")
+    setStatus("idle")
+    setDestAnchor(null)
+    genRef.current += 1
     proximityRef.current = proximity
-    if (!proximity) {
-      const dest = destinationHint?.trim()
-      const codes = countriesKey ? countriesKey.split(",") : []
-      if (dest) {
-        void geocodeRegionAnchor(dest, {
-          countryCodes: codes.length ? codes : undefined,
-        }).then((anchor) => {
-          if (anchor) proximityRef.current = [anchor.coord.lng, anchor.coord.lat]
-        })
-      }
+    const dest = destinationHint?.trim()
+    const codes = countriesKey ? countriesKey.split(",") : []
+    if (dest) {
+      void geocodeRegionAnchor(dest, {
+        countryCodes: codes.length ? codes : undefined,
+      }).then((anchor) => {
+        if (!anchor) return
+        const next: PlaceSearchAnchor = {
+          id: `dest:${dest}`,
+          label: dest,
+          featureType: anchor.featureType,
+          coords: anchor.coord,
+          countryCode: null,
+          bbox: null,
+        }
+        setDestAnchor(next)
+        if (!proximityRef.current) {
+          proximityRef.current = [anchor.coord.lng, anchor.coord.lat]
+        }
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open
   }, [open])
@@ -120,27 +144,44 @@ export function AdjustLocationDialog({
     }
 
     setSuggestLoading(true)
+    setStatus("idle")
+    const gen = ++genRef.current
     debounceRef.current = setTimeout(() => {
       const ac = new AbortController()
       abortRef.current = ac
       const codes = countriesKey ? countriesKey.split(",") : []
-      void suggestPlaces(q, {
+      void suggestPlacesResult(q, {
         proximity: proximityRef.current,
-        countryCodes: codes.length ? codes : undefined,
+        countryCodes: scope === "anywhere" ? undefined : (codes.length ? codes : undefined),
         limit: 6,
         signal: ac.signal,
+        purpose: "site",
+        bbox: scope === "anchored" && destAnchor ? bboxForAnchor(destAnchor) : null,
+        anchored: scope === "anchored" && Boolean(destAnchor),
+        anywhere: scope === "anywhere",
       })
-        .then((list) => {
-          if (ac.signal.aborted) return
-          setSuggestions(rankPlaceSuggestions(list, q, itemType))
+        .then((result) => {
+          if (ac.signal.aborted || gen !== genRef.current) return
+          if (!result.ok) {
+            if (result.reason === "aborted") return
+            setSuggestions([])
+            setStatus("error")
+            setSuggestLoading(false)
+            setListOpen(true)
+            return
+          }
+          const withCenter = result.items.filter((s): s is GeocodeSuggestion => s.center != null)
+          setSuggestions(rankPlaceSuggestions(withCenter, q, itemType))
+          setStatus(withCenter.length === 0 ? "empty" : "idle")
           setListOpen(true)
           setSuggestLoading(false)
         })
         .catch((err: unknown) => {
-          if (ac.signal.aborted) return
+          if (ac.signal.aborted || gen !== genRef.current) return
           if (err instanceof DOMException && err.name === "AbortError") return
           setSuggestions([])
           setSuggestLoading(false)
+          setStatus("error")
         })
     }, SUGGEST_DEBOUNCE_MS)
 
@@ -148,11 +189,12 @@ export function AdjustLocationDialog({
       if (debounceRef.current) clearTimeout(debounceRef.current)
       abortRef.current?.abort()
     }
-  }, [placeQuery, open, countriesKey, selectedPlace, itemType])
+  }, [placeQuery, open, countriesKey, selectedPlace, itemType, scope, destAnchor])
 
   const codesForResolve = countriesKey ? countriesKey.split(",") : []
 
   const handleSelectSuggestion = (s: GeocodeSuggestion) => {
+    const gen = ++genRef.current
     setSelectedPlace({ label: s.text, coords: s.center })
     setPlaceQuery(s.text)
     setSuggestions([])
@@ -160,6 +202,7 @@ export function AdjustLocationDialog({
     seedGeocodeCache(s.placeName, s.center, codesForResolve)
     void resolvePermanentCoords(s.placeName, s.center, { countryCodes: codesForResolve }).then(
       (coords) => {
+        if (gen !== genRef.current) return
         if (coords === s.center) return
         setSelectedPlace((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
       },
@@ -178,19 +221,37 @@ export function AdjustLocationDialog({
     const q = placeQuery.trim()
     if (q.length < SUGGEST_MIN_CHARS || saving) return
     setSaving(true)
+    const submitGen = ++genRef.current
     const codes = codesForResolve.length ? codesForResolve : undefined
-    void suggestPlaces(q, {
+    void suggestPlacesResult(q, {
       proximity: proximityRef.current,
       countryCodes: codes,
       limit: 6,
+      purpose: "site",
+      bbox: scope === "anchored" && destAnchor ? bboxForAnchor(destAnchor) : null,
+      anchored: scope === "anchored" && Boolean(destAnchor),
+      anywhere: scope === "anywhere",
     })
-      .then(async (list) => {
-        const ranked = rankPlaceSuggestions(list, q, itemType)
+      .then(async (result) => {
+        if (submitGen !== genRef.current) return
+        if (!result.ok) {
+          setStatus("error")
+          return
+        }
+        const ranked = rankPlaceSuggestions(
+          result.items.filter((s): s is GeocodeSuggestion => s.center != null),
+          q,
+          itemType,
+        )
         const first = ranked[0]
-        if (!first) return
+        if (!first) {
+          setStatus("empty")
+          return
+        }
         const coords = await resolvePermanentCoords(first.placeName, first.center, {
           countryCodes: codes,
         })
+        if (submitGen !== genRef.current) return
         onConfirm({ label: first.text, coords })
         onOpenChange(false)
       })
@@ -293,6 +354,43 @@ export function AdjustLocationDialog({
                   )
                 })}
               </ul>
+            ) : null}
+            {listOpen && status === "empty" && !suggestLoading ? (
+              <div className="rounded-md border border-border bg-popover px-3 py-2 text-sm">
+                <p className="text-muted-foreground">
+                  {scope === "anchored" && destAnchor
+                    ? emptyScopeMessage(destAnchor.label)
+                    : "Sin resultados."}
+                </p>
+                {scope === "anchored" && destAnchor ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1 h-7 px-2 text-[11px]"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setScope("anywhere")}
+                  >
+                    Buscar en cualquier sitio
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            {listOpen && status === "error" && !suggestLoading ? (
+              <p className="text-xs text-destructive" role="alert">
+                No se pudieron cargar sugerencias. Puedes seguir escribiendo a mano.
+              </p>
+            ) : null}
+            {scope === "anywhere" && destAnchor ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-0 text-[11px] text-muted-foreground"
+                onClick={() => setScope("anchored")}
+              >
+                Volver a la zona de {destAnchor.label}
+              </Button>
             ) : null}
             {selectedPlace ? (
               <p className="text-xs text-muted-foreground">Ubicación fijada en el mapa.</p>

@@ -45,6 +45,8 @@
     "test:geocode-validate": "tsx lib/geocode-validate.test.ts",
     "test:place-suggest-rank": "tsx lib/place-suggest-rank.test.ts",
     "test:place-search-bias": "tsx lib/place-search-bias.test.ts",
+    "test:place-search-purpose": "tsx lib/place-search-purpose.test.ts",
+    "test:mapbox-suggest": "tsx lib/mapbox-suggest.test.ts",
     "test:unsplash": "tsx lib/unsplash.test.ts",
     "test:map-destination": "tsx lib/map-destination.test.ts",
     "test:mapbox-permanent": "tsx lib/mapbox-permanent.test.ts",

@@ -22,11 +22,29 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { isSyntheticSourceId, MANUAL_SOURCE_ID } from "@/lib/item-provenance"
-import { geocodeFreeText } from "@/lib/mapbox"
+import { geocodeFreeText, geocodeRegionAnchor, suggestPlacesSession, type PlaceSuggestion } from "@/lib/mapbox"
 import {
   PlaceSuggestInput,
   type SelectedPlace,
 } from "@/components/place-suggest-input"
+import {
+  nameSuggestDedupeKey,
+  newPlaceSearchSession,
+  recordSessionSuggest,
+  sessionNeedsRotation,
+  bboxForAnchor,
+  type PlaceSearchAnchor,
+  type PlaceSearchScope,
+  type PlaceSearchSession,
+} from "@/lib/place-search-purpose"
+import {
+  canSpendSuggest,
+  canStartSession,
+  createPlaceSearchBudget,
+  recordSession,
+  recordSuggest,
+  type PlaceSearchBudget,
+} from "@/lib/place-search-guardrails"
 import { DayPickerSelect } from "@/components/day-picker-select"
 import { firstDayIdWithoutSourceItem } from "@/lib/day-heading"
 import type {
@@ -149,8 +167,11 @@ export function AddManualItemDialog({
   const [detail, setDetail] = useState("")
   const [placeQuery, setPlaceQuery] = useState("")
   const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null)
+  const [cityAnchor, setCityAnchor] = useState<PlaceSearchAnchor | null>(null)
   const [addressQuery, setAddressQuery] = useState("")
   const [selectedAddress, setSelectedAddress] = useState<SelectedPlace | null>(null)
+  const [addressScope, setAddressScope] = useState<PlaceSearchScope>("anchored")
+  const [nameSuggestions, setNameSuggestions] = useState<PlaceSuggestion[] | null>(null)
   const [tripProximity, setTripProximity] = useState<[number, number] | null>(null)
   const [nights, setNights] = useState(1)
   const [transportCanSubmit, setTransportCanSubmit] = useState(false)
@@ -158,6 +179,12 @@ export function AddManualItemDialog({
   const [placeOpen, setPlaceOpen] = useState(false)
 
   const costRef = useRef<number | null>(null)
+  const cityAnchorIdRef = useRef<string | null>(null)
+  const nameSuggestKeyRef = useRef<string | null>(null)
+  const nameBlurGenRef = useRef(0)
+  const citySeedGenRef = useRef(0)
+  const addressSessionRef = useRef<PlaceSearchSession | null>(null)
+  const budgetRef = useRef<PlaceSearchBudget>(createPlaceSearchBudget())
 
   const nameId = `${id}-name`
   const dayFieldId = `${id}-day`
@@ -205,17 +232,10 @@ export function AddManualItemDialog({
       setAddressQuery(splitPlace.address)
       if (splitPlace.address && seed && hasFiniteLngLat(seed.coords)) {
         setSelectedAddress({ label: splitPlace.address, coords: seed.coords })
-        setSelectedPlace(null)
-      } else if (seed && hasFiniteLngLat(seed.coords)) {
-        setSelectedPlace({
-          label: splitPlace.city || seed.name,
-          coords: seed.coords,
-        })
-        setSelectedAddress(null)
       } else {
-        setSelectedPlace(null)
         setSelectedAddress(null)
       }
+      setSelectedPlace(null)
     } else {
       setPlaceQuery(seed?.region?.trim() ?? "")
       setAddressQuery("")
@@ -235,6 +255,15 @@ export function AddManualItemDialog({
     setTaskDraft(seededDraft)
     costRef.current = seededDraft.cost
     setPlaceOpen(false)
+    setCityAnchor(null)
+    cityAnchorIdRef.current = null
+    setAddressScope("anchored")
+    setNameSuggestions(null)
+    nameSuggestKeyRef.current = null
+    nameBlurGenRef.current += 1
+    citySeedGenRef.current += 1
+    addressSessionRef.current = null
+    budgetRef.current = createPlaceSearchBudget()
     const fromSourceSeed =
       Boolean(seed && !isSyntheticSourceId(seed.sourceId)) &&
       !(mode === "edit" && existingDayId != null)
@@ -247,16 +276,35 @@ export function AddManualItemDialog({
     setDayId(preferred)
 
     setTripProximity(null)
-    if (seed && hasFiniteLngLat(seed.coords)) {
-      setTripProximity([seed.coords.lng, seed.coords.lat])
-    } else {
-      const dest = destinationHint?.trim()
-      const codes = countryCodes.filter((c) => c.trim().length === 2)
-      if (dest) {
-        void geocodeFreeText(dest, { countryCodes: codes.length ? codes : undefined }).then((p) => {
-          setTripProximity(p)
-        })
-      }
+    const dest = destinationHint?.trim()
+    const codes = countryCodes.filter((c) => c.trim().length === 2)
+    if (dest) {
+      void geocodeFreeText(dest, { countryCodes: codes.length ? codes : undefined }).then((p) => {
+        setTripProximity(p)
+      })
+    }
+    if (splitPlace?.city.trim()) {
+      const cityLabel = splitPlace.city.trim()
+      const seedGen = citySeedGenRef.current
+      void geocodeRegionAnchor(cityLabel, {
+        countryCodes: codes.length ? codes : undefined,
+      }).then((anchor) => {
+        if (seedGen !== citySeedGenRef.current) return
+        if (!anchor) return
+        const next: PlaceSearchAnchor = {
+          id: `anchor:${cityLabel}:${anchor.coord.lng.toFixed(4)},${anchor.coord.lat.toFixed(4)}`,
+          label: cityLabel,
+          featureType: anchor.featureType,
+          coords: anchor.coord,
+          countryCode: null,
+          bbox: null,
+        }
+        setCityAnchor((current) => current ?? next)
+        cityAnchorIdRef.current = cityAnchorIdRef.current ?? next.id
+        setSelectedPlace((current) =>
+          current ?? { label: cityLabel, coords: anchor.coord, id: next.id },
+        )
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on open
   }, [open])
@@ -273,28 +321,94 @@ export function AddManualItemDialog({
     !alreadyOnSelectedDay &&
     !allDaysOccupied
 
+  const clearDependentAddress = () => {
+    setAddressQuery("")
+    setSelectedAddress(null)
+    setNameSuggestions(null)
+    nameSuggestKeyRef.current = null
+    nameBlurGenRef.current += 1
+    setAddressScope("anchored")
+  }
+
   const handleSelectCity = (place: SelectedPlace) => {
-    if (selectedPlace && selectedPlace.label !== place.label) {
-      setAddressQuery("")
-      setSelectedAddress(null)
+    const nextId = place.id ?? place.label
+    if (cityAnchorIdRef.current && cityAnchorIdRef.current !== nextId) {
+      clearDependentAddress()
     }
+    cityAnchorIdRef.current = nextId
     setPlaceQuery(place.label)
     setSelectedPlace(place)
   }
 
+  const handleResolvedCityAnchor = (anchor: PlaceSearchAnchor) => {
+    if (cityAnchorIdRef.current && cityAnchorIdRef.current !== anchor.id) {
+      clearDependentAddress()
+    }
+    cityAnchorIdRef.current = anchor.id
+    setCityAnchor(anchor)
+  }
+
   const handleCityChange = (next: string) => {
+    citySeedGenRef.current += 1
     setPlaceQuery(next)
     setSelectedPlace(null)
+    setCityAnchor(null)
+    cityAnchorIdRef.current = null
+    clearDependentAddress()
   }
 
   const handleSelectAddress = (place: SelectedPlace) => {
-    setAddressQuery(place.label)
-    setSelectedAddress(place)
+    const isPoi = place.featureType === "poi"
+    const postal = place.address?.trim() || (isPoi ? "" : place.label)
+    setAddressQuery(postal)
+    setSelectedAddress({ ...place, label: postal || place.label })
+    if (isPoi && place.name?.trim()) setName(place.name.trim())
+    setNameSuggestions(null)
   }
 
   const handleAddressChange = (next: string) => {
+    nameBlurGenRef.current += 1
     setAddressQuery(next)
     setSelectedAddress(null)
+    setNameSuggestions(null)
+  }
+
+  const handleNameBlur = () => {
+    if (fromSourceAdd) return
+    const n = name.trim()
+    if (!n || !cityAnchor || addressQuery.trim() || selectedAddress) return
+    const key = nameSuggestDedupeKey({
+      name: n,
+      anchorId: cityAnchor.id,
+      purpose: "poi",
+      scope: addressScope,
+    })
+    if (nameSuggestKeyRef.current === key) return
+    const budget = budgetRef.current
+    if (!canSpendSuggest(budget)) return
+    let session = addressSessionRef.current
+    if (sessionNeedsRotation(session) && !canStartSession(budget)) return
+    nameSuggestKeyRef.current = key
+    const gen = ++nameBlurGenRef.current
+    if (sessionNeedsRotation(session)) {
+      session = newPlaceSearchSession()
+      addressSessionRef.current = session
+      budgetRef.current = recordSession(budgetRef.current)
+    }
+    budgetRef.current = recordSuggest(budgetRef.current)
+    addressSessionRef.current = recordSessionSuggest(session!)
+    void suggestPlacesSession(n, addressSessionRef.current.token, {
+      purpose: "poi",
+      proximity: [cityAnchor.coords.lng, cityAnchor.coords.lat],
+      bbox: addressScope === "anywhere" ? null : bboxForAnchor(cityAnchor),
+      anchored: addressScope === "anchored",
+      anywhere: addressScope === "anywhere",
+      countryCodes: cityAnchor.countryCode ? [cityAnchor.countryCode] : undefined,
+    }).then((result) => {
+      if (gen !== nameBlurGenRef.current) return
+      if (!result.ok) return
+      setNameSuggestions(result.items)
+    })
   }
 
   const currentTaskPatch = (persistEmpty: boolean) =>
@@ -306,7 +420,9 @@ export function AddManualItemDialog({
   const handleSubmit = () => {
     if (!canSubmit) return
     const city = selectedPlace?.label ?? placeQuery.trim()
-    const address = selectedAddress?.label ?? addressQuery.trim()
+    const address = selectedAddress
+      ? (selectedAddress.address?.trim() || selectedAddress.label)
+      : addressQuery.trim()
     const region = splitsPlace
       ? joinStayPlace(city, address)
       : selectedPlace?.label ?? (placeQuery.trim() || null)
@@ -429,9 +545,11 @@ export function AddManualItemDialog({
     />
   )
 
-  const addressProximity: [number, number] | null = selectedPlace
-    ? [selectedPlace.coords.lng, selectedPlace.coords.lat]
-    : tripProximity
+  const addressProximity: [number, number] | null = cityAnchor
+    ? [cityAnchor.coords.lng, cityAnchor.coords.lat]
+    : selectedPlace
+      ? [selectedPlace.coords.lng, selectedPlace.coords.lat]
+      : tripProximity
 
   const addressPinHint = selectedAddress ? (
     <p className="text-xs text-muted-foreground">
@@ -451,10 +569,13 @@ export function AddManualItemDialog({
       onValueChange={handleCityChange}
       selected={selectedPlace}
       onSelect={handleSelectCity}
+      onResolvedAnchor={handleResolvedCityAnchor}
       placeholder="p. ej. Budapest"
       proximity={tripProximity}
-      countryCodes={countryCodes}
+      countryCodes={[]}
+      purpose={splitsPlace ? "city" : "site"}
       autoFocus={!seeded}
+      budgetRef={budgetRef}
     />
   )
 
@@ -468,8 +589,16 @@ export function AddManualItemDialog({
       onSelect={handleSelectAddress}
       placeholder="p. ej. Király utca 15"
       proximity={addressProximity}
-      countryCodes={countryCodes}
+      countryCodes={cityAnchor?.countryCode ? [cityAnchor.countryCode] : []}
+      purpose="address"
+      anchor={cityAnchor}
+      scope={addressScope}
+      onScopeChange={setAddressScope}
       hint={addressPinHint}
+      budgetRef={budgetRef}
+      sessionRef={addressSessionRef}
+      externalSuggestions={nameSuggestions}
+      onExternalSuggestionsConsumed={() => setNameSuggestions(null)}
     />
   ) : null
 
@@ -736,6 +865,7 @@ export function AddManualItemDialog({
               id={nameId}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onBlur={handleNameBlur}
               placeholder={NAME_PLACEHOLDERS[type]}
             />
           </div>

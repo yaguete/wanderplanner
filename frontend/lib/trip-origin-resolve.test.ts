@@ -7,16 +7,20 @@ import {
 
 const sanFrancisco: GeocodeSuggestion = {
   id: "place.sf",
+  provider: "searchbox",
   text: "San Francisco",
   placeName: "San Francisco, California, Estados Unidos",
+  featureType: "place",
   center: { lng: -122.4194, lat: 37.7749 },
   countryCode: "US",
 }
 
 const barcelona: GeocodeSuggestion = {
   id: "place.bcn",
+  provider: "searchbox",
   text: "Barcelona",
   placeName: "Barcelona, Cataluña, España",
+  featureType: "place",
   center: { lng: 2.1734, lat: 41.3851 },
   countryCode: "ES",
 }
@@ -105,6 +109,11 @@ assert.equal(
     geocodeCoords: null,
   }).kind,
   "unresolved",
+)
+
+assert.equal(
+  exactTextSuggestionMatch("Edimburgo", [{ text: "Edimburgo" }])?.text,
+  "Edimburgo",
 )
 
 console.log("trip-origin-resolve: ok")

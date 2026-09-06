@@ -29,10 +29,10 @@ function originFromSuggestion(s: GeocodeSuggestion): TripOrigin {
  * Solo igualdad exacta (case-insensitive) con `suggestion.text`.
  * Nunca usa prefijos ni `placeName`: eso adivinaría ciudades ("San" → San Francisco).
  */
-export function exactTextSuggestionMatch(
+export function exactTextSuggestionMatch<T extends { text: string }>(
   query: string,
-  suggestions: GeocodeSuggestion[],
-): GeocodeSuggestion | null {
+  suggestions: T[],
+): T | null {
   const q = query.trim().toLowerCase()
   if (!q || suggestions.length === 0) return null
   const first = suggestions[0]!

@@ -45,7 +45,10 @@ import {
   allowTransportHubPersistence,
   createPlaceSearchBudget,
   canSpendSuggest,
+  canStartSession,
   recordSuggest,
+  recordSession,
+  recordRetrieve,
   toPersistableRoutePlace,
   stripPersistMeta,
 } from "./place-search-guardrails"
@@ -1170,6 +1173,18 @@ describe("guardrails", () => {
     assert.ok(p.coords)
     void allowTransportHubPersistence
     void sourceRouteHintFromTransport
+  })
+
+  it("sesiones y retrieves no se confunden con teclazos", () => {
+    let b = createPlaceSearchBudget({ maxSuggests: 4, maxSessions: 1, maxHubs: 1 })
+    assert.equal(canStartSession(b), true)
+    b = recordSession(b)
+    b = recordSuggest(b)
+    b = recordRetrieve(b)
+    assert.equal(canSpendSuggest(b), true, "retrieve no agota el tope de suggests")
+    assert.equal(canStartSession(b), false, "una sesión ya abierta agota maxSessions")
+    assert.equal(b.retrieves, 1)
+    assert.equal(b.sessions, 1)
   })
 })
 

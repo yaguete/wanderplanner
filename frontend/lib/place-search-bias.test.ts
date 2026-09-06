@@ -39,4 +39,35 @@ assert.equal(queryLooksGeographicallyQualified("Uganda"), true)
   assert.ok(bias.countryCodes.includes("gd"))
 }
 
+{
+  const madrid: [number, number] = [-3.7038, 40.4168]
+  const bias = placeSearchBias("Plaza Mayor, Madrid", {
+    proximity: madrid,
+    countryCodes: ["es"],
+    anchored: true,
+  })
+  assert.deepEqual(bias.proximity, madrid, "el ancla conserva proximity aunque haya coma")
+  assert.ok(bias.countryCodes.includes("es"))
+}
+
+{
+  const bias = placeSearchBias("Sagrada Familia", {
+    proximity: [-3.7038, 40.4168],
+    countryCodes: ["es"],
+    anywhere: true,
+  })
+  assert.deepEqual(bias.proximity, [-3.7038, 40.4168])
+  assert.deepEqual(bias.countryCodes, [], "anywhere tira los países heredados")
+}
+
+{
+  const bias = placeSearchBias("Edimburgo, Reino Unido", {
+    proximity: [-3.7038, 40.4168],
+    countryCodes: ["es"],
+    anywhere: true,
+  })
+  assert.ok(bias.countryCodes.includes("gb"))
+  assert.equal(bias.countryCodes.includes("es"), false)
+}
+
 console.log("place-search-bias: ok")

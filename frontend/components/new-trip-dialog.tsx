@@ -35,11 +35,17 @@ import {
 import {
   geocodeFreeText,
   resolvePermanentCoords,
+  retrievePlace,
   seedGeocodeCache,
-  suggestPlaces,
-  type GeocodeSuggestion,
+  suggestPlacesSession,
+  type PlaceSuggestion,
 } from "@/lib/mapbox"
-import { decideOriginOnSubmit } from "@/lib/trip-origin-resolve"
+import { typesForPurpose, newPlaceSearchSession, recordSessionSuggest, sessionNeedsRotation } from "@/lib/place-search-purpose"
+import {
+  decideOriginOnSubmit,
+  exactTextSuggestionMatch,
+  type OriginSubmitDecision,
+} from "@/lib/trip-origin-resolve"
 import type { TripOrigin } from "@/types/itinerary"
 
 const SUGGEST_DEBOUNCE_MS = 300
@@ -116,7 +122,7 @@ export function NewTripDialog({
   const [currency, setCurrency] = useState("EUR")
 
   const [originQuery, setOriginQuery] = useState("")
-  const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [selectedOrigin, setSelectedOrigin] = useState<TripOrigin | null>(null)
   const [listOpen, setListOpen] = useState(false)
@@ -124,7 +130,9 @@ export function NewTripDialog({
 
   const abortRef = useRef<AbortController | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const suggestionsRef = useRef<GeocodeSuggestion[]>([])
+  const suggestionsRef = useRef<PlaceSuggestion[]>([])
+  const originSessionRef = useRef(newPlaceSearchSession())
+  const originGenRef = useRef(0)
 
   const nameId = `${id}-name`
   const datesId = `${id}-dates`
@@ -148,6 +156,8 @@ export function NewTripDialog({
     setListOpen(false)
     setSuggestLoading(false)
     setSubmitting(false)
+    originSessionRef.current = newPlaceSearchSession()
+    originGenRef.current += 1
 
     if (isEdit && initial) {
       setName(initial.name)
@@ -191,22 +201,35 @@ export function NewTripDialog({
     }
 
     setSuggestLoading(true)
+    const gen = ++originGenRef.current
     debounceRef.current = setTimeout(() => {
       const ac = new AbortController()
       abortRef.current = ac
-      // No filtrar por trip.countries: el origen suele ser distinto del destino.
-      void suggestPlaces(q, {
+      let session = originSessionRef.current
+      if (sessionNeedsRotation(session)) {
+        session = newPlaceSearchSession()
+        originSessionRef.current = session
+      }
+      originSessionRef.current = recordSessionSuggest(session)
+      void suggestPlacesSession(q, originSessionRef.current.token, {
         limit: 6,
         signal: ac.signal,
+        purpose: "city",
       })
-        .then((list) => {
-          if (ac.signal.aborted) return
-          setSuggestions(list)
+        .then((result) => {
+          if (ac.signal.aborted || gen !== originGenRef.current) return
+          if (!result.ok) {
+            if (result.reason === "aborted") return
+            setSuggestions([])
+            setSuggestLoading(false)
+            return
+          }
+          setSuggestions(result.items)
           setListOpen(true)
           setSuggestLoading(false)
         })
         .catch((err: unknown) => {
-          if (ac.signal.aborted) return
+          if (ac.signal.aborted || gen !== originGenRef.current) return
           if (err instanceof DOMException && err.name === "AbortError") return
           setSuggestions([])
           setSuggestLoading(false)
@@ -243,23 +266,40 @@ export function NewTripDialog({
     return base
   })()
 
-  const handleSelectSuggestion = (s: GeocodeSuggestion) => {
-    const origin: TripOrigin = {
-      label: s.text,
-      countryCode: s.countryCode,
-      coords: s.center,
-    }
+  const applyOrigin = (
+    origin: TripOrigin,
+    cache?: { placeName: string; center: { lng: number; lat: number } },
+  ) => {
     setSelectedOrigin(origin)
-    setOriginQuery(s.text)
+    setOriginQuery(origin.label)
     setSuggestions([])
     setListOpen(false)
     setOriginError(null)
-    seedGeocodeCache(s.placeName, s.center)
-    // `s.center` es del dataset temporal y `trip.origin` se persiste: pedimos la
-    // permanente por detrás. Si no llega, se guarda la temporal como siempre.
-    void resolvePermanentCoords(s.placeName, s.center).then((coords) => {
-      if (coords === s.center) return
-      setSelectedOrigin((prev) => (prev?.label === s.text ? { ...prev, coords } : prev))
+    if (cache) seedGeocodeCache(cache.placeName, cache.center)
+  }
+
+  const retrieveSuggestion = async (s: PlaceSuggestion) => {
+    const result = await retrievePlace(s)
+    if (!result.ok) return null
+    originSessionRef.current = newPlaceSearchSession()
+    return result.place
+  }
+
+  const handleSelectSuggestion = (s: PlaceSuggestion) => {
+    const gen = ++originGenRef.current
+    void retrieveSuggestion(s).then((place) => {
+      if (gen !== originGenRef.current || !place) return
+      const origin: TripOrigin = {
+        label: place.text,
+        countryCode: place.countryCode,
+        coords: place.center,
+      }
+      applyOrigin(origin, { placeName: place.placeName, center: place.center })
+      void resolvePermanentCoords(place.placeName, place.center).then((coords) => {
+        if (gen !== originGenRef.current) return
+        if (coords === place.center) return
+        setSelectedOrigin((prev) => (prev?.label === place.text ? { ...prev, coords } : prev))
+      })
     })
   }
 
@@ -279,7 +319,6 @@ export function NewTripDialog({
       const list = suggestionsRef.current
       if (list.length === 0) return
       const first = list[0]!
-      // En blur el match por prefijo es visible: el campo se actualiza a la vista.
       if (
         first.text.toLowerCase() === q.toLowerCase() ||
         first.placeName.toLowerCase().startsWith(q.toLowerCase())
@@ -287,6 +326,45 @@ export function NewTripDialog({
         handleSelectSuggestion(first)
       }
     }, 150)
+  }
+
+  const applyOriginDecision = (
+    decision: OriginSubmitDecision,
+    placeNameForCache?: string,
+  ):
+    | { ok: true; origin: TripOrigin | null }
+    | { ok: false; error: string; allowSkip: boolean } => {
+    switch (decision.kind) {
+      case "empty":
+        return { ok: true, origin: null }
+      case "confirmed":
+        setSelectedOrigin(decision.origin)
+        setOriginQuery(decision.origin.label)
+        if (placeNameForCache) {
+          seedGeocodeCache(placeNameForCache, decision.origin.coords)
+        }
+        return { ok: true, origin: decision.origin }
+      case "needs_confirm":
+        setSelectedOrigin(decision.origin)
+        setOriginQuery(decision.displayLabel)
+        if (decision.placeNameForCache) {
+          seedGeocodeCache(decision.placeNameForCache, decision.origin.coords)
+        } else if (placeNameForCache) {
+          seedGeocodeCache(placeNameForCache, decision.origin.coords)
+        }
+        return {
+          ok: false,
+          error: `Origen propuesto: «${decision.displayLabel}». Confírmalo pulsando Crear de nuevo, elige otra opción del desplegable, o continúa sin origen.`,
+          allowSkip: true,
+        }
+      case "unresolved":
+        return {
+          ok: false,
+          error:
+            "No encontramos ese lugar. Elige una opción del desplegable o continúa sin origen.",
+          allowSkip: true,
+        }
+    }
   }
 
   const resolveOriginForSubmit = async (): Promise<
@@ -302,43 +380,46 @@ export function NewTripDialog({
     }
 
     const suggestions = suggestionsRef.current
-    // Solo llamar a geocode si no hay candidatos visibles (cascada 2).
-    const geocodeCoords =
-      suggestions.length === 0 ? await geocodeFreeText(q) : null
+    const exact = exactTextSuggestionMatch(q, suggestions)
+    const candidate = exact ?? (suggestions.length > 0 ? suggestions[0]! : null)
+    if (candidate) {
+      const place = await retrieveSuggestion(candidate)
+      if (!place) {
+        return {
+          ok: false,
+          error: "No encontramos ese lugar. Elige una opción del desplegable o continúa sin origen.",
+          allowSkip: true,
+        }
+      }
+      const geocodeSuggestion = {
+        id: place.id,
+        provider: "searchbox" as const,
+        text: place.text,
+        placeName: place.placeName,
+        featureType: place.featureType,
+        countryCode: place.countryCode,
+        center: place.center,
+      }
+      const decision = decideOriginOnSubmit({
+        query: q,
+        selected: selectedOrigin,
+        suggestions: [geocodeSuggestion],
+        geocodeCoords: null,
+      })
+      return applyOriginDecision(decision, place.placeName)
+    }
+
+    const geocodeCoords = await geocodeFreeText(q, {
+      types: typesForPurpose("city", "geocoding-v5") ?? undefined,
+    })
 
     const decision = decideOriginOnSubmit({
       query: q,
       selected: selectedOrigin,
-      suggestions,
+      suggestions: [],
       geocodeCoords,
     })
-
-    switch (decision.kind) {
-      case "empty":
-        return { ok: true, origin: null }
-      case "confirmed":
-        setSelectedOrigin(decision.origin)
-        setOriginQuery(decision.origin.label)
-        return { ok: true, origin: decision.origin }
-      case "needs_confirm":
-        setSelectedOrigin(decision.origin)
-        setOriginQuery(decision.displayLabel)
-        if (decision.placeNameForCache) {
-          seedGeocodeCache(decision.placeNameForCache, decision.origin.coords)
-        }
-        return {
-          ok: false,
-          error: `Origen propuesto: «${decision.displayLabel}». Confírmalo pulsando Crear de nuevo, elige otra opción del desplegable, o continúa sin origen.`,
-          allowSkip: true,
-        }
-      case "unresolved":
-        return {
-          ok: false,
-          error:
-            "No encontramos ese lugar. Elige una opción del desplegable o continúa sin origen.",
-          allowSkip: true,
-        }
-    }
+    return applyOriginDecision(decision)
   }
 
   const buildPayload = (origin: TripOrigin | null): NewTripData => {
@@ -382,6 +463,7 @@ export function NewTripDialog({
     }
 
     setSubmitting(true)
+    originGenRef.current += 1
     try {
       let origin: TripOrigin | null = null
       if (opts?.skipOrigin) {

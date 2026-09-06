@@ -26,6 +26,16 @@ import {
   type RegionAnchor,
 } from "@/lib/geocode-validate"
 import { placeSearchBias } from "@/lib/place-search-bias"
+import {
+  bboxToParam,
+  parseBbox,
+  shouldFallbackToGeocodingV5,
+  suggestionAllowedForPurpose,
+  typesForPurpose,
+  type Bbox,
+  type PlaceSearchPurpose,
+  type PlaceSearchProvider,
+} from "@/lib/place-search-purpose"
 
 const CACHE_VERSION = 7
 const CACHE_PREFIX = "wp-mapbox-geo-v7"
@@ -345,17 +355,51 @@ export function shortPlaceLabel(feature: {
   return `${primary}, ${secondary}`
 }
 
-export type GeocodeSuggestion = {
+export type PlaceSearchFailure = {
+  ok: false
+  reason: "disabled" | "no-token" | "http" | "network" | "aborted"
+  status?: number
+}
+
+export type PlaceSuggestion = {
   id: string
-  /** place_name completo (útil para caché / debug). */
-  placeName: string
-  /** Etiqueta corta para `UserDayItem.region` y la tarjeta. */
+  provider: PlaceSearchProvider
   text: string
-  center: LngLat
-  /** ISO 3166-1 alpha-2 si Mapbox lo aporta; null si no. */
+  placeName: string
+  featureType: string
   countryCode: string | null
-  /** Search Box `poi_category_ids` (estable frente al idioma). Ausente en v5. */
   poiCategoryIds?: string[] | null
+  /** Presente en /forward y v5. Ausente en /suggest. */
+  center?: LngLat
+  mapboxId?: string
+  sessionToken?: string
+}
+
+export type GeocodeSuggestion = PlaceSuggestion & {
+  center: LngLat
+}
+
+export type RetrievedPlace = {
+  id: string
+  text: string
+  placeName: string
+  featureType: string
+  center: LngLat
+  countryCode: string | null
+  bbox: Bbox | null
+  poiCategoryIds: string[] | null
+}
+
+export type PlaceSearchListResult =
+  | { ok: true; items: PlaceSuggestion[] }
+  | PlaceSearchFailure
+
+export type PlaceRetrieveResult =
+  | { ok: true; place: RetrievedPlace }
+  | PlaceSearchFailure
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError"
 }
 
 type SearchBoxForwardHit = {
@@ -381,7 +425,9 @@ type SearchBoxForwardFeature = {
     poi_category_ids?: string[]
     coordinates?: { longitude?: number; latitude?: number }
     context?: { country?: { country_code?: string; name?: string } }
+    bbox?: [number, number, number, number]
   }
+  bbox?: [number, number, number, number]
 }
 
 function searchBoxCountryParam(codes: string[] | null | undefined): string | null {
@@ -413,9 +459,13 @@ async function searchBoxForward(
     countryCodes?: string[] | null
     limit?: number
     signal?: AbortSignal
+    types?: string | null
+    bbox?: Bbox | null
   },
-): Promise<SearchBoxForwardHit[]> {
-  if (!MAPBOX_TOKEN?.trim() || !query.trim()) return []
+): Promise<{ ok: true; hits: SearchBoxForwardHit[] } | PlaceSearchFailure> {
+  if (!MAPBOX_TOKEN?.trim() || !query.trim()) {
+    return MAPBOX_TOKEN?.trim() ? { ok: true, hits: [] } : { ok: false, reason: "no-token" }
+  }
   const limit = Math.min(Math.max(options?.limit ?? 5, 1), 10)
   const params = new URLSearchParams({
     q: query.trim(),
@@ -428,11 +478,13 @@ async function searchBoxForward(
   }
   const country = searchBoxCountryParam(options?.countryCodes)
   if (country) params.set("country", country)
+  if (options?.types) params.set("types", options.types)
+  if (options?.bbox) params.set("bbox", bboxToParam(options.bbox))
 
   const url = `https://api.mapbox.com/search/searchbox/v1/forward?${params}`
   try {
     const res = await fetch(url, { signal: options?.signal })
-    if (!res.ok) return []
+    if (!res.ok) return { ok: false, reason: "http", status: res.status }
     const data = (await res.json()) as { features?: SearchBoxForwardFeature[] }
     const out: SearchBoxForwardHit[] = []
     for (const f of data.features ?? []) {
@@ -459,10 +511,10 @@ async function searchBoxForward(
           : null,
       })
     }
-    return out
+    return { ok: true, hits: out }
   } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") throw err
-    return []
+    if (isAbortError(err)) return { ok: false, reason: "aborted" }
+    return { ok: false, reason: "network" }
   }
 }
 
@@ -498,12 +550,14 @@ export async function searchPlaceCandidates(
   const cached = searchBoxSessionCache.get(key)
   if (cached && cached.length > 0) return cached
 
-  const hits = await searchBoxForward(name.trim(), {
+  const hitsResult = await searchBoxForward(name.trim(), {
     proximity,
     countryCodes: options.countryCodes,
     limit: 5,
     signal: options.signal,
   })
+  if (!hitsResult.ok) return []
+  const hits = hitsResult.hits
   const candidates: GeocodeCandidate[] = hits.map((h) => ({
     coord: h.coord,
     featureType: h.featureType,
@@ -514,50 +568,110 @@ export async function searchPlaceCandidates(
   return candidates
 }
 
-/**
- * Autocompletado de lugares. Search Box `/forward` (tiene POIs); si no hay
- * hits, Geocoding v5. Siempre temporal: la coordenada que acaba en el jsonb
- * la resuelve `resolvePermanentCoords` al confirmar.
- */
-export async function suggestPlaces(
+export type SuggestPlacesOptions = {
+  proximity?: [number, number] | null
+  countryCodes?: string[] | null
+  limit?: number
+  signal?: AbortSignal
+  purpose?: PlaceSearchPurpose
+  bbox?: Bbox | null
+  anchored?: boolean
+  anywhere?: boolean
+}
+
+function applySuggestBias(
   text: string,
-  options?: {
-    proximity?: [number, number] | null
-    countryCodes?: string[] | null
-    limit?: number
-    signal?: AbortSignal
-  },
-): Promise<GeocodeSuggestion[]> {
-  if (!isPlaceSearchEnabled()) return []
-  if (!MAPBOX_TOKEN?.trim() || !text?.trim()) return []
-  const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
+  options?: SuggestPlacesOptions,
+): {
+  proximity: [number, number] | null
+  countryCodes: string[] | undefined
+  typesSearchBox: string | null
+  typesV5: string | null
+  bbox: Bbox | null
+  purpose: PlaceSearchPurpose
+} {
+  const purpose = options?.purpose ?? "site"
   const bias = placeSearchBias(text, {
     proximity: options?.proximity,
     countryCodes: options?.countryCodes,
+    anchored: options?.anchored,
+    anywhere: options?.anywhere,
   })
-  const proximity = bias.proximity
-  const countryCodes = bias.countryCodes.length ? bias.countryCodes : undefined
-  const fromBox = await searchBoxForward(text.trim(), {
-    proximity,
-    countryCodes,
-    limit,
-    signal: options?.signal,
-  })
-  if (fromBox.length > 0) {
-    return fromBox.map((f) => ({
-      id: f.id,
-      placeName: f.placeName,
-      text: f.text,
-      center: f.coord,
-      countryCode: f.countryCode,
-      poiCategoryIds: f.poiCategoryIds,
-    }))
+  return {
+    proximity: bias.proximity,
+    countryCodes: bias.countryCodes.length ? bias.countryCodes : undefined,
+    typesSearchBox: typesForPurpose(purpose, "searchbox"),
+    typesV5: typesForPurpose(purpose, "geocoding-v5"),
+    bbox: options?.anywhere ? null : (parseBbox(options?.bbox) ?? null),
+    purpose,
   }
-  return suggestPlacesGeocodingV5(text.trim(), {
-    proximity,
-    countryCodes,
+}
+
+function filterByPurpose<T extends { featureType: string }>(
+  items: T[],
+  purpose: PlaceSearchPurpose,
+): T[] {
+  return items.filter((item) => suggestionAllowedForPurpose(item.featureType, purpose))
+}
+
+/**
+ * Autocompletado de lugares. Search Box `/forward` (tiene POIs); si no hay
+ * hits y el propósito admite fallback, Geocoding v5. Siempre temporal: la
+ * coordenada que acaba en el jsonb la resuelve `resolvePermanentCoords`.
+ */
+export async function suggestPlaces(
+  text: string,
+  options?: SuggestPlacesOptions,
+): Promise<GeocodeSuggestion[]> {
+  const result = await suggestPlacesResult(text, options)
+  if (!result.ok) return []
+  return result.items.filter((item): item is GeocodeSuggestion => item.center != null)
+}
+
+export async function suggestPlacesResult(
+  text: string,
+  options?: SuggestPlacesOptions,
+): Promise<PlaceSearchListResult> {
+  if (!isPlaceSearchEnabled()) return { ok: false, reason: "disabled" }
+  if (!MAPBOX_TOKEN?.trim()) return { ok: false, reason: "no-token" }
+  if (!text?.trim()) return { ok: true, items: [] }
+  const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
+  const bias = applySuggestBias(text, options)
+  const fromBox = await searchBoxForward(text.trim(), {
+    proximity: bias.proximity,
+    countryCodes: bias.countryCodes,
     limit,
     signal: options?.signal,
+    types: bias.typesSearchBox,
+    bbox: bias.bbox,
+  })
+  if (!fromBox.ok) return fromBox
+  const filtered = filterByPurpose(fromBox.hits, bias.purpose)
+  if (filtered.length > 0) {
+    return {
+      ok: true,
+      items: filtered.map((f) => ({
+        id: f.id,
+        provider: "searchbox" as const,
+        placeName: f.placeName,
+        text: f.text,
+        center: f.coord,
+        countryCode: f.countryCode,
+        poiCategoryIds: f.poiCategoryIds,
+        featureType: f.featureType,
+        mapboxId: f.id,
+      })),
+    }
+  }
+  if (!shouldFallbackToGeocodingV5(bias.purpose)) return { ok: true, items: [] }
+  return suggestPlacesGeocodingV5(text.trim(), {
+    proximity: bias.proximity,
+    countryCodes: bias.countryCodes,
+    limit,
+    signal: options?.signal,
+    types: bias.typesV5,
+    bbox: bias.bbox,
+    purpose: bias.purpose,
   })
 }
 
@@ -568,8 +682,11 @@ async function suggestPlacesGeocodingV5(
     countryCodes?: string[] | null
     limit: number
     signal?: AbortSignal
+    types?: string | null
+    bbox?: Bbox | null
+    purpose: PlaceSearchPurpose
   },
-): Promise<GeocodeSuggestion[]> {
+): Promise<PlaceSearchListResult> {
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
     limit: String(options.limit),
@@ -580,27 +697,195 @@ async function suggestPlacesGeocodingV5(
     params.set("proximity", `${options.proximity[0]},${options.proximity[1]}`)
   }
   appendCountryParams(params, options.countryCodes)
+  if (options.types) params.set("types", options.types)
+  if (options.bbox) params.set("bbox", bboxToParam(options.bbox))
 
   const url = buildGeocodeUrl(text, params)
-  const res = await fetch(url, { signal: options.signal })
-  if (!res.ok) return []
-  const data = (await res.json()) as { features?: MapboxFeature[] }
-  const out: GeocodeSuggestion[] = []
-  for (const f of data.features ?? []) {
-    const c = f.center
-    if (!c || c.length < 2) continue
-    const placeName = f.place_name?.trim()
-    if (!placeName) continue
-    const center = { lng: c[0], lat: c[1] }
-    out.push({
-      id: f.id ?? `${placeName}-${center.lng}-${center.lat}`,
-      placeName,
-      text: shortPlaceLabel(f),
-      center,
-      countryCode: countryCodeFromMapboxFeature(f),
-    })
+  try {
+    const res = await fetch(url, { signal: options.signal })
+    if (!res.ok) return { ok: false, reason: "http", status: res.status }
+    const data = (await res.json()) as { features?: MapboxFeature[] }
+    const out: PlaceSuggestion[] = []
+    for (const f of data.features ?? []) {
+      const c = f.center
+      if (!c || c.length < 2) continue
+      const placeName = f.place_name?.trim()
+      if (!placeName) continue
+      const center = { lng: c[0], lat: c[1] }
+      const featureType = featureTypeFromMapboxId(f.id)
+      if (!suggestionAllowedForPurpose(featureType, options.purpose)) continue
+      out.push({
+        id: f.id ?? `${placeName}-${center.lng}-${center.lat}`,
+        provider: "geocoding-v5",
+        placeName,
+        text: shortPlaceLabel(f),
+        center,
+        countryCode: countryCodeFromMapboxFeature(f),
+        featureType,
+      })
+    }
+    return { ok: true, items: out }
+  } catch (err) {
+    if (isAbortError(err)) return { ok: false, reason: "aborted" }
+    return { ok: false, reason: "network" }
   }
-  return out
+}
+
+type SearchBoxSuggestHit = {
+  name?: string
+  mapbox_id?: string
+  feature_type?: string
+  place_formatted?: string
+  full_address?: string
+  context?: { country?: { country_code?: string } }
+}
+
+/**
+ * Autocompletado por sesión (Search Box `/suggest`). Sin coordenadas hasta
+ * `retrievePlace`. Factura por sesión, no por tecleo.
+ */
+export async function suggestPlacesSession(
+  text: string,
+  sessionToken: string,
+  options?: SuggestPlacesOptions,
+): Promise<PlaceSearchListResult> {
+  if (!isPlaceSearchEnabled()) return { ok: false, reason: "disabled" }
+  if (!MAPBOX_TOKEN?.trim()) return { ok: false, reason: "no-token" }
+  if (!text?.trim() || !sessionToken.trim()) return { ok: true, items: [] }
+  const limit = Math.min(Math.max(options?.limit ?? 6, 1), 10)
+  const bias = applySuggestBias(text, options)
+  const params = new URLSearchParams({
+    q: text.trim(),
+    access_token: MAPBOX_TOKEN,
+    language: "es",
+    limit: String(limit),
+    session_token: sessionToken,
+  })
+  if (bias.proximity) params.set("proximity", `${bias.proximity[0]},${bias.proximity[1]}`)
+  const country = searchBoxCountryParam(bias.countryCodes)
+  if (country) params.set("country", country)
+  if (bias.typesSearchBox) params.set("types", bias.typesSearchBox)
+  if (bias.bbox) params.set("bbox", bboxToParam(bias.bbox))
+
+  const url = `https://api.mapbox.com/search/searchbox/v1/suggest?${params}`
+  try {
+    const res = await fetch(url, { signal: options?.signal })
+    if (!res.ok) return { ok: false, reason: "http", status: res.status }
+    const data = (await res.json()) as { suggestions?: SearchBoxSuggestHit[] }
+    const items: PlaceSuggestion[] = []
+    for (const s of data.suggestions ?? []) {
+      const textLabel = s.name?.trim()
+      const mapboxId = s.mapbox_id?.trim()
+      if (!textLabel || !mapboxId) continue
+      const featureType = s.feature_type?.trim() || "unknown"
+      if (!suggestionAllowedForPurpose(featureType, bias.purpose)) continue
+      const countryRaw = s.context?.country?.country_code?.trim().toUpperCase()
+      const placeName =
+        s.full_address?.trim() ||
+        [textLabel, s.place_formatted?.trim()].filter(Boolean).join(", ") ||
+        textLabel
+      items.push({
+        id: mapboxId,
+        provider: "searchbox",
+        text: textLabel,
+        placeName,
+        featureType,
+        countryCode: countryRaw && /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : null,
+        mapboxId,
+        sessionToken,
+      })
+    }
+    if (items.length > 0) return { ok: true, items }
+    if (!shouldFallbackToGeocodingV5(bias.purpose)) return { ok: true, items: [] }
+    return suggestPlacesGeocodingV5(text.trim(), {
+      proximity: bias.proximity,
+      countryCodes: bias.countryCodes,
+      limit,
+      signal: options?.signal,
+      types: bias.typesV5,
+      bbox: bias.bbox,
+      purpose: bias.purpose,
+    })
+  } catch (err) {
+    if (isAbortError(err)) return { ok: false, reason: "aborted" }
+    return { ok: false, reason: "network" }
+  }
+}
+
+/**
+ * Recupera coordenadas (y bbox opcional) de un candidato de `/suggest`.
+ * Un hit de v5 ya trae `center` y no se envía a Search Box.
+ */
+export async function retrievePlace(
+  suggestion: PlaceSuggestion,
+  options?: { signal?: AbortSignal },
+): Promise<PlaceRetrieveResult> {
+  if (suggestion.center) {
+    return {
+      ok: true,
+      place: {
+        id: suggestion.id,
+        text: suggestion.text,
+        placeName: suggestion.placeName,
+        featureType: suggestion.featureType,
+        center: suggestion.center,
+        countryCode: suggestion.countryCode,
+        bbox: null,
+        poiCategoryIds: suggestion.poiCategoryIds ?? null,
+      },
+    }
+  }
+  if (!isPlaceSearchEnabled()) return { ok: false, reason: "disabled" }
+  if (!MAPBOX_TOKEN?.trim()) return { ok: false, reason: "no-token" }
+  const mapboxId = suggestion.mapboxId ?? suggestion.id
+  const sessionToken = suggestion.sessionToken
+  if (!mapboxId || !sessionToken) return { ok: false, reason: "network" }
+
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    language: "es",
+    session_token: sessionToken,
+  })
+  const url = `https://api.mapbox.com/search/searchbox/v1/retrieve/${encodeURIComponent(mapboxId)}?${params}`
+  try {
+    const res = await fetch(url, { signal: options?.signal })
+    if (!res.ok) return { ok: false, reason: "http", status: res.status }
+    const data = (await res.json()) as { features?: SearchBoxForwardFeature[] }
+    const f = data.features?.[0]
+    if (!f) return { ok: false, reason: "network" }
+    const coord = coordsFromSearchBoxFeature(f)
+    if (!coord) return { ok: false, reason: "network" }
+    const text =
+      f.properties?.name_preferred?.trim() ||
+      f.properties?.name?.trim() ||
+      suggestion.text
+    const placeName =
+      f.properties?.full_address?.trim() ||
+      [text, f.properties?.place_formatted?.trim()].filter(Boolean).join(", ") ||
+      text
+    const bbox = parseBbox(
+      (f.properties as { bbox?: unknown } | undefined)?.bbox ??
+        (f as { bbox?: unknown }).bbox,
+    )
+    return {
+      ok: true,
+      place: {
+        id: f.properties?.mapbox_id ?? mapboxId,
+        text,
+        placeName,
+        featureType: f.properties?.feature_type?.trim() || suggestion.featureType,
+        center: coord,
+        countryCode: countryCodeFromSearchBox(f) ?? suggestion.countryCode,
+        bbox,
+        poiCategoryIds: Array.isArray(f.properties?.poi_category_ids)
+          ? f.properties.poi_category_ids.filter((id) => typeof id === "string" && id.trim())
+          : suggestion.poiCategoryIds ?? null,
+      },
+    }
+  } catch (err) {
+    if (isAbortError(err)) return { ok: false, reason: "aborted" }
+    return { ok: false, reason: "network" }
+  }
 }
 
 /** Descarta el punto permanente si no se parece al elegido (ver `resolvePermanentCoords`). */

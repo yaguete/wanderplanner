@@ -19,7 +19,6 @@ import {
   EndpointField,
   TransportModePicker,
   TransportRouteForm,
-  usePlaceSuggest,
   type EndpointState,
   type TransportModeChoice,
   type TransportRouteFormHandle,
@@ -116,10 +115,6 @@ export function InternalTransportForm({
   const noteId = useId()
   const routeFormRef = useRef<TransportRouteFormHandle>(null)
   const budgetRef = useRef<PlaceSearchBudget>(createPlaceSearchBudget())
-  const pickupDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pickupAbortRef = useRef<AbortController | null>(null)
-  const dropoffDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const dropoffAbortRef = useRef<AbortController | null>(null)
   const draftsRef = useRef<Partial<Record<BranchKey, BranchDraft>>>({})
 
   const seed = seedTransportForm(existingItem)
@@ -229,37 +224,6 @@ export function InternalTransportForm({
   useEffect(() => {
     onValidityChange?.(canSubmit)
   }, [canSubmit, onValidityChange])
-
-  usePlaceSuggest({
-    endpoint: pickup,
-    setEndpoint: setPickup,
-    debounceRef: pickupDebounceRef,
-    abortRef: pickupAbortRef,
-    budgetRef,
-    setSearchNotice,
-    enabled: rentalActive,
-  })
-
-  usePlaceSuggest({
-    endpoint: dropoff,
-    setEndpoint: setDropoff,
-    debounceRef: dropoffDebounceRef,
-    abortRef: dropoffAbortRef,
-    budgetRef,
-    setSearchNotice,
-    enabled: rentalActive && rentalDetailsOpen && !sameCityDropoff,
-  })
-
-  useEffect(() => {
-    if (rentalActive) return
-    pickupAbortRef.current?.abort()
-    dropoffAbortRef.current?.abort()
-  }, [rentalActive])
-
-  useEffect(() => {
-    if (!sameCityDropoff) return
-    dropoffAbortRef.current?.abort()
-  }, [sameCityDropoff])
 
   const snapshotBranch = (key: BranchKey) => {
     draftsRef.current[key] = {
@@ -457,6 +421,9 @@ export function InternalTransportForm({
             setEndpoint={setPickup}
             placeholder="p. ej. Edimburgo"
             required
+            budgetRef={budgetRef}
+            onBudgetNotice={setSearchNotice}
+            enabled={rentalActive}
           />
           <DayPickerSelect
             id={pickupDayIdField}
@@ -502,7 +469,6 @@ export function InternalTransportForm({
                       const checked = value === true
                       setSameCityDropoff(checked)
                       if (checked) {
-                        dropoffAbortRef.current?.abort()
                         setDropoff((s) => ({
                           ...s,
                           listOpen: false,
@@ -524,6 +490,9 @@ export function InternalTransportForm({
                     setEndpoint={setDropoff}
                     placeholder="p. ej. Glasgow"
                     required
+                    budgetRef={budgetRef}
+                    onBudgetNotice={setSearchNotice}
+                    enabled={rentalActive && rentalDetailsOpen && !sameCityDropoff}
                   />
                 ) : null}
               </div>
