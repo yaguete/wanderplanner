@@ -1,182 +1,136 @@
 ---
 name: wanderplanner-traffic
 description: >-
-  Informe de tráfico y activación de WanderPlanner (visitas, invitados,
-  peticiones de cuenta, registros, fuentes, clics salientes) cruzando Vercel
-  Analytics y Supabase, y volcado del resultado en la nota de seguimiento del
-  vault. Use when the user asks about visitas, tráfico, analytics, embudo,
-  invitados, registros, fuentes indexadas, clics a Booking/Skyscanner, o un
-  recuento de ayer/esta semana; or mentions Vercel Analytics, funnel_events,
-  gate_shown, criterio de vida, or wanderplanner.ai traffic.
+  Analiza tráfico, uso, registros y afiliación de WanderPlanner con Supabase y
+  Vercel Analytics; distingue eventos, cuentas y personas, y documenta la lectura
+  en el seguimiento del vault. Usar para revisar visitas, embudo, invitados,
+  gate_shown, clics salientes, retorno o el criterio de vida de wanderplanner.ai.
 ---
 
 # WanderPlanner · seguimiento de tráfico
 
-Eres el analista de producto. El fundador pregunta en español si **alguien de verdad** usó la app, no un dashboard genérico.
+Responde en español a qué actividad se ha observado, qué evidencia hay de uso externo y qué falta para valorar el negocio. Separa hechos, inferencias y desconocidos. Una lectura pequeña o incompleta no identifica por sí sola el cuello de botella.
 
-Ventana por defecto: **ayer, Europe/Madrid**. Si pide «esta semana» o fechas, úsalas. Convierte a UTC para Vercel.
+## Alcance y fuentes
 
-## El resultado se escribe SIEMPRE en el vault
+Ventana por defecto: **ayer, Europe/Madrid**, intervalo semiabierto `[desde, hasta)`. Anota ambos límites y la fecha de consulta; convierte los bordes a UTC para Vercel respetando el horario de verano. Separa cualquier dato de hoy o acumulado.
 
-Registro único, no negociable:
-
-```
-/Users/yago/Library/Mobile Documents/iCloud~md~obsidian/Documents/notas_de_yago/🚀 Personal/🚧 Pet Projects/WanderPlanner/WanderPlanner-embudo-seguimiento.md
-```
-
-Toda lectura del embudo termina ahí, además de contestar en el chat. Tres sitios dentro del fichero:
-
-1. **`## Registro`** — una fila nueva en la tabla, con la fecha de la lectura. **Nunca** reescribas filas anteriores: el registro es un historial, no un estado.
-2. **`## Lecturas del embudo (texto libre)`** — una subsección `### YYYY-MM-DD` con la lectura en prosa: qué post tira, qué cambió, hipótesis. Aquí va lo que no cabe en una celda.
-3. **Tabla del criterio de vida** — actualiza solo `Día del reloj` y `Acumulado a día de hoy`.
-
-Reglas del registro, que existen por una razón concreta:
-
-- **Si una lectura no está en el fichero, NO significa que no se hiciera.** Significa que no se anotó. Antes de este registro el plan pedía anotar «en la daily», sin sitio fijo, y durante días se concluyó por escrito —y en falso— que «la tabla no se ha consultado ni una vez». **No vuelvas a escribir «cero consultas» ni «lleva N días sin mirarse» en ningún documento.** Si necesitas saber si se miró, se mira aquí; si aquí no hay nada, se pregunta.
-- El **criterio de vida** son **10 emails en 4 semanas**; reloj desde el **17 ago 2026**, vence el **14 sep 2026**. Ese número **no** sale de `account_created`: sale del panel de Authentication de Supabase (o de `auth.users`). `funnel_events` solo añade atribución.
-- Si el fichero no existe, dilo y para. No lo recrees de cero ni inventes historial.
-
-## IDs
-
-| Pieza | ID |
+| Servicio | Identificador |
 |---|---|
-| Supabase | `kzriijgdkrdruikmpufl` (proyecto WanderPlanner) |
+| Supabase · WanderPlanner | `kzriijgdkrdruikmpufl` |
 | Vercel team | `team_f9DR86W9nckEuIvwthX0w5V3` |
 | Vercel project | `prj_zA8P8kqF1z6mdrScwsydI6dyKyGC` |
 
-MCP: `plugin-supabase-supabase` → `execute_sql`. `plugin-vercel-vercel` → `get_web_analytics` (si `needsAuth`, `mcp_auth` y reintenta).
+Descubre las herramientas disponibles de Supabase (`execute_sql`) y Vercel (`get_web_analytics`); no supongas nombres de MCP de otra instalación. No uses `va-cross-prototype`. Si falta acceso, informa del límite y trabaja con la última lectura fechada sin presentarla como consulta nueva.
 
-SQL listo en [queries.md](queries.md). Sustituye `:from` / `:to` por `timestamptz 'YYYY-MM-DD HH:MI:SS Europe/Madrid'`.
+Lee [queries.md](queries.md) para las consultas. Contrasta cambios de instrumentación en `frontend/lib/funnel-analytics.ts`, sus puntos de emisión, `backend/funnel.py` y `frontend/lib/auth-context.tsx`. `supabase/queries/funnel.sql` es un apoyo; usa ventanas explícitas para informes reproducibles.
 
-## Privacidad (no se negocia)
+Esta skill hace lecturas de los servicios y escribe la nota. No cambia instrumentación, cuentas, datos de producción, despliegues ni contactos. Una revisión de la propia skill no implica ejecutar una lectura nueva de producción.
 
-El informe **nunca** lleva: emails, nombres, IPs completas, user-agents, UUIDs de usuario, URLs con query, ni el texto de `meta` crudo si contiene `://` o `@`.
+## Registro en el vault
 
-Sí: `is_anonymous`, `signup_referrer`, `/24` (no el host), ISP si hace falta, `ref`/`post_slug`, dominio de fuente, booleanos (`tiene_email`).
+Ruta:
+`/Users/yago/Library/Mobile Documents/iCloud~md~obsidian/Documents/notas_de_yago/🚀 Personal/🚧 Pet Projects/WanderPlanner/WanderPlanner-embudo-seguimiento.md`
 
-Si Auto-review bloquea un SQL, **no** pidas aprobación para leer emails o UA. Reformula: quita `email`, `user_agent`, `host(ip)`. IP solo como `set_masklen(s.ip::inet, 24)`.
+Antes de escribir, lee el estado actual. Al terminar una lectura:
 
-`funnel_events` **no** tiene `user_id` ni IP a propósito. El join con viajes es por `post_slug` + tiempo, no por persona.
+- Añade una fila a `## Registro` con fecha, ventana, unidades y cobertura; y una entrada fechada en `## Lecturas del embudo (texto libre)`.
+- Distingue una consulta nueva de una revisión metodológica. Esta última usa «sin consulta nueva», nunca ceros como si fueran métricas del día.
+- Conserva los números históricos y su procedencia. Si una interpretación es falsa, corrígela con fecha y motivo; no la mantengas como conclusión vigente por una regla de historial inmutable. Un recuento nuevo sustituye el estado actual solo con evidencia y fecha, dejando rastro del anterior.
+- Actualiza el reloj y el acumulado por separado: el paso del tiempo no refresca los datos de Authentication.
+- Si falta una lectura, escribe «no consta aquí»; no concluyas que nadie consultó el embudo. Busca las notas pertinentes si hace falta. Si falta el fichero, comunica el límite; no inventes historial.
 
-## Cómo está montado (no lo re-instrumentes)
+## Qué mide cada capa
 
-Dos capas, no una:
+| Capa | Unidad y límites |
+|---|---|
+| `funnel_events` | Eventos recibidos por el servidor; no tiene `user_id`, IP ni identificador de sesión. Cuatro nombres actuales: `start_opened`, `gate_shown`, `account_created`, `outbound_click`. Retención prevista: 90 días. |
+| Vercel Analytics | Páginas y visitantes según su definición, solo con `wp-consent=all` en la integración actual. No representa todo el tráfico ni identifica personas. |
+| Auth / producto | Identidades técnicas, viajes, fuentes, solicitudes de uso y caché. Muchas filas se crean o actualizan automáticamente. |
 
-| Capa | Qué es | Consentimiento | Dónde |
-|---|---|---|---|
-| Embudo CTA | `funnel()` → `POST /funnel` → `funnel_events` | No. `start_opened` **antes** del captcha | Supabase, 90 días |
-| Web Analytics | `@vercel/analytics` + Speed Insights | Sí (`wp-consent=all`, `AnalyticsGate`) | Vercel, agregados |
-| Producto | `trips`, `sources`, `auth.users`, `usage_events`, `article_extractions` | Contrato / límites | Supabase |
+Los eventos custom de Vercel devolvían 402 en el plan documentado. No repitas esa consulta en la rutina salvo que cambie el plan o el usuario pida comprobarlo. No confundir falta de acceso con cero eventos.
 
-`track()` de Vercel (landing, onboarding, sugerencias de fuente) **existe en código** y **no se puede consultar** en el plan actual (API eventos custom → 402). Ignóralo. El denominador del CTA es `funnel_events`, no Analytics.
+### Unidades, atribución y comparaciones
 
-Nombres de embudo: `start_opened`, `outbound_click`, `account_created`, `gate_shown`. Meta de clic: `target` (booking/skyscanner/getyourguide/civitatis/kayak/stay22/other), `affiliate` (partner/own/none), `surface` (task_row/budget_row/route_card/assistant/flight_search/inspiration/manual_item). Meta de alta: `onboarding`. Meta de `gate_shown`: `reason`.
+- `start_opened`: guarda en `sessionStorage` por **ref + postSlug**, durante la sesión de pestaña. Puede repetirse entre pestañas, dispositivos o al fallar el almacenamiento; puede no llegar por un fallo de red. Ocurre antes de resolver Turnstile, pero después de las condiciones de carga/configuración del frontend. No equivale a personas únicas ni a impresiones/clics del banner.
+- `gate_shown`: guarda por **motivo** en esa sesión, no por artículo. Una sesión puede emitir varios motivos; el mismo motivo posterior en otro artículo puede no emitirse. Por tanto, sumar motivos no cuenta personas y dividir gates por starts no produce una tasa de exposición de una cohorte.
+- `account_created`: evento del flujo del frontend, no censo ni garantía de email confirmado. No atribuyas automáticamente un alta a una llegada concreta porque compartan artículo/hora.
+- `outbound_click`: clic registrado, repetible; no reserva ni ingreso.
+- `ref` y `post_slug` son atribución, no identidad. `wp-landing`, `wp-sources`, `landing`, `start`, `admin` son orígenes internos, **no prueban tráfico del equipo**.
+- Los CTA específicos documentados en `WanderPlanner-plan-produccion` transmiten `source`; el banner genérico abre la landing del partner. Usa la lista vigente al revisar el recorrido. `ref + post_slug` no siempre permite distinguirlos: la landing puede conservar atribución previa y su buscador acabar en el mismo artículo. Si falta la superficie de entrada, declara que no se puede separar.
+- Puedes mostrar altas/start como **ratio de eventos**, con misma ventana y filtro y denominador explícito; no lo llames conversión de personas. Muestra n/d y advierte si no hay cohorte enlazable.
+- No sumes ventanas móviles solapadas ni visitantes únicos por hora/día para obtener únicos del periodo. No compares acumulados con periodos parciales como si tuvieran igual duración. Una fila de total es válida solo si el proveedor devuelve ese total para la ventana.
+- Vercel y Auth/funnel tienen cobertura y unidades distintas: no impongas `Analytics ≤ actividad real` ni `start_opened ≥ /start`, ni calcules un «porcentaje sin consentimiento» restándolos.
 
-### `gate_shown` — la petición de cuenta (desde el 28 ago 2026)
+### Identidades y contaminación
 
-La modal de registro (`RegistrationGate`) se ha puesto delante de un invitado. Existe porque `account_created` por sí solo es ambiguo: con pocas altas no distingues **«la ven y la rechazan»** (problema de producto: nada detrás del email) de **«no llegan a verla»** (problema de sitio y momento). Son diagnósticos opuestos con el mismo número.
+Mantén tres grupos: **equipo/pruebas confirmadas**, **externos confirmados**, **desconocidos**. Para cada clasificación indica evidencia y fecha. Los indicios pueden anotarse dentro de desconocidos; no los conviertas en un censo.
 
-- `meta.reason`, lista cerrada de 7: `new-trip`, `second-source`, `home`, `source-limit`, `assistant-limit`, `invite`, `share-plan`. La misma lista vive en `FUNNEL_GATE_REASONS` (frontend) y en `ALLOWED_META_VALUES["reason"]` (backend); si divergen, el evento se descarta en silencio.
-- **`home` es el recordatorio automático** (3 min la primera vez, luego cada 5), no intención: a nadie le hizo falta la cuenta, solo pasó el tiempo. Los otros seis sí son intención, y señalan qué merecería la pena poner detrás del email.
-- Se emite **una vez por sesión y motivo**, con la misma guarda de `sessionStorage` que `start_opened` — así las dos columnas son comparables. Sin esa guarda contaría insistencias (la modal se reabre sola), no personas.
-- **No existe antes del 28 ago 2026.** En ventanas anteriores da cero y ese cero no significa nada: dilo explícitamente en el informe en vez de reportar 0.
-- Ojo con el nombre: esto es el **gate de registro**. El «gate» de la consulta 8 de [queries.md](queries.md) es el **captcha** (Turnstile). No los mezcles.
+Una cuenta reconocida por Yago o una prueba documentada permiten excluir actividad vinculable a esa identidad técnica. `signup_referrer=SinMapa` es una pista histórica de la cuenta del fundador: valida la correspondencia, no conviertas todo un ref público en una lista de exclusión.
 
-`ref=wp-landing` es chip de la home, **no** un partner. Partners reales: p. ej. `lacosmopolilla`.
+Una IP o red coincidente, ISP residencial, datacenter, país, ausencia de sesión, nombre de destino o proximidad horaria **no bastan** para afirmar equipo, persona externa o bot. Tampoco permiten unir dos cuentas como una persona. La ausencia de una fila en `auth.sessions` no prueba que nunca hubiera una sesión.
 
-## Tú vs el resto
+No arrastres cifras fijas ni nombres de lectores desde esta skill. Consulta el último estado documentado y su evidencia. Sin datos nuevos, conserva la última cifra como **clasificación histórica pendiente de validar** cuando solo se apoye en redes. Una cuenta borrada cambia el censo actual; no demuestra que su alta histórica fuera falsa o interna.
 
-Contaminación del fundador: casi todo el tráfico histórico es él. Clasifica **antes** de hablar de «visitas reales».
+Prueba conocida del 5 sep: `ref=codex-audit`, artículo Rocosas, viaje `d7b130f3-ad4e-4107-8895-ebd33838d173`. Exclúyela donde haya vínculo verificable; las visitas previas al blog/landing del auditor no están todas etiquetadas. No restes eventos anónimos por coincidencia horaria.
 
-Estado verificado a **28 ago 2026** en el panel de Authentication: **3 usuarios registrados en total, y dos son del equipo** — Patricia Rojas (la bloguera) y Yago. El único registro ajeno es **Victoria**. Con `auth.users` en cifras de un dígito, comprueba ahí antes de deducir nada del embudo.
+### Progreso técnico, uso y retorno
 
-**Eres tú si** encaja uno:
+| Observación | Interpretación admisible |
+|---|---|
+| Viaje con fuente inicial | El flujo creó/persistió un borrador; no demuestra planificación deliberada. |
+| Extracción o fuente creada | Procesamiento o incorporación de contenido, posiblemente automática/prewarm. |
+| `updated_at` posterior | Hubo una escritura; puede ser sync, metadatos o importación. No demuestra una edición humana. |
+| `created_at = updated_at` | No consta escritura posterior en esa fila; no demuestra rebote ni ausencia de lectura. |
+| Solicitud al asistente u otra acción vinculable | Señal de interacción; revisa qué la dispara y si el registro mide intento, éxito o consumo. |
+| Actividad de la misma identidad en otro día | Retorno de identidad técnica si hay registros fechados comparables; no por compartir /24 o post. Describe la acción, no declares retención útil solo por login/refresh. |
 
-1. `profiles.signup_referrer = 'SinMapa'` (cuenta principal).
-2. Sesión en una red de casa conocida: `79.155.19.0/24`, `79.155.115.0/24` (actualiza si cambia el ISP).
-3. `ref` reservado (`wp-landing`, `landing`, `start`, `admin`) **y** red de casa.
-4. Cuenta registrada que **también** ha tenido sesión en esas /24 (segunda cuenta de prueba).
+La activación útil propuesta es obtener un borrador utilizable y tomar una decisión propia recuperable. Si la instrumentación no permite observarlo, escribe **«activación útil no medible con estos datos»**, además de las señales disponibles. No inventes una tasa ni una nueva métrica registrada.
 
-**Es otro si**: invitado o cuenta nueva, `ref` de partner real, **y** `/24` que no es de casa. ISP residencial ES (Movistar, Vodafone, Orange) > datacenter.
+`fetched_at` de `article_extractions` se sobrescribe en el upsert: indica extracción reciente, **no primera indexación histórica**. `validated_at` es validación. Para probar novedad hacen falta historial/snapshot anterior; contar fetches tampoco cuenta URLs distintas.
 
-Un `start_opened` duplicado en el mismo milisegundo es doble disparo, no dos personas.
+### Captcha y petición de cuenta
 
-Analytics unique visitors **no** se suman por hora. `count` a veces ignora el rango: usa `aggregate` + `by: ["day"]` o `["hour"]`.
+La diferencia entre `start_opened` y viajes nuevos por artículo es un **desajuste entre agregados**, no abandonos del captcha. Reutilización, cambios de seed, ventanas, ref, slugs, pérdidas de eventos y fallos de auth/persistencia pueden alterarlo; puede ser negativo. Ni siquiera es una cota estadística garantizada sin supuestos verificables. No recortes negativos a cero para construir un porcentaje de abandono.
 
-## Orden de trabajo
+Sin telemetría específica no sabes quién vio, resolvió o abandonó Turnstile. Una reproducción del navegador confirma solo ese caso.
 
-1. Autentica MCP si hace falta. Confirma proyecto WanderPlanner (el otro, `va-cross-prototype`, está inactivo).
-2. SQL en paralelo: embudo, usuarios nuevos, viajes, fuentes, extracciones, usage, sesiones `/24`, outbound.
-3. Vercel en paralelo: totales por día, paths, `referrerHostname`, country, device. Filtro `requestPath eq '/start'`.
-4. Cruza. Headline primero: ¿hubo alguien que no fueras tú?
-5. Responde en español con la plantilla de abajo.
-6. **Vuelca el resultado** en `WanderPlanner-embudo-seguimiento.md`: fila nueva en `## Registro`, subsección `### YYYY-MM-DD` en las lecturas en texto libre, y `Día del reloj` / `Acumulado` al día. Di en el chat que lo has anotado y dónde.
+`gate_shown` es el registro, no Turnstile. Disponible desde el despliegue del **28 ago 2026**: ese día puede tener cobertura parcial; antes, «no instrumentado». Cero después significa cero eventos recibidos, no prueba de que nadie viera la modal.
 
-## Qué cuenta como «le interesa»
+- `home`: recordatorio temporizado (3 minutos, luego 5); no acción voluntaria.
+- Otros motivos actuales: `new-trip`, `second-source`, `source-limit`, `assistant-limit`, `invite`, `share-plan`. Señalan una acción bloqueada, no que se completara, aceptara pagar o rechazara conscientemente registrarse.
+- Usa los motivos de los enums actuales. Presenta eventos por motivo; no personas expuestas/rechazos individuales sin vínculo.
 
-No uses pageviews como éxito. Pirámide, de más barato a más caro de fingir:
+### Criterio de vida y fechas de cuenta
 
-1. **Llegada** — `start_opened` con `ref` de partner (o `/` con referrer externo en Vercel).
-2. **Pasó el gate** — invitado + fila en `trips` (Turnstile). Borrador vacío + `created_at = updated_at` = rebote (caso Tenerife).
-3. **Activación** — extrajo fuente (`sources` o `usage_events.kind=extraction`) **o** mutó el viaje después de crearlo. Esto es el norte: alguien planeó de verdad.
-4. **Intención de reserva** — `outbound_click` (da igual partner/own/none).
-5. **Retorno** — mismo `user_id` con actividad horas o días después (caso Coruña).
-6. **Vio la petición de cuenta** — `gate_shown`. No es un logro del usuario, es un dato tuyo: mide si la pregunta llegó a hacerse. Repórtalo siempre junto a `start_opened` y a las altas, nunca solo.
-7. **Cuenta** — `account_created` o `is_anonymous=false` creado en la ventana. Es el que decide el criterio de vida, y se confirma contra Authentication, no contra el evento.
+Regla histórica documentada: **10 emails externos recogidos en cuatro semanas**, desde **17 ago 2026**, vence **14 sep 2026**. Es una regla de decisión del fundador, no validación estadística del mercado; no declares fracaso definitivo antes del plazo.
 
-También reporta, si hay datos:
+Expresa días transcurridos desde el 17 (día 0) y restantes, evitando mezclar numeraciones inclusivas. No cambies el umbral ni exijas confirmación/retorno como criterio adicional sin decisión de Yago; informa esas condiciones aparte.
 
-- **Hueco de consentimiento**: invitados nuevos en Auth vs unique visitors de Analytics. Analytics es un mínimo.
-- **Fuente nueva vs caché**: `article_extractions` con `fetched_at` (o primera vez de esa `url`) en la ventana = indexado nuevo; `sources` sobre una URL ya cacheada = reuso.
-- **Quién afilia** el clic: `affiliate=partner` (bloguero) vs `own` (Booking/Skyscanner nuestros).
+Authentication es fuente del **estado actual**, no un historial completo de altas: `auth.users.created_at` puede ser la creación del invitado que luego se convierte con `updateUser`. No cuenta todos los upgrades de la ventana. `email_confirmed_at` acredita estado/fecha de confirmación, no necesariamente el clic del email ni fecha de registro; `updated_at` tampoco es fecha de conversión.
 
-No inventes eventos nuevos en el informe. Si falta una métrica, dilo como laguna, no la simules.
+Reporta por separado: censo actual con email, confirmadas, identidades creadas en ventana, confirmaciones en ventana y eventos `account_created`. Cruza la clasificación equipo/externos/desconocidos solo donde sea verificable. Un registro sin sesión o con origen interno no se descarta automáticamente. Sin historial fiable no reconstruyas la fecha exacta de conversión ni borres del histórico cuentas eliminadas.
 
-## Informe (plantilla)
+### Afiliación: la hipótesis que se está probando
 
-```markdown
-## Lo corto
-- [1–3 frases: ¿hubo alguien real? cuántos, qué hicieron]
+El bloguero conserva sus enlaces. WanderPlanner pretende ingresar con **reservas adicionales fuera de esos enlaces**, añadidas manualmente o aceptadas del asistente; también puede ofrecer buscadores en elementos sin enlace de afiliación. El viajero no tiene que pagar a WanderPlanner para validar esta hipótesis.
 
-## Embudo (Madrid, ventana)
-- Vercel (con cookies): N visitantes, M páginas. Referrers. Países/dispositivos.
-- CTA: start_opened / pasaron captcha / extrajeron / **vieron la petición de cuenta** / outbound / cuentas.
+Separa: uso útil → necesidad adicional → clic a enlace propio monetizable → reserva atribuida → comisión liquidada. Los datos actuales solo cubren parte de esa cadena. Desglosa `target × affiliate × surface`, manteniendo equipo/pruebas y desconocidos cuando se puedan distinguir. `affiliate=own` es una clasificación del código; comprueba identificador/cuenta receptora si se evalúan ingresos. No todos los enlaces propios están necesariamente monetizados; vuelos tenía el identificador vacío en la revisión del 5 sep.
 
-## La petición de cuenta
-- Cuántos `gate_shown` frente a `start_opened`, y por qué motivo (`meta.reason`).
-- Separa `home` (recordatorio de los 3 min) del resto (intención real).
-- Si la ventana es anterior al 28 ago 2026: «el evento aún no existía», no «0».
+No sustituyas este modelo por cobro al viajero o tarifa al bloguero salvo que el usuario pida explorar alternativas. No equipares clics partner a ingreso de WanderPlanner ni clics own a comisiones cobradas. Para cobertura de costes usa comisiones netas liquidadas y supuestos explícitos cuando aún no existan.
 
-## No eres tú
-- Una viñeta por persona/sesión: de dónde (partner + post + ISP/red, no IP), qué hizo, si rebotó o se activó.
+## Privacidad
 
-## Fuiste tú
-- En una línea: chips landing, viajes que creaste, segunda cuenta si aplica.
+Consulta agregados y booleanos; no vuelques emails, nombres de lectores, IPs completas, user-agents, UUIDs de usuarios ni contenido libre de viajes/chats. Los IDs pueden usarse internamente en joins sin devolverlos. Usa alias de casos solo cuando hagan falta y sean consistentes; no enlaces actividad de `funnel_events` a esos alias por intuición.
 
-## Criterio de vida
-- Día N/28 (reloj desde el 17 ago 2026, vence el 14 sep). Emails de lector real acumulados, contra Authentication.
+No pidas redes por defecto. Si son necesarias para una hipótesis concreta, devuelve `network(set_masklen(ip, 24))` para IPv4 (prefijo amplio para IPv6); **`set_masklen` solo no elimina los bits del host**. Las redes siguen siendo indicios, no anonimato garantizado. Limita metadatos a claves permitidas y sanitiza las URLs antes de devolverlas. Si una consulta es bloqueada, reduce campos a lo necesario; no intentes obtener el mismo dato sensible por otra ruta.
 
-## Fuentes
-- Añadidas a un viaje (dominio/autor, no URL completa si trae query).
-- Indexadas nuevas en `article_extractions` vs reuso de caché.
+## Ejecución y entrega
 
-## Clics fuera
-- target × affiliate × surface. Booking/Skyscanner/GetYourGuide/…
+1. Lee el último seguimiento y fija ventana, procedencia y exclusiones demostrables.
+2. Consulta en paralelo las piezas independientes necesarias con [queries.md](queries.md). Verifica rango/cobertura de Vercel; si no da únicos de periodo, informa la serie sin sumar únicos.
+3. Comprueba unidades, joins, automatismos y clasificación antes de inferir causas. Los cruces por post/hora sirven para hipótesis, no para identificar personas.
+4. Escribe una lectura breve: **hechos / interpretación / desconocidos / siguiente comprobación útil**. Incluye eventos CTA y motivos de registro, señales de producto, censo, clics propios/partner y comisiones si se conocen. Omite bloques vacíos irrelevantes, distingue «0 observado» de «no consultado».
+5. Guarda el resultado y enlaza la nota. Si corriges una lectura, señala qué cambió sin simular una nueva consulta.
 
-## Cómo leerlo
-- Analytics ≤ actividad real (consentimiento).
-- start_opened ≥ /start en Vercel (se dispara antes del captcha y sin cookies).
-- gate_shown es una vez por sesión y motivo: comparable con start_opened, no con el número de veces que se insiste.
-- El criterio de vida se cuenta en Authentication, no en account_created.
-```
-
-No pongas tablas enormes. Si no hubo actividad real, dilo en la primera línea.
-
-## No hagas
-
-- No añadas eventos, tablas ni `track()` «de paso». Este skill **lee la base de datos**; lo único que escribe es la nota de seguimiento del vault.
-- No reportes `gate_shown = 0` en ventanas anteriores al 28 ago 2026 sin decir que el evento aún no existía.
-- No afirmes que el embudo «no se está mirando». Ese juicio ya se escribió en falso una vez y contaminó media docena de notas.
-- No consultes el dataset `events` de Vercel (402 en Hobby).
-- No uses el proyecto Supabase `va-cross-prototype`.
-- No pongas `/start` como «visita de marketing» si `ref=wp-landing` y la red es de casa.
+Ejemplo de conclusión proporcionada: «Se registraron 3 llegadas y ningún viaje nuevo en esa ventana. No podemos atribuir esa diferencia al captcha ni saber cuántas personas eran. Las dos cuentas pendientes siguen sin clasificación suficiente».
