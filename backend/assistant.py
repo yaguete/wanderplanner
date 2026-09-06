@@ -30,6 +30,7 @@ from country_briefs import (
     fetch_and_cache,
 )
 from inspirational_source import is_inspirational_source_url
+from itinerary_schema import usable_affiliate_url
 from obs import log_kv
 from usage import enforce_usage, record_event
 from web_search import tavily_search
@@ -130,6 +131,9 @@ TOOLS: list[dict[str, Any]] = [
                 "Si el sitio YA está extraído en Fuentes, pasa source_id y "
                 "source_item_id del briefing (consolida autor y afiliado). "
                 "Si es una recomendación nueva, omite esos ids. "
+                "En activity nueva, pasa url si encontraste la web oficial o de "
+                "entradas (museo, taquilla, tour). No inventes URLs. "
+                "En stay no pases url: el enlace de Booking se genera solo. "
                 "region geocodifica el ítem en el mapa: no lo dejes vacío si conoces el sitio. "
                 "No lo añade automáticamente; el usuario confirma."
             ),
@@ -154,6 +158,15 @@ TOOLS: list[dict[str, Any]] = [
                     "source_item_id": {
                         "type": "string",
                         "description": "id del ítem extraído (id=`…` en Ítems extraídos)",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": (
+                            "Solo recomendaciones nuevas (sin source_id). "
+                            "activity: URL oficial o de compra de entradas que hayas "
+                            "encontrado. No la uses en stay ni al consolidar de Fuentes. "
+                            "No inventes URLs."
+                        ),
                     },
                 },
                 "required": ["day_id", "type", "name"],
@@ -532,6 +545,11 @@ async def _run_tool(
         return _PROPOSED_ACK, action
 
     if name == "propose_add_item":
+        source_id = _opt_str(args, "source_id")
+        source_item_id = _opt_str(args, "source_item_id")
+        url = usable_affiliate_url(_opt_str(args, "url"))
+        if source_id and source_item_id:
+            url = None
         action = {
             "kind": "add_item",
             "day_id": str(args.get("day_id") or "").strip(),
@@ -539,8 +557,9 @@ async def _run_tool(
             "name": str(args.get("name") or "").strip(),
             "detail": _opt_str(args, "detail"),
             "region": _opt_str(args, "region"),
-            "source_id": _opt_str(args, "source_id"),
-            "source_item_id": _opt_str(args, "source_item_id"),
+            "source_id": source_id,
+            "source_item_id": source_item_id,
+            "url": url,
         }
         return _PROPOSED_ACK, action
 

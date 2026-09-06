@@ -34,6 +34,14 @@ export type AssistantAction =
       source_item_id?: string | null
       source_author?: string | null
       day_number?: number | null
+      /**
+       * Recomendación nueva (sin fuente): URL oficial / entradas que encontró
+       * el modelo. En `stay` se ignora: el Booking propio se genera al confirmar.
+       */
+      url?: string | null
+      /** Snapshot del afiliado de la fuente (no lo emite el modelo). */
+      affiliate_url?: string | null
+      vendor?: string | null
     }
   | {
       kind: "move_item"

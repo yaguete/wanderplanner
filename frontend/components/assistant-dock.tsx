@@ -53,7 +53,7 @@ import { loadActiveConversationId } from "@/lib/db/assistant-repo"
 import { useTrips } from "@/lib/trip-context"
 import { pinRootScrollerForCollapsedChrome } from "@/lib/mobile-browser-chrome"
 import { cn } from "@/lib/utils"
-import type { UserDayItem } from "@/types/itinerary"
+import type { Source, UserDayItem } from "@/types/itinerary"
 import type { MoveParams } from "@/lib/itinerary-dnd"
 import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
 import {
@@ -189,6 +189,9 @@ const MessageBubble = memo(function MessageBubble({
   isStreamingTail,
   actionBusyId,
   currency,
+  startDate,
+  numTravelers,
+  sources,
   undoableIds,
   undoneIds,
   staleActionIds,
@@ -200,6 +203,9 @@ const MessageBubble = memo(function MessageBubble({
   isStreamingTail: boolean
   actionBusyId: string | null
   currency: string
+  startDate: string | null
+  numTravelers: number | null
+  sources: readonly Source[]
   undoableIds: ReadonlySet<string>
   undoneIds: ReadonlySet<string>
   staleActionIds: ReadonlySet<string>
@@ -250,6 +256,9 @@ const MessageBubble = memo(function MessageBubble({
               action={action}
               busy={actionBusyId === action.id}
               currency={currency}
+              startDate={startDate}
+              numTravelers={numTravelers}
+              sources={sources}
               canUndo={undoableIds.has(action.id)}
               undone={undoneIds.has(action.id)}
               stale={staleActionIds.has(action.id)}
@@ -931,6 +940,7 @@ export function AssistantPanelLayer({
             name: action.name,
             detail: action.detail,
             region: action.region,
+            affiliateUrl: action.url,
           }),
         )
         setActionStatus(messageId, action.id, "accepted")
@@ -1213,6 +1223,9 @@ export function AssistantPanelLayer({
                       isStreamingTail={m.id === streamingTailId}
                       actionBusyId={actionBusyId}
                       currency={(trip?.currency || "EUR").toUpperCase()}
+                      startDate={trip?.startDate ?? null}
+                      numTravelers={trip?.numTravelers ?? null}
+                      sources={sources}
                       undoableIds={undoableIds}
                       undoneIds={undoneIds}
                       staleActionIds={staleActionIds}

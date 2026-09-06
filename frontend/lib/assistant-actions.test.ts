@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import type { Source, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import {
   applyMoveToDays,
+  assistantAddItemPreviewLink,
   buildAssistantDayItem,
   isAssistantActionStale,
   locateDayItem,
@@ -10,10 +11,12 @@ import {
   resolveRemoveItem,
   resolveSetTaskCost,
   resolveSwapItems,
+  snapshotAssistantAction,
   snapshotMoveProposal,
 } from "./assistant-actions"
 import { ASSISTANT_SOURCE_ID } from "./item-provenance"
 import { BOOKING_AFFILIATE_AID } from "./booking-search"
+import { dateISOForDayIndex, toISODate } from "./trip-dates"
 
 function item(
   id: string,
@@ -414,8 +417,225 @@ const days: UserDay[] = daysOf(
   })
   assert.equal(activity.affiliateUrl, undefined)
 
+  const museum = buildAssistantDayItem({
+    type: "activity",
+    name: "Museo do Pobo Galego",
+    region: "Santiago",
+    affiliateUrl: "https://museodopobo.gal/entradas",
+  })
+  assert.equal(museum.affiliateUrl, "https://museodopobo.gal/entradas")
+
+  const stayIgnoresUrl = buildAssistantDayItem({
+    type: "stay",
+    name: "Hotel X",
+    affiliateUrl: "https://museodopobo.gal/x",
+  })
+  assert.ok(stayIgnoresUrl.affiliateUrl)
+  assert.equal(new URL(stayIgnoresUrl.affiliateUrl!).hostname, "www.booking.com")
+
   const fallback = buildAssistantDayItem({ type: "nope", name: "X" })
   assert.equal(fallback.type, "activity")
+}
+
+{
+  const sources: Source[] = [
+    {
+      id: "src-1",
+      url: "https://example.com",
+      author: "La Cosmopolilla",
+      title: "Guía",
+      area: "Ourense",
+      totalDays: 3,
+      items: [
+        {
+          id: "stay-1",
+          type: "stay",
+          name: "Pazo de Bentraces",
+          detail: "Rural",
+          dayHint: 1,
+          region: "Ourense",
+          affiliateUrl: "https://www.booking.com/hotel/es/pazo.html?aid=1598831",
+          vendor: "Booking",
+        },
+        {
+          id: "act-1",
+          type: "activity",
+          name: "Tour termal",
+          detail: null,
+          dayHint: 2,
+          affiliateUrl: "https://www.civitatis.com/es/ourense/termas/?aid=1006",
+        },
+      ],
+      basics: [],
+      articleHtml: "",
+      ogImage: null,
+    },
+  ]
+  const tripDays: UserDay[] = [{ id: "d1", label: "", items: [] }]
+  const snapStay = snapshotAssistantAction(
+    { days: tripDays } as Trip,
+    sources,
+    {
+      kind: "add_item",
+      day_id: "d1",
+      type: "stay",
+      name: "Pazo de Bentraces",
+      source_id: "src-1",
+      source_item_id: "stay-1",
+    },
+  )
+  assert.equal(snapStay.kind, "add_item")
+  if (snapStay.kind === "add_item") {
+    assert.equal(snapStay.source_author, "La Cosmopolilla")
+    assert.equal(
+      snapStay.affiliate_url,
+      "https://www.booking.com/hotel/es/pazo.html?aid=1598831",
+    )
+    assert.equal(snapStay.vendor, "Booking")
+    assert.equal(snapStay.url, null)
+  }
+}
+
+{
+  function futureISO(daysFromToday: number): string {
+    const d = new Date()
+    d.setDate(d.getDate() + daysFromToday)
+    return toISODate(d)
+  }
+  const checkin = futureISO(40)
+  const sources: Source[] = [
+    {
+      id: "src-1",
+      url: "https://example.com",
+      author: "La Cosmopolilla",
+      title: "Guía",
+      area: "Ourense",
+      totalDays: 3,
+      items: [
+        {
+          id: "stay-1",
+          type: "stay",
+          name: "Pazo de Bentraces",
+          detail: null,
+          dayHint: 1,
+          affiliateUrl: "https://www.booking.com/hotel/es/pazo.html?aid=1598831",
+        },
+        {
+          id: "act-1",
+          type: "activity",
+          name: "Tour termal",
+          detail: null,
+          dayHint: 2,
+          affiliateUrl: "https://www.civitatis.com/es/ourense/termas/?aid=1006",
+        },
+      ],
+      basics: [],
+      articleHtml: "",
+      ogImage: null,
+    },
+  ]
+
+  const sourceStay = assistantAddItemPreviewLink(
+    {
+      kind: "add_item",
+      day_id: "d1",
+      type: "stay",
+      name: "Pazo de Bentraces",
+      source_id: "src-1",
+      source_item_id: "stay-1",
+      day_number: 1,
+    },
+    sources,
+    { startDate: checkin, currency: "EUR", numTravelers: 1 },
+  )
+  assert.ok(sourceStay)
+  assert.equal(sourceStay.label, "Ver en Booking")
+  assert.equal(sourceStay.affiliate, "partner")
+  assert.equal(new URL(sourceStay.href).searchParams.get("aid"), "1598831")
+  assert.equal(new URL(sourceStay.href).searchParams.get("checkin"), checkin)
+  assert.equal(new URL(sourceStay.href).searchParams.get("checkout"), dateISOForDayIndex(checkin, 1))
+
+  const sourceActivity = assistantAddItemPreviewLink(
+    {
+      kind: "add_item",
+      day_id: "d1",
+      type: "activity",
+      name: "Tour termal",
+      source_id: "src-1",
+      source_item_id: "act-1",
+      day_number: 2,
+    },
+    sources,
+    { startDate: checkin },
+  )
+  assert.ok(sourceActivity)
+  assert.equal(sourceActivity.label, "Ver en Civitatis")
+  assert.equal(sourceActivity.affiliate, "partner")
+
+  const ownStay = assistantAddItemPreviewLink(
+    {
+      kind: "add_item",
+      day_id: "d1",
+      type: "stay",
+      name: "Hotel Goldener Adler",
+      region: "Innsbruck",
+      day_number: 1,
+    },
+    [],
+    { startDate: checkin, currency: "EUR", numTravelers: 2 },
+  )
+  assert.ok(ownStay)
+  assert.equal(ownStay.label, "Ver en Booking")
+  assert.equal(ownStay.affiliate, "own")
+  assert.equal(new URL(ownStay.href).searchParams.get("aid"), BOOKING_AFFILIATE_AID)
+  assert.equal(new URL(ownStay.href).searchParams.get("ss"), "Hotel Goldener Adler Innsbruck")
+
+  const museum = assistantAddItemPreviewLink(
+    {
+      kind: "add_item",
+      day_id: "d1",
+      type: "activity",
+      name: "Museo do Pobo Galego",
+      url: "https://museodopobo.gal/entradas",
+      day_number: 1,
+    },
+    [],
+    { startDate: checkin },
+  )
+  assert.ok(museum)
+  assert.equal(museum.label, "Ver web")
+  assert.equal(museum.affiliate, "auto")
+  assert.equal(museum.href, "https://museodopobo.gal/entradas")
+
+  const gyg = assistantAddItemPreviewLink(
+    {
+      kind: "add_item",
+      day_id: "d1",
+      type: "activity",
+      name: "Free tour",
+      url: "https://www.getyourguide.com/santiago-l123/",
+      day_number: 1,
+    },
+    [],
+    { startDate: checkin },
+  )
+  assert.ok(gyg)
+  assert.equal(gyg.label, "Ver en GetYourGuide")
+
+  assert.equal(
+    assistantAddItemPreviewLink(
+      {
+        kind: "add_item",
+        day_id: "d1",
+        type: "food",
+        name: "Pulpería",
+        url: "https://pulperia.example/reserva",
+      },
+      [],
+      { startDate: checkin },
+    ),
+    null,
+  )
 }
 
 console.log("assistant-actions: ok")

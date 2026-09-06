@@ -1,8 +1,11 @@
-import { ArrowRightLeft, Link2, Loader2 } from "lucide-react"
+import { ArrowRightLeft, ExternalLink, Link2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { isInspirationalSourceUrl } from "@/lib/inspirational-source"
+import { assistantAddItemPreviewLink } from "@/lib/assistant-actions"
+import { outbound } from "@/lib/funnel-analytics"
 import { formatTripCurrency } from "@/lib/task-labels"
 import type { ChatAction } from "@/hooks/use-assistant-chat"
+import type { Source } from "@/types/itinerary"
 
 const ACCEPTED_LABEL: Record<ChatAction["kind"], string> = {
   add_source: "Añadida al viaje",
@@ -100,6 +103,9 @@ export function ActionCard({
   canUndo,
   undone,
   stale,
+  sources,
+  startDate,
+  numTravelers,
   onAccept,
   onDismiss,
   onUndo,
@@ -110,6 +116,9 @@ export function ActionCard({
   canUndo: boolean
   undone: boolean
   stale?: boolean
+  sources?: readonly Source[]
+  startDate?: string | null
+  numTravelers?: number | null
   onAccept: () => void
   onDismiss: () => void
   onUndo: () => void
@@ -292,11 +301,38 @@ export function ActionCard({
   const author = action.source_author?.trim()
   const name = action.name.trim() || "Ítem"
   const detail = action.detail ? detailWithoutAttribution(action.detail, author) : ""
+  const preview =
+    action.kind === "add_item"
+      ? assistantAddItemPreviewLink(action, sources ?? [], {
+          startDate: startDate ?? null,
+          currency,
+          numTravelers,
+        })
+      : null
   return (
     <div className="rounded-lg border border-border bg-background p-3 shadow-sm">
-      <p className="text-sm font-medium text-foreground">
-        {author ? `${name} - vía @${author}` : name}
-      </p>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <p className="min-w-0 text-sm font-medium text-foreground">
+          {author ? `${name} - vía @${author}` : name}
+        </p>
+        {preview ? (
+          <a
+            href={preview.href}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="wp-ext-link inline-flex shrink-0 items-center gap-1 text-xs font-medium"
+            onClick={() =>
+              outbound(preview.href, {
+                surface: "assistant",
+                affiliate: preview.affiliate,
+              })
+            }
+          >
+            {preview.label}
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+          </a>
+        ) : null}
+      </div>
       {detail ? (
         <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
       ) : null}

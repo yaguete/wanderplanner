@@ -20,9 +20,12 @@ import {
   userBasicItemFromSource,
   userDayItemFromSource,
 } from "@/lib/item-provenance"
-import { buildAssistantBookingSearchUrl } from "@/lib/booking-search"
+import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
+import { buildAssistantBookingSearchUrl, stayReserveHref } from "@/lib/booking-search"
+import { partnerCtaLabel } from "@/lib/item-discovery-links"
 import { buildTripTasks, taskKeyForItem } from "@/lib/trip-tasks"
 import type { MoveParams } from "@/lib/itinerary-dnd"
+import type { OutboundAffiliate } from "@/lib/funnel-analytics"
 
 export type LocatedDayItem = {
   day: UserDay
@@ -363,6 +366,8 @@ export function buildAssistantDayItem(input: {
   name: string
   detail?: string | null
   region?: string | null
+  /** Solo recomendaciones nuevas (no `stay`): taquilla, museo, tour. */
+  affiliateUrl?: string | null
 }): UserDayItem {
   const type: ItemType = ITEM_TYPES.includes(input.type as ItemType)
     ? (input.type as ItemType)
@@ -382,8 +387,107 @@ export function buildAssistantDayItem(input: {
   if (type === "stay") {
     const href = buildAssistantBookingSearchUrl({ name, region })
     if (href) item.affiliateUrl = href
+  } else {
+    const href = sanitizeAffiliateUrl(input.affiliateUrl)
+    if (href) item.affiliateUrl = href
   }
   return item
+}
+
+export type AssistantItemPreviewLink = {
+  href: string
+  label: string
+  affiliate: OutboundAffiliate | "auto"
+}
+
+function dayIndexFromNumber(dayNumber?: number | null): number {
+  if (typeof dayNumber !== "number" || !Number.isFinite(dayNumber) || dayNumber < 1) {
+    return 0
+  }
+  return Math.floor(dayNumber) - 1
+}
+
+function previewCtaLabel(href: string, vendor?: string | null): string {
+  const label = partnerCtaLabel(href, vendor)
+  return label === "Ver reserva" ? "Ver web" : label
+}
+
+function sourceItemAffiliate(
+  action: Extract<AssistantAction, { kind: "add_item" }>,
+  sources: readonly Source[],
+): { href: string | null; vendor: string | null } {
+  const snap = sanitizeAffiliateUrl(action.affiliate_url)
+  const vendor = action.vendor?.trim() || null
+  if (snap) return { href: snap, vendor }
+  const sourceId = action.source_id?.trim()
+  const itemId = action.source_item_id?.trim()
+  if (!sourceId || !itemId) return { href: null, vendor }
+  const source = sources.find((s) => s.id === sourceId)
+  const item = source?.items.find((i) => i.id === itemId)
+  return {
+    href: sanitizeAffiliateUrl(item?.affiliateUrl),
+    vendor: item?.vendor?.trim() || vendor,
+  }
+}
+
+/**
+ * Enlace de la tarjeta de propuesta: el mismo que acabará en Ruta.
+ * Fuente → afiliado del bloguero. Stay nuevo → Booking propio.
+ * Activity nueva → `url` del modelo (taquilla / web oficial).
+ */
+export function assistantAddItemPreviewLink(
+  action: Extract<AssistantAction, { kind: "add_item" }>,
+  sources: readonly Source[],
+  paint: {
+    startDate: string | null
+    currency?: string | null
+    numTravelers?: number | null
+  },
+): AssistantItemPreviewLink | null {
+  const type = action.type
+  if (type !== "stay" && type !== "activity") return null
+
+  const fromSource = Boolean(action.source_id?.trim() && action.source_item_id?.trim())
+  const dayIndex = dayIndexFromNumber(action.day_number)
+  const dayIndexes = [dayIndex]
+
+  if (fromSource) {
+    const { href: stored, vendor } = sourceItemAffiliate(action, sources)
+    if (!stored) return null
+    const href =
+      type === "stay"
+        ? (stayReserveHref({
+            type: "stay",
+            name: action.name,
+            region: action.region,
+            affiliateUrl: stored,
+            startDate: paint.startDate,
+            dayIndexes,
+            currency: paint.currency,
+            numTravelers: paint.numTravelers,
+          }) ?? stored)
+        : stored
+    return { href, label: previewCtaLabel(href, vendor), affiliate: "partner" }
+  }
+
+  if (type === "stay") {
+    const href = stayReserveHref({
+      type: "stay",
+      name: action.name.trim(),
+      region: action.region,
+      sourceId: ASSISTANT_SOURCE_ID,
+      startDate: paint.startDate,
+      dayIndexes,
+      currency: paint.currency,
+      numTravelers: paint.numTravelers,
+    })
+    if (!href) return null
+    return { href, label: previewCtaLabel(href), affiliate: "own" }
+  }
+
+  const href = sanitizeAffiliateUrl(action.url)
+  if (!href) return null
+  return { href, label: previewCtaLabel(href, action.vendor), affiliate: "auto" }
 }
 
 export function buildAssistantTransportStub(input: {
@@ -552,6 +656,9 @@ export function snapshotAssistantAction(
         type: resolved.item.type,
         source_author: resolved.sourceTitle,
         day_number: resolved.dayNumber,
+        affiliate_url: resolved.item.affiliateUrl ?? null,
+        vendor: resolved.item.vendor ?? null,
+        url: null,
       }
     }
     return { ...action, day_number }

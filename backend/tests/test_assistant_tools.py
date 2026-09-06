@@ -47,6 +47,48 @@ async def test_propose_add_item_with_source():
     assert action["source_id"] == "src-1"
     assert action["source_item_id"] == "rest-1"
     assert action["region"] == "Innsbruck"
+    assert action["url"] is None
+
+
+async def test_propose_add_item_with_activity_url():
+    _, action = await _run_tool(
+        "propose_add_item",
+        {
+            "day_id": "d1",
+            "type": "activity",
+            "name": "Museo do Pobo Galego",
+            "url": " https://museodopobo.gal/entradas ",
+        },
+    )
+    assert action["url"] == "https://museodopobo.gal/entradas"
+
+
+async def test_propose_add_item_drops_url_when_consolidating():
+    _, action = await _run_tool(
+        "propose_add_item",
+        {
+            "day_id": "d1",
+            "type": "stay",
+            "name": "Pazo",
+            "source_id": "src-1",
+            "source_item_id": "stay-1",
+            "url": "https://invented.example/x",
+        },
+    )
+    assert action["url"] is None
+
+
+async def test_propose_add_item_drops_junk_url():
+    _, action = await _run_tool(
+        "propose_add_item",
+        {
+            "day_id": "d1",
+            "type": "activity",
+            "name": "Mirador",
+            "url": "javascript:alert(1)",
+        },
+    )
+    assert action["url"] is None
 
 
 async def test_propose_swap_remove_transport_task_cost():

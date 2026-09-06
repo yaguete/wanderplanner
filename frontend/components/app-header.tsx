@@ -112,6 +112,10 @@ export function AppHeader({ leading }: AppHeaderProps) {
       <div
         className={cn(
           "flex h-12 w-full items-center gap-2.5",
+          // Detalle desktop: tres columnas iguales a los lados para que
+          // Fuentes/Viaje/Asistente queden en el eje de la barra.
+          showPanelToggles &&
+            "md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-2",
           insetToContent
             ? cn(
                 "mx-auto max-w-5xl",
@@ -122,8 +126,6 @@ export function AppHeader({ leading }: AppHeaderProps) {
               : "px-3 sm:px-4",
         )}
       >
-      {leading}
-
       {/* Detalle: w-56 / rail alineados al aside. Listado y cuenta: wordmark al rincón del canvas, sin colapso. */}
       <div
         className={cn(
@@ -135,6 +137,7 @@ export function AppHeader({ leading }: AppHeaderProps) {
           alignToSidebar && !chromeHydrated && "invisible",
         )}
       >
+        {leading}
         <Link
           href="/trips"
           aria-label="WanderPlanner"
@@ -168,15 +171,15 @@ export function AppHeader({ leading }: AppHeaderProps) {
 
       {showPanelToggles && chrome ? (
         <TripPanelToggles
-          className="shrink-0"
+          className="justify-self-center"
           panels={chrome.panels}
           onToggle={chrome.onTogglePanel}
         />
       ) : null}
 
-      <div className="flex-1" />
+      {showPanelToggles ? null : <div className="flex-1" />}
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-end gap-1.5">
         {openTrip ? (
           <>
             <ShareRouteButton trip={openTrip} />
