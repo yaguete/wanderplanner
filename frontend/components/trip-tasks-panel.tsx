@@ -450,7 +450,7 @@ export function TripTasksPanel({
             </>
           )}
 
-          {isEmpty ? null : <div className="mt-4 flex justify-end">{addButton}</div>}
+          {isEmpty ? null : <div className="mt-4 flex justify-center">{addButton}</div>}
         </div>
       </div>
 
