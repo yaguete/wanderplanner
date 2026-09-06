@@ -3,8 +3,10 @@
  *
  * `delta > 0` = el usuario baja por el documento (el contenido sube).
  * Fuentes / Mi viaje en móvil pasan `expandOnScrollUp: false`: el cromo se
- * queda replegado y solo vuelve con el chevron. El asistente y el desktop
- * de Fuentes siguen expandiendo al subir.
+ * queda replegado y solo vuelve con el chevron. El dock inferior llama la
+ * misma función con `expandOnScrollUp: true`: se compacta al bajar y
+ * recupera el tamaño grande al subir. El asistente y el desktop de Fuentes
+ * también expanden el cromo al subir.
  */
 export type CollapsingHeaderIntent = "collapse" | "expand" | "ignore"
 

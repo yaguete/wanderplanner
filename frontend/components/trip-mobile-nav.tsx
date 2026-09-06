@@ -41,8 +41,10 @@ type TripMobileNavProps = {
   active: TripMobileSection
   onChange: (section: TripMobileSection) => void
   /**
-   * Repliegue al hacer scroll (Fuentes / Mi viaje): iconos solos, más juntos.
-   * El teclado virtual sigue ocultando el dock por completo (variante `floating`).
+   * Repliegue al hacer scroll hacia abajo (Fuentes / Mi viaje): iconos solos,
+   * más juntos. Al subir, vuelve el tamaño grande; el chevron de la cabecera
+   * no lo toca. El teclado virtual sigue ocultando el dock por completo
+   * (variante `floating`).
    */
   compact?: boolean
   /**

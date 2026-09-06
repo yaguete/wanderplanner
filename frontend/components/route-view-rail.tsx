@@ -54,15 +54,14 @@ export function RouteViewRail({
       style={
         {
           right: "max(1rem, env(safe-area-inset-right, 0px))",
-          // El rail solo se monta con el dock compacto: la variable de
-          // `--wp-nav-height` vive en un ancestro que el portal ya no ve.
-          bottom:
-            "calc(var(--wp-nav-gap) + var(--wp-nav-height-compact) + 0.5rem)",
+          // `--wp-nav-height` se pisa en `:root` al compactar el dock, para
+          // que este portal (fuera del detalle) vea el mismo valor.
+          bottom: "calc(var(--wp-nav-gap) + var(--wp-nav-height) + 0.5rem)",
         } as CSSProperties
       }
       className={cn(
         "pointer-events-none fixed z-40 md:hidden",
-        "transition-[opacity,transform] duration-200 ease-out",
+        "transition-[opacity,transform,bottom] duration-200 ease-out",
         isHidden && "translate-y-[120%] opacity-0",
       )}
     >

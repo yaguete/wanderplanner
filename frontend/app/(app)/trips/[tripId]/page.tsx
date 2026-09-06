@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useTrips } from "@/lib/trip-context"
 import { useAuth } from "@/lib/auth-context"
@@ -187,12 +187,29 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     window.scrollTo(0, sectionScrollRef.current[mobileSection] ?? 0)
   }, [isMobile, mobileSection])
 
-  const onSourcesHeaderCollapsed = useCallback((collapsed: boolean) => {
-    if (mobileSectionRef.current === "sources") setMobileNavHidden(collapsed)
+  const onSourcesNavCompact = useCallback((compact: boolean) => {
+    if (mobileSectionRef.current === "sources") setMobileNavHidden(compact)
   }, [])
-  const onPlanHeaderCollapsed = useCallback((collapsed: boolean) => {
-    if (mobileSectionRef.current === "plan") setMobileNavHidden(collapsed)
+  const onPlanNavCompact = useCallback((compact: boolean) => {
+    if (mobileSectionRef.current === "plan") setMobileNavHidden(compact)
   }, [])
+
+  // El rail de Ruta es un portal a `body`: tiene que ver `--wp-nav-height`
+  // en `:root`, no en un ancestro del detalle. El padding de reserva de las
+  // listas hereda el mismo valor.
+  useEffect(() => {
+    if (!isMobile || mobileSection === "assistant" || !mobileNavHidden) {
+      document.documentElement.style.removeProperty("--wp-nav-height")
+      return
+    }
+    document.documentElement.style.setProperty(
+      "--wp-nav-height",
+      "var(--wp-nav-height-compact)",
+    )
+    return () => {
+      document.documentElement.style.removeProperty("--wp-nav-height")
+    }
+  }, [isMobile, mobileNavHidden, mobileSection])
 
   // Evitar mismatch SSR/cliente: leer localStorage tras montar.
   useEffect(() => {
@@ -363,18 +380,18 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
         onAddSourceOpenChange={openAddSource}
         initialSourceUrl={pendingSourceUrl}
         onRevealSources={revealSources}
-        onHeaderCollapsedChange={onSourcesHeaderCollapsed}
+        onNavCompactChange={onSourcesNavCompact}
         activeOnMobile={mobileSection === "sources"}
       />
     ),
-    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources, onSourcesHeaderCollapsed, mobileSection],
+    [tripId, addSourceOpen, openAddSource, pendingSourceUrl, revealSources, onSourcesNavCompact, mobileSection],
   )
   const planNode = useMemo(
     () => (
       <ItineraryPanel
         tripId={tripId}
         onEditTrip={openEditTrip}
-        onHeaderCollapsedChange={onPlanHeaderCollapsed}
+        onNavCompactChange={onPlanNavCompact}
         activeOnMobile={mobileSection === "plan"}
         initialViewMode={queryTab ?? "itinerary"}
         desktopSolo={
@@ -389,7 +406,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     [
       tripId,
       openEditTrip,
-      onPlanHeaderCollapsed,
+      onPlanNavCompact,
       mobileSection,
       queryTab,
       isMobile,
@@ -477,11 +494,6 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
           "relative flex flex-1 flex-col md:min-h-0 md:flex-row md:p-2.5 md:pt-0 md:pl-0",
           !panelsHydrated && "md:invisible",
         )}
-        style={
-          isMobile && mobileNavHidden
-            ? ({ "--wp-nav-height": "var(--wp-nav-height-compact)" } as CSSProperties)
-            : undefined
-        }
       >
         {!isMobile && panelCount(panels) === 0 ? (
           <TripPanelsEmpty onSelect={togglePanel} destination={emptyDestination} />

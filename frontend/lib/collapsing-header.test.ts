@@ -14,7 +14,7 @@ assert.equal(
 assert.equal(
   collapsingHeaderIntent({ top: 120, delta: -20, expandOnScrollUp: true }),
   "expand",
-  "asistente / desktop sí expanden al subir",
+  "el dock (y el cromo del asistente / desktop) sí recuperan al subir",
 )
 assert.equal(
   collapsingHeaderIntent({ top: 40, delta: 20, expandOnScrollUp: false }),

@@ -109,7 +109,7 @@ export default function InspirationPanel({
   onAddSourceOpenChange,
   initialSourceUrl,
   onRevealSources,
-  onHeaderCollapsedChange,
+  onNavCompactChange,
   activeOnMobile = true,
 }: {
   tripId: string
@@ -118,8 +118,8 @@ export default function InspirationPanel({
   initialSourceUrl?: string | null
   /** Activa el panel/sección Fuentes (toast «Ver»). */
   onRevealSources?: () => void
-  /** Móvil: repliegue de cabecera (para compactar la navbar con el mismo gesto). */
-  onHeaderCollapsedChange?: (collapsed: boolean) => void
+  /** Móvil: compacta o agranda el dock según el gesto de scroll. */
+  onNavCompactChange?: (compact: boolean) => void
   /** Móvil: true mientras esta sección está visible. */
   activeOnMobile?: boolean
 }) {
@@ -182,15 +182,16 @@ export default function InspirationPanel({
   const lastScrolledIndexRef = useRef<number | null>(null)
   const activeSourceIdRef = useRef(activeSourceId)
   const seenExtractionSeqRef = useRef(0)
-  // Móvil: repliega chips + cabecera (y compacta la navbar); no vuelve solo
-  // al subir — el chevron lo recupera. Desktop: el titular del artículo.
+  // Móvil: repliega chips + cabecera; no vuelve solo al subir — el chevron
+  // lo recupera. El dock se compacta al bajar y se agranda al subir, aparte.
+  // Desktop: el titular del artículo.
   const {
     containerRef: panelRef,
     collapsed: headerCollapsed,
     setCollapsed: setHeaderCollapsed,
   } = useCollapsingHeader(
     true,
-    isMobile ? onHeaderCollapsedChange : undefined,
+    isMobile ? onNavCompactChange : undefined,
     isMobile ? activeOnMobile : true,
     !isMobile,
   )

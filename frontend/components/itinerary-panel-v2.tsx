@@ -196,7 +196,7 @@ export default function ItineraryPanel({
   tripId,
   onClose,
   onEditTrip,
-  onHeaderCollapsedChange,
+  onNavCompactChange,
   activeOnMobile = true,
   desktopSolo = false,
   initialViewMode = "itinerary",
@@ -205,8 +205,8 @@ export default function ItineraryPanel({
   onClose?: () => void
   /** Abre el diálogo de edición del viaje (fechas, nombre, etc.). */
   onEditTrip?: () => void
-  /** Móvil: repliegue de cabecera (para compactar la navbar con el mismo gesto). */
-  onHeaderCollapsedChange?: (collapsed: boolean) => void
+  /** Móvil: compacta o agranda el dock según el gesto de scroll. */
+  onNavCompactChange?: (compact: boolean) => void
   /** Móvil: true mientras esta sección está visible. */
   activeOnMobile?: boolean
   /**
@@ -250,7 +250,7 @@ export default function ItineraryPanel({
     setCollapsed: setHeaderCollapsed,
   } = useCollapsingHeader(
     true,
-    isMobile ? onHeaderCollapsedChange : undefined,
+    isMobile ? onNavCompactChange : undefined,
     isMobile ? activeOnMobile : true,
     !isMobile,
   )
