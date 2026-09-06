@@ -32,7 +32,7 @@ const CTA_LABEL: Record<OnboardingCtaAction, string> = {
   add_source: "Empieza a planificar",
   view_extraction: "Ver cómo va",
   view_trip: "Ir a la ruta",
-  open_assistant: "Planifica con el asistente",
+  open_assistant: "Empieza a planificar",
 }
 
 export function OnboardingDialog({
@@ -168,14 +168,12 @@ export function OnboardingDialog({
                     )}
                     aria-hidden={!active}
                   >
-                    <div
-                      className={cn(
-                        "shrink-0 sm:min-w-0 sm:flex-1",
-                        isFirstSlide
-                          ? "order-1 sm:order-1"
-                          : "order-2 mt-5 sm:order-1 sm:mt-0",
-                      )}
-                    >
+                    {/*
+                      Sin clases `order-*`: en móvil (columna) y en escritorio
+                      (fila) el orden es el del DOM —titular y luego mock—, así
+                      que invertirlo aquí las hacía redundantes en los dos ejes.
+                    */}
+                    <div className="shrink-0 sm:min-w-0 sm:flex-1">
                       <span className="mb-3 flex min-w-0 items-end gap-2">
                         <BrandMark className="h-12" />
                         {item.id === "mecanismo" ? (
@@ -213,8 +211,8 @@ export function OnboardingDialog({
                       className={cn(
                         "min-w-0 items-stretch justify-center",
                         isFirstSlide
-                          ? "hidden sm:order-2 sm:flex sm:min-h-0 sm:flex-none sm:items-center sm:p-6"
-                          : "order-1 flex min-h-[11rem] flex-1 px-1 py-3 sm:order-2 sm:min-h-0 sm:flex-none sm:items-center sm:p-6",
+                          ? "hidden sm:flex sm:min-h-0 sm:flex-none sm:items-center sm:p-6"
+                          : "mt-5 flex min-h-[11rem] flex-1 px-1 py-3 sm:mt-0 sm:min-h-0 sm:flex-none sm:items-center sm:p-6",
                       )}
                     >
                       <Mock />
