@@ -100,9 +100,9 @@ export default function AvisoLegalPage() {
           las añadimos al mismo enlace; el afiliado del autor no cambia.
         </p>
         <p>
-          Si un alojamiento, vuelo o actividad no viene de ninguna —te lo recomienda el asistente o lo
-          añades tú—, los enlaces de afiliado son nuestros, y los proveedores pueden pagarnos una pequeña comisión (booking, skyscanner, civitatis, getyourguide, etc.).
-          Eso no sustituye nunca el enlace de un bloguero. Los usuarios no pagan ningún recargo por reservar desde nuestra página, en ningún caso.
+          Si un alojamiento, vuelo, actividad o alquiler de coche no procede de ninguna de las fuentes añadidas por el usuario (por ejemplo, lo ha recomendado el asistente, o lo
+          ha añadido manualmente el usuario), los enlaces de afiliado son nuestros, y los proveedores pueden pagarnos una pequeña comisión (booking, skyscanner, civitatis, getyourguide, discovercars, etc.).
+          Eso no sustituye NUNCA el la afiliación del autor o autora del contenido. Los usuarios no pagan ningún recargo por reservar desde nuestra página, en ningún caso.
         </p>
       </LegalSection>
 

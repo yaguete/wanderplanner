@@ -1,16 +1,23 @@
 "use client"
 
 /**
- * Formulario compartido de extremos + medio + hubs (T4B.3 §9.2).
+ * Formulario A→B de extremos + medio + hubs (T4B.3 §9.2).
  * No conoce Trip, legs ni tareas: solo datos de formulario.
  * Hubs por extremo: loading/resultados independientes; solo tras acción explícita.
  *
- * Duración / `spanDays`: un tramo A→B no dura noches. El campo Noches del
- * alta manual es solo stay. Enganche futuro (coche de alquiler): un tramo
- * no modela «tengo el coche N días»; eso sería otro tipo de ítem, no
- * alargar este formulario.
+ * El alquiler de coche (`carUse: "rental"`) no vive aquí: el cuerpo
+ * progresivo (`internal-transport-form`) monta este form solo en
+ * traslados y coche propio. Un tramo A→B no modela «tengo el coche N días».
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react"
+import {
+  forwardRef,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
 import { Loader2, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,7 +54,7 @@ import {
   isCityOrAddressKind,
   type HubKind,
 } from "@/lib/transport-hubs"
-import type { RouteMode, RoutePlace } from "@/types/itinerary"
+import type { RouteCarUse, RouteMode, RoutePlace } from "@/types/itinerary"
 import { isBookableTransportMode } from "@/lib/trip-tasks"
 import {
   TRANSPORT_MODE_ICONS,
@@ -107,6 +114,101 @@ export type TransportRouteFormProps = {
     to: RoutePlace | null
     mode: RouteMode | null
   }) => void
+  /** `div` anidable en el form del padre. Default: propio `<form>`. */
+  embedded?: boolean
+  showModePicker?: boolean
+  hideNotes?: boolean
+  hideVendor?: boolean
+  /** Corta sugerencias y aborta peticiones (p. ej. rama alquiler visible). */
+  paused?: boolean
+  mode?: RouteMode | "undecided"
+  onModeChange?: (mode: RouteMode | "undecided") => void
+}
+
+export type TransportRouteFormHandle = {
+  tryGetValue: () => TransportRouteFormValue | null
+}
+
+/** Alta vacía: nada marcado. Distinto de `"undecided"` persistido. */
+export type TransportModeChoice = "unselected" | RouteMode | "undecided"
+
+export function TransportModePicker({
+  value,
+  onChange,
+}: {
+  value: TransportModeChoice
+  onChange: (next: RouteMode | "undecided") => void
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Medio de transporte</Label>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
+        {TRANSPORT_MODE_OPTIONS.map((opt) => {
+          const selected = value === opt.value
+          const Icon = TRANSPORT_MODE_ICONS[opt.value]
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onChange(opt.value)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+                selected
+                  ? "border-primary bg-primary/5 text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export function CarUsePicker({
+  value,
+  onChange,
+}: {
+  value: RouteCarUse | null
+  onChange: (next: RouteCarUse) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Es tu coche o alquilas</Label>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Es tu coche o alquilas">
+        {(
+          [
+            { value: "owned" as const, label: "Viajo en mi propio coche" },
+            { value: "rental" as const, label: "Alquilo coche" },
+          ] as const
+        ).map((opt) => {
+          const selected = value === opt.value
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onChange(opt.value)}
+              className={cn(
+                "inline-flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                selected
+                  ? "border-primary bg-primary/5 text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function emptyEndpoint(seed?: {
@@ -151,22 +253,38 @@ function emptyHubSide(): HubSideState {
   }
 }
 
-export function TransportRouteForm({
-  initial,
-  fromLabel = "Origen",
-  toLabel = "Destino",
-  fromPlaceholder = "p. ej. Barcelona",
-  toPlaceholder = "p. ej. Granada",
-  formId,
-  onValidityChange,
-  onSubmit,
-  renderAfterDestination,
-  onLiveContext,
-}: TransportRouteFormProps) {
+export const TransportRouteForm = forwardRef<
+  TransportRouteFormHandle,
+  TransportRouteFormProps
+>(function TransportRouteForm(
+  {
+    initial,
+    fromLabel = "Origen",
+    toLabel = "Destino",
+    fromPlaceholder = "p. ej. Barcelona",
+    toPlaceholder = "p. ej. Granada",
+    formId,
+    onValidityChange,
+    onSubmit,
+    renderAfterDestination,
+    onLiveContext,
+    embedded = false,
+    showModePicker = true,
+    hideNotes = false,
+    hideVendor = false,
+    paused = false,
+    mode: modeProp,
+    onModeChange,
+  },
+  ref,
+) {
   const id = useId()
   const [from, setFrom] = useState<EndpointState>(initial.from)
   const [to, setTo] = useState<EndpointState>(initial.to)
-  const [mode, setMode] = useState<RouteMode | "undecided">(initial.mode)
+  const [internalMode, setInternalMode] = useState<RouteMode | "undecided">(
+    initial.mode,
+  )
+  const mode = modeProp ?? internalMode
   const [vendor, setVendor] = useState(initial.vendor)
   const [detail, setDetail] = useState(initial.detail)
   const [hubFrom, setHubFrom] = useState<HubSideState>(emptyHubSide)
@@ -214,6 +332,13 @@ export function TransportRouteForm({
     })
   }, [from.selected, to.selected, mode])
 
+  useEffect(() => {
+    setHubFrom(emptyHubSide())
+    setHubTo(emptyHubSide())
+    hubFromAbortRef.current?.abort()
+    hubToAbortRef.current?.abort()
+  }, [mode])
+
   usePlaceSuggest({
     endpoint: from,
     setEndpoint: setFrom,
@@ -221,6 +346,7 @@ export function TransportRouteForm({
     abortRef: fromAbortRef,
     budgetRef,
     setSearchNotice,
+    enabled: !paused,
   })
   usePlaceSuggest({
     endpoint: to,
@@ -229,7 +355,21 @@ export function TransportRouteForm({
     abortRef: toAbortRef,
     budgetRef,
     setSearchNotice,
+    enabled: !paused,
   })
+
+  useEffect(() => {
+    if (!paused) return
+    fromAbortRef.current?.abort()
+    toAbortRef.current?.abort()
+    hubFromAbortRef.current?.abort()
+    hubToAbortRef.current?.abort()
+  }, [paused])
+
+  const setMode = (next: RouteMode | "undecided") => {
+    if (modeProp === undefined) setInternalMode(next)
+    onModeChange?.(next)
+  }
 
   // Al cambiar de modo: restaurar anclas de ciudad para la próxima búsqueda de hubs.
   const handleModeChange = (next: RouteMode | "undecided") => {
@@ -358,10 +498,10 @@ export function TransportRouteForm({
     }
   }
 
-  const showVendor = isBookableTransportMode(mode === "undecided" ? null : mode)
+  const showVendor =
+    !hideVendor && isBookableTransportMode(mode === "undecided" ? null : mode)
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  const persistValue = (): TransportRouteFormValue | null => {
     if (!from.selected || !to.selected) {
       if (!from.selected) {
         setFrom((s) => ({ ...s, error: "Elige un origen del desplegable." }))
@@ -369,7 +509,7 @@ export function TransportRouteForm({
       if (!to.selected) {
         setTo((s) => ({ ...s, error: "Elige un destino del desplegable." }))
       }
-      return
+      return null
     }
 
     const persistFrom = stripPersistMeta(
@@ -379,59 +519,52 @@ export function TransportRouteForm({
       toPersistableRoutePlace(to.selected, cityToRef.current),
     )
 
-    onSubmit({
+    return {
       from: persistFrom,
       to: persistTo,
       mode: mode === "undecided" ? null : mode,
       vendor: showVendor ? vendor.trim() || null : null,
-      detail: detail.trim() || null,
+      detail: hideNotes ? null : detail.trim() || null,
       cityFrom: cityFromRef.current,
       cityTo: cityToRef.current,
-    })
+    }
+  }
+
+  useImperativeHandle(ref, () => ({
+    tryGetValue: persistValue,
+  }))
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const value = persistValue()
+    if (!value) return
+    onSubmit(value)
   }
 
   const showHubActions = Boolean(hubKind && (from.selected || to.selected))
 
-  return (
-    <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+  const body = (
+    <>
       {searchNotice ? (
         <p className="rounded-md border border-warning-border bg-warning-surface px-2.5 py-2 text-xs text-warning-foreground">
           {searchNotice}
         </p>
       ) : null}
 
-      <div className="space-y-2">
-        <Label>Medio de transporte</Label>
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
-          {TRANSPORT_MODE_OPTIONS.map((opt) => {
-            const selected = mode === opt.value
-            const Icon = TRANSPORT_MODE_ICONS[opt.value]
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => handleModeChange(opt.value)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
-                  selected
-                    ? "border-primary bg-primary/5 text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {opt.label}
-              </button>
-            )
-          })}
+      {showModePicker ? (
+        <div className="space-y-2">
+          <TransportModePicker value={mode} onChange={handleModeChange} />
+          {showHubActions ? (
+            <p className="text-[11px] text-muted-foreground">
+              Puedes refinar cada extremo con {hubLabelForKind(hubKind!)} concreto cuando quieras.
+            </p>
+          ) : null}
         </div>
-        {showHubActions ? (
-          <p className="text-[11px] text-muted-foreground">
-            Puedes refinar cada extremo con {hubLabelForKind(hubKind!)} concreto cuando quieras.
-          </p>
-        ) : null}
-      </div>
+      ) : showHubActions ? (
+        <p className="text-[11px] text-muted-foreground">
+          Puedes refinar cada extremo con {hubLabelForKind(hubKind!)} concreto cuando quieras.
+        </p>
+      ) : null}
 
       <div className="space-y-2">
         <EndpointField
@@ -513,25 +646,39 @@ export function TransportRouteForm({
         </div>
       ) : null}
 
-      <div className="space-y-2">
-        <Label htmlFor={`${id}-detail`}>Referencia o nota (opcional)</Label>
-        <Textarea
-          id={`${id}-detail`}
-          value={detail}
-          onChange={(e) => setDetail(e.target.value)}
-          placeholder="Número de reserva, horario…"
-          rows={3}
-          className="min-h-[80px] resize-y text-sm"
-        />
-      </div>
+      {!hideNotes ? (
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-detail`}>Referencia o nota (opcional)</Label>
+          <Textarea
+            id={`${id}-detail`}
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
+            placeholder="Número de reserva, horario…"
+            rows={3}
+            className="min-h-[80px] resize-y text-sm"
+          />
+        </div>
+      ) : null}
 
-      {/* Submit lo dispara el footer del Dialog vía form=formId */}
-      <button type="submit" className="sr-only" tabIndex={-1} aria-hidden>
-        Guardar
-      </button>
+      {!embedded ? (
+        <button type="submit" className="sr-only" tabIndex={-1} aria-hidden>
+          Guardar
+        </button>
+      ) : null}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="space-y-4">{body}</div>
+  }
+
+  return (
+    <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+      {body}
     </form>
   )
-}
+})
+TransportRouteForm.displayName = "TransportRouteForm"
 
 function HubSidePanel({
   kind,
@@ -615,7 +762,7 @@ function HubSidePanel({
   )
 }
 
-function EndpointField({
+export function EndpointField({
   id,
   label,
   endpoint,
@@ -740,13 +887,14 @@ function EndpointField({
   )
 }
 
-function usePlaceSuggest({
+export function usePlaceSuggest({
   endpoint,
   setEndpoint,
   debounceRef,
   abortRef,
   budgetRef,
   setSearchNotice,
+  enabled = true,
 }: {
   endpoint: EndpointState
   setEndpoint: React.Dispatch<React.SetStateAction<EndpointState>>
@@ -754,10 +902,15 @@ function usePlaceSuggest({
   abortRef: React.MutableRefObject<AbortController | null>
   budgetRef: React.MutableRefObject<PlaceSearchBudget>
   setSearchNotice: (msg: string | null) => void
+  enabled?: boolean
 }) {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     abortRef.current?.abort()
+
+    if (!enabled) {
+      return
+    }
 
     // No buscar al montar con texto de hint: esperar a que el usuario enfoque o escriba.
     if (!endpoint.listOpen) {
@@ -806,5 +959,5 @@ function usePlaceSuggest({
       abortRef.current?.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint.query, endpoint.selected, endpoint.listOpen])
+  }, [endpoint.query, endpoint.selected, endpoint.listOpen, enabled])
 }

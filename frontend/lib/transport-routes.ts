@@ -12,6 +12,16 @@ import type {
 } from "@/types/itinerary"
 import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import { formatLegName, isRouteMode, routeModeLabel } from "@/lib/route-legs"
+import { applySpanDays } from "@/lib/item-span"
+import {
+  isCarRentalRoute,
+  rentalDescriptiveName,
+  rentalDisplayName,
+  rentalMaxPickupIndex,
+  rentalRegionLabel,
+  rentalRouteFromPickup,
+  transportWriteError,
+} from "@/lib/transport-kind"
 
 export type TransportFormSeed = {
   from: RoutePlace | null
@@ -21,6 +31,72 @@ export type TransportFormSeed = {
   mode: RouteMode | "undecided"
   vendor: string
   detail: string
+  carUse: "owned" | "rental" | null
+}
+
+export type UpsertTransportRoutePayload = {
+  dayId: string
+  itemId?: string
+  /** Día de devolución; solo rama alquiler. */
+  returnDayId?: string
+  route: TransportRoute
+  detail?: string | null
+  vendor?: string | null
+  taskPatch?: Partial<TripTaskState> | null
+}
+
+export type TransportRouteWriteOk = {
+  ok: true
+  pickupIndex: number
+  returnIndex: number
+  rental: boolean
+}
+
+/**
+ * Valida la variante **antes** del discriminador de lectura. Un `carUse:
+ * rental` con `leg` no se degrada a traslado: se rechaza.
+ */
+export function validateTransportRouteWrite(
+  data: UpsertTransportRoutePayload,
+  dayIds: readonly string[],
+): TransportRouteWriteOk | { ok: false; error: string } {
+  const pickupIndex = dayIds.indexOf(data.dayId)
+  if (pickupIndex < 0) {
+    return { ok: false, error: "Día no encontrado." }
+  }
+
+  const writeError = transportWriteError(data.route)
+  if (writeError) return { ok: false, error: writeError }
+
+  const rental =
+    data.route.carUse === "rental" &&
+    data.route.mode === "car" &&
+    data.route.leg == null
+
+  let returnIndex = pickupIndex
+  if (rental) {
+    if (!data.returnDayId) {
+      return { ok: false, error: "Elige un día de devolución posterior a la recogida." }
+    }
+    returnIndex = dayIds.indexOf(data.returnDayId)
+    if (returnIndex < 0) {
+      return { ok: false, error: "Día de devolución no encontrado." }
+    }
+    if (pickupIndex > rentalMaxPickupIndex(dayIds.length)) {
+      return {
+        ok: false,
+        error:
+          dayIds.length < 2
+            ? "El alquiler necesita al menos dos días en el viaje."
+            : "Elige un día de recogida anterior al último día del viaje.",
+      }
+    }
+    if (returnIndex <= pickupIndex) {
+      return { ok: false, error: "La devolución tiene que ser posterior a la recogida." }
+    }
+  }
+
+  return { ok: true, pickupIndex, returnIndex, rental }
 }
 
 /** Mapea el `Transport.type` de extracción a `RouteMode` (valores ya alineados). */
@@ -61,6 +137,9 @@ export function splitArrowTitle(name: string): { from: string; to: string } | nu
  * route confirmada > hint de fuente > split del nombre > vacío.
  */
 export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed {
+  const carUse = item?.route?.carUse === "owned" || item?.route?.carUse === "rental"
+    ? item.route.carUse
+    : null
   if (item?.route?.from && item.route.to) {
     return {
       from: item.route.from,
@@ -70,6 +149,7 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
       mode: item.route.mode ?? "undecided",
       vendor: item.vendor ?? "",
       detail: item.detail ?? "",
+      carUse,
     }
   }
 
@@ -83,6 +163,7 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
       mode: hint.mode ?? "undecided",
       vendor: item?.vendor ?? "",
       detail: item?.detail ?? "",
+      carUse: null,
     }
   }
 
@@ -96,6 +177,7 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
       mode: "undecided",
       vendor: item?.vendor ?? "",
       detail: item?.detail ?? "",
+      carUse: null,
     }
   }
 
@@ -107,6 +189,7 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
     mode: "undecided",
     vendor: item?.vendor ?? "",
     detail: item?.detail ?? "",
+    carUse: null,
   }
 }
 
@@ -114,7 +197,11 @@ export function formatRouteSummary(params: {
   mode?: RouteMode | null
   leg?: "outbound" | "return" | null
   vendor?: string | null
+  carUse?: TransportRoute["carUse"]
 }): string {
+  if (params.carUse === "rental" && params.mode === "car") {
+    return rentalDescriptiveName(params.vendor)
+  }
   const parts = [
     routeModeLabel(params.mode),
     params.leg === "outbound" ? "Ida" : params.leg === "return" ? "Vuelta" : null,
@@ -123,44 +210,78 @@ export function formatRouteSummary(params: {
   return parts.join(" · ")
 }
 
-/** Construye o actualiza un ítem de traslado interno (sin `leg`). */
+/** Construye o actualiza un ítem de traslado interno o alquiler (sin `leg`). */
 export function buildTransportRouteItem(params: {
   route: Omit<TransportRoute, "leg"> & { from: RoutePlace; to: RoutePlace }
   detail?: string | null
   vendor?: string | null
   existing?: UserDayItem | null
+  /** Índice ancla y duración inclusiva; solo alquiler. */
+  span?: { anchorIndex: number; coverage: number; numDays: number }
 }): UserDayItem {
-  const { route, detail, vendor, existing } = params
-  const cleanRoute: TransportRoute = {
-    from: route.from,
-    to: route.to,
-    mode: route.mode ?? null,
-  }
+  const { route, detail, vendor, existing, span } = params
+  const cleanVendor = vendor?.trim() ? vendor.trim() : null
+  const cleanDetail = detail?.trim() ? detail.trim() : null
+
+  const rental = isCarRentalRoute(route)
+  const cleanRoute: TransportRoute = rental
+    ? rentalRouteFromPickup(route.from, route.to)
+    : {
+        from: route.from,
+        to: route.to,
+        mode: route.mode ?? null,
+        ...(route.carUse === "owned" && route.mode === "car"
+          ? { carUse: "owned" as const }
+          : {}),
+      }
+
+  const name = rental
+    ? rentalDisplayName(cleanVendor)
+    : formatLegName(route.from.label, route.to.label)
+  const region = rental ? rentalRegionLabel(cleanRoute) : route.to.label
+  const coords = rental ? route.from.coords : route.to.coords
+
+  let item: UserDayItem
   if (existing) {
-    return {
+    item = {
       ...existing,
       type: "transport",
-      name: formatLegName(route.from.label, route.to.label),
-      detail: detail?.trim() ? detail.trim() : null,
-      vendor: vendor?.trim() ? vendor.trim() : null,
-      region: route.to.label,
-      coords: route.to.coords,
+      name,
+      detail: cleanDetail,
+      vendor: cleanVendor,
+      region,
+      coords,
+      route: cleanRoute,
+    }
+    if (!rental && item.spanDays !== undefined) {
+      const rest = { ...item }
+      delete rest.spanDays
+      item = rest
+    }
+  } else {
+    item = {
+      id: crypto.randomUUID(),
+      sourceItemId: `manual-${crypto.randomUUID()}`,
+      sourceId: MANUAL_SOURCE_ID,
+      type: "transport",
+      name,
+      detail: cleanDetail,
+      sourceAuthor: "Tú",
+      region,
+      coords,
+      vendor: cleanVendor,
       route: cleanRoute,
     }
   }
-  return {
-    id: crypto.randomUUID(),
-    sourceItemId: `manual-${crypto.randomUUID()}`,
-    sourceId: MANUAL_SOURCE_ID,
-    type: "transport",
-    name: formatLegName(route.from.label, route.to.label),
-    detail: detail?.trim() ? detail.trim() : null,
-    sourceAuthor: "Tú",
-    region: route.to.label,
-    coords: route.to.coords,
-    vendor: vendor?.trim() ? vendor.trim() : null,
-    route: cleanRoute,
+
+  if (rental && span) {
+    item = applySpanDays(item, span.coverage, span.anchorIndex, span.numDays)
+  } else if (!rental && item.spanDays !== undefined) {
+    const rest = { ...item }
+    delete rest.spanDays
+    item = rest
   }
+  return item
 }
 
 /**

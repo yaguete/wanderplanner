@@ -40,6 +40,8 @@ class SharePlanItem(BaseModel):
     type: ItemType
     name: str = Field(min_length=1, max_length=120)
     region: str | None = Field(default=None, max_length=120)
+    nights: int | None = Field(default=None, ge=2, le=60)
+    days: int | None = Field(default=None, ge=2, le=60)
     route: SharePlanRoute | None = None
     via: str | None = Field(default=None, max_length=120)
 

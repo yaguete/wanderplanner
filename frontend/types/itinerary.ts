@@ -344,18 +344,28 @@ export interface RoutePlace {
 /** Medio elegido para el tramo; null/ausente = «aún no lo sé». */
 export type RouteMode = "car" | "train" | "bus" | "flight" | "ferry" | "other"
 
+/** Cómo se usa el coche: trayecto propio vs alquiler de varios días. */
+export type RouteCarUse = "owned" | "rental"
+
 /** Dirección del tramo respecto al viaje. */
 export type RouteLeg = "outbound" | "return"
 
 /**
- * Cadena de un tramo de ida/vuelta (T4B.3). Vive en el ítem, no en el Trip.
- * `mode` nullable a propósito: el tramo existe antes de decidir el medio.
+ * Cadena de un tramo de ida/vuelta, un traslado interno o un alquiler.
+ * Vive en el ítem, no en el Trip. `mode` nullable a propósito: el tramo
+ * existe antes de decidir el medio.
+ *
+ * `carUse: "rental"` (solo con `mode: "car"` y sin `leg`): no es un
+ * trayecto A→B. `from` es la ciudad de recogida; `to` es una copia si
+ * se entrega en la misma ciudad, o la ciudad de entrega si no.
+ * Comparar por valor (`sameRoutePlace`), no por `===`.
  */
 export interface TransportRoute {
   from: RoutePlace
   to: RoutePlace
   mode?: RouteMode | null
   leg?: RouteLeg
+  carUse?: RouteCarUse
 }
 
 export interface UserDayItem {
@@ -371,16 +381,19 @@ export interface UserDayItem {
   /**
    * Coordenadas resueltas (p. ej. al elegir un candidato Mapbox en ítems manuales).
    * Objeto `{ lng, lat }` — no tupla — para el jsonb y el contrato de `LngLat`.
-   * En tramos con `route` (T4B.3): apunta a `route.to.coords` (destino del tramo;
-   * en la vuelta es la casa). El mapa (T4B.6) usará `route.from`/`route.to` directamente.
+   * En tramos A→B: apunta a `route.to.coords`. En un alquiler: la ciudad de
+   * recogida (`route.from`). El mapa no dibuja el alquiler en esta entrega.
    */
   coords?: { lng: number; lat: number } | null
   affiliateUrl?: string | null
   vendor?: string | null
   /**
-   * Tramo de ida/vuelta o traslado interno estructurado (T4B.3).
-   * Con `leg` = ida/vuelta del viaje; sin `leg` = desplazamiento interno.
-   * `from`/`to` son la fuente de verdad; `name` se deriva como «A → B».
+   * Tramo de ida/vuelta, traslado interno o alquiler (`carUse: "rental"`).
+   * Con `leg` = ida/vuelta del viaje; sin `leg` = desplazamiento interno
+   * o alquiler. En un trayecto, `from`/`to` son la fuente de verdad y
+   * `name` se deriva como «A → B». En un alquiler, `name` es la compañía
+   * o «Coche de alquiler»; `region` lleva la ciudad de recogida o
+   * «recogida → entrega» si son distintas. No usar «A → A» en el nombre.
    */
   route?: TransportRoute
   /**
@@ -391,9 +404,11 @@ export interface UserDayItem {
   /**
    * Días de calendario que cubre el ítem, contando el de inicio (T4B.2b).
    * Ausente o 1 = solo su día. Solo se persiste si es un entero ≥ 2.
-   * Stay = noches; activity = duración de la actividad. Food/transport no.
-   * El ítem vive UNA vez, en su día de entrada; los días cubiertos muestran
-   * un eco derivado en render (`expandSpannedItems`). No replicar en jsonb.
+   * Stay = noches; activity = duración; alquiler (`carUse: "rental"`) =
+   * recogida inclusive hasta devolución inclusive. Food y el resto de
+   * transportes no. El ítem vive UNA vez, en su día de entrada; los días
+   * cubiertos muestran un eco derivado en render (`expandSpannedItems`).
+   * No replicar en jsonb.
    */
   spanDays?: number
 }

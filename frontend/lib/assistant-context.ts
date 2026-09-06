@@ -132,7 +132,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
         const typeLabel = itemTypeLabel(item.type, item)
         const region = item.region ? ` · ${item.region}` : ""
         const detail = item.detail ? ` — ${item.detail}` : ""
-        const span = itemTakesCalendarSpan(item.type) ? parseSpanDays(item.spanDays) : undefined
+        const span = itemTakesCalendarSpan(item) ? parseSpanDays(item.spanDays) : undefined
         const duration = !span
           ? ""
           : item.type === "stay"

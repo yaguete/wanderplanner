@@ -213,6 +213,25 @@ assert.equal(
   classifyOutboundTarget("https://www.homeexchange.fr/search-v2/Edimbourg"),
   "homeexchange",
 )
+assert.equal(
+  classifyOutboundTarget("https://www.discovercars.com/es?a_aid=lacosmopolilla"),
+  "discovercars",
+)
+assert.equal(
+  classifyOutboundTarget("https://book.discovercars.com/search"),
+  "discovercars",
+)
+assert.equal(
+  classifyOutboundAffiliate("https://www.discovercars.com/es?a_aid=lacosmopolilla"),
+  "own",
+)
+assert.equal(
+  classifyOutboundAffiliate(
+    "https://www.discovercars.com/es?a_aid=lacosmopolilla",
+    "partner",
+  ),
+  "partner",
+)
 {
   // Misma URL, distinta procedencia: el aid propio coincide con el de la partner.
   const civitatis = "https://www.civitatis.com/es/budapest/?aid=1006"

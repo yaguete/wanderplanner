@@ -4,6 +4,7 @@
  * Wrapper de ida/vuelta sobre TransportRouteForm (T4B.3 §9.2).
  * Aporta suggestLegEndpoints, originPatch y copy de casa.
  * Al crear una ida sin retorno: atajo «Solo ida / Ida y vuelta» (no se persiste).
+ * No ofrece alquiler de coche (`allowRental` no aplica: este diálogo es A→B).
  */
 import { useId, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"

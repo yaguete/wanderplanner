@@ -84,6 +84,68 @@ assert.equal(
 )
 
 {
+  const city = place("Edimburgo", -3.19, 55.95)
+  const parsed = parseTransportRoute({
+    from: city,
+    to: { ...city, coords: { ...city.coords } },
+    mode: "car",
+    carUse: "rental",
+  })
+  assert.equal(parsed?.carUse, "rental")
+  assert.equal(parsed?.mode, "car")
+  assert.equal(parsed?.leg, undefined)
+}
+
+{
+  const cleaned = sanitizeUserDayItem({
+    id: "1",
+    sourceItemId: "s",
+    sourceId: "manual",
+    type: "transport",
+    name: "Hertz",
+    detail: null,
+    sourceAuthor: "Tú",
+    spanDays: 4,
+    route: {
+      from: place("Edimburgo", -3.19, 55.95),
+      to: place("Edimburgo", -3.19, 55.95),
+      mode: "car",
+      carUse: "rental",
+    },
+  })
+  assert.equal(cleaned.route?.carUse, "rental")
+  assert.equal(cleaned.spanDays, 4)
+}
+
+assert.equal(
+  parseTransportRoute({
+    from: place("A", 1, 2),
+    to: place("B", 3, 4),
+    mode: "train",
+    carUse: "rental",
+  })?.carUse,
+  undefined,
+)
+assert.equal(
+  parseTransportRoute({
+    from: place("A", 1, 2),
+    to: place("B", 3, 4),
+    mode: "car",
+    carUse: "rental",
+    leg: "outbound",
+  })?.carUse,
+  undefined,
+)
+assert.equal(
+  parseTransportRoute({
+    from: place("A", 1, 2),
+    to: place("B", 3, 4),
+    mode: "car",
+  })?.carUse,
+  undefined,
+)
+
+{
   const item: UserDayItem = {
     id: "1",
     sourceItemId: "s",

@@ -136,6 +136,7 @@ import {
   type DayDestructiveAction,
 } from "@/components/day-destructive-confirm-dialog"
 import { hasRouteLeg, isRouteLegItem } from "@/lib/route-legs"
+import { isCarRentalItem } from "@/lib/transport-kind"
 import { useListFlip } from "@/hooks/use-list-flip"
 import { useItineraryDnd } from "@/hooks/use-itinerary-dnd"
 import { useStableList } from "@/hooks/use-stable-list"
@@ -1332,11 +1333,9 @@ export default function ItineraryPanel({
           const result = upsertTransportRouteItem(tripId, data)
           if (!result.ok) {
             toast.error(result.error)
-            return
+            return result
           }
-          if (data.taskPatch) {
-            setTaskState(tripId, result.taskKey, data.taskPatch)
-          }
+          return result
         }}
       />
 
@@ -1386,6 +1385,7 @@ export default function ItineraryPanel({
           startDate={trip.startDate}
           numTravelers={trip.numTravelers}
           currency={trip.currency}
+          onAddDay={() => addDay(tripId)}
           initialDayId={transportDialog.dayId}
           existingItem={transportDialog.existingItem}
           existingTask={
@@ -1397,11 +1397,9 @@ export default function ItineraryPanel({
             const result = upsertTransportRouteItem(tripId, data)
             if (!result.ok) {
               toast.error(result.error)
-              return
+              return result
             }
-            if (data.taskPatch) {
-              setTaskState(tripId, result.taskKey, data.taskPatch)
-            }
+            return result
           }}
         />
       ) : null}
@@ -1505,7 +1503,7 @@ function DayItineraryTimeline({
           const state = taskStates[taskKey] ?? null
           const status = resolveTaskStatus(state)
           const bucket = taskBucket(categoryFromItemType(item.type), state, "dayItem", {
-            routeMode: item.route?.mode,
+            route: item.route,
             hasAffiliate: Boolean(item.affiliateUrl?.trim()),
           })
           const titleAdornment =
@@ -1522,17 +1520,20 @@ function DayItineraryTimeline({
             ) : null
           const isLeg = isRouteLegItem(item)
           const routeSummary =
-            item.type === "transport" && (item.route || item.vendor)
+            item.type === "transport" &&
+            !isCarRentalItem(item) &&
+            (item.route || item.vendor)
               ? formatRouteSummary({
                   mode: item.route?.mode,
                   leg: item.route?.leg,
                   vendor: item.vendor,
+                  carUse: item.route?.carUse,
                 }) || null
               : null
           const transportVisual =
             item.type === "transport" ? transportIconForItem(item) : null
           const spanLabel =
-            !isEcho ? spanAnchorLabel(item.type, spanTotal) : null
+            !isEcho ? spanAnchorLabel(item, spanTotal) : null
           return (
             <li
               key={isEcho ? `echo:${item.id}` : item.id}
@@ -1576,7 +1577,7 @@ function DayItineraryTimeline({
                 regionLabel={resolveRegion(item)}
                 typeLabel={
                   isEcho
-                    ? spanEchoLabel(item.type, spanIndex, spanTotal)
+                    ? spanEchoLabel(item, spanIndex, spanTotal)
                     : itemTypeLabel(item.type, item)
                 }
                 spanLabel={spanLabel}
@@ -1615,7 +1616,7 @@ function DayItineraryTimeline({
                 onRemove={() =>
                   isEcho ? onShortenStay(item.id, spanIndex) : onRemoveItem(item.id)
                 }
-                removeAriaLabel={isEcho ? spanEchoRemoveLabel(item.type) : "Quitar ítem"}
+                removeAriaLabel={isEcho ? spanEchoRemoveLabel(item) : "Quitar ítem"}
                 onEdit={
                   isEcho
                     ? undefined
@@ -1632,7 +1633,7 @@ function DayItineraryTimeline({
                     ? item.route?.leg === "outbound"
                       ? "Editar viaje de ida"
                       : "Editar viaje de vuelta"
-                    : itemEditAriaLabel(item.type)
+                    : itemEditAriaLabel(item.type, { route: item.route })
                 }
                 titleAdornment={titleAdornment}
                 taskIndicator={taskIndicator}

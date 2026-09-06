@@ -9,6 +9,7 @@
  */
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { itemTakesCalendarSpan, parseSpanDays, unionStayDayIndexes } from "@/lib/item-span"
+import { transportReservePolicy, type TransportKindProbe } from "@/lib/transport-kind"
 import type {
   BasicCategory,
   ExtraTask,
@@ -219,23 +220,26 @@ export function isBookableTransportMode(mode: RouteMode | null | undefined): boo
   return mode === "flight" || mode === "train" || mode === "bus" || mode === "ferry"
 }
 
-/** `cancellable` solo aplica en alojamiento y transporte con billete. */
+/** `cancellable` solo aplica en alojamiento, alquiler y transporte con billete. */
 export function cancellableApplies(
   category: TripTaskCategory,
-  routeMode?: RouteMode | null,
+  route?: TransportKindProbe["route"] | TransportRoute | RouteMode | null,
 ): boolean {
   if (category === "accommodation") return true
-  if (category === "transport") return isBookableTransportMode(routeMode)
+  if (category === "transport") {
+    const probe = typeof route === "string" ? { mode: route } : route
+    return transportReservePolicy(probe).bookable
+  }
   return false
 }
 
 /** El control solo se enseña en Pagado; Reservado no lo pinta. */
 export function cancellableControlVisible(
   category: TripTaskCategory,
-  routeMode: RouteMode | null | undefined,
+  route: TransportKindProbe["route"] | TransportRoute | RouteMode | null | undefined,
   status: TripTaskStatus | null,
 ): boolean {
-  return cancellableApplies(category, routeMode) && status === "paid"
+  return cancellableApplies(category, route) && status === "paid"
 }
 
 function needsTriage(category: TripTaskCategory): boolean {
@@ -280,15 +284,20 @@ export function taskBucket(
   category: TripTaskCategory,
   state: TripTaskState | null,
   origin: DerivedTaskOrigin,
-  opts?: { routeMode?: RouteMode | null; hasAffiliate?: boolean },
+  opts?: {
+    routeMode?: RouteMode | null
+    route?: TransportRoute | null
+    hasAffiliate?: boolean
+  },
 ): TaskBucket {
-  const routeMode = opts?.routeMode
+  const route = opts?.route ?? (opts?.routeMode != null ? { mode: opts.routeMode } : null)
+  const policy = transportReservePolicy(route)
   if (state?.status === "notNeeded") return "dismissed"
   if (origin === "extra") return "main"
   if (
     category === "transport" &&
     origin === "dayItem" &&
-    !isBookableTransportMode(routeMode) &&
+    !policy.skipTriageWhenUntouched &&
     state === null
   ) {
     return "triage"
@@ -378,7 +387,7 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
         group.dayIndexSet.add(dayIndex)
         group.dayIndexes.push(dayIndex)
       }
-      if (itemTakesCalendarSpan(item.type)) {
+      if (itemTakesCalendarSpan(item)) {
         const span = parseSpanDays(item.spanDays)
         if (span != null) {
           for (const idx of unionStayDayIndexes([], dayIndex, span, numDays)) {
@@ -413,6 +422,7 @@ function aggregateDayItems(trip: Trip): DerivedTripTask[] {
       state,
       bucket: taskBucket(g.category, state, origin, {
         routeMode: g.route?.mode,
+        route: g.route,
         hasAffiliate: Boolean(g.affiliateUrl),
       }),
       itemIds: g.itemIds,

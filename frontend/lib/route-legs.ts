@@ -3,6 +3,7 @@
  * Parsing defensivo, naming, localización, propuesta de extremos y reanclaje.
  */
 import type {
+  RouteCarUse,
   RouteLeg,
   RouteMode,
   RoutePlace,
@@ -15,6 +16,7 @@ import type {
 } from "@/types/itinerary"
 import { MANUAL_SOURCE_ID } from "@/lib/item-provenance"
 import { parseSpanDays } from "@/lib/item-span"
+import { isRouteCarUse } from "@/lib/transport-kind"
 
 export const ROUTE_MODES: readonly RouteMode[] = [
   "car",
@@ -143,6 +145,12 @@ export function parseTransportRoute(raw: unknown): TransportRoute | null {
 
   const route: TransportRoute = { from, to, mode }
   if (isRouteLeg(obj.leg)) route.leg = obj.leg
+
+  // Alquiler con leg no se activa: un ida/vuelta no es un alquiler.
+  const carUseRaw = obj.carUse
+  if (mode === "car" && isRouteCarUse(carUseRaw) && !route.leg) {
+    route.carUse = carUseRaw as RouteCarUse
+  }
   return route
 }
 

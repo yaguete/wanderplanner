@@ -12,6 +12,7 @@ import {
 } from "date-fns"
 import type { UserDayItem } from "@/types/itinerary"
 import { dateISOForDayIndex, formatTripDates, toISODate } from "@/lib/trip-dates"
+import { isCarRentalItem } from "@/lib/transport-kind"
 
 export type CalendarScale = "month" | "week"
 
@@ -176,8 +177,11 @@ function shortPlace(label: string): string {
 }
 
 export function calendarBadgeLabel(
-  item: Pick<UserDayItem, "name" | "route">,
+  item: Pick<UserDayItem, "name" | "route"> & { type?: UserDayItem["type"] },
 ): string {
+  if (isCarRentalItem(item)) {
+    return item.name.trim() || "Coche de alquiler"
+  }
   if (item.route) return `→ ${shortPlace(item.route.to.label)}`
   return item.name
 }

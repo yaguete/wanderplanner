@@ -7,7 +7,6 @@
  */
 import { useMemo, useState } from "react"
 import {
-  Check,
   CheckSquare,
   ChevronDown,
   ExternalLink,
@@ -21,12 +20,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { BookingStatusToggle, CancellableDropdown } from "@/components/task-state-controls"
+import { BookingStatusToggle, CancellableDropdown, DoneChip } from "@/components/task-state-controls"
 import { AddExtraTaskDialog } from "@/components/add-extra-task-dialog"
 import { ReserveSearchDialog } from "@/components/reserve-search-dialog"
 import { CostInput } from "@/components/cost-input"
 import { CountryTasksSection } from "@/components/country-tasks-section"
 import { EmptyState } from "@/components/empty-state"
+import { Button } from "@/components/ui/button"
 import { FlightSearchLink } from "@/components/flight-search-link"
 import { stayReserveHref } from "@/lib/booking-search"
 import { taskReserveAction } from "@/lib/item-discovery-links"
@@ -47,11 +47,11 @@ import {
   buildTripTasks,
   cancellableControlVisible,
   computeTripTaskTotals,
-  isBookableTransportMode,
   isTaskManaged,
   type DerivedTripTask,
   type TripTaskTotals,
 } from "@/lib/trip-tasks"
+import { transportReservePolicy } from "@/lib/transport-kind"
 import { flightSearchHrefForItem } from "@/lib/flight-search"
 import { resolveTripCountryCodes } from "@/lib/countries"
 import type { Source, Trip, TripTaskCategory, TripTaskState, UserDayItem } from "@/types/itinerary"
@@ -258,8 +258,8 @@ function findTaskDayItem(
 /** Chip «Hecho» (trámites / trayectos sin billete) vs Reservado·Pagado. */
 function usesDoneChip(task: DerivedTripTask): boolean {
   if (task.category === "paperwork" || task.category === "health") return true
-  if (task.category === "transport" && !isBookableTransportMode(task.route?.mode)) {
-    return true
+  if (task.category === "transport") {
+    return transportReservePolicy(task.route).usesDoneChip
   }
   return false
 }
@@ -310,8 +310,10 @@ export function TripTasksPanel({
     mainTasks.length === 0 && triageTasks.length === 0 && dismissedTasks.length === 0
 
   const addButton = (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      className="h-8 px-2.5 text-xs"
       onClick={() => {
         if (onAddAction) {
           onAddAction()
@@ -319,11 +321,10 @@ export function TripTasksPanel({
         }
         setExtraDialogOpen(true)
       }}
-      className="inline-flex min-h-8 items-center gap-1 text-xs font-medium text-foreground transition-colors hover:text-muted-foreground"
     >
-      <Plus className="h-3.5 w-3.5 shrink-0" />
+      <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
       {addActionLabel}
-    </button>
+    </Button>
   )
 
   return (
@@ -339,9 +340,15 @@ export function TripTasksPanel({
           // Móvil: scrollea el documento (ver `trips-shell`), no esta lista.
           "px-4 pb-6 max-md:pb-[var(--wp-nav-clearance)] md:min-h-0 md:flex-1 md:overflow-y-auto",
           hideSummary ? "pt-0" : "pt-2",
+          isEmpty && "flex flex-col md:min-h-0",
         )}
       >
-        <div className="panel-column flex flex-col gap-6">
+        <div
+          className={cn(
+            "panel-column flex flex-col gap-6",
+            isEmpty && (countryTasks ? "flex-1" : "min-h-[min(24rem,60svh)] flex-1 md:min-h-0"),
+          )}
+        >
           {countryTasks ? (
             <CountryTasksSection
               trip={trip}
@@ -357,7 +364,15 @@ export function TripTasksPanel({
               icon={CheckSquare}
               title={emptyTitle}
               description={emptyDescription}
-              className={countryTasks ? "py-6" : "py-10"}
+              actionLabel={addActionLabel}
+              onAction={() => {
+                if (onAddAction) {
+                  onAddAction()
+                  return
+                }
+                setExtraDialogOpen(true)
+              }}
+              className={countryTasks ? "flex-1 py-6" : "flex-1 py-10"}
             />
           ) : (
             <>
@@ -405,6 +420,7 @@ export function TripTasksPanel({
                               type: task.sourceKind,
                               sourceId: task.sourceId,
                               affiliateUrl: task.affiliateUrl,
+                              route: task.route,
                             }) === "own-search"
                               ? () => setReserveTask(task)
                               : undefined
@@ -434,7 +450,7 @@ export function TripTasksPanel({
             </>
           )}
 
-          <div className="flex justify-end">{addButton}</div>
+          {isEmpty ? null : <div className="mt-4 flex justify-end">{addButton}</div>}
         </div>
       </div>
 
@@ -445,7 +461,9 @@ export function TripTasksPanel({
         defaultCategory={defaultCategory}
       />
       {reserveTask &&
-      (reserveTask.sourceKind === "stay" || reserveTask.sourceKind === "activity") ? (
+      (reserveTask.sourceKind === "stay" ||
+        reserveTask.sourceKind === "activity" ||
+        reserveTask.sourceKind === "transport") ? (
         <ReserveSearchDialog
           open
           onOpenChange={(open) => {
@@ -465,36 +483,6 @@ export function TripTasksPanel({
         />
       ) : null}
     </div>
-  )
-}
-
-function DoneChip({
-  active,
-  onClick,
-}: {
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "inline-flex min-h-7 items-center gap-1.5 rounded-md bg-muted px-2.5 text-[11px] transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active
-          ? "font-semibold text-foreground shadow-sm ring-1 ring-border bg-background"
-          : "font-medium text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {active ? (
-        <Check className="h-3 w-3 shrink-0 text-success" strokeWidth={2.4} aria-hidden />
-      ) : (
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
-      )}
-      Hecho
-    </button>
   )
 }
 
@@ -534,7 +522,7 @@ function TaskRow({
   })
   const showCancellable = cancellableControlVisible(
     task.category,
-    task.route?.mode,
+    task.route,
     status,
   )
   const cost = task.state?.cost ?? null
@@ -565,6 +553,7 @@ function TaskRow({
     type: task.sourceKind,
     sourceId: task.sourceId,
     affiliateUrl: task.affiliateUrl,
+    route: task.route,
   })
   const reserveHref =
     reserveAction === "partner"

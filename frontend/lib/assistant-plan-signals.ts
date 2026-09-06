@@ -4,6 +4,7 @@
  */
 import type { ItemType, Trip, UserDay, UserDayItem } from "@/types/itinerary"
 import { haversineMeters } from "@/lib/map-route-geometry"
+import { isCarRentalItem } from "@/lib/transport-kind"
 
 export const LONG_HOP_KM = 60
 export const LOADED_TIME_ITEMS = 4
@@ -84,7 +85,7 @@ function normalizeRegion(raw: string | null | undefined): string | null {
 }
 
 function timeOccupyingCount(items: readonly UserDayItem[]): number {
-  return items.filter((i) => TIME_TYPES.has(i.type)).length
+  return items.filter((i) => TIME_TYPES.has(i.type) && !isCarRentalItem(i)).length
 }
 
 function refFor(day: UserDay, index: number): PlanDayRef {
@@ -156,6 +157,7 @@ export function collectPlanSignals(
     }
 
     const withCoords = items
+      .filter((i) => !isCarRentalItem(i))
       .filter((i) => i.coords && Number.isFinite(i.coords.lng) && Number.isFinite(i.coords.lat))
       .slice(0, MAX_COORDS_PER_DAY)
     for (let i = 0; i < withCoords.length; i++) {

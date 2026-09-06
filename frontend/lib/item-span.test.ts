@@ -8,8 +8,10 @@ import {
   expandSpannedItems,
   filterStaySpanPins,
   hasFiniteLngLat,
+  itemTakesCalendarSpan,
   listStaySpanMapAnchors,
   parseSpanDays,
+  reanchorCarRentals,
   reanchorSpannedStays,
   spanDaysAfterDroppingEcho,
   spanDaysForWrite,
@@ -44,6 +46,38 @@ function activity(id: string, name: string): UserDayItem {
     name,
     detail: null,
     sourceAuthor: "Ana",
+  }
+}
+
+function rental(
+  id: string,
+  opts?: { spanDays?: number; name?: string },
+): UserDayItem {
+  const city = {
+    label: "Edimburgo",
+    coords: { lng: -3.19, lat: 55.95 },
+    kind: "city" as const,
+  }
+  return {
+    id,
+    sourceItemId: id,
+    sourceId: "manual",
+    type: "transport",
+    name: opts?.name ?? "Hertz",
+    detail: null,
+    sourceAuthor: "Tú",
+    vendor: "Hertz",
+    region: "Edimburgo",
+    coords: city.coords,
+    route: {
+      from: city,
+      to: { ...city, coords: { ...city.coords } },
+      mode: "car",
+      carUse: "rental",
+    },
+    ...(opts?.spanDays != null && opts.spanDays >= 2
+      ? { spanDays: opts.spanDays }
+      : {}),
   }
 }
 
@@ -215,11 +249,12 @@ assert.equal(spanDaysAfterDroppingEcho(1), undefined)
   assert.equal(slots[1]![0]!.spanIndex, 2)
   assert.equal(slots[4]![0]!.spanIndex, 5)
   assert.equal(slots[5]!.some((s) => s.item.id === "bhutan"), false)
-  assert.equal(spanAnchorLabel("activity", 5), "5 días")
-  assert.equal(spanEchoLabel("activity", 3, 5), "Día 3 de 5")
-  assert.equal(spanEchoRemoveLabel("activity"), "Acortar la actividad")
-  assert.equal(spanAnchorLabel("stay", 3), "3 noches")
-  assert.equal(spanEchoLabel("stay", 2, 3), "Noche 2 de 3")
+  assert.equal(spanAnchorLabel({ type: "activity" }, 5), "5 días")
+  assert.equal(spanEchoLabel({ type: "activity" }, 3, 5), "Día 3 de 5")
+  assert.equal(spanEchoRemoveLabel({ type: "activity" }), "Acortar la actividad")
+  assert.equal(spanAnchorLabel({ type: "stay" }, 3), "3 noches")
+  assert.equal(spanEchoLabel({ type: "stay" }, 2, 3), "Noche 2 de 3")
+  assert.equal(spanEchoRemoveLabel({ type: "stay" }), "Acortar la estancia")
 }
 
 // ── Anclas de mapa: coords obligatorias; cierra / abre ───────────────────────
@@ -320,6 +355,80 @@ assert.equal(spanDaysAfterDroppingEcho(1), undefined)
     filterStaySpanPins(day2, 2).map((p) => p.id),
     ["h::open::2"],
   )
+}
+
+{
+  const car = rental("rent-1")
+  assert.equal(itemTakesCalendarSpan(car), true)
+  const one = daysOf([car], [], [])
+  const slots1 = expandSpannedItems(one)
+  assert.equal(slots1[0]!.length, 1)
+  assert.equal(slots1[0]![0]!.isEcho, false)
+  assert.equal(slots1[1]!.length, 0)
+
+  const multi = rental("rent-n", { spanDays: 4 })
+  const days = daysOf([], [multi], [], [], [])
+  const slots = expandSpannedItems(days)
+  assert.equal(slots[1]![0]!.isEcho, false)
+  assert.equal(slots[1]![0]!.spanTotal, 4)
+  assert.equal(slots[2]![0]!.isEcho, true)
+  assert.equal(slots[2]![0]!.spanIndex, 2)
+  assert.equal(slots[4]![0]!.spanIndex, 4)
+  assert.equal(slots[0]!.some((s) => s.item.id === "rent-n"), false)
+  const probe = {
+    type: "transport" as const,
+    route: { mode: "car" as const, carUse: "rental" as const },
+  }
+  assert.equal(spanAnchorLabel(probe, 4), "4 días")
+  assert.equal(spanEchoLabel(probe, 2, 4), "Día 2 de 4")
+  assert.equal(spanEchoRemoveLabel(probe), "Acortar el alquiler")
+}
+
+{
+  const flight: UserDayItem = {
+    id: "fly",
+    sourceItemId: "fly",
+    sourceId: "manual",
+    type: "transport",
+    name: "BCN → EDI",
+    detail: null,
+    sourceAuthor: "Tú",
+    spanDays: 4,
+    route: {
+      from: { label: "BCN", coords: { lng: 2, lat: 41 }, kind: "airport" },
+      to: { label: "EDI", coords: { lng: -3, lat: 55 }, kind: "airport" },
+      mode: "flight",
+    },
+  }
+  assert.equal(itemTakesCalendarSpan(flight), false)
+  const slots = expandSpannedItems(daysOf([flight], [], [], []))
+  assert.equal(slots[0]!.length, 1)
+  assert.equal(slots[1]!.length, 0)
+  assert.equal(flight.spanDays, 4)
+}
+
+{
+  const car = rental("r", { spanDays: 4 })
+  const before = daysOf([], [car], [], [], [])
+  const dropMiddle = [before[0]!, before[1]!, before[3]!, before[4]!]
+  const mid = reanchorCarRentals(before, dropMiddle)
+  const kept = mid[1]!.items.find((i) => i.id === "r")
+  assert.ok(kept)
+  assert.equal(kept!.spanDays, 3)
+
+  const dropAnchor = [before[0]!, before[2]!, before[3]!, before[4]!]
+  const rescued = reanchorCarRentals(before, dropAnchor)
+  const moved = rescued[1]!.items.find((i) => i.id === "r")
+  assert.ok(moved)
+  assert.equal(moved!.spanDays, 3)
+
+  const dropReturn = [before[0]!, before[1]!, before[2]!, before[3]!]
+  const shortened = reanchorCarRentals(before, dropReturn)
+  assert.equal(shortened[1]!.items.find((i) => i.id === "r")!.spanDays, 3)
+
+  const dropAll = [before[0]!]
+  const gone = reanchorCarRentals(before, dropAll)
+  assert.equal(gone.some((d) => d.items.some((i) => i.id === "r")), false)
 }
 
 console.log("item-span: ok")

@@ -245,4 +245,32 @@ const TODAY = new Date("2026-08-17T12:00:00")
   assert.match(md, /día 1: 0 ítems/)
 }
 
+{
+  const edinburgh = { lng: -3.19, lat: 55.95 }
+  const madrid = { lng: -3.7, lat: 40.4 }
+  const rentalDays: UserDay[] = [
+    {
+      id: "d1",
+      label: "",
+      items: [
+        item("rent", "Hertz", {
+          type: "transport",
+          coords: edinburgh,
+          spanDays: 4,
+          route: {
+            from: { label: "Edimburgo", coords: edinburgh, kind: "city" },
+            to: { label: "Edimburgo", coords: { ...edinburgh }, kind: "city" },
+            mode: "car",
+            carUse: "rental",
+          },
+        }),
+        item("museo", "Museo", { coords: madrid, region: "Madrid" }),
+      ],
+    },
+  ]
+  const s = collectPlanSignals(tripOf(rentalDays), { today: TODAY })
+  assert.equal(s.longHops.length, 0)
+  assert.equal(s.loadedDays.length, 0)
+}
+
 console.log("assistant-plan-signals: ok")

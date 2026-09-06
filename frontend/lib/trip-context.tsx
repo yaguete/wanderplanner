@@ -64,6 +64,7 @@ import {
   clipSpanDaysInDays,
   itemTakesCalendarSpan,
   parseSpanDays,
+  reanchorCarRentals,
   reanchorSpannedStays,
   spanClipNotice,
 } from "@/lib/item-span"
@@ -79,7 +80,10 @@ import {
 import {
   buildTransportRouteItem,
   migrateTaskKeyOnStructure,
+  validateTransportRouteWrite,
+  type UpsertTransportRoutePayload,
 } from "@/lib/transport-routes"
+import { rentalCoverageDays } from "@/lib/transport-kind"
 import { isMirroredFlightRoundtrip } from "@/lib/flight-search"
 import { canAddSource } from "@/lib/trip-sources"
 import { tripsQueryPending } from "@/lib/trip-open-guard"
@@ -367,18 +371,13 @@ interface TripContextValue {
     },
   ) => { ok: true; taskKey: string } | { ok: false; error: string }
   /**
-   * Crea o edita un traslado interno estructurado (sin `leg`).
+   * Crea o edita un traslado interno o un alquiler (sin `leg`).
    * Migra la clave de tarea legacy → `route:${id}` en el mismo setTrips.
+   * El parche de tarea se aplica aquí; no hace falta un segundo `setTaskState`.
    */
   upsertTransportRouteItem: (
     tripId: string,
-    data: {
-      dayId: string
-      itemId?: string
-      route: Omit<TransportRoute, "leg"> & { from: TransportRoute["from"]; to: TransportRoute["to"] }
-      detail?: string | null
-      vendor?: string | null
-    },
+    data: UpsertTransportRoutePayload,
   ) => { ok: true; itemId: string; taskKey: string } | { ok: false; error: string }
 }
 
@@ -1362,7 +1361,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         const filtered = t.days.filter((d) => d.id !== dayId)
         if (filtered.length === 0) return t
         const days = clipSpanDaysInDays(
-          reanchorSpannedStays(t.days, rescueLegsFromRemovedDays(t.days, filtered)),
+          reanchorCarRentals(
+            t.days,
+            reanchorSpannedStays(t.days, rescueLegsFromRemovedDays(t.days, filtered)),
+          ),
         )
         return withPrunedTasks(syncTripSchedule(t, days))
       }),
@@ -1385,7 +1387,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           filtered = filtered.filter((x) => x.id !== d.id)
         }
         const days = clipSpanDaysInDays(
-          reanchorSpannedStays(t.days, rescueLegsFromRemovedDays(t.days, filtered)),
+          reanchorCarRentals(
+            t.days,
+            reanchorSpannedStays(t.days, rescueLegsFromRemovedDays(t.days, filtered)),
+          ),
         )
         return withPrunedTasks(syncTripSchedule(t, days))
       }),
@@ -1601,7 +1606,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         region: params.item.region ?? null,
         coords: params.item.coords ?? null,
       }
-      if (itemTakesCalendarSpan(existing.type)) {
+      if (itemTakesCalendarSpan(existing)) {
         nextItem = applySpanDays(
           nextItem,
           parseSpanDays(params.item.spanDays) ?? 1,
@@ -1620,7 +1625,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       const nextSpan = parseSpanDays(nextItem.spanDays) ?? 1
       let clipNotice: string | null = null
       if (requested != null && nextSpan < requested) {
-        clipNotice = spanClipNotice(existing.type, nextSpan, trip.days.length)
+        clipNotice = spanClipNotice(existing, nextSpan, trip.days.length)
       }
 
       setTrips((prev) =>
@@ -1684,13 +1689,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         const toDayIndex = t.days.findIndex((d) => d.id === toDayId)
         const requested = parseSpanDays(movingItem.spanDays)
         const placed =
-          !sameDay && itemTakesCalendarSpan(movingItem.type) && requested != null
+          !sameDay && itemTakesCalendarSpan(movingItem) && requested != null
             ? applySpanDays(movingItem, requested, toDayIndex, t.days.length)
             : movingItem
         if (placed !== movingItem && requested != null) {
           const nextSpan = parseSpanDays(placed.spanDays) ?? 1
           if (nextSpan < requested) {
-            clipNotice = spanClipNotice(movingItem.type, nextSpan, t.days.length)
+            clipNotice = spanClipNotice(movingItem, nextSpan, t.days.length)
           }
         }
         const targetItems = [...targetBase]
@@ -1869,22 +1874,16 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const upsertTransportRouteItem = useCallback(
     (
       tripId: string,
-      data: {
-        dayId: string
-        itemId?: string
-        route: Omit<TransportRoute, "leg"> & {
-          from: TransportRoute["from"]
-          to: TransportRoute["to"]
-        }
-        detail?: string | null
-        vendor?: string | null
-      },
+      data: UpsertTransportRoutePayload,
     ): { ok: true; itemId: string; taskKey: string } | { ok: false; error: string } => {
       const trip = tripsRef.current.find((t) => t.id === tripId)
       if (!trip) return { ok: false, error: "Viaje no encontrado." }
-      if (!trip.days.some((d) => d.id === data.dayId)) {
-        return { ok: false, error: "Día no encontrado." }
-      }
+      const validated = validateTransportRouteWrite(
+        data,
+        trip.days.map((d) => d.id),
+      )
+      if (!validated.ok) return validated
+      const { pickupIndex, returnIndex, rental } = validated
 
       let existing: UserDayItem | null = null
       let oldDayId: string | null = null
@@ -1909,17 +1908,18 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       }
 
       const oldKey = existing ? taskKeyForItem(existing) : null
+      const coverage = rental ? rentalCoverageDays(pickupIndex, returnIndex) : 1
       const item = buildTransportRouteItem({
-        route: {
-          from: data.route.from,
-          to: data.route.to,
-          mode: data.route.mode ?? null,
-        },
+        route: data.route,
         detail: data.detail,
         vendor: data.vendor,
         existing,
+        span: rental
+          ? { anchorIndex: pickupIndex, coverage, numDays: trip.days.length }
+          : undefined,
       })
       const newKey = taskKeyForItem(item)
+      const now = new Date().toISOString()
 
       setTrips((prev) =>
         prev.map((t) => {
@@ -1945,6 +1945,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           let tasks = t.tasks
           if (oldKey && oldKey !== newKey) {
             tasks = migrateTaskKeyOnStructure({ tasks, oldKey, newKey })
+          }
+          if (data.taskPatch) {
+            tasks = {
+              ...tasks,
+              [newKey]: mergeTaskState(tasks[newKey], data.taskPatch, now),
+            }
           }
           return withPrunedTasks(syncTripSchedule({ ...t, tasks }, days))
         }),

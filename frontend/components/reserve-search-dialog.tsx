@@ -16,7 +16,7 @@ import { itemDiscoveryLinks } from "@/lib/item-discovery-links"
 import { ITEM_COLORS, ITEM_LABELS, ITEM_TYPE_ICONS } from "@/lib/item-styles"
 import { formatItemPlaceCaption, splitStayPlace } from "@/lib/stay-discovery"
 import { cn } from "@/lib/utils"
-import type { ItemType, UserDayItem } from "@/types/itinerary"
+import type { ItemType, TransportRoute, UserDayItem } from "@/types/itinerary"
 
 export function ReserveSearchDialog({
   open,
@@ -36,7 +36,7 @@ export function ReserveSearchDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
-  type: Extract<ItemType, "stay" | "activity" | "food">
+  type: Extract<ItemType, "stay" | "activity" | "food" | "transport">
   sourceId?: string | null
   item?: UserDayItem | null
   startDate: string | null
@@ -75,9 +75,11 @@ export function ReserveSearchDialog({
     currency,
     numTravelers: numTravelers ?? 1,
     allowFromSource: true,
+    route: item?.route ?? null,
   })
   const ownStay = discovery.kind === "own" ? discovery.stay : undefined
   const ownActivity = discovery.kind === "own" ? discovery.activity : undefined
+  const ownCarRental = discovery.kind === "own" ? discovery.carRental : undefined
   const hasStayLinks = Boolean(
     ownStay && (ownStay.booking || ownStay.airbnb || ownStay.homeExchange),
   )
@@ -145,6 +147,17 @@ export function ReserveSearchDialog({
             ) : (
               <p className="text-sm text-muted-foreground">{discovery.hint}</p>
             )
+          ) : discovery.kind === "own" && ownCarRental ? (
+            <div className="space-y-1.5">
+              <PartnerSearchLink
+                href={ownCarRental.discovercars}
+                label="Buscar en DiscoverCars"
+                surface="task_row"
+              />
+              {discovery.hint ? (
+                <p className="text-xs text-muted-foreground">{discovery.hint}</p>
+              ) : null}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               No hay un buscador para este ítem.

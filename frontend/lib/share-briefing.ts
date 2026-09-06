@@ -8,6 +8,7 @@ import type { ItemType, ShareCard, Source, Trip, UserDay, UserDayItem } from "@/
 import { stripNullChars } from "@/lib/day-summary"
 import { isSyntheticSourceId, itemProvenanceLabel } from "@/lib/item-provenance"
 import { parseSpanDays } from "@/lib/item-span"
+import { isCarRentalItem, rentalDescriptiveName, DEFAULT_CAR_RENTAL_NAME } from "@/lib/transport-kind"
 
 export const SHARE_MAX_DAYS = 30
 export const SHARE_MAX_ITEMS_PER_DAY = 8
@@ -23,7 +24,7 @@ export type SharePlanItem = {
   region: string | null
   /** Noches del stay si `spanDays` ≥ 2. Noches sí, dinero no. */
   nights?: number
-  /** Días de una activity con `spanDays` ≥ 2. */
+  /** Días de una activity o alquiler con `spanDays` ≥ 2. */
   days?: number
   route: { from: string; to: string; mode: string | null } | null
   via: string | null
@@ -64,6 +65,7 @@ function clipOrNull(value: string | null | undefined): string | null {
 }
 
 function itemRoute(item: UserDayItem): SharePlanItem["route"] {
+  if (isCarRentalItem(item)) return null
   const route = item.route
   if (!route) return null
   const from = clip(route.from?.label ?? "")
@@ -85,12 +87,18 @@ function itemVia(item: UserDayItem): string | null {
 function mapItem(item: UserDayItem, cited: Set<string>): SharePlanItem {
   if (!isSyntheticSourceId(item.sourceId)) cited.add(item.sourceId)
   const span = parseSpanDays(item.spanDays)
+  const rental = isCarRentalItem(item)
+  const rentalName = rental
+    ? rentalDescriptiveName(
+        item.vendor || (item.name !== DEFAULT_CAR_RENTAL_NAME ? item.name : null),
+      )
+    : null
   return {
     type: item.type,
-    name: clip(item.name) || "Sin nombre",
+    name: clip(rentalName ?? item.name) || "Sin nombre",
     region: clipOrNull(item.region),
     ...(item.type === "stay" && span != null ? { nights: span } : {}),
-    ...(item.type === "activity" && span != null ? { days: span } : {}),
+    ...((item.type === "activity" || rental) && span != null ? { days: span } : {}),
     route: itemRoute(item),
     via: itemVia(item),
   }

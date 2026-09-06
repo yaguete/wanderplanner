@@ -101,6 +101,38 @@ assert.equal(
     task({
       origin: "dayItem",
       sourceKind: "transport",
+      title: "Hertz",
+      route: {
+        from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+        to: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+        mode: "car",
+        carUse: "rental",
+      },
+    }),
+  ),
+  "Alquilar coche en Edimburgo",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
+      title: "Hertz",
+      route: {
+        from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+        to: { label: "Glasgow", coords: { lng: -4.25, lat: 55.86 }, kind: "city" },
+        mode: "car",
+        carUse: "rental",
+      },
+    }),
+  ),
+  "Alquilar coche en Edimburgo → Glasgow",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
       title: "Barcelona → Vienna International Airport",
       route: {
         from: { label: "Barcelona", coords: { lng: 2.08, lat: 41.3 }, kind: "airport" },

@@ -1,10 +1,10 @@
 "use client"
 
 /**
- * Diálogo de traslado interno (sin leg). Reutiliza TransportRouteForm.
- * Día editable; sin originPatch ni reanclaje.
+ * Diálogo de traslado interno o alquiler (sin leg).
+ * El cuerpo progresivo vive en InternalTransportForm.
  */
-import { useId, useMemo, useRef, useState } from "react"
+import { useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,58 +14,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  emptyEndpoint,
-  TransportRouteForm,
-  type TransportRouteFormValue,
-} from "@/components/transport-route-form"
-import { ManualFlightSearch } from "@/components/manual-flight-search"
-import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
-import { formatDayPickerLabel } from "@/lib/day-heading"
-import { isSyntheticSourceId } from "@/lib/item-provenance"
-import {
-  draftFromTaskState,
-  taskPatchFromManualDraft,
-  type ManualTaskDraft,
-} from "@/lib/manual-item-task"
-import { dateISOForDayIndex, formatDayDateShort } from "@/lib/trip-dates"
-import { seedTransportForm } from "@/lib/transport-routes"
-import type {
-  RouteMode,
-  TransportRoute,
-  TripTaskState,
-  UserDay,
-  UserDayItem,
-} from "@/types/itinerary"
+import { InternalTransportForm } from "@/components/internal-transport-form"
+import { isCarRentalItem } from "@/lib/transport-kind"
+import type { UpsertTransportRoutePayload } from "@/lib/transport-routes"
+import type { TripTaskState, UserDay, UserDayItem } from "@/types/itinerary"
 
 export type TransportRouteDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   days: UserDay[]
-  /** Fecha de inicio del viaje; sin ella el selector no muestra el paréntesis. */
   startDate?: string | null
   numTravelers?: number | null
   currency?: string
   existingTask?: TripTaskState | null
-  /** Día preseleccionado (creación) o día actual del ítem (edición). */
   initialDayId?: string | null
   existingItem?: UserDayItem | null
-  onSubmit: (data: {
-    dayId: string
-    itemId?: string
-    route: Omit<TransportRoute, "leg"> & { from: TransportRoute["from"]; to: TransportRoute["to"] }
-    detail: string | null
-    vendor: string | null
-    taskPatch?: Partial<TripTaskState> | null
-  }) => void
+  onAddDay?: () => void
+  onSubmit: (
+    data: UpsertTransportRoutePayload,
+  ) => { ok: true } | { ok: false; error?: string } | void
 }
 
 export function TransportRouteDialog({
@@ -78,61 +45,30 @@ export function TransportRouteDialog({
   existingTask = null,
   initialDayId = null,
   existingItem = null,
+  onAddDay,
   onSubmit,
 }: TransportRouteDialogProps) {
   const formId = useId()
-  const dayFieldId = useId()
   const [canSubmit, setCanSubmit] = useState(false)
-  const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(() =>
-    draftFromTaskState(existingTask),
-  )
-  const costRef = useRef<number | null>(taskDraft.cost)
-  const [liveMode, setLiveMode] = useState<RouteMode | null>(
-    existingItem?.route?.mode ?? null,
-  )
-
-  const seed = useMemo(() => seedTransportForm(existingItem), [])
-  const initial = useMemo(
-    () => ({
-      from: emptyEndpoint({ place: seed.from, pendingText: seed.pendingFromText }),
-      to: emptyEndpoint({ place: seed.to, pendingText: seed.pendingToText }),
-      mode: seed.mode,
-      vendor: seed.vendor,
-      detail: seed.detail,
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
-
-  const preferredDay =
-    (initialDayId && days.some((d) => d.id === initialDayId) && initialDayId) ||
-    days[0]?.id ||
-    ""
-  const [dayId, setDayId] = useState(preferredDay)
-  const dayIndex = Math.max(0, days.findIndex((d) => d.id === dayId))
 
   const editing = Boolean(existingItem)
-  const title = editing ? "Editar traslado" : "Añadir traslado"
-  const showDiscovery = !existingItem || isSyntheticSourceId(existingItem.sourceId)
+  const rental = Boolean(existingItem && isCarRentalItem(existingItem))
+  const title = editing
+    ? rental
+      ? "Editar alquiler de coche"
+      : "Editar traslado"
+    : "Añadir transporte o traslado"
+  const description = editing
+    ? rental
+      ? "Cambia la ciudad, los días de recogida y devolución o la compañía."
+      : "Cambia origen, destino o medio de transporte."
+    : "Elige cómo, cuándo y desde dónde viajas."
 
-  const handleFormSubmit = (value: TransportRouteFormValue) => {
-    if (!dayId) return
-    onSubmit({
-      dayId,
-      itemId: existingItem?.id,
-      route: {
-        from: value.from,
-        to: value.to,
-        mode: value.mode,
-      },
-      detail: value.detail,
-      vendor: value.vendor,
-      taskPatch: taskPatchFromManualDraft(
-        { ...taskDraft, cost: costRef.current },
-        existingTask ? { includeCleared: true } : undefined,
-      ),
-    })
+  const handleSubmit = (data: UpsertTransportRoutePayload) => {
+    const result = onSubmit(data)
+    if (result && result.ok === false) return result
     onOpenChange(false)
+    return result ?? { ok: true as const }
   }
 
   return (
@@ -140,68 +76,23 @@ export function TransportRouteDialog({
       <DialogContent fullscreenOnMobile hideClose className="sm:max-w-lg">
         <DialogHeader className="shrink-0 space-y-1.5 px-6 py-4 text-left">
           <DialogTitle className="text-lg font-semibold tracking-tight">{title}</DialogTitle>
-          <DialogDescription>
-            Define origen, destino y medio de transporte si lo sabes.
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 pb-10">
-          <div className="space-y-2">
-            <Label htmlFor={dayFieldId}>Día del traslado</Label>
-            <Select value={dayId} onValueChange={setDayId}>
-              <SelectTrigger id={dayFieldId}>
-                <SelectValue placeholder="Elige un día" />
-              </SelectTrigger>
-              <SelectContent>
-                {days.map((d, i) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {formatDayPickerLabel(
-                      i,
-                      formatDayDateShort(dateISOForDayIndex(startDate, i)),
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <TransportRouteForm
+          <InternalTransportForm
             formId={formId}
-            initial={initial}
-            fromLabel="Origen"
-            toLabel="Destino"
-            onValidityChange={setCanSubmit}
-            onLiveContext={({ mode }) => setLiveMode(mode)}
-            onSubmit={handleFormSubmit}
-            renderAfterDestination={
-              showDiscovery
-                ? ({ from, to, mode }) => (
-                    <ManualFlightSearch
-                      from={from}
-                      to={to}
-                      mode={mode}
-                      trip={{
-                        startDate,
-                        numDays: days.length,
-                        numTravelers: numTravelers ?? 1,
-                      }}
-                      dayIndex={dayIndex}
-                      days={days}
-                    />
-                  )
-                : undefined
-            }
-          />
-
-          <ManualItemTaskFields
-            type="transport"
-            routeMode={liveMode}
+            days={days}
+            startDate={startDate}
+            initialDayId={initialDayId}
+            existingItem={existingItem}
+            existingTask={existingTask}
             currency={currency}
-            draft={taskDraft}
-            onChange={(next) => {
-              costRef.current = next.cost
-              setTaskDraft(next)
-            }}
+            numTravelers={numTravelers}
+            allowRental
+            onAddDay={onAddDay}
+            onValidityChange={setCanSubmit}
+            onSubmit={handleSubmit}
           />
         </div>
 
@@ -209,7 +100,7 @@ export function TransportRouteDialog({
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button type="submit" form={formId} disabled={!canSubmit || !dayId}>
+          <Button type="submit" form={formId} disabled={!canSubmit}>
             {editing ? "Guardar" : "Añadir al plan"}
           </Button>
         </DialogFooter>

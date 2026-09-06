@@ -14,6 +14,7 @@ import {
   seedTransportForm,
   sourceRouteHintFromTransport,
   splitArrowTitle,
+  validateTransportRouteWrite,
 } from "./transport-routes"
 import { flattenItinerary } from "./itinerary-utils"
 import { taskKeyForItem } from "./trip-tasks"
@@ -48,6 +49,15 @@ import {
   toPersistableRoutePlace,
   stripPersistMeta,
 } from "./place-search-guardrails"
+import {
+  rentalDropoffPlace,
+  rentalMaxPickupIndex,
+  rentalMinReturnIndex,
+  rentalCoverageDays,
+  rentalRouteFromPickup,
+  transportReservePolicy,
+  transportWriteError,
+} from "./transport-kind"
 import type { Itinerary, UserDay, UserDayItem } from "@/types/itinerary"
 
 const place = (label: string, kind: "city" | "airport" | "station" = "city") => ({
@@ -222,6 +232,192 @@ describe("transport-routes seeds y build", () => {
     assert.equal(built.route?.leg, undefined)
     assert.equal(built.name, "Takayama → Okuhida")
     assert.equal(built.coords?.lng, place("Okuhida").coords.lng)
+  })
+
+  it("alquiler one-way: conserva ciudad de entrega y región con flecha", () => {
+    const city = place("Edimburgo")
+    const built = buildTransportRouteItem({
+      route: {
+        from: city,
+        to: place("Glasgow"),
+        mode: "car",
+        carUse: "rental",
+      },
+      vendor: "Hertz",
+      span: { anchorIndex: 1, coverage: 4, numDays: 7 },
+    })
+    assert.equal(built.name, "Hertz")
+    assert.equal(built.route?.carUse, "rental")
+    assert.equal(built.route?.from.label, "Edimburgo")
+    assert.equal(built.route?.to.label, "Glasgow")
+    assert.notEqual(built.route?.from, built.route?.to)
+    assert.equal(built.region, "Edimburgo → Glasgow")
+    assert.equal(built.spanDays, 4)
+    const seed = seedTransportForm(built)
+    assert.equal(seed.carUse, "rental")
+    assert.equal(seed.mode, "car")
+    assert.equal(seed.to?.label, "Glasgow")
+  })
+
+  it("alquiler en la misma ciudad: to es copia de la recogida, no A→A", () => {
+    const city = {
+      label: "Edimburgo",
+      coords: { lng: -3.19, lat: 55.95 },
+      kind: "city" as const,
+    }
+    const built = buildTransportRouteItem({
+      route: {
+        from: city,
+        to: { ...city, coords: { ...city.coords } },
+        mode: "car",
+        carUse: "rental",
+      },
+      vendor: "Hertz",
+      span: { anchorIndex: 1, coverage: 4, numDays: 7 },
+    })
+    assert.equal(built.route?.from.label, "Edimburgo")
+    assert.equal(built.route?.to.label, "Edimburgo")
+    assert.notEqual(built.route?.from, built.route?.to)
+    assert.equal(built.region, "Edimburgo")
+    assert.equal(built.name, "Hertz")
+    assert.equal(rentalDropoffPlace(built.route), null)
+    const glasgow = {
+      label: "Glasgow",
+      coords: { lng: -4.25, lat: 55.86 },
+      kind: "city" as const,
+    }
+    const oneWay = rentalRouteFromPickup(city, glasgow)
+    assert.equal(rentalDropoffPlace(oneWay)?.label, "Glasgow")
+    assert.notEqual(oneWay.from, oneWay.to)
+  })
+
+  it("alquiler: recogida no es el último día; devolución al menos el siguiente", () => {
+    assert.equal(rentalMaxPickupIndex(1), -1)
+    assert.equal(rentalMaxPickupIndex(2), 0)
+    assert.equal(rentalMaxPickupIndex(5), 3)
+    assert.equal(rentalMinReturnIndex(0), 1)
+    assert.equal(rentalMinReturnIndex(3), 4)
+    assert.equal(rentalCoverageDays(1, 1), 1)
+    assert.equal(rentalCoverageDays(1, 2), 2)
+    assert.equal(rentalCoverageDays(1, 4), 4)
+  })
+
+  it("formulario: Hecho solo en coche propio explícito; Tareas conservan el histórico", () => {
+    const owned = transportReservePolicy({ mode: "car", carUse: "owned" })
+    assert.equal(owned.formUsesDoneChip, true)
+    assert.equal(owned.usesDoneChip, true)
+    const rental = transportReservePolicy({ mode: "car", carUse: "rental" })
+    assert.equal(rental.formUsesDoneChip, false)
+    assert.equal(rental.usesDoneChip, false)
+    const undecided = transportReservePolicy({ mode: null })
+    assert.equal(undecided.formUsesDoneChip, false)
+    assert.equal(undecided.usesDoneChip, true)
+    const other = transportReservePolicy({ mode: "other" })
+    assert.equal(other.formUsesDoneChip, false)
+    assert.equal(other.usesDoneChip, true)
+    const legacy = transportReservePolicy({ mode: "car" })
+    assert.equal(legacy.formUsesDoneChip, false)
+    assert.equal(legacy.usesDoneChip, true)
+    const flight = transportReservePolicy({ mode: "flight" })
+    assert.equal(flight.formUsesDoneChip, false)
+    assert.equal(flight.usesDoneChip, false)
+  })
+
+  it("escritura: rental+leg o modo incompatible se rechaza sin degradar", () => {
+    const city = place("Edimburgo")
+    const days = ["d1", "d2", "d3", "d4", "d5"]
+    assert.equal(
+      transportWriteError({ mode: "car", carUse: "rental", leg: "outbound" }),
+      "Un tramo de ida o vuelta no puede ser un alquiler.",
+    )
+    assert.equal(
+      transportWriteError({ mode: "flight", carUse: "rental" }),
+      "El uso del coche solo aplica a un traslado en coche.",
+    )
+    const withLeg = validateTransportRouteWrite(
+      {
+        dayId: "d1",
+        returnDayId: "d2",
+        route: {
+          from: city,
+          to: city,
+          mode: "car",
+          carUse: "rental",
+          leg: "outbound",
+        },
+      },
+      days,
+    )
+    assert.equal(withLeg.ok, false)
+    if (withLeg.ok) throw new Error("expected reject")
+    assert.match(withLeg.error, /ida o vuelta/)
+
+    const sameDay = validateTransportRouteWrite(
+      {
+        dayId: "d2",
+        returnDayId: "d2",
+        route: { from: city, to: city, mode: "car", carUse: "rental" },
+      },
+      days,
+    )
+    assert.equal(sameDay.ok, false)
+
+    const lastDayPickup = validateTransportRouteWrite(
+      {
+        dayId: "d5",
+        returnDayId: "d5",
+        route: { from: city, to: city, mode: "car", carUse: "rental" },
+      },
+      days,
+    )
+    assert.equal(lastDayPickup.ok, false)
+
+    const oneDayTrip = validateTransportRouteWrite(
+      {
+        dayId: "d1",
+        returnDayId: "d1",
+        route: { from: city, to: city, mode: "car", carUse: "rental" },
+      },
+      ["d1"],
+    )
+    assert.equal(oneDayTrip.ok, false)
+    if (oneDayTrip.ok) throw new Error("expected reject")
+    assert.match(oneDayTrip.error, /al menos dos días/)
+
+    const ok = validateTransportRouteWrite(
+      {
+        dayId: "d2",
+        returnDayId: "d5",
+        route: { from: city, to: city, mode: "car", carUse: "rental" },
+      },
+      days,
+    )
+    assert.equal(ok.ok, true)
+    if (!ok.ok) throw new Error("expected ok")
+    assert.equal(ok.pickupIndex, 1)
+    assert.equal(ok.returnIndex, 4)
+    assert.equal(ok.rental, true)
+  })
+
+  it("convertir alquiler a traslado de un día limpia spanDays y carUse", () => {
+    const city = place("Edimburgo")
+    const existing = buildTransportRouteItem({
+      route: { from: city, to: city, mode: "car", carUse: "rental" },
+      vendor: "Hertz",
+      span: { anchorIndex: 0, coverage: 4, numDays: 6 },
+    })
+    const next = buildTransportRouteItem({
+      route: {
+        from: city,
+        to: place("Glasgow"),
+        mode: "train",
+      },
+      existing,
+    })
+    assert.equal(next.spanDays, undefined)
+    assert.equal(next.route?.carUse, undefined)
+    assert.equal(next.route?.mode, "train")
+    assert.equal(next.name, "Edimburgo → Glasgow")
   })
 
   it("flattenItinerary conserva sourceRouteHint", () => {
@@ -814,6 +1010,50 @@ describe("mapa recorrido de lugares", () => {
     const again = collectTransportDistances(days)
     assert.equal(again.totalKm, dist.totalKm)
     assert.equal(summarizeTransportKm(dist.byMode).includes("avión"), true)
+  })
+
+  it("el alquiler no cuenta km ni incompletos ni se dibuja", () => {
+    const city = {
+      label: "Edimburgo",
+      coords: { lng: -3.19, lat: 55.95 },
+      kind: "city" as const,
+    }
+    const dropoff = {
+      label: "Glasgow",
+      coords: { lng: -4.25, lat: 55.86 },
+      kind: "city" as const,
+    }
+    const days: UserDay[] = [
+      {
+        id: "d1",
+        label: "",
+        items: [
+          {
+            id: "rent",
+            sourceItemId: "s",
+            sourceId: "m",
+            type: "transport",
+            name: "Hertz",
+            detail: null,
+            sourceAuthor: "Tú",
+            coords: city.coords,
+            route: {
+              from: city,
+              to: dropoff,
+              mode: "car",
+              carUse: "rental",
+            },
+            spanDays: 4,
+          },
+        ],
+      },
+    ]
+    assert.equal(collectMapSegments(days).length, 0)
+    assert.equal(collectItineraryPlaces(days).length, 0)
+    const dist = collectTransportDistances(days)
+    assert.equal(dist.totalKm, 0)
+    assert.equal(dist.undrawn.length, 0)
+    assert.equal(incompleteMapTransports(days).length, 0)
   })
 
   it("incompleteMapTransports: hint-only y sin extremos; ignora los ya geocodificados", () => {

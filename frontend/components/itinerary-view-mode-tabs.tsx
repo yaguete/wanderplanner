@@ -55,7 +55,7 @@ export const VIEW_MODE_ADD_ACTION_LABEL: Record<
 > = {
   activities: "Añadir actividad",
   stay: "Añadir alojamiento",
-  transport: "Añadir traslado",
+  transport: "Añadir transporte o traslado",
   basics: "Añadir tarea",
 }
 

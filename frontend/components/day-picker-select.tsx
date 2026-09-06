@@ -32,6 +32,8 @@ export function DayPickerSelect({
   onAddDay,
   disabled = false,
   occupiedHint = null,
+  disableDay,
+  selectNewlyAddedDays = true,
 }: {
   id: string
   label: string
@@ -43,15 +45,18 @@ export function DayPickerSelect({
   onAddDay?: () => void
   disabled?: boolean
   occupiedHint?: string | null
+  disableDay?: (day: UserDay, index: number) => boolean
+  /** Si crece `days.length`, selecciona el último día. Default true. */
+  selectNewlyAddedDays?: boolean
 }) {
   const prevLength = useRef(days.length)
   useEffect(() => {
-    if (days.length > prevLength.current) {
+    if (selectNewlyAddedDays && days.length > prevLength.current) {
       const last = days[days.length - 1]
       if (last) onValueChange(last.id)
     }
     prevLength.current = days.length
-  }, [days, onValueChange])
+  }, [days, onValueChange, selectNewlyAddedDays])
 
   useEffect(() => {
     if (!sourceItemId) return
@@ -82,6 +87,7 @@ export function DayPickerSelect({
               const alreadyHere = sourceItemId
                 ? dayHasSourceItem(day, sourceItemId)
                 : false
+              const blocked = alreadyHere || Boolean(disableDay?.(day, index))
               const hint = formatDayPickerHint({
                 description: getDayUserDescription(day.label),
                 itemCount: day.items.length,
@@ -97,7 +103,7 @@ export function DayPickerSelect({
                   textValue={optionLabel}
                   hint={hint}
                   alreadyHere={alreadyHere}
-                  disabled={alreadyHere}
+                  disabled={blocked}
                 >
                   {optionLabel}
                 </SelectItem>

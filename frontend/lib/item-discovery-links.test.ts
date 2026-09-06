@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { ASSISTANT_SOURCE_ID, MANUAL_SOURCE_ID } from "./item-provenance"
 import { dateISOForDayIndex, toISODate } from "./trip-dates"
 import { BOOKING_AFFILIATE_AID } from "./booking-search"
-import { itemDiscoveryLinks, partnerCtaLabel, taskReserveAction } from "./item-discovery-links"
+import { itemDiscoveryLinks, partnerCtaLabel, rentalFormDiscoveryLinks, taskReserveAction } from "./item-discovery-links"
 
 function futureISO(daysFromToday: number): string {
   const d = new Date()
@@ -227,10 +227,120 @@ assert.equal(partnerCtaLabel("https://operator.example/tour"), "Ver reserva")
     taskReserveAction({ type: "food", sourceId: MANUAL_SOURCE_ID, affiliateUrl: null }),
     "none",
   )
+assert.equal(
+  taskReserveAction({ type: "activity", sourceId: SOURCE_ID, affiliateUrl: "n/a" }),
+  "own-search",
+)
+assert.equal(
+  taskReserveAction({
+    type: "transport",
+    sourceId: MANUAL_SOURCE_ID,
+    affiliateUrl: null,
+    route: {
+      from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      to: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      mode: "car",
+      carUse: "rental",
+    },
+  }),
+  "own-search",
+)
+assert.equal(
+  taskReserveAction({
+    type: "transport",
+    sourceId: MANUAL_SOURCE_ID,
+    affiliateUrl: null,
+    route: {
+      from: { label: "A", coords: { lng: 1, lat: 2 }, kind: "city" },
+      to: { label: "B", coords: { lng: 3, lat: 4 }, kind: "city" },
+      mode: "car",
+      carUse: "owned",
+    },
+  }),
+  "none",
+)
+assert.equal(
+  partnerCtaLabel("https://www.discovercars.com/es?a_aid=lacosmopolilla"),
+  "Ver en DiscoverCars",
+)
+}
+
+{
+  const links = itemDiscoveryLinks({
+    type: "transport",
+    sourceId: MANUAL_SOURCE_ID,
+    destination: "Edimburgo",
+    startDate: checkin,
+    dayIndexes: [1, 2, 3, 4],
+    dayIndex: 1,
+    spanDays: 4,
+    route: {
+      from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      to: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      mode: "car",
+      carUse: "rental",
+    },
+  })
+  assert.equal(links.kind, "own")
+  if (links.kind !== "own") throw new Error("expected own")
   assert.equal(
-    taskReserveAction({ type: "activity", sourceId: SOURCE_ID, affiliateUrl: "n/a" }),
-    "own-search",
+    links.carRental?.discovercars,
+    "https://www.discovercars.com/es?a_aid=lacosmopolilla",
   )
+  assert.equal(links.hint, "Elige la ciudad y las fechas en DiscoverCars.")
+}
+
+{
+  const stored = "https://www.discovercars.com/es?a_aid=blogger"
+  const links = itemDiscoveryLinks({
+    type: "transport",
+    affiliateUrl: stored,
+    sourceId: SOURCE_ID,
+    destination: "Edimburgo",
+    startDate: checkin,
+    dayIndexes: [0],
+    dayIndex: 0,
+    spanDays: 1,
+    route: {
+      from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      to: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      mode: "car",
+      carUse: "rental",
+    },
+  })
+  assert.equal(links.kind, "partner")
+  if (links.kind !== "partner") throw new Error("expected partner")
+  assert.equal(links.affiliate, "partner")
+  assert.ok(links.href.includes("discovercars.com"))
+}
+
+{
+  const partner = rentalFormDiscoveryLinks({
+    affiliateUrl: "https://www.discovercars.com/es?a_aid=source_partner",
+    sourceId: SOURCE_ID,
+    destination: "Edimburgo",
+    startDate: checkin,
+    pickupIndex: 1,
+    spanDays: 4,
+  })
+  assert.equal(partner.kind, "partner")
+  if (partner.kind !== "partner") throw new Error("expected partner")
+  assert.equal(partner.affiliate, "partner")
+  assert.equal(partner.href, "https://www.discovercars.com/es?a_aid=source_partner")
+  assert.equal(partner.label, "Ver en DiscoverCars")
+
+  const own = rentalFormDiscoveryLinks({
+    affiliateUrl: null,
+    sourceId: SOURCE_ID,
+    destination: "Edimburgo",
+    startDate: checkin,
+    pickupIndex: 1,
+    spanDays: 4,
+  })
+  assert.equal(own.kind, "own")
+  if (own.kind !== "own") throw new Error("expected own")
+  assert.equal(own.carRental?.discovercars, "https://www.discovercars.com/es?a_aid=lacosmopolilla")
+  assert.equal(own.hint, "Elige la ciudad y las fechas en DiscoverCars.")
 }
 
 console.log("item-discovery-links.test.ts: ok")

@@ -3,42 +3,71 @@
  *
  * `spanDays` = días de calendario que cubre, contando el de inicio.
  * Ausente o 1 = solo su día. Al escribir solo se persiste si ≥ 2.
- * Lo usan stay (noches) y activity (días de la actividad); no food ni
- * transport. El mapa de apertura/cierre de jornada sigue siendo solo stay.
+ * Lo usan stay (noches), activity (días de la actividad) y el alquiler
+ * de coche (`carUse: "rental"`, recogida→devolución inclusive). Food y
+ * el resto de transportes no. El mapa de apertura/cierre de jornada
+ * sigue siendo solo stay.
  *
  * No replica el ítem en `days[].items`. Las fuentes siguen con N copias
  * persistidas; los ecos son solo para anclas con `spanDays`.
  */
-import type { ItemType, UserDay, UserDayItem } from "@/types/itinerary"
+import type { ItemType, TransportRoute, UserDay, UserDayItem } from "@/types/itinerary"
+import { isCarRentalItem } from "@/lib/transport-kind"
 
-/** Stay (noches) y activity (excursión de varios días). */
-export function itemTakesCalendarSpan(type: ItemType): boolean {
-  return type === "stay" || type === "activity"
+export type CalendarSpanTarget = {
+  type: ItemType
+  route?: Pick<TransportRoute, "mode" | "carUse" | "leg"> | null
 }
 
-export function spanAnchorLabel(type: ItemType, spanTotal: number): string | null {
+export type SpanKind = "stay" | "activity" | "rental"
+
+export function spanKindForItem(item: CalendarSpanTarget): SpanKind | null {
+  if (item.type === "stay") return "stay"
+  if (item.type === "activity") return "activity"
+  if (isCarRentalItem(item)) return "rental"
+  return null
+}
+
+/** Stay, activity, o alquiler de coche. Recibe el ítem (no solo el tipo). */
+export function itemTakesCalendarSpan(item: CalendarSpanTarget): boolean {
+  return spanKindForItem(item) != null
+}
+
+export function spanAnchorLabel(
+  item: CalendarSpanTarget,
+  spanTotal: number,
+): string | null {
   if (spanTotal < 2) return null
-  if (type === "stay") return `${spanTotal} noches`
-  if (type === "activity") return `${spanTotal} días`
+  const kind = spanKindForItem(item)
+  if (kind === "stay") return `${spanTotal} noches`
+  if (kind === "activity" || kind === "rental") return `${spanTotal} días`
   return null
 }
 
 export function spanEchoLabel(
-  type: ItemType,
+  item: CalendarSpanTarget,
   spanIndex: number,
   spanTotal: number,
 ): string {
-  if (type === "stay") return `Noche ${spanIndex} de ${spanTotal}`
+  if (spanKindForItem(item) === "stay") return `Noche ${spanIndex} de ${spanTotal}`
   return `Día ${spanIndex} de ${spanTotal}`
 }
 
-export function spanEchoRemoveLabel(type: ItemType): string {
-  return type === "stay" ? "Acortar la estancia" : "Acortar la actividad"
+export function spanEchoRemoveLabel(item: CalendarSpanTarget): string {
+  const kind = spanKindForItem(item)
+  if (kind === "stay") return "Acortar la estancia"
+  if (kind === "rental") return "Acortar el alquiler"
+  return "Acortar la actividad"
 }
 
-export function spanClipNotice(type: ItemType, nextSpan: number, numDays: number): string {
+export function spanClipNotice(
+  item: CalendarSpanTarget,
+  nextSpan: number,
+  numDays: number,
+): string {
+  const kind = spanKindForItem(item)
   const unit =
-    type === "stay"
+    kind === "stay"
       ? nextSpan === 1
         ? "1 noche"
         : `${nextSpan} noches`
@@ -136,7 +165,7 @@ function listSpannedAnchors(days: UserDay[]): StaySpan[] {
   const out: StaySpan[] = []
   days.forEach((day, dayIndex) => {
     for (const item of day.items) {
-      if (!itemTakesCalendarSpan(item.type)) continue
+      if (!itemTakesCalendarSpan(item)) continue
       const parsed = parseSpanDays(item.spanDays)
       if (parsed == null) continue
       const spanTotal = clipSpanToTrip(dayIndex, parsed, numDays)
@@ -306,7 +335,7 @@ export function reanchorSpannedStays(before: UserDay[], after: UserDay[]): UserD
   before.forEach((day, dayIndex) => {
     if (afterIds.has(day.id)) return
     for (const item of day.items) {
-      if (!itemTakesCalendarSpan(item.type)) continue
+      if (!itemTakesCalendarSpan(item) || isCarRentalItem(item)) continue
       if (afterHasItem(item.id)) continue
       const parsed = parseSpanDays(item.spanDays)
       if (parsed == null) continue
@@ -334,6 +363,70 @@ export function reanchorSpannedStays(before: UserDay[], after: UserDay[]): UserD
     if (next[di]!.items.some((i) => i.id === item.id)) continue
     const target = next[di]!
     const placed = applySpanDays(item, nights, di, next.length)
+    next[di] = { ...target, items: [placed, ...target.items] }
+  }
+  return next
+}
+
+/**
+ * Al borrar días de un alquiler: la cobertura es el conjunto de IDs cubiertos
+ * (recogida…devolución) que sobreviven, no solo el ancla. Si desaparece el
+ * ancla, se reancla al primer día cubierto vivo. Si no queda ninguno, el
+ * alquiler se elimina (y `withPrunedTasks` poda el coste). Stay/activity
+ * siguen en `reanchorSpannedStays`.
+ */
+export function reanchorCarRentals(before: UserDay[], after: UserDay[]): UserDay[] {
+  if (after.length === 0 || before.length === after.length) return after
+  const afterIds = new Set(after.map((d) => d.id))
+
+  const rentals: { item: UserDayItem; coveredIds: string[] }[] = []
+  before.forEach((day, dayIndex) => {
+    for (const item of day.items) {
+      if (!isCarRentalItem(item)) continue
+      const parsed = parseSpanDays(item.spanDays)
+      const spanTotal =
+        parsed != null ? clipSpanToTrip(dayIndex, parsed, before.length) : 1
+      const coveredIds: string[] = []
+      for (let k = 0; k < spanTotal; k++) {
+        const covered = before[dayIndex + k]
+        if (covered) coveredIds.push(covered.id)
+      }
+      rentals.push({ item, coveredIds })
+    }
+  })
+  if (rentals.length === 0) return after
+
+  const currentDayId = (id: string) => {
+    const day = after.find((d) => d.items.some((i) => i.id === id))
+    return day?.id ?? null
+  }
+
+  const dirty = rentals.filter(({ item, coveredIds }) => {
+    const surviving = coveredIds.filter((id) => afterIds.has(id))
+    if (surviving.length === 0) return currentDayId(item.id) != null
+    const coverage = parseSpanDays(item.spanDays) ?? 1
+    return (
+      currentDayId(item.id) !== surviving[0] ||
+      surviving.length !== coveredIds.length ||
+      coverage !== surviving.length
+    )
+  })
+  if (dirty.length === 0) return after
+
+  const dirtyIds = new Set(dirty.map((r) => r.item.id))
+  const next = after.map((d) => ({
+    ...d,
+    items: d.items.filter((i) => !dirtyIds.has(i.id)),
+  }))
+
+  for (const { item, coveredIds } of dirty) {
+    const surviving = coveredIds.filter((id) => afterIds.has(id))
+    if (surviving.length === 0) continue
+    const di = next.findIndex((d) => d.id === surviving[0])
+    if (di < 0) continue
+    if (next[di]!.items.some((i) => i.id === item.id)) continue
+    const placed = applySpanDays(item, surviving.length, di, next.length)
+    const target = next[di]!
     next[di] = { ...target, items: [placed, ...target.items] }
   }
   return next

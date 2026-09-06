@@ -150,6 +150,36 @@ export function ReservationNeededChips({
   )
 }
 
+export function DoneChip({
+  active,
+  onClick,
+}: {
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-7 items-center gap-1.5 rounded-md bg-muted px-2.5 text-[11px] transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "bg-background font-semibold text-foreground shadow-sm ring-1 ring-border"
+          : "font-medium text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {active ? (
+        <Check className="h-3 w-3 shrink-0 text-success" strokeWidth={2.4} aria-hidden />
+      ) : (
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden />
+      )}
+      Hecho
+    </button>
+  )
+}
+
 /** Reservado | No reservado. Siempre hay uno marcado mientras el grupo está visible. */
 export function BookedOrNotChips({
   booked,

@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react"
+import { Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -35,6 +36,7 @@ export function EmptyState({
       ) : null}
       {actionLabel && onAction ? (
         <Button type="button" size="sm" className="mt-4" onClick={onAction}>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
           {actionLabel}
         </Button>
       ) : null}

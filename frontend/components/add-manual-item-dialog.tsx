@@ -31,17 +31,12 @@ import { DayPickerSelect } from "@/components/day-picker-select"
 import { firstDayIdWithoutSourceItem } from "@/lib/day-heading"
 import type {
   ItemType,
-  RouteMode,
-  TransportRoute,
   TripTaskState,
   UserDay,
   UserDayItem,
 } from "@/types/itinerary"
-import {
-  emptyEndpoint,
-  TransportRouteForm,
-  type TransportRouteFormValue,
-} from "@/components/transport-route-form"
+import { InternalTransportForm } from "@/components/internal-transport-form"
+import type { UpsertTransportRoutePayload } from "@/lib/transport-routes"
 import {
   hasFiniteLngLat,
   itemTakesCalendarSpan,
@@ -58,7 +53,6 @@ import {
   type ManualTaskDraft,
 } from "@/lib/manual-item-task"
 import { PartnerSearchLink } from "@/components/partner-search-link"
-import { ManualFlightSearch } from "@/components/manual-flight-search"
 import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
 import type { OutboundSurface } from "@/lib/funnel-analytics"
 
@@ -113,16 +107,9 @@ export type AddManualItemDialogProps = {
     taskPatch?: Partial<TripTaskState> | null,
   ) => void
   /** Alta de traslado desde el mismo diálogo (el tipo sigue visible). */
-  onSubmitTransport?: (data: {
-    dayId: string
-    route: Omit<TransportRoute, "leg"> & {
-      from: TransportRoute["from"]
-      to: TransportRoute["to"]
-    }
-    detail: string | null
-    vendor: string | null
-    taskPatch?: Partial<TripTaskState> | null
-  }) => void
+  onSubmitTransport?: (
+    data: UpsertTransportRoutePayload,
+  ) => { ok: true } | { ok: false; error?: string } | void
   /**
    * Ítem de partida: edición de uno ya en el viaje, o semilla al consolidar
    * desde fuente (`userDayItemFromSource`). Conserva id y procedencia.
@@ -168,7 +155,6 @@ export function AddManualItemDialog({
   const [nights, setNights] = useState(1)
   const [transportCanSubmit, setTransportCanSubmit] = useState(false)
   const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(emptyManualTaskDraft)
-  const [liveTransportMode, setLiveTransportMode] = useState<RouteMode | null>(null)
   const [placeOpen, setPlaceOpen] = useState(false)
 
   const costRef = useRef<number | null>(null)
@@ -186,7 +172,7 @@ export function AddManualItemDialog({
   const seeded = seedItem != null
   const persisted = mode === "edit" && existingDayId != null
   const addingTransport = type === "transport" && !seeded
-  const durationKind = itemTakesCalendarSpan(type)
+  const durationKind = type === "stay" || type === "activity"
   const splitsPlace = type === "stay" || type === "activity" || type === "food"
   const fromSource = Boolean(seedItem && !isSyntheticSourceId(seedItem.sourceId))
   const fromSourceAdd = fromSource && !persisted
@@ -245,7 +231,6 @@ export function AddManualItemDialog({
     }
     setNights(parseSpanDays(seed?.spanDays) ?? 1)
     setTransportCanSubmit(false)
-    setLiveTransportMode(null)
     const seededDraft = draftFromTaskState(existingTask)
     setTaskDraft(seededDraft)
     costRef.current = seededDraft.cost
@@ -348,7 +333,7 @@ export function AddManualItemDialog({
           region,
           coords,
         }
-    if (itemTakesCalendarSpan(item.type)) {
+    if (itemTakesCalendarSpan({ type: item.type })) {
       const span = spanDaysForWrite(nights, selectedDayIndex, days.length)
       if (span != null) item.spanDays = span
       else delete item.spanDays
@@ -359,20 +344,12 @@ export function AddManualItemDialog({
     onOpenChange(false)
   }
 
-  const handleTransportSubmit = (value: TransportRouteFormValue) => {
-    if (!dayId || !onSubmitTransport) return
-    onSubmitTransport({
-      dayId,
-      route: {
-        from: value.from,
-        to: value.to,
-        mode: value.mode,
-      },
-      detail: value.detail,
-      vendor: value.vendor,
-      taskPatch: currentTaskPatch(false),
-    })
+  const handleTransportSubmit = (data: UpsertTransportRoutePayload) => {
+    if (!onSubmitTransport) return { ok: false as const }
+    const result = onSubmitTransport(data)
+    if (result && result.ok === false) return result
     onOpenChange(false)
+    return result ?? { ok: true as const }
   }
 
   const title = persisted
@@ -386,7 +363,7 @@ export function AddManualItemDialog({
           : type === "food"
             ? "Añadir restaurante"
             : type === "transport"
-              ? "Añadir traslado"
+              ? "Añadir transporte o traslado"
               : "Añadir ítem"
 
   const descriptionText = persisted
@@ -394,7 +371,7 @@ export function AddManualItemDialog({
       ? "Cambia el nombre, el día, el lugar o la duración."
       : "Cambia el nombre, el día o el lugar."
     : addingTransport
-      ? "Define origen, destino y medio de transporte si lo sabes."
+      ? "Elige cómo, cuándo y desde dónde viajas."
       : seeded
         ? type === "stay"
           ? "Elige el día de entrada y, si quieres, reserva o anota el coste."
@@ -446,7 +423,7 @@ export function AddManualItemDialog({
       value={dayId}
       onValueChange={setDayId}
       sourceItemId={fromSourceAdd && seedItem ? seedItem.sourceItemId : null}
-      onAddDay={onAddDay}
+      onAddDay={type === "stay" && !persisted ? undefined : onAddDay}
       disabled={allDaysOccupied}
       occupiedHint={allDaysOccupied ? allDaysOccupiedHint(type) : null}
     />
@@ -560,7 +537,7 @@ export function AddManualItemDialog({
   const budgetFields = (
     <ManualItemTaskFields
       type={addingTransport ? "transport" : type}
-      routeMode={addingTransport ? liveTransportMode : seedItem?.route?.mode}
+      routeMode={seedItem?.route?.mode}
       currency={currency}
       draft={taskDraft}
       onChange={(next) => {
@@ -706,39 +683,19 @@ export function AddManualItemDialog({
           ) : null}
 
           {addingTransport ? (
-            <>
-              {dayField}
-              <TransportRouteForm
-                formId={transportFormId}
-                initial={{
-                  from: emptyEndpoint(),
-                  to: emptyEndpoint(),
-                  mode: "undecided",
-                  vendor: "",
-                  detail: "",
-                }}
-                fromLabel="Origen"
-                toLabel="Destino"
-                onValidityChange={setTransportCanSubmit}
-                onLiveContext={({ mode }) => setLiveTransportMode(mode)}
-                onSubmit={handleTransportSubmit}
-                renderAfterDestination={({ from, to, mode }) => (
-                  <ManualFlightSearch
-                    from={from}
-                    to={to}
-                    mode={mode}
-                    trip={{
-                      startDate,
-                      numDays: days.length,
-                      numTravelers: numTravelers ?? 1,
-                    }}
-                    dayIndex={selectedDayIndex}
-                    days={days}
-                  />
-                )}
-              />
-              {budgetFields}
-            </>
+            <InternalTransportForm
+              key={open ? "open" : "closed"}
+              formId={transportFormId}
+              days={days}
+              startDate={startDate}
+              initialDayId={dayId || initialDayId}
+              currency={currency}
+              numTravelers={numTravelers}
+              allowRental
+              onAddDay={onAddDay}
+              onValidityChange={setTransportCanSubmit}
+              onSubmit={handleTransportSubmit}
+            />
           ) : fromSourceAdd ? (
             <>
           {placeCollapsible}
@@ -810,7 +767,7 @@ export function AddManualItemDialog({
             <Button
               type="submit"
               form={transportFormId}
-              disabled={!transportCanSubmit || !dayId}
+              disabled={!transportCanSubmit}
             >
               Añadir al plan
             </Button>

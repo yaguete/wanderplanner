@@ -20,12 +20,14 @@ import {
 } from "lucide-react"
 import { ITEM_TYPE_PAINT } from "@/lib/item-paint"
 import { sanitizeAffiliateUrl } from "@/lib/affiliate-url"
+import { isCarRentalItem } from "@/lib/transport-kind"
 import type {
   BasicCategory,
   ItemType,
   RouteMode,
   SourceRouteHint,
   TaskGroupCategory,
+  TransportRoute,
   UserDayItem,
 } from "@/types/itinerary"
 
@@ -83,19 +85,25 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   activity: "Actividad",
 }
 
-export function itemEditAriaLabel(type: ItemType): string {
+export function itemEditAriaLabel(
+  type: ItemType,
+  opts?: { route?: TransportRoute | null },
+): string {
+  if (isCarRentalItem({ type, route: opts?.route })) return "Editar alquiler de coche"
   if (type === "transport") return "Editar traslado"
   return `Editar ${ITEM_LABELS[type].toLowerCase()}`
 }
 
 /**
  * Etiqueta visible de un ítem. Una activity sin enlace de reserva es un «Lugar».
+ * Un alquiler es «Coche de alquiler», no «Transporte».
  * `ITEM_LABELS` sigue siendo el diccionario del tipo (selector de alta, etc.).
  */
 export function itemTypeLabel(
   type: ItemType,
-  opts?: { affiliateUrl?: string | null },
+  opts?: { affiliateUrl?: string | null; route?: TransportRoute | null },
 ): string {
+  if (isCarRentalItem({ type, route: opts?.route })) return "Coche de alquiler"
   if (type === "activity" && !sanitizeAffiliateUrl(opts?.affiliateUrl)) return "Lugar"
   return ITEM_LABELS[type]
 }

@@ -293,6 +293,19 @@ assert.equal(
   "→ Innsbruck",
 )
 assert.equal(calendarBadgeLabel({ name: "Hotel Gruberhof" }), "Hotel Gruberhof")
+assert.equal(
+  calendarBadgeLabel({
+    name: "Hertz",
+    type: "transport",
+    route: {
+      from: { label: "Edimburgo", coords: { lng: 0, lat: 0 }, kind: "city" },
+      to: { label: "Edimburgo", coords: { lng: 0, lat: 0 }, kind: "city" },
+      mode: "car",
+      carUse: "rental",
+    },
+  }),
+  "Hertz",
+)
 
 // intersectsTrip false al navegar un mes fuera del viaje.
 const away = buildCalendarGrid({

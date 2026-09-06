@@ -9,6 +9,7 @@
  */
 import { parseRefParam } from "@/lib/partner-trip"
 import { isOwnBookingAffiliateUrl } from "@/lib/booking-search"
+import { isOwnDiscoverCarsUrl } from "@/lib/car-rental-search"
 import { FLIGHT_SEARCH_TRACKING_URL } from "@/lib/flight-search"
 import { sourceKindFromUrl } from "@/lib/instagram-url"
 import { readOnboardingFunnelOutcome } from "@/lib/onboarding"
@@ -33,6 +34,7 @@ export type OutboundTarget =
   | "stay22"
   | "airbnb"
   | "homeexchange"
+  | "discovercars"
   | "other"
 
 export type OutboundAffiliate = "partner" | "own" | "none"
@@ -248,6 +250,7 @@ export function classifyOutboundTarget(href: string): OutboundTarget {
   if (host.includes("civitatis.")) return "civitatis"
   if (host.includes("airbnb.")) return "airbnb"
   if (host.includes("homeexchange.")) return "homeexchange"
+  if (host === "discovercars.com" || host.endsWith(".discovercars.com")) return "discovercars"
   if (host.includes("kayak.")) return "kayak"
   if (host.includes("skyscanner.") || host === "pxf.io" || host.endsWith(".pxf.io")) {
     return "skyscanner"
@@ -274,6 +277,7 @@ export function classifyOutboundAffiliate(
 ): OutboundAffiliate {
   if (source === "partner" || source === "own" || source === "none") return source
   if (isOwnBookingAffiliateUrl(href)) return "own"
+  if (isOwnDiscoverCarsUrl(href)) return "own"
   if (isOwnFlightSearchUrl(href)) return "own"
   const target = classifyOutboundTarget(href)
   if (target === "booking" || target === "stay22" || target === "getyourguide" || target === "kayak") {

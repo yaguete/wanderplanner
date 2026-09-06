@@ -6,6 +6,7 @@
 import type { DerivedTripTask } from "@/lib/trip-tasks"
 import { resolveAirportCode } from "@/lib/airports"
 import { dateISOForDayIndex, formatDayDate } from "@/lib/trip-dates"
+import { isCarRentalRoute, sameRoutePlace } from "@/lib/transport-kind"
 import type {
   BasicCategory,
   ItemType,
@@ -129,6 +130,14 @@ export function taskActionTitle(
 
   // Transporte con ruta estructurada (leg o interno): verbo según medio.
   if (task.origin === "dayItem" && task.route?.from && task.route.to) {
+    if (isCarRentalRoute(task.route)) {
+      const from = routePlaceShortLabel(task.route.from)
+      const to = routePlaceShortLabel(task.route.to)
+      if (!sameRoutePlace(task.route.from, task.route.to) && to && to !== from) {
+        return `Alquilar coche en ${from} → ${to}`
+      }
+      return `Alquilar coche en ${from}`
+    }
     if (task.roundtripFlight) {
       const from = routePlaceShortLabel(task.route.from)
       const to = routePlaceShortLabel(task.route.to)

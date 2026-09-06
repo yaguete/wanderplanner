@@ -107,3 +107,39 @@ async def test_call_deepseek_no_tools_and_max_tokens(monkeypatch):
     assert kwargs["max_tokens"] == 320
     assert kwargs["model"] == "deepseek-v4-flash"
     assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_share_plan_keeps_rental_days_and_stay_nights():
+    from share_summary import ShareSummaryRequest
+
+    body = ShareSummaryRequest.model_validate(
+        {
+            "trip_name": "Escocia",
+            "num_days": 5,
+            "days": [
+                {
+                    "index": 1,
+                    "items": [
+                        {
+                            "type": "transport",
+                            "name": "Coche de alquiler · Hertz",
+                            "region": "Edimburgo → Glasgow",
+                            "days": 4,
+                            "route": None,
+                        },
+                        {"type": "stay", "name": "Hotel", "nights": 3},
+                    ],
+                }
+            ],
+        }
+    )
+    dumped = body.model_dump()
+    rental = dumped["days"][0]["items"][0]
+    stay = dumped["days"][0]["items"][1]
+    assert rental["name"] == "Coche de alquiler · Hertz"
+    assert rental["days"] == 4
+    assert rental["route"] is None
+    assert stay["nights"] == 3
+    message = body.model_dump(by_alias=True)
+    assert message["days"][0]["items"][0]["days"] == 4
+

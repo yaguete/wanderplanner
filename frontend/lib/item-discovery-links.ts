@@ -20,11 +20,17 @@ import {
   type ActivityDiscoveryHrefs,
 } from "@/lib/activity-search"
 import { classifyOutboundTarget, type OutboundAffiliate } from "@/lib/funnel-analytics"
+import { carRentalFormSearchHref } from "@/lib/car-rental-search"
+import { isCarRentalItem, type TransportKindProbe } from "@/lib/transport-kind"
 import {
   stayDiscoveryHrefs,
   type StayDiscoveryHrefs,
 } from "@/lib/stay-discovery"
-import type { ItemType } from "@/types/itinerary"
+import type { ItemType, TransportRoute } from "@/types/itinerary"
+
+export type CarRentalDiscoveryHrefs = {
+  discovercars: string
+}
 
 export type ItemDiscoveryLinks =
   | {
@@ -37,6 +43,7 @@ export type ItemDiscoveryLinks =
       kind: "own"
       stay?: StayDiscoveryHrefs
       activity?: ActivityDiscoveryHrefs
+      carRental?: CarRentalDiscoveryHrefs
       hint?: string
     }
   | { kind: "none"; hint?: string }
@@ -58,6 +65,7 @@ export type ItemDiscoveryLinksInput = {
   spanDays: number
   currency?: string | null
   numTravelers?: number | null
+  route?: TransportKindProbe["route"] | TransportRoute | null
 }
 
 export function partnerCtaLabel(href: string, vendor?: string | null): string {
@@ -78,6 +86,8 @@ export function partnerCtaLabel(href: string, vendor?: string | null): string {
       return "Ver en Kayak"
     case "skyscanner":
       return "Ver en Skyscanner"
+    case "discovercars":
+      return "Ver en DiscoverCars"
     default: {
       const v = vendor?.trim()
       return v ? `Ver en ${v}` : "Ver reserva"
@@ -147,7 +157,53 @@ export function itemDiscoveryLinks(input: ItemDiscoveryLinksInput): ItemDiscover
     }
   }
 
+  if (input.type === "transport" && isCarRentalItem({ type: "transport", route: input.route })) {
+    return {
+      kind: "own",
+      carRental: {
+        discovercars: carRentalFormSearchHref({
+          city: input.destination,
+          startDate: input.startDate,
+          pickupIndex: input.dayIndex,
+          returnIndex: input.dayIndex + Math.max(input.spanDays, 1) - 1,
+          affiliateUrl: null,
+        }),
+      },
+      hint: "Elige la ciudad y las fechas en DiscoverCars.",
+    }
+  }
+
   return { kind: "none" }
+}
+
+/**
+ * CTA del formulario de alquiler. Conserva el `affiliateUrl` de la fuente
+ * (`partner`); si no hay enlace, el propio. No usa el guard de vuelos.
+ */
+export function rentalFormDiscoveryLinks(input: {
+  affiliateUrl?: string | null
+  vendor?: string | null
+  sourceId?: string | null
+  destination: string
+  startDate: string | null
+  pickupIndex: number
+  spanDays: number
+}): ItemDiscoveryLinks {
+  const pickup = Math.max(0, input.pickupIndex)
+  const span = Math.max(input.spanDays, 1)
+  return itemDiscoveryLinks({
+    type: "transport",
+    affiliateUrl: input.affiliateUrl,
+    vendor: input.vendor,
+    sourceId: input.sourceId,
+    allowFromSource: true,
+    destination: input.destination,
+    startDate: input.startDate,
+    dayIndexes: Array.from({ length: span }, (_, i) => pickup + i),
+    dayIndex: pickup,
+    spanDays: span,
+    route: { mode: "car", carUse: "rental" },
+  })
 }
 
 /**
@@ -159,8 +215,12 @@ export function taskReserveAction(params: {
   type: string
   sourceId?: string | null
   affiliateUrl?: string | null
+  route?: TransportRoute | null
 }): "partner" | "own-search" | "none" {
   if (sanitizeAffiliateUrl(params.affiliateUrl)) return "partner"
   if (params.type === "stay" || params.type === "activity") return "own-search"
+  if (params.type === "transport" && isCarRentalItem({ type: "transport", route: params.route })) {
+    return "own-search"
+  }
   return "none"
 }

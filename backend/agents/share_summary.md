@@ -28,3 +28,4 @@ El mensaje de usuario te dice un objetivo de caracteres. Nunca pases de 1800 car
 - Emojis con cuentagotas: máximo uno por línea de titular, nunca dos seguidos, nunca en las viñetas.
 - No menciones WanderPlanner ni ninguna app. El pie lo pone el cliente.
 - Un día de solo transporte no se convierte en un parte de vuelos: una línea basta.
+- Un ítem cuyo nombre empieza por «Coche de alquiler» no es un traslado A→B. `days` es la cobertura inclusiva (recogida y devolución). Menciónalo como alquiler, no como un viaje en coche de un día. Si `region` trae «A → B», es ciudad de entrega distinta, no un trayecto.

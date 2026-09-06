@@ -409,6 +409,54 @@ assert.equal(isBookableTransportMode(null), false)
   })
   assert.equal(buildTripTasks(carIncluded).find((t) => t.id === carKey)!.bucket, "main")
 
+  const rentalItem = dayItem({
+    id: "rent-1",
+    type: "transport",
+    name: "Hertz",
+    route: {
+      from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      to: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      mode: "car",
+      carUse: "rental",
+    },
+    spanDays: 4,
+  })
+  const rentalKey = taskKeyForItem(rentalItem)
+  const rentalTrip = makeTrip({
+    numDays: 5,
+    days: [
+      { id: "day-1", label: "", items: [] },
+      { id: "day-2", label: "", items: [rentalItem] },
+      { id: "day-3", label: "", items: [] },
+      { id: "day-4", label: "", items: [] },
+      { id: "day-5", label: "", items: [] },
+    ],
+    basics: [],
+  })
+  const rentalTask = buildTripTasks(rentalTrip).find((t) => t.id === rentalKey)!
+  assert.equal(rentalTask.bucket, "main")
+  assert.deepEqual(rentalTask.dayIndexes, [1, 2, 3, 4])
+  assert.equal(rentalTask.nights, undefined)
+  assert.equal(rentalKey.startsWith("route:"), true)
+
+  const ownedItem = dayItem({
+    id: "own-1",
+    type: "transport",
+    name: "Edimburgo → Glasgow",
+    route: {
+      from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },
+      to: { label: "Glasgow", coords: { lng: -4.25, lat: 55.86 }, kind: "city" },
+      mode: "car",
+      carUse: "owned",
+    },
+  })
+  const ownedKey = taskKeyForItem(ownedItem)
+  const ownedTrip = makeTrip({
+    days: [{ id: "day-1", label: "", items: [ownedItem] }],
+    basics: [],
+  })
+  assert.equal(buildTripTasks(ownedTrip).find((t) => t.id === ownedKey)!.bucket, "main")
+
   const tourItem = dayItem({
     id: "act-tour",
     type: "activity",

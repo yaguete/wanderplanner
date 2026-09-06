@@ -3,6 +3,7 @@
  * 0 llamadas a Directions por defecto; arco geodésico / línea.
  */
 import type { RouteLeg, RouteMode, UserDay, UserDayItem } from "@/types/itinerary"
+import { isCarRentalItem } from "@/lib/transport-kind"
 import {
   listStaySpanMapAnchors,
   staySpanClosesDay,
@@ -171,6 +172,7 @@ export function shouldDrawTransportOnMap(
   item: Pick<UserDayItem, "type" | "route">,
 ): boolean {
   if (item.type !== "transport") return false
+  if (isCarRentalItem(item)) return false
   const route = item.route
   if (!route?.from?.coords || !route.to?.coords) return false
   const endpoints = {
@@ -483,6 +485,7 @@ export function incompleteMapTransports(days: UserDay[]): IncompleteMapTransport
   days.forEach((day, dayIndex) => {
     for (const item of day.items) {
       if (item.type !== "transport") continue
+      if (isCarRentalItem(item)) continue
       const route = item.route
       if (
         route &&
@@ -654,6 +657,7 @@ export function collectTransportDistances(days: UserDay[]): TransportDistances {
   for (const day of days) {
     for (const item of day.items) {
       if (item.type !== "transport") continue
+      if (isCarRentalItem(item)) continue
       const route = item.route
       if (!route?.from?.coords || !route.to?.coords) continue
       if (

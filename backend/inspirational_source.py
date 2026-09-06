@@ -54,6 +54,7 @@ REFERENCE_HOST_SUFFIXES = (
     "airbnb.com",
     "airbnb.es",
     "homeexchange.com",
+    "discovercars.com",
     "agoda.com",
     "kayak.com",
     "skyscanner.com",

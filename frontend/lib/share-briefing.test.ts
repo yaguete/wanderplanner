@@ -395,4 +395,83 @@ function dumped(trip: Trip, sources: Source[] = [source({ id: "src-1" })]): stri
   assert.equal(payload.days[0]!.items[0]!.nights, undefined)
 }
 
+{
+  const city = {
+    label: "Edimburgo",
+    coords: { lng: -3.19, lat: 55.95 },
+    kind: "city" as const,
+  }
+  const trip = makeTrip({
+    days: [
+      day("d1", []),
+      day("d2", [
+        item({
+          id: "rent",
+          type: "transport",
+          name: "Hertz",
+          vendor: "Hertz",
+          sourceId: MANUAL_SOURCE_ID,
+          spanDays: 4,
+          route: {
+            from: city,
+            to: { ...city, coords: { ...city.coords } },
+            mode: "car",
+            carUse: "rental",
+          },
+        }),
+      ]),
+    ],
+    numDays: 5,
+  })
+  const payload = buildSharePlan(trip, [])
+  const rental = payload.days[1]!.items[0]!
+  assert.equal(rental.name, "Coche de alquiler · Hertz")
+  assert.equal(rental.days, 4)
+  assert.equal(rental.route, null)
+  assert.equal(rental.nights, undefined)
+  const blob = JSON.stringify(payload)
+  assert.equal(blob.includes("a_aid"), false)
+}
+
+{
+  const pickup = {
+    label: "Edimburgo",
+    coords: { lng: -3.19, lat: 55.95 },
+    kind: "city" as const,
+  }
+  const dropoff = {
+    label: "Glasgow",
+    coords: { lng: -4.25, lat: 55.86 },
+    kind: "city" as const,
+  }
+  const trip = makeTrip({
+    days: [
+      day("d1", [
+        item({
+          id: "rent-ow",
+          type: "transport",
+          name: "Hertz",
+          vendor: "Hertz",
+          sourceId: MANUAL_SOURCE_ID,
+          region: "Edimburgo → Glasgow",
+          spanDays: 4,
+          route: {
+            from: pickup,
+            to: dropoff,
+            mode: "car",
+            carUse: "rental",
+          },
+        }),
+      ]),
+    ],
+    numDays: 4,
+  })
+  const payload = buildSharePlan(trip, [])
+  const rental = payload.days[0]!.items[0]!
+  assert.equal(rental.name, "Coche de alquiler · Hertz")
+  assert.equal(rental.route, null)
+  assert.equal(rental.region, "Edimburgo → Glasgow")
+  assert.equal(rental.days, 4)
+}
+
 console.log("share-briefing: ok")
