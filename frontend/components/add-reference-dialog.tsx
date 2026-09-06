@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useState, type FormEvent } from "react"
+import { Lightbulb } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -27,12 +28,14 @@ export function AddReferenceDialog({
   knownDomains,
   onAddReference,
   onCreateTrip,
+  onFindInspiration,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   knownDomains: readonly string[]
   onAddReference: (homeUrl: string, domain: string) => Promise<boolean>
   onCreateTrip: (articleUrl: string) => void
+  onFindInspiration: () => void
 }) {
   const id = useId()
   const [url, setUrl] = useState("")
@@ -129,6 +132,19 @@ export function AddReferenceDialog({
                   </p>
                 ) : null}
               </form>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={saving}
+                onClick={() => {
+                  close()
+                  onFindInspiration()
+                }}
+              >
+                <Lightbulb className="h-4 w-4" strokeWidth={1.8} aria-hidden />
+                Encuentra inspiración
+              </Button>
             </div>
             <div className="min-h-0 flex-1" />
             <DialogFooter className="shrink-0 bg-background px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

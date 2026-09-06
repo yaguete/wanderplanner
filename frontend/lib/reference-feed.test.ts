@@ -8,6 +8,8 @@ import {
   extractionFailureMessage,
   faviconUrlForHost,
   favoriteInputsWithoutHost,
+  feedEmptyCopy,
+  feedHostsAreBlocked,
   feedHostsFromReferences,
   formatPublishedAt,
   hostIsFeedable,
@@ -291,5 +293,18 @@ assert.equal(parsedSearch[0]?.instant, true)
 assert.equal(parsedSearch[1]?.host, "lacosmopolilla.com")
 assert.deepEqual(parseReferenceSearchItems(null), [])
 assert.deepEqual(parseReferenceSearchItems({ results: [] }), [])
+
+assert.equal(feedHostsAreBlocked([]), false)
+assert.equal(feedHostsAreBlocked(["empty"]), false)
+assert.equal(feedHostsAreBlocked(["unavailable"]), true)
+assert.equal(feedHostsAreBlocked(["unavailable", "unavailable"]), true)
+assert.equal(feedHostsAreBlocked(["unavailable", "empty"]), false)
+
+const blockedCopy = feedEmptyCopy(["Los Viajes de Claudia"], true)
+assert.equal(blockedCopy.title, "No hemos podido leer el listado")
+assert.match(blockedCopy.body, /Los Viajes de Claudia/)
+const emptyCopy = feedEmptyCopy(["Los Viajes de Claudia"], false)
+assert.equal(emptyCopy.title, "Sin artículos recientes")
+assert.match(emptyCopy.body, /Los Viajes de Claudia/)
 
 console.log("reference-feed: ok")

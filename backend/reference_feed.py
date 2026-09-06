@@ -52,6 +52,7 @@ router = APIRouter(tags=["sources"])
 POSTS_PER_HOST = 5
 WP_FETCH_PER_PAGE = 20
 MAX_BODY_BYTES = 512_000
+FAILURE_CACHE_TTL_SEC = 120
 MAX_FEED_CACHE = 64
 MAX_SEARCH_CACHE = 64
 MAX_SEARCH_HOSTS = 8
@@ -386,13 +387,27 @@ def mark_instant(items: list[FeedItem], rows: list[dict[str, Any]]) -> list[Feed
     ]
 
 
+def _feed_cache_ttl(resp: FeedResponse) -> float:
+    # Un captcha / 202 de SiteGround se cacheaba 6 h como listado vacío.
+    if resp.items:
+        return _response_ttl_sec()
+    return float(FAILURE_CACHE_TTL_SEC)
+
+
+def is_bot_challenge(status: int, body: bytes) -> bool:
+    if status in {202, 403, 429}:
+        return True
+    head = (body or b"")[:2048].lower()
+    return b"sgcaptcha" in head or b"just a moment" in head
+
+
 def get_cached_feed(host: str) -> FeedResponse | None:
     key = f"{CACHE_SCOPE_PREFIX}{host}"
     entry = _feed_cache.get(key)
     if entry is None:
         return None
     ts, resp = entry
-    if monotonic() - ts > _response_ttl_sec():
+    if monotonic() - ts > _feed_cache_ttl(resp):
         _feed_cache.pop(key, None)
         return None
     return resp.model_copy(deep=True)
@@ -540,6 +555,9 @@ async def fetch_wp_latest(host: str) -> list[dict[str, Any]] | None:
     if fetched is None:
         return None
     status, body = fetched
+    if is_bot_challenge(status, body):
+        log_kv(logger, event="reference_feed", err="challenge", host=host, status=status)
+        return None
     if status != 200:
         return None
     try:

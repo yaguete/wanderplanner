@@ -396,11 +396,40 @@ export function readCachedFeed(host: string): ReferenceFeedResponse | null {
 
 export function writeCachedFeed(host: string, payload: ReferenceFeedResponse): void {
   if (typeof window === "undefined") return
+  // Un 401, un captcha del blog o un fallo de red se guardan como items=[].
+  // Cachearlos 6 h deja el listado vacío en producción aunque el origen se recupere.
+  if (payload.items.length === 0) return
   try {
     const entry: CacheEntry = { at: Date.now(), payload }
     sessionStorage.setItem(cacheKey(host), JSON.stringify(entry))
   } catch {
     /* quota */
+  }
+}
+
+/** Todos los hosts respondieron sin ítems porque el fetch falló, no porque el blog esté vacío. */
+export function feedHostsAreBlocked(reasons: readonly ReferenceFeedReason[]): boolean {
+  return reasons.length > 0 && reasons.every((r) => r === "unavailable")
+}
+
+export function feedEmptyCopy(
+  labels: readonly string[],
+  blocked: boolean,
+): { title: string; body: string } {
+  const names = labels.filter((label) => label.trim().length > 0).join(", ")
+  if (blocked) {
+    return {
+      title: "No hemos podido leer el listado",
+      body: names
+        ? `No hemos podido listar los artículos recientes de ${names} desde nuestros servidores. Ábrelos en su web.`
+        : "No hemos podido listar los artículos recientes desde nuestros servidores.",
+    }
+  }
+  return {
+    title: "Sin artículos recientes",
+    body: names
+      ? `No hemos encontrado posts recientes en ${names}.`
+      : "No hemos encontrado posts recientes.",
   }
 }
 

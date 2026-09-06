@@ -11,12 +11,16 @@ from fastapi import HTTPException
 from blog_landings import get_blog_landing_by_host
 from inspirational_source import host_is_feedable
 from reference_feed import (
+    FAILURE_CACHE_TTL_SEC,
     FeedItem,
+    FeedResponse,
     MAX_SEARCH_HOSTS,
     WP_FEED_FIELDS,
     WP_SEARCH_FIELDS,
     clear_reference_feed_runtime_state,
     featured_media_url,
+    get_cached_feed,
+    is_bot_challenge,
     map_wp_post_to_item,
     mark_instant,
     merge_ranked_feed_items,
@@ -26,6 +30,7 @@ from reference_feed import (
     parse_wp_gmt,
     select_search_items,
     select_wp_feed_items,
+    set_cached_feed,
     slug_from_url,
     sources_reference_feed,
     sources_reference_search,
@@ -360,4 +365,33 @@ async def test_search_429_when_ip_exhausted():
             )
     assert exc.value.status_code == 429
     fetch.assert_not_called()
+
+
+def test_siteground_captcha_is_a_bot_challenge():
+    html = b'<html><head><meta http-equiv="refresh" content="0;/.well-known/sgcaptcha/?r=%2Fwp-json"></head></html>'
+    assert is_bot_challenge(202, html) is True
+    assert is_bot_challenge(200, html) is True
+    assert is_bot_challenge(200, b'[{"id":1}]') is False
+    assert FAILURE_CACHE_TTL_SEC == 120
+
+
+def test_empty_feed_cache_expires_faster_than_hits():
+    from time import monotonic as real_mono
+
+    clear_reference_feed_runtime_state()
+    t0 = real_mono()
+    empty = FeedResponse(host="losviajesdeclaudia.com", items=[], reason="unavailable")
+    set_cached_feed("losviajesdeclaudia.com", empty)
+    with patch("reference_feed.monotonic", return_value=t0 + FAILURE_CACHE_TTL_SEC + 1):
+        assert get_cached_feed("losviajesdeclaudia.com") is None
+
+    hit = FeedResponse(
+        host="sinmapa.net",
+        items=[FeedItem(url="https://sinmapa.net/ruta/", title="Ruta", host="sinmapa.net")],
+    )
+    set_cached_feed("sinmapa.net", hit)
+    with patch("reference_feed.monotonic", return_value=t0 + FAILURE_CACHE_TTL_SEC + 1):
+        cached = get_cached_feed("sinmapa.net")
+    assert cached is not None
+    assert len(cached.items) == 1
 

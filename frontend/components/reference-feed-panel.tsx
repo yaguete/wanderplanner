@@ -43,6 +43,9 @@ import {
   fetchReferenceFeed,
   hostIsFeedable,
   allFeedFilterSelected,
+  blogHomeUrl,
+  feedEmptyCopy,
+  feedHostsAreBlocked,
   readStoredFeedFilter,
   resolveFeedFilter,
   toggleAllFeedFilter,
@@ -329,6 +332,16 @@ export function ReferenceFeedPanel({
     const state = feeds[host]
     return state?.status === "ok" && state.payload.items.length === 0
   })
+  const emptyLabels = emptyHosts.map((h) => chips.find((c) => c.domain === h)?.label || h)
+  const emptyCopy = feedEmptyCopy(
+    emptyLabels,
+    feedHostsAreBlocked(
+      emptyHosts.map((h) => {
+        const state = feeds[h]
+        return state?.status === "ok" ? state.payload.reason : null
+      }),
+    ),
+  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -450,11 +463,29 @@ export function ReferenceFeedPanel({
             </div>
           ) : allEmpty ? (
             <div className="rounded-xl border border-dashed border-border px-6 py-14 text-center">
-              <p className="text-sm font-medium text-foreground">Sin artículos recientes</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                No hemos encontrado posts recientes en{" "}
-                {emptyHosts.map((h) => chips.find((c) => c.domain === h)?.label || h).join(", ")}.
-              </p>
+              <p className="text-sm font-medium text-foreground">{emptyCopy.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{emptyCopy.body}</p>
+              {emptyHosts.length > 0 ? (
+                <p className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                  {emptyHosts.map((host) => {
+                    const href = blogHomeUrl(host)
+                    const label = chips.find((c) => c.domain === host)?.label || host
+                    if (!href) return null
+                    return (
+                      <a
+                        key={host}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        Abrir {label}
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      </a>
+                    )
+                  })}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-border">
@@ -488,6 +519,10 @@ export function ReferenceFeedPanel({
         knownDomains={chips.map((c) => c.domain)}
         onAddReference={persistFavorite}
         onCreateTrip={createTripFromUrl}
+        onFindInspiration={() => {
+          setAdding(false)
+          onDirectoryChange(true)
+        }}
       />
 
       <RemoveReferenceDialog
