@@ -21,12 +21,44 @@ export type GeocodeCandidate = {
   placeName?: string
   /** `text` corto de Mapbox (p. ej. «Igls»), no el place_name completo. */
   text?: string
+  /** ISO-2 del país que contiene la feature; distingue Granada (ES) de Grenada (GD). */
+  countryCode?: string | null
 }
 
+/**
+ * De dónde salió la coordenada.
+ * - `local-hit`: candidato dentro del radio del ancla.
+ * - `far-name-match`: nadie pasó el radio; rescatado porque el nombre cubre la query.
+ * - `anchor-fallback`: ningún candidato sirvió; el pin es el centro del ancla.
+ * - `no-anchor`: sin ancla, no se sitúa.
+ *
+ * Cruzado con `precision` distingue un POI bueno de un centro de ciudad. El
+ * `anchor-fallback` es el que un `bbox` en la petición podría rescatar: hoy el
+ * recorte por distancia ocurre después, sobre candidatos que ya vinieron de fuera.
+ */
+export type GeocodeOutcomeReason =
+  | "local-hit"
+  | "far-name-match"
+  | "anchor-fallback"
+  | "no-anchor"
+
 export type PlaceGeocodeOutcome =
-  | { precision: "exact"; coord: LngLat }
-  | { precision: "approximate"; coord: LngLat; anchorLabel: string }
-  | { precision: "unlocated" }
+  | {
+      precision: "exact"
+      coord: LngLat
+      reason: GeocodeOutcomeReason
+      /** Tipo Mapbox del candidato elegido. */
+      featureType: string
+    }
+  | {
+      precision: "approximate"
+      coord: LngLat
+      anchorLabel: string
+      reason: GeocodeOutcomeReason
+      /** Ausente en `anchor-fallback`: ahí no hubo candidato, el pin es el ancla. */
+      featureType?: string
+    }
+  | { precision: "unlocated"; reason: "no-anchor" }
 
 /** Radios en metros según el tipo del ancla. `country` no usa radio. */
 const RADIUS_M: Record<string, number> = {
@@ -199,27 +231,144 @@ export function candidateNameMatchesQuery(
 }
 
 /**
+ * Núcleo de una consulta de ancla: lo que va antes de la primera coma.
+ * «Isla de Flores, Guatemala» → «Isla de Flores». El resto es contexto y lo
+ * comparte cualquier subdivisión del país, así que no distingue zonas.
+ * Si el núcleo es un hint débil («Zona Centro, Madrid»), vale la consulta entera.
+ *
+ * Solo es el respaldo de `anchorQueryScope` cuando no se sabe el país: cortar por
+ * la primera coma también tira las subdivisiones intermedias, que sí distinguen.
+ */
+export function anchorQueryCore(query: string): string {
+  const first = query.split(",")[0]?.trim() ?? ""
+  return significantTokens(first).length > 0 ? first : query.trim()
+}
+
+/**
+ * El hint sin el sufijo de país: «Tikal, Petén, Guatemala» → «Tikal, Petén».
+ *
+ * Es el ámbito contra el que se juzga un hit amplio. El país es el único
+ * componente que **todo** el viaje comparte, y por eso era el que colaba
+ * `Departamento de Guatemala` en cualquier hint. Lo intermedio (`Petén`) sí
+ * distingue: es la zona que el propio artículo declara, y para Tikal o Yaxhá
+ * —que Mapbox no conoce por nombre— es la mejor ancla disponible.
+ */
+export function anchorQueryScope(query: string, countryName: string | null): string {
+  const q = query.trim()
+  if (!countryName) return anchorQueryCore(q)
+  const parts = q
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return q
+  const last = parts[parts.length - 1]!
+  if (normalizeGeoText(last) !== normalizeGeoText(countryName)) return q
+  return parts.slice(0, -1).join(", ")
+}
+
+/**
  * ¿Sirve este hit como ancla de región? En tipos de radio estrecho exige
  * todos los tokens (`Costa Vasca` no puede anclarse en la aldea `Costa`).
- * `region`/`district`/`country` son sesgo amplio: basta con no ser un miss total.
+ * `region`/`district`/`country` son sesgo amplio y no necesitan cubrir la
+ * consulta entera, pero sí tienen que ser **de la zona pedida**: se comparan
+ * contra el núcleo, no contra la consulta completa.
+ *
+ * Sin esa comparación, cualquier tipo amplio pasaba por el solo hecho de no ser
+ * estrecho, y Mapbox rellena lo que no entiende con la subdivisión más genérica
+ * del país: «Isla de Flores, Guatemala» → `Departamento de Guatemala`, a 400 km.
+ * Como el ancla fija el radio (150 km en `region`), eso descartaba los
+ * candidatos buenos de Petén y de Izabal. Contra la consulta completa no sirve:
+ * el sufijo «, Guatemala» lo comparte también el departamento equivocado.
  * No sustituye a `sharesSignificantToken` (otros callers).
  */
-export function anchorHitAcceptable(query: string, hit: GeocodeCandidate): boolean {
+export function anchorHitAcceptable(
+  query: string,
+  hit: GeocodeCandidate,
+  /**
+   * Ámbito del hint **original** ya sin país (`anchorQueryScope`). Hay que
+   * pasarlo desde la escalera: su último peldaño concatena los tokens y se lleva
+   * por delante las comas, así que «Isla de Flores, Guatemala» llega como «isla
+   * flores guatemala» y cualquier ámbito derivado de ahí vuelve a incluir el
+   * país. Con eso, `Departamento de Guatemala` pasaba otra vez el filtro.
+   */
+  scope?: string,
+): boolean {
   const tokens = significantTokens(query)
   if (tokens.length === 0) return false
   if (candidateNameMatchesQuery(hit, query)) return true
-  return !TIGHT_ANCHOR_TYPES.has(hit.featureType)
+  if (TIGHT_ANCHOR_TYPES.has(hit.featureType)) return false
+  return sharesSignificantToken(scope?.trim() || anchorQueryCore(query), candidateNameBlob(hit))
+}
+
+/**
+ * El país al que Mapbox atribuye estos hits, para poder descontarlo del hint.
+ * Sale de los propios candidatos: la respuesta a «X, Guatemala» casi siempre
+ * trae el país entre ellos, y así no hace falta una tabla de nombres.
+ */
+function countryNameFromHits(hits: GeocodeCandidate[]): string | null {
+  const hit = hits.find((h) => h.featureType === "country")
+  if (!hit) return null
+  const name = hit.text?.trim() || hit.placeName?.split(",")[0]?.trim()
+  return name || null
+}
+
+/**
+ * Nombre corto del candidato, sin el contexto de `place_name`.
+ * «Guatemala» a partir de «Guatemala» o de «Departamento de Guatemala, Guatemala».
+ */
+function candidateShortName(candidate: GeocodeCandidate): string {
+  const text = candidate.text?.trim()
+  if (text) return normalizeGeoText(text)
+  const first = candidate.placeName?.split(",")[0]?.trim()
+  return first ? normalizeGeoText(first) : ""
+}
+
+/**
+ * Un país con una subdivisión homónima (Guatemala, México, Panamá) degradaba el
+ * ancla del viaje a esa subdivisión, y con ella el radio de validación: `country`
+ * no recorta, `region` recorta a 150 km. En un viaje a Guatemala eso dejaba fuera
+ * Petén (~400 km) e Izabal (~200 km), que solo se salvaban por `pickFarNameMatch`.
+ *
+ * Dos guardias, los dos necesarios:
+ * - El nombre del país tiene que **ser** la consulta, no contenerla: los tokens
+ *   significativos de «Ciudad de México» se reducen a «mexico» (`ciudad` es débil),
+ *   así que comparar por tokens mandaría ese viaje al centroide del país y perdería
+ *   la proximidad de la capital.
+ * - El candidato específico tiene que caer dentro de ese mismo país: «Granada» (ES)
+ *   frente a Grenada (GD) son sitios distintos y ahí sigue ganando la ciudad.
+ */
+function homonymousCountryHit(
+  hits: GeocodeCandidate[],
+  best: GeocodeCandidate,
+  query: string,
+): GeocodeCandidate | null {
+  if (best.featureType === "country") return null
+  if (!best.countryCode) return null
+  const q = normalizeGeoText(query)
+  if (!q) return null
+  const country = hits.find(
+    (h) =>
+      h.featureType === "country" &&
+      candidateShortName(h) === q &&
+      h.countryCode &&
+      h.countryCode === best.countryCode,
+  )
+  return country ?? null
 }
 
 /**
  * Entre los hits aceptables, el más específico (place > region > country).
  * «Granada» en español es también el país GD: sin esto gana la isla.
+ * Excepción: la subdivisión homónima de su propio país (ver `homonymousCountryHit`).
  */
 export function pickBestAnchorHit(
   hits: GeocodeCandidate[],
   query: string,
+  /** `hint`: el texto original del que salió `query`; ver `anchorHitAcceptable`. */
+  options?: { hint?: string },
 ): GeocodeCandidate | null {
-  const ok = hits.filter((h) => anchorHitAcceptable(query, h))
+  const scope = anchorQueryScope(options?.hint?.trim() || query, countryNameFromHits(hits))
+  const ok = hits.filter((h) => anchorHitAcceptable(query, h, scope))
   if (ok.length === 0) return null
   let best = ok[0]!
   let bestRank = typeSpecificity(best.featureType)
@@ -231,7 +380,7 @@ export function pickBestAnchorHit(
       bestRank = rank
     }
   }
-  return best
+  return homonymousCountryHit(ok, best, query) ?? best
 }
 
 function isStreetLike(featureType: string): boolean {
@@ -342,15 +491,18 @@ function pickFarNameMatch(
 function outcomeFromHit(
   hit: GeocodeCandidate,
   anchor: RegionAnchor,
+  reason: GeocodeOutcomeReason,
 ): PlaceGeocodeOutcome {
   if (COARSE_TYPES.has(hit.featureType)) {
     return {
       precision: "approximate",
       coord: hit.coord,
       anchorLabel: candidateAnchorLabel(hit, anchor.label),
+      reason,
+      featureType: hit.featureType,
     }
   }
-  return { precision: "exact", coord: hit.coord }
+  return { precision: "exact", coord: hit.coord, reason, featureType: hit.featureType }
 }
 
 export function pickGeocodeOutcome(
@@ -358,15 +510,20 @@ export function pickGeocodeOutcome(
   anchor: RegionAnchor | null,
   query?: string | null,
 ): PlaceGeocodeOutcome {
-  if (!anchor) return { precision: "unlocated" }
+  if (!anchor) return { precision: "unlocated", reason: "no-anchor" }
   const local = pickFirstValidCandidate(candidates, anchor, query)
-  if (local) return outcomeFromHit(local, anchor)
+  if (local) return outcomeFromHit(local, anchor, "local-hit")
   const q = query?.trim()
   if (q) {
     const far = pickFarNameMatch(candidates, anchor, q)
-    if (far) return outcomeFromHit(far, anchor)
+    if (far) return outcomeFromHit(far, anchor, "far-name-match")
   }
-  return { precision: "approximate", coord: anchor.coord, anchorLabel: anchor.label }
+  return {
+    precision: "approximate",
+    coord: anchor.coord,
+    anchorLabel: anchor.label,
+    reason: "anchor-fallback",
+  }
 }
 
 /** Radio de reparto visual: ~30 m · n (n = tamaño del grupo). */

@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { haversineMeters } from "./map-route-geometry"
 import {
   anchorHitAcceptable,
+  anchorQueryCore,
+  anchorQueryScope,
   candidateNameMatchesQuery,
   candidatePassesAnchor,
   featureTypeFromMapboxId,
@@ -252,6 +254,7 @@ function hit(
     featureType: partial.featureType,
     text: partial.text,
     placeName: partial.placeName,
+    countryCode: partial.countryCode,
   }
 }
 
@@ -437,6 +440,267 @@ if (gernikaCountry.precision === "exact") {
   assert.equal(picked, granadaSpain)
   const onlyIsland = pickBestAnchorHit([grenadaCountry], "Granada")
   assert.equal(onlyIsland, grenadaCountry)
+
+  // Con los ISO puestos sigue ganando la ciudad: son países distintos (ES ≠ GD).
+  const grenadaIso = hit({ ...grenadaCountry.coord, ...grenadaCountry, countryCode: "GD" })
+  const granadaIso = hit({ ...granadaSpain.coord, ...granadaSpain, countryCode: "ES" })
+  assert.equal(pickBestAnchorHit([grenadaIso, granadaIso], "Granada"), granadaIso)
+}
+
+{
+  // Viaje real a Guatemala: la extracción etiqueta bien («Isla de Flores,
+  // Guatemala»), pero Mapbox rellenaba con la subdivisión genérica del país y
+  // esta pasaba por no ser de tipo estrecho. El ancla acababa a 400 km.
+  const deptGuatemala = hit({
+    lng: -90.5069,
+    lat: 14.6349,
+    featureType: "region",
+    text: "Departamento de Guatemala",
+    placeName: "Departamento de Guatemala, Guatemala",
+    countryCode: "GT",
+  })
+  assert.equal(
+    anchorHitAcceptable("Isla de Flores, Guatemala", deptGuatemala),
+    false,
+    "el sufijo del país no convierte al departamento equivocado en la zona pedida",
+  )
+  assert.equal(anchorHitAcceptable("Río Dulce, Guatemala", deptGuatemala), false)
+  assert.equal(anchorHitAcceptable("Volcán Acatenango, Guatemala", deptGuatemala), false)
+  // Rechazarlo deja que la escalera pruebe los peldaños siguientes.
+  assert.deepEqual(regionAnchorQueryLadder("Isla de Flores, Guatemala"), [
+    "Isla de Flores, Guatemala",
+    "Isla de Flores",
+    "isla flores guatemala",
+  ])
+  // «Río Dulce» sí ancla: el hit cubre el único token significativo («rio» son
+  // 3 letras), así que pasa incluso siendo de tipo estrecho.
+  const rioDulce = hit({
+    lng: -88.9497,
+    lat: 15.6613,
+    featureType: "place",
+    text: "Río Dulce",
+    placeName: "Río Dulce, Izabal, Guatemala",
+    countryCode: "GT",
+  })
+  assert.equal(anchorHitAcceptable("Río Dulce", rioDulce), true)
+  assert.equal(pickBestAnchorHit([deptGuatemala, rioDulce], "Río Dulce"), rioDulce)
+
+  // «Isla de Flores» contra el pueblo «Flores» no pasa el guardia de tipos
+  // estrechos (le falta «isla»), igual que «Costa Vasca» contra la aldea
+  // «Costa». Quedarse sin ancla es el resultado seguro: se cae al ancla del
+  // viaje, que al ser país no descarta ningún candidato. Anclar a 400 km sí
+  // descartaba los buenos.
+  const flores = hit({
+    lng: -89.8919,
+    lat: 16.9316,
+    featureType: "place",
+    text: "Flores",
+    placeName: "Flores, Petén, Guatemala",
+    countryCode: "GT",
+  })
+  assert.equal(anchorHitAcceptable("Isla de Flores", flores), false)
+  assert.equal(pickBestAnchorHit([deptGuatemala, flores], "Isla de Flores"), null)
+
+  // Y el hint que sí es de la capital sigue anclando ahí.
+  assert.equal(anchorHitAcceptable("Ciudad de Guatemala", deptGuatemala), true)
+
+  // El último peldaño de la escalera pierde las comas: sin pasarle el hint
+  // original, «guatemala» vuelve a ser parte del ámbito y el departamento cuela.
+  assert.equal(anchorHitAcceptable("isla flores guatemala", deptGuatemala), true)
+  assert.equal(
+    anchorHitAcceptable("isla flores guatemala", deptGuatemala, "Isla de Flores"),
+    false,
+  )
+  assert.equal(
+    pickBestAnchorHit([deptGuatemala], "isla flores guatemala", {
+      hint: "Isla de Flores, Guatemala",
+    }),
+    null,
+  )
+  assert.equal(
+    pickBestAnchorHit([deptGuatemala], "dulce guatemala", { hint: "Río Dulce, Guatemala" }),
+    null,
+  )
+
+  assert.equal(anchorQueryCore("Isla de Flores, Guatemala"), "Isla de Flores")
+  assert.equal(
+    anchorQueryCore("Zona Centro, Madrid"),
+    "Zona Centro, Madrid",
+    "si el núcleo es débil vale la consulta entera",
+  )
+}
+
+{
+  // La subdivisión intermedia del hint sí distingue zonas, y para un sitio que
+  // Mapbox no conoce por nombre (Tikal, Yaxhá) es la mejor ancla que hay: 150 km
+  // desde Petén cubren el yacimiento; el país deja la proximidad en el centroide.
+  const guatemala = hit({
+    lng: -90.2308,
+    lat: 15.7835,
+    featureType: "country",
+    text: "Guatemala",
+    placeName: "Guatemala",
+    countryCode: "GT",
+  })
+  const deptPeten = hit({
+    lng: -89.8,
+    lat: 16.9,
+    featureType: "region",
+    text: "Departamento de Petén",
+    placeName: "Departamento de Petén, Guatemala",
+    countryCode: "GT",
+  })
+  const deptGuatemala = hit({
+    lng: -90.5069,
+    lat: 14.6349,
+    featureType: "region",
+    text: "Departamento de Guatemala",
+    placeName: "Departamento de Guatemala, Guatemala",
+    countryCode: "GT",
+  })
+
+  assert.equal(anchorQueryScope("Tikal, Petén, Guatemala", "Guatemala"), "Tikal, Petén")
+  assert.equal(
+    pickBestAnchorHit([deptPeten, guatemala, deptGuatemala], "Tikal, Petén, Guatemala"),
+    deptPeten,
+    "la zona que declara el artículo gana al departamento homónimo del país",
+  )
+
+  // Sin subdivisión en el hint no hay nada que rescatar: el departamento de la
+  // capital no puede anclar un sitio del otro extremo del país.
+  assert.equal(anchorQueryScope("Isla de Flores, Guatemala", "Guatemala"), "Isla de Flores")
+  assert.equal(pickBestAnchorHit([deptGuatemala, guatemala], "Isla de Flores, Guatemala"), null)
+
+  // El sufijo solo se descuenta si de verdad es el país.
+  assert.equal(anchorQueryScope("Santiago, Chile", "Guatemala"), "Santiago, Chile")
+  assert.equal(anchorQueryScope("Guatemala", "Guatemala"), "Guatemala")
+}
+
+{
+  // Un país con subdivisión homónima: el ancla tiene que ser el país. Con la
+  // región, el radio baja a 150 km y Petén (~400 km) se queda fuera del viaje.
+  const guatemalaCountry = hit({
+    lng: -90.2308,
+    lat: 15.7835,
+    featureType: "country",
+    text: "Guatemala",
+    placeName: "Guatemala",
+    countryCode: "GT",
+  })
+  const guatemalaRegion = hit({
+    lng: -90.5069,
+    lat: 14.6349,
+    featureType: "region",
+    text: "Departamento de Guatemala",
+    placeName: "Departamento de Guatemala, Guatemala",
+    countryCode: "GT",
+  })
+  const guatemalaCity = hit({
+    lng: -90.5133,
+    lat: 14.6407,
+    featureType: "place",
+    text: "Ciudad de Guatemala",
+    placeName: "Ciudad de Guatemala, Departamento de Guatemala, Guatemala",
+    countryCode: "GT",
+  })
+  assert.equal(
+    pickBestAnchorHit([guatemalaCountry, guatemalaRegion, guatemalaCity], "Guatemala"),
+    guatemalaCountry,
+  )
+
+  // Sin ISO (caché vieja o v5 sin context) se mantiene el criterio de siempre.
+  const noIso = hit({
+    lng: -90.5069,
+    lat: 14.6349,
+    featureType: "region",
+    text: "Departamento de Guatemala",
+    placeName: "Departamento de Guatemala, Guatemala",
+  })
+  assert.equal(pickBestAnchorHit([guatemalaCountry, noIso], "Guatemala"), noIso)
+}
+
+{
+  // «Ciudad de México» no es «México»: el ancla debe seguir siendo la capital, o
+  // la proximidad se iría al centroide del país. `ciudad` es token débil, así que
+  // comparar por tokens daría un falso positivo; por eso se compara el nombre.
+  const mexicoCountry = hit({
+    lng: -102.5528,
+    lat: 23.6345,
+    featureType: "country",
+    text: "México",
+    placeName: "México",
+    countryCode: "MX",
+  })
+  const mexicoCity = hit({
+    lng: -99.1332,
+    lat: 19.4326,
+    featureType: "place",
+    text: "Ciudad de México",
+    placeName: "Ciudad de México, México",
+    countryCode: "MX",
+  })
+  assert.equal(pickBestAnchorHit([mexicoCountry, mexicoCity], "Ciudad de México"), mexicoCity)
+  // Pero si el destino es el país a secas, sí manda el país.
+  assert.equal(pickBestAnchorHit([mexicoCountry, mexicoCity], "México"), mexicoCountry)
+}
+
+{
+  // Criterio del ancla por POI (`poiAnchorFallback` en mapbox.ts): el candidato
+  // tiene que cubrir el **núcleo** del hint. Ni el hint entero ni un token.
+  const reservaLago = hit({
+    lng: -91.2,
+    lat: 14.69,
+    featureType: "poi",
+    text: "Reserva de Usos Múltiples de la Cuenca del Lago Atitlán",
+    placeName: "Reserva de Usos Múltiples de la Cuenca del Lago Atitlán, Sololá, Guatemala",
+    countryCode: "GT",
+  })
+  const parqueSantiago = hit({
+    lng: -91.2295,
+    lat: 14.6383,
+    featureType: "poi",
+    text: "Parque Central de Santiago Atitlán",
+    placeName: "Parque Central de Santiago Atitlán, Santiago Atitlán, Guatemala",
+    countryCode: "GT",
+  })
+  const core = anchorQueryCore("Santiago de Atitlán, Lago Atitlán, Guatemala")
+  assert.equal(core, "Santiago de Atitlán")
+  assert.equal(
+    candidateNameMatchesQuery(reservaLago, core),
+    false,
+    "compartir «atitlan» no basta: la reserva está en la otra orilla",
+  )
+  assert.equal(candidateNameMatchesQuery(parqueSantiago, core), true)
+
+  // Contra el hint completo tampoco vale: el POI no repite el contexto y se
+  // perdería un ancla buena.
+  const sanJuan = hit({
+    lng: -91.2894,
+    lat: 14.6969,
+    featureType: "poi",
+    text: "San Juan La Laguna",
+    placeName: "San Juan La Laguna, Sololá, Guatemala",
+    countryCode: "GT",
+  })
+  assert.equal(
+    candidateNameMatchesQuery(sanJuan, "San Juan de la Laguna, Lago Atitlán, Guatemala"),
+    false,
+  )
+  assert.equal(
+    candidateNameMatchesQuery(sanJuan, anchorQueryCore("San Juan de la Laguna, Lago Atitlán, Guatemala")),
+    true,
+  )
+
+  // Un negocio con el nombre del sitio sirve de ancla: está en el sitio.
+  const hotelFlores = hit({
+    lng: -89.8919,
+    lat: 16.9316,
+    featureType: "poi",
+    text: "Hotel Isla de Flores",
+    placeName: "Hotel Isla de Flores, Flores, Petén, Guatemala",
+    countryCode: "GT",
+  })
+  assert.equal(candidateNameMatchesQuery(hotelFlores, anchorQueryCore("Isla de Flores, Guatemala")), true)
 }
 
 console.log("geocode-validate: ok")

@@ -39,6 +39,13 @@ import {
   pickGeocodeOutcome,
   type RegionAnchor,
 } from "@/lib/geocode-validate"
+import {
+  formatGeocodeSummary,
+  isGeocodeDebugEnabled,
+  summarizeGeocodeOutcomes,
+  type GeocodeDiagnosticEntry,
+  type GeocodeDiagnosticReason,
+} from "@/lib/geocode-diagnostics"
 import { isIndependentRegionHint } from "@/lib/map-destination"
 import { filterByDayScope, type DayScope } from "@/lib/map-day-scope"
 import {
@@ -467,6 +474,10 @@ export function ItineraryMapView({
         coord: LngLat
         precision: "exact" | "approximate"
         anchorLabel?: string
+        /** Solo diagnóstico (`isGeocodeDebugEnabled`); no llegan al mapa. */
+        reason: GeocodeDiagnosticReason
+        featureType?: string
+        anchorUsed?: { label: string; featureType: string }
       }
 
       const regionKeys = [
@@ -535,7 +546,7 @@ export function ItineraryMapView({
             Number.isFinite(saved.lat)
           ) {
             const pin = { lng: saved.lng, lat: saved.lat }
-            const fix: PlaceFix = { coord: pin, precision: "exact" }
+            const fix: PlaceFix = { coord: pin, precision: "exact", reason: "saved-coords" }
             coordCacheRef.current.set(p.id, fix)
             return fix
           }
@@ -571,13 +582,23 @@ export function ItineraryMapView({
           }
           const outcome = pickGeocodeOutcome(candidates, anchor, p.name)
           if (outcome.precision === "unlocated") return null
+          const anchorUsed = { label: anchor.label, featureType: anchor.featureType }
           const fix: PlaceFix =
             outcome.precision === "exact"
-              ? { coord: outcome.coord, precision: "exact" }
+              ? {
+                  coord: outcome.coord,
+                  precision: "exact",
+                  reason: outcome.reason,
+                  featureType: outcome.featureType,
+                  anchorUsed,
+                }
               : {
                   coord: outcome.coord,
                   precision: "approximate",
                   anchorLabel: outcome.anchorLabel,
+                  reason: outcome.reason,
+                  featureType: outcome.featureType,
+                  anchorUsed,
                 }
           coordCacheRef.current.set(p.id, fix)
           return fix
@@ -587,6 +608,8 @@ export function ItineraryMapView({
       if (ac.signal.aborted) return
 
       const unspread: GeocodeResolved[] = []
+      const diagnostics: GeocodeDiagnosticEntry[] = []
+      const debug = isGeocodeDebugEnabled()
       for (let i = 0; i < placesNow.length; i++) {
         const p = placesNow[i]!
         const r = results[i]!
@@ -597,9 +620,31 @@ export function ItineraryMapView({
             precision: r.value.precision,
             anchorLabel: r.value.anchorLabel,
           })
+          if (debug) {
+            diagnostics.push({
+              name: p.name,
+              reason: r.value.reason,
+              precision: r.value.precision,
+              featureType: r.value.featureType,
+              label: r.value.anchorLabel,
+              anchor: r.value.anchorUsed,
+              regionHint: p.region,
+            })
+          }
         } else {
           failed.push({ point: asGeocodePoint(p) })
+          if (debug) {
+            diagnostics.push({
+              name: p.name,
+              reason: "no-anchor",
+              precision: "unlocated",
+              regionHint: p.region,
+            })
+          }
         }
+      }
+      if (debug && diagnostics.length > 0) {
+        console.info(formatGeocodeSummary(summarizeGeocodeOutcomes(diagnostics)))
       }
       const spread = offsetStackedApproximate(
         unspread.map((r) => ({

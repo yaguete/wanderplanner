@@ -20,6 +20,8 @@ import {
 } from "@/lib/place-search-guardrails"
 import {
   featureTypeFromMapboxId,
+  anchorQueryCore,
+  candidateNameMatchesQuery,
   pickBestAnchorHit,
   regionAnchorQueryLadder,
   type GeocodeCandidate,
@@ -1059,21 +1061,25 @@ export async function geocodeRegionAnchor(
     options?.countryCodes && options.countryCodes.length
       ? countryParamsKey(options.countryCodes)
       : "none"
-  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}|t7`)
+  // `t11`: cambió la elección de ancla (subdivisión homónima del país en
+  // `homonymousCountryHit`; hits amplios juzgados contra el hint sin país en
+  // `anchorHitAcceptable`, también en los peldaños sin comas de la escalera).
+  // Las anclas cacheadas con claves anteriores guardan el departamento equivocado.
+  const key = geocodeQueryKey(`__anchor__${text.trim()}`, null, cKey, `types:${REGION_ANCHOR_TYPES}|t11`)
   const mem = getAnchorFromMemory(key) ?? readAnchorCache(key)
   if (mem) return mem
 
+  const hint = text.trim()
   for (const q of ladder) {
     const hits = await geocodeAnchorHits(q, options?.countryCodes)
-    const hit = pickBestAnchorHit(
-      hits.map((h) => ({
-        coord: h.coord,
-        featureType: h.featureType,
-        text: h.label,
-        placeName: h.placeName,
-      })),
-      q,
-    )
+    const candidates = hits.map((h) => ({
+      coord: h.coord,
+      featureType: h.featureType,
+      text: h.label,
+      placeName: h.placeName,
+      countryCode: h.countryCode,
+    }))
+    const hit = pickBestAnchorHit(candidates, q, { hint })
     if (!hit) continue
     const value: RegionAnchor = {
       coord: hit.coord,
@@ -1087,26 +1093,104 @@ export async function geocodeRegionAnchor(
     })
     return value
   }
-  return null
+
+  const poi = await poiAnchorFallback(hint, options?.countryCodes)
+  // Search Box es dataset temporal: memoria de sesión, nunca `writeLocalCache`.
+  if (poi) setAnchorMemory(key, poi)
+  return poi
+}
+
+/** Hints ya resueltos por POI en esta pestaña (incluido el fallo, que también costó). */
+const poiAnchorTried = new Map<string, RegionAnchor | null>()
+
+/**
+ * Último recurso del ancla: un POI de Search Box.
+ *
+ * Los tipos administrativos no conocen lagos, ríos, volcanes ni yacimientos, y
+ * diez de los quince hints de un viaje a Guatemala son justo eso. Sin esto, la
+ * escalera se queda sin ancla y el ítem cae en la del viaje — el país —, con lo
+ * que la proximidad pasa a ser el centroide y Search Box devuelve la capital
+ * para «Paseo en barca por los manglares».
+ *
+ * Vale que el hit sea un negocio (`Hotel Isla de Flores`): está **en** Flores, y
+ * de un ancla solo se pide la zona. Lo que no vale es aflojar el nombre. Se pide
+ * el **núcleo** del hint entero (`candidateNameMatchesQuery`, todos sus tokens):
+ * con un token suelto bastaría `atitlan` para que «Santiago de Atitlán» anclara
+ * en la reserva del lago, a la otra orilla — y un «Restaurante Tikal» de la
+ * capital se llevaría allí el yacimiento. Contra el hint completo tampoco vale:
+ * el contexto («, Lago Atitlán, Guatemala») no lo repite el POI, y así se perdía
+ * `San Juan La Laguna`. `anchorHitAcceptable` no sirve aquí: `poi` no es un tipo
+ * estrecho y cae por su vía amplia.
+ *
+ * El tipo se declara `place` (25 km de radio, 250 km para pines del mapa): un
+ * lago o un volcán ocupan más que un punto. Y la etiqueta es el núcleo del hint,
+ * no el nombre del POI: se le enseña al usuario en el pin («centro de Río
+ * Dulce», no «centro de Pesqueros de Guatemala Rio Dulce»).
+ */
+async function poiAnchorFallback(
+  hint: string,
+  countryCodes?: string[],
+): Promise<RegionAnchor | null> {
+  if (!hint) return null
+  const cached = poiAnchorTried.get(hint)
+  if (cached !== undefined) return cached
+
+  const core = anchorQueryCore(hint)
+  const res = await searchBoxForward(hint, { countryCodes: countryCodes ?? null, limit: 5 })
+  let value: RegionAnchor | null = null
+  if (res.ok) {
+    const poi = res.hits.find(
+      (h) =>
+        h.featureType === "poi" &&
+        candidateNameMatchesQuery(
+          {
+            coord: h.coord,
+            featureType: h.featureType,
+            text: h.text,
+            placeName: h.placeName,
+            countryCode: h.countryCode,
+          },
+          core,
+        ),
+    )
+    if (poi) value = { coord: poi.coord, featureType: "place", label: core }
+  }
+  poiAnchorTried.set(hint, value)
+  return value
 }
 
 async function geocodeAnchorHits(
   text: string,
   countryCodes?: string[],
-): Promise<Array<{ coord: LngLat; featureType: string; label: string; placeName: string }>> {
+  types = REGION_ANCHOR_TYPES,
+): Promise<
+  Array<{
+    coord: LngLat
+    featureType: string
+    label: string
+    placeName: string
+    countryCode: string | null
+  }>
+> {
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
     limit: "5",
     autocomplete: "false",
     language: "es",
-    types: REGION_ANCHOR_TYPES,
+    types,
   })
   appendCountryParams(params, countryCodes)
   const url = buildGeocodeUrl(text.trim(), params)
   const res = await fetch(url)
   if (!res.ok) return []
   const data = (await res.json()) as { features?: MapboxFeature[] }
-  const out: Array<{ coord: LngLat; featureType: string; label: string; placeName: string }> = []
+  const out: Array<{
+    coord: LngLat
+    featureType: string
+    label: string
+    placeName: string
+    countryCode: string | null
+  }> = []
   for (const f of data.features ?? []) {
     const c = f.center
     if (!c || c.length < 2) continue
@@ -1116,6 +1200,7 @@ async function geocodeAnchorHits(
       featureType: featureTypeFromMapboxId(f.id),
       label,
       placeName: f.place_name?.trim() || "",
+      countryCode: countryCodeFromMapboxFeature(f),
     })
   }
   return out
