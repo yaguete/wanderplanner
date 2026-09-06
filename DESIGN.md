@@ -69,7 +69,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 - Header: en listado y cuenta, marca y avatar van en la misma columna que el canvas (`max-w-5xl`); un poco de aire arriba en desktop. En detalle, la marca se alinea con la columna del sidebar · colapso (`PanelLeftClose`/`PanelLeftOpen`, junto a la marca) · toggles Fuentes / Viaje / Asistente · **Invitar** a la derecha (`UserPlus` + etiqueta). El avatar vive en el pie del sidebar (detalle) y en la cabecera (listado, cuenta, y todo el cromo móvil).
 - Tres paneles alícuota (`wp-trip-panels`); mínimo uno activo. Conmutación instantánea (sin animar `flex-grow`). Con 3 paneles y viewport &lt; ~1280px el sidebar se auto-colapsa a rail.
 - Título del viaje en la cabecera del panel Viaje (no en el header). En las cards de Inicio, el hueco de la derecha es compartir: avatares si el viaje ya tiene editores, icono `UserPlus` si todavía no; clic o tap abre Invitar.
-- Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes y Mi viaje. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista · Calendario · Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
+- Columna de contenido `.panel-column` (`max-w-4xl`) en Fuentes, Mi viaje y Asistente. Con un solo panel el cromo del recuadro sigue a sangre; el texto, las filas y el composer se centran. Fuentes: pestañas con subrayado (`PanelTabs`). Mi viaje y Lista · Calendario · Mapa: píldora (`SegmentedControl`). Etiquetas según ancho del **panel** (`@container` / `@md:` ≈448px), no de la ventana.
 - Sidebar (solo `/trips/[id]`): «Inicio» y «Tus viajes» como filas hermanas; pie de cuenta (avatar + nombre expandido, solo avatar en rail).
 - Asistente: panel peer montado desde el inicio; chips de sugerencia sin esperar a Supabase si no hay conversación activa.
 
@@ -81,7 +81,7 @@ Una sola familia: **Inter** (`--font-inter`). Sin display serif.
 
 ### Chat del asistente
 - Mensajes del **usuario**: bocadillo alineado a la derecha, fondo `muted`.
-- Mensajes del **asistente**: sin caja ni borde; texto a ancho del panel.
+- Mensajes del **asistente**: sin caja ni borde; texto a ancho de `.panel-column`.
 - Scroll: al enviar, la pregunta queda anclada arriba; auto-follow solo si el usuario está al fondo.
 - Enlaces del chat: clicables, sin botón «Añadir fuente». Citar el origen de un dato ≠ indexar el artículo. Añadir una fuente va por `propose_add_source` (tarjeta) o por el panel Fuentes.
 

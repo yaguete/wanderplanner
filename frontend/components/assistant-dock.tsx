@@ -1158,16 +1158,22 @@ export function AssistantPanelLayer({
     >
       <div
         className={cn(
-          "flex shrink-0 items-center gap-2",
+          "shrink-0",
           isSection
-            ? "overflow-hidden px-4 transition-[max-height,opacity,padding] duration-200 ease-out"
-            : "h-12 border-b border-border/60 px-3 @md:px-4",
+            ? "overflow-hidden transition-[max-height,opacity,padding] duration-200 ease-out"
+            : "border-b border-border/60",
           isSection &&
             (headerCollapsed
               ? "max-h-0 py-0 opacity-0"
               : "max-h-20 pb-2 pt-3.5 opacity-100"),
         )}
       >
+        <div
+          className={cn(
+            "panel-column flex items-center gap-2",
+            isSection ? "px-4" : "h-12 px-3 @md:px-4",
+          )}
+        >
         {showHistory ? (
           <>
             <button
@@ -1226,16 +1232,18 @@ export function AssistantPanelLayer({
             </Button>
           </>
         )}
+        </div>
       </div>
 
       {showHistory ? (
         <ScrollArea className="min-h-0 flex-1">
           <div
             className={cn(
-              "space-y-3 p-4",
+              "p-4",
               isSection && "pb-[var(--wp-nav-clearance)]",
             )}
           >
+            <div className="panel-column space-y-3">
             <ConversationHistoryList
               conversations={conversations}
               activeConversationId={activeConversationId}
@@ -1251,6 +1259,7 @@ export function AssistantPanelLayer({
               <Plus className="h-3.5 w-3.5" />
               Nueva conversación
             </button>
+            </div>
           </div>
         </ScrollArea>
       ) : null}
@@ -1273,7 +1282,8 @@ export function AssistantPanelLayer({
                 isSection && "[&>[data-radix-scroll-area-viewport]]:overscroll-y-contain",
               )}
             >
-              <div className="space-y-3 p-4">
+              <div className="p-4">
+                <div className="panel-column space-y-3">
                 {messages.length === 0 && (hydrated || canShowSuggestionsEarly) ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     Pregúntame sobre tus fuentes, el plan o requisitos oficiales. Puedo buscar en
@@ -1339,6 +1349,7 @@ export function AssistantPanelLayer({
                       (isSection && keyboardOpen ? keyboardInset : 0),
                   }}
                 />
+                </div>
               </div>
             </ScrollArea>
           </div>
@@ -1360,6 +1371,7 @@ export function AssistantPanelLayer({
               bottom: isSection && keyboardOpen ? keyboardInset : 0,
             }}
           >
+            <div className="panel-column">
             {/*
               Los chips de arranque se ven también sin consentimiento: el
               invitado que aterriza aquí tiene que leer para qué sirve esto
@@ -1426,6 +1438,7 @@ export function AssistantPanelLayer({
                   {bottomNav}
                 </div>
               ) : null}
+            </div>
             </div>
           </div>
         </>

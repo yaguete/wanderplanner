@@ -1215,11 +1215,12 @@ export default function ItineraryPanel({
         </>
       ) : categoryView ? (
         <>
-          <div className="flex shrink-0 items-baseline justify-between gap-3 px-4 pt-3 pb-2">
+          <div className="shrink-0 px-4 pt-3 pb-2">
             {/*
               Móvil + panel < @md (~448px): las pestañas pasan a solo icono
               y este título (en flujo, no sticky) nombra la sección.
             */}
+            <div className="panel-column flex items-baseline justify-between gap-3">
             <h2
               className={cn(
                 "hidden min-w-0 truncate text-sm font-semibold text-[hsl(var(--brand-ink))]",
@@ -1234,6 +1235,7 @@ export default function ItineraryPanel({
                 trip={trip}
                 categories={VIEW_MODE_TASK_CATEGORIES[categoryView]}
               />
+            </div>
             </div>
           </div>
           <TripTasksPanel

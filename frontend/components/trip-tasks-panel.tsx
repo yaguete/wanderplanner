@@ -331,7 +331,9 @@ export function TripTasksPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       {!hideSummary ? (
         <div className="shrink-0 border-b border-border px-4 py-2.5">
-          <TripTasksSummary trip={trip} />
+          <div className="panel-column">
+            <TripTasksSummary trip={trip} />
+          </div>
         </div>
       ) : null}
 
