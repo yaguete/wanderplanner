@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import type { Source, Trip } from "@/types/itinerary"
 import {
+  HOW_IT_WORKS_PROMPT,
+  PLAN_TRIP_PROMPT,
   buildAssistantSuggestions,
   confidentTripDestinationLabel,
   tripDestinationLabel,
@@ -129,10 +131,41 @@ function source(overrides: Partial<Source> = {}): Source {
 {
   const uganda = buildAssistantSuggestions(baseTrip({ name: "Uganda" }), [])
   assert.equal(uganda.length, 3)
-  assert.ok(uganda[0]!.includes("visado"))
+  assert.equal(uganda[0], PLAN_TRIP_PROMPT)
   assert.ok(uganda.some((s) => s.includes("Uganda")))
   // Estable entre llamadas.
   assert.deepEqual(uganda, buildAssistantSuggestions(baseTrip({ name: "Uganda" }), []))
+}
+
+{
+  // El visado ya no arranca ninguna conversación: salía igual para Granada.
+  for (const name of ["Uganda", "España", "Austria", "Japón", "Perú"]) {
+    const chips = buildAssistantSuggestions(baseTrip({ name, id: `t-${name}` }), [])
+    assert.ok(
+      !chips.some((s) => /visado/i.test(s)),
+      `«${name}» no debería arrancar con visado: ${chips.join(" | ")}`,
+    )
+  }
+}
+
+{
+  // Invitado / primer viaje: planificar, cómo funciona y el chip de utilidad.
+  const trip = baseTrip({ name: "Uganda" })
+  const first = buildAssistantSuggestions(trip, [], { firstTimer: true })
+  assert.equal(first.length, 3)
+  assert.equal(first[0], PLAN_TRIP_PROMPT)
+  assert.equal(first[1], HOW_IT_WORKS_PROMPT)
+  assert.equal(first[2], buildAssistantSuggestions(trip, [])[1])
+
+  // Quien ya conoce la casa no lo ve.
+  assert.ok(!buildAssistantSuggestions(trip, []).includes(HOW_IT_WORKS_PROMPT))
+  // Y si ya lo preguntó, tampoco se repite.
+  assert.ok(
+    !buildAssistantSuggestions(trip, [], {
+      firstTimer: true,
+      usedPrompts: [HOW_IT_WORKS_PROMPT],
+    }).includes(HOW_IT_WORKS_PROMPT),
+  )
 }
 
 {
@@ -150,8 +183,7 @@ function source(overrides: Partial<Source> = {}): Source {
 
 {
   const spain = buildAssistantSuggestions(baseTrip({ name: "España", countries: ["ES"] }), [])
-  assert.ok(!spain[0]!.toLowerCase().includes("visado"))
-  assert.ok(spain[0]!.includes("España") || spain.some((s) => s.includes("España")))
+  assert.ok(spain.some((s) => s.includes("España")))
 }
 
 {
@@ -178,7 +210,7 @@ function source(overrides: Partial<Source> = {}): Source {
 
 {
   assert.deepEqual(buildAssistantSuggestions(null, []), [
-    "¿Necesito visado para este viaje?",
+    PLAN_TRIP_PROMPT,
     "¿Qué me falta para completar el plan?",
     "Sugiéreme otra fuente útil",
   ])
@@ -235,7 +267,7 @@ function source(overrides: Partial<Source> = {}): Source {
     ],
   })
   const chips = buildAssistantSuggestions(loaded, [])
-  assert.ok(chips[0]!.includes("visado"))
+  assert.equal(chips[0], PLAN_TRIP_PROMPT)
   assert.ok(chips.includes("¿Qué tiempo crees que hará en las fechas de mi viaje?"))
   assert.ok(!chips.includes("Revisa qué huecos tiene el plan"))
   assert.ok(!chips.some((s) => /está muy cargado/i.test(s)))
@@ -246,7 +278,7 @@ function source(overrides: Partial<Source> = {}): Source {
     days: [{ id: "d1", label: "", items: [] }],
   })
   const chips = buildAssistantSuggestions(thin, [])
-  assert.ok(chips[0]!.includes("visado"))
+  assert.equal(chips[0], PLAN_TRIP_PROMPT)
 }
 
 console.log("assistant-suggestions.test.ts: ok")

@@ -22,13 +22,14 @@ import { fetchOnboardingSeen, recordOnboardingSeen } from "@/lib/onboarding-pers
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 import { tripIdFromPath } from "@/lib/trip-paths"
 import { useTrips } from "@/lib/trip-context"
+import { isAssistantFirstVisitor } from "@/lib/trip-entry-layout"
 import { OnboardingDialog } from "./onboarding-dialog"
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user, isGuest, isLoading: authLoading } = useAuth()
   const { isOpen: gateOpen } = useRegistrationGate()
-  const { getTripSources, pendingSources } = useTrips()
+  const { trips, isLoading: tripsLoading, getTripSources, pendingSources } = useTrips()
   const [open, setOpen] = useState(false)
   const [trigger, setTrigger] = useState<OnboardingTrigger>("auto")
   const [profileSeen, setProfileSeen] = useState<boolean | null>(null)
@@ -40,7 +41,15 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     ? pendingSources.filter((p) => p.tripId === tripId && p.status === "loading").length
     : 0
 
-  const cta: OnboardingCtaAction = onboardingCta({ sourceCount, loadingPendingCount })
+  const cta: OnboardingCtaAction = onboardingCta({
+    sourceCount,
+    loadingPendingCount,
+    assistantFirst: isAssistantFirstVisitor({
+      isGuest,
+      tripsLoading,
+      activeTripCount: trips.filter((t) => !t.archived).length,
+    }),
+  })
   const mode = isGuest ? "guest" : "user"
   const userId = user?.id ?? null
 

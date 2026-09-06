@@ -2,6 +2,7 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { Loader2 } from "lucide-react"
 import { useTrips } from "@/lib/trip-context"
 import { useAuth } from "@/lib/auth-context"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -12,8 +13,15 @@ import { formatGuideLabel } from "@/lib/itinerary-utils"
 import { confidentTripDestinationLabel } from "@/lib/assistant-suggestions"
 import {
   ADD_SOURCE_OPEN_EVENT,
+  OPEN_ASSISTANT_EVENT,
   REVEAL_SOURCES_EVENT,
 } from "@/lib/onboarding"
+import {
+  DEFAULT_TRIP_PANELS,
+  isAssistantFirstVisitor,
+  resolveEntryPanels,
+  resolveEntrySection,
+} from "@/lib/trip-entry-layout"
 import InspirationPanel from "@/components/inspiration-panel"
 import ItineraryPanel from "@/components/itinerary-panel-v2"
 import dynamic from "next/dynamic"
@@ -32,24 +40,36 @@ import { useTripRealtime } from "@/hooks/use-trip-realtime"
 
 const AssistantPanelLayer = dynamic(
   () => import("@/components/assistant-dock").then((m) => m.AssistantPanelLayer),
-  { ssr: false },
+  {
+    ssr: false,
+    /**
+     * Con el aterrizaje de invitado el asistente es la **primera** pantalla en
+     * móvil, así que su chunk ya no llega en un clic tranquilo: sin fallback,
+     * el primer paint sería un hueco en blanco mientras baja.
+     */
+    loading: () => (
+      <div
+        className="flex flex-1 items-center justify-center p-6"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+        <span className="sr-only">Cargando el asistente…</span>
+      </div>
+    ),
+  },
 )
 
 const PANELS_KEY = "wp-trip-panels"
 /** Con 3 paneles activos, por debajo de este ancho útil se auto-colapsa el sidebar a rail. */
 const AUTO_COLLAPSE_SIDEBAR_PX = 1280
 
-const DEFAULT_PANELS: TripPanelState = {
-  sources: true,
-  plan: true,
-  assistant: false,
-}
-
-function readPanels(): TripPanelState {
-  if (typeof window === "undefined") return DEFAULT_PANELS
+/** `null` = sin preferencia en este navegador (decide `trip-entry-layout`). */
+function readPanels(): TripPanelState | null {
+  if (typeof window === "undefined") return null
   try {
     const raw = localStorage.getItem(PANELS_KEY)
-    if (!raw) return DEFAULT_PANELS
+    if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<TripPanelState>
     return {
       sources: parsed.sources !== false,
@@ -57,7 +77,7 @@ function readPanels(): TripPanelState {
       assistant: Boolean(parsed.assistant),
     }
   } catch {
-    return DEFAULT_PANELS
+    return null
   }
 }
 
@@ -123,8 +143,9 @@ function TripPanelSlot({
 
 function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { getTrip, isLoading, startSourceExtraction, updateTrip, getTripSources } = useTrips()
-  const { user, isLoading: authLoading } = useAuth()
+  const { trips, getTrip, isLoading, startSourceExtraction, updateTrip, getTripSources } =
+    useTrips()
+  const { user, isGuest, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const trip = getTrip(tripId)
@@ -143,7 +164,7 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
   const { setChrome, setAutoCollapsed } = useTripChrome()
   const { openingTrip, clearOpeningTrip } = useOpeningTrip()
 
-  const [panels, setPanels] = useState<TripPanelState>(DEFAULT_PANELS)
+  const [panels, setPanels] = useState<TripPanelState>(DEFAULT_TRIP_PANELS)
   const [panelsHydrated, setPanelsHydrated] = useState(false)
   const [mobileSection, setMobileSection] = useState<TripMobileSection>(
     queryTab ? "plan" : "sources",
@@ -211,15 +232,31 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     }
   }, [isMobile, mobileNavHidden, mobileSection])
 
-  // Evitar mismatch SSR/cliente: leer localStorage tras montar.
+  const activeTripCount = useMemo(() => trips.filter((t) => !t.archived).length, [trips])
+
+  /**
+   * Evitar mismatch SSR/cliente: leer localStorage tras montar. Sin preferencia
+   * guardada el aterrizaje depende de si es su primera vez, y eso necesita la
+   * sesión (invitado) y, en cuenta, el recuento de viajes: hasta que llegan, no
+   * se decide — los paneles siguen invisibles (`md:invisible`).
+   */
   useEffect(() => {
+    if (panelsHydrated || authLoading) return
     const stored = readPanels()
-    if (queryTab) stored.plan = true
-    setPanels(stored)
+    if (!stored && !isGuest && isLoading) return
+    const entry = {
+      stored,
+      assistantFirst: isAssistantFirstVisitor({
+        isGuest,
+        tripsLoading: isLoading,
+        activeTripCount,
+      }),
+      forcePlan: Boolean(queryTab),
+    }
+    setPanels(resolveEntryPanels(entry))
+    setMobileSection(resolveEntrySection(entry))
     setPanelsHydrated(true)
-    // Solo al montar: un tab posterior lo aplica el efecto de queryTab.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [panelsHydrated, authLoading, isGuest, isLoading, activeTripCount, queryTab])
 
   useEffect(() => {
     if (!queryTab) return
@@ -355,16 +392,24 @@ function TripDetailView({ params }: { params: Promise<{ tripId: string }> }) {
     else setPanels((prev) => ({ ...prev, sources: true }))
   }, [isMobile, selectMobileSection])
 
+  const revealAssistant = useCallback(() => {
+    if (isMobile) selectMobileSection("assistant")
+    else setPanels((prev) => ({ ...prev, assistant: true }))
+  }, [isMobile, selectMobileSection])
+
   useEffect(() => {
     const onAddSource = () => openAddSource(true)
     const onRevealSources = () => revealSources()
+    const onOpenAssistant = () => revealAssistant()
     window.addEventListener(ADD_SOURCE_OPEN_EVENT, onAddSource)
     window.addEventListener(REVEAL_SOURCES_EVENT, onRevealSources)
+    window.addEventListener(OPEN_ASSISTANT_EVENT, onOpenAssistant)
     return () => {
       window.removeEventListener(ADD_SOURCE_OPEN_EVENT, onAddSource)
       window.removeEventListener(REVEAL_SOURCES_EVENT, onRevealSources)
+      window.removeEventListener(OPEN_ASSISTANT_EVENT, onOpenAssistant)
     }
-  }, [openAddSource, revealSources])
+  }, [openAddSource, revealSources, revealAssistant])
 
   const openEditTrip = useCallback(() => setEditTripOpen(true), [])
 

@@ -18,6 +18,7 @@ import {
   type OnboardingTrigger,
   focusSourceRutaFromOnboarding,
   openAddSourceFromOnboarding,
+  openAssistantFromOnboarding,
   revealSourcesFromOnboarding,
 } from "@/lib/onboarding"
 import { cn } from "@/lib/utils"
@@ -31,6 +32,7 @@ const CTA_LABEL: Record<OnboardingCtaAction, string> = {
   add_source: "Empieza a planificar",
   view_extraction: "Ver cómo va",
   view_trip: "Ir a la ruta",
+  open_assistant: "Planifica con el asistente",
 }
 
 export function OnboardingDialog({
@@ -82,12 +84,11 @@ export function OnboardingDialog({
   )
 
   const runCta = useCallback(() => {
-    track("onboarding_cta", {
-      action: cta === "add_source" ? "add_source" : "view_trip",
-    })
+    track("onboarding_cta", { action: cta })
     finish("completed")
     queueMicrotask(() => {
       if (cta === "add_source") openAddSourceFromOnboarding()
+      else if (cta === "open_assistant") openAssistantFromOnboarding()
       else if (cta === "view_extraction") revealSourcesFromOnboarding()
       else focusSourceRutaFromOnboarding()
     })

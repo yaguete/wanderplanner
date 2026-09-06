@@ -19,6 +19,7 @@ export const ONBOARDING_RECENT_TTL_MS = 45 * 60 * 1000
 export const ONBOARDING_OPEN_EVENT = "wp-onboarding-open"
 export const ADD_SOURCE_OPEN_EVENT = "wp-add-source-open"
 export const REVEAL_SOURCES_EVENT = "wp-reveal-sources"
+export const OPEN_ASSISTANT_EVENT = "wp-open-assistant"
 
 export type RevealSourcesDetail = {
   /** Pestaña del panel Fuentes; sin `tab` solo revela el panel. */
@@ -29,7 +30,11 @@ export type OnboardingRoute = "trip-detail" | "other"
 export type OnboardingTrigger = "auto" | "replay"
 export type OnboardingOutcome = "completed" | "skipped" | "dismissed"
 export type OnboardingFunnelOutcome = "completed" | "skipped" | "unseen"
-export type OnboardingCtaAction = "add_source" | "view_extraction" | "view_trip"
+export type OnboardingCtaAction =
+  | "add_source"
+  | "view_extraction"
+  | "view_trip"
+  | "open_assistant"
 export type OnboardingMode = "guest" | "user"
 
 export type StorageLike = {
@@ -229,11 +234,19 @@ export function readOnboardingFunnelOutcome(session?: StorageLike): OnboardingFu
   return funnelOutcomeFrom(safeGet(store, ONBOARDING_OUTCOME_KEY))
 }
 
+/**
+ * Último clic del modal. Con `assistantFirst` (invitado o primer viaje) lleva
+ * al asistente: es el aterrizaje que ya eligió `trip-entry-layout`, y devolverlo
+ * a Fuentes justo aquí deshacía el cambio. Sin ninguna fuente sigue mandando
+ * pegar un artículo: sin fuente no hay nada que planificar.
+ */
 export function onboardingCta(input: {
   sourceCount: number
   loadingPendingCount: number
+  assistantFirst?: boolean
 }): OnboardingCtaAction {
   if (input.sourceCount <= 0 && input.loadingPendingCount <= 0) return "add_source"
+  if (input.assistantFirst) return "open_assistant"
   if (input.loadingPendingCount > 0) return "view_extraction"
   return "view_trip"
 }
@@ -251,6 +264,12 @@ export function openAddSourceFromOnboarding(): void {
 export function revealSourcesFromOnboarding(detail?: RevealSourcesDetail): void {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent(REVEAL_SOURCES_EVENT, { detail }))
+}
+
+/** Abre el asistente: panel en escritorio, sección en móvil. */
+export function openAssistantFromOnboarding(): void {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(OPEN_ASSISTANT_EVENT))
 }
 
 /** Fuentes → pestaña Ruta (CTA cuando ya hay fuente extraída). */

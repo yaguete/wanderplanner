@@ -5,8 +5,22 @@
 import type { Source, Trip } from "@/types/itinerary"
 import { getCountryByCode, resolveTripCountryCodes } from "@/lib/countries"
 
+/**
+ * Chip de arranque de todo viaje. Sustituye al de visado, que salía primero
+ * incluso para un fin de semana en Granada; el asistente ya mira destino,
+ * fechas y fuentes por su cuenta y decide qué hace falta.
+ */
+export const PLAN_TRIP_PROMPT = "Ayúdame a planificar mi viaje"
+
+/**
+ * Solo para invitados y primer viaje: el segundo clic tiene que explicar qué
+ * es esto. La respuesta la escribe el asistente con la sección «Qué es
+ * WanderPlanner» de su prompt.
+ */
+export const HOW_IT_WORKS_PROMPT = "Explícame cómo funciona WanderPlanner"
+
 const FALLBACK = [
-  "¿Necesito visado para este viaje?",
+  PLAN_TRIP_PROMPT,
   "¿Qué me falta para completar el plan?",
   "Sugiéreme otra fuente útil",
 ] as const
@@ -126,23 +140,19 @@ function filterUsed(prompts: string[], usedPrompts: readonly string[]): string[]
 
 export type AssistantSuggestionOptions = {
   usedPrompts?: readonly string[]
+  /**
+   * Invitado o primer viaje: se cuela «cómo funciona» en segunda posición, a
+   * costa del chip de sabor. Antes de entender la herramienta, la mejor época
+   * para ir a Kioto no le sirve de nada.
+   */
+  firstTimer?: boolean
 }
 
 function genericSuggestions(trip: Trip, sources: Source[]): string[] {
   const dest = tripDestinationLabel(trip, sources)
-  const codes = resolveTripCountryCodes(trip, sources)
-  const onlySpain = codes.length > 0 && codes.every((c) => c === "ES")
   const hasSources = sources.length > 0
   const seed = hashSeed(dest ?? trip.name ?? trip.id)
   const utility = utilitySnippet(Boolean(trip.startDate), dest)
-
-  const first = onlySpain
-    ? dest
-      ? `¿Qué zonas no me puedo perder en ${dest}?`
-      : "¿Qué zonas no me puedo perder?"
-    : dest
-      ? `¿Necesito visado para ${dest}?`
-      : "¿Necesito visado para este viaje?"
 
   const flavours = dest
     ? [
@@ -172,14 +182,16 @@ function genericSuggestions(trip: Trip, sources: Source[]): string[] {
 
   const a = flavours[seed % flavours.length]!
   const third = [a, flavours[(seed + 3) % flavours.length]!, flavours[(seed + 1) % flavours.length]!]
-    .find((s) => s !== first && s !== utility) ?? FALLBACK[2]
+    .find((s) => s !== utility) ?? FALLBACK[2]
 
-  return [first, utility, third]
+  return [PLAN_TRIP_PROMPT, utility, third]
 }
 
 /**
- * Hasta 3 sugerencias de arranque (chat vacío): visado / tiempo / presupuesto…
- * Las de auditoría (huecos, ritmo, clima) las propone el modelo en followups.
+ * Hasta 3 sugerencias de arranque (chat vacío): planificar / tiempo o mochila /
+ * un sabor del destino, y «cómo funciona» en lugar del sabor si es su primera
+ * vez. Las de auditoría (huecos, ritmo, clima) las propone el modelo en
+ * followups.
  */
 export function buildAssistantSuggestions(
   trip: Trip | null | undefined,
@@ -187,6 +199,9 @@ export function buildAssistantSuggestions(
   options: AssistantSuggestionOptions = {},
 ): string[] {
   const used = options.usedPrompts ?? []
-  if (!trip) return filterUsed([...FALLBACK], used)
-  return filterUsed(genericSuggestions(trip, sources), used).slice(0, 3)
+  const base = trip ? genericSuggestions(trip, sources) : [...FALLBACK]
+  const prompts = options.firstTimer
+    ? [base[0]!, HOW_IT_WORKS_PROMPT, ...base.slice(1)]
+    : base
+  return filterUsed(prompts, used).slice(0, 3)
 }

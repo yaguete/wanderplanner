@@ -85,6 +85,7 @@
     "test:trip-share": "tsx lib/trip-share.test.ts",
     "test:trip-invite-url": "tsx lib/trip-invite-url.test.ts",
     "test:trip-tab": "tsx lib/trip-tab.test.ts",
+    "test:trip-entry-layout": "tsx lib/trip-entry-layout.test.ts",
     "test:trips-home-view": "tsx lib/trips-home-view.test.ts",
     "test:reference-feed": "tsx lib/reference-feed.test.ts",
     "test:suggested-references": "tsx lib/suggested-references.test.ts",

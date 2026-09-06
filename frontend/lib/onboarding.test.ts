@@ -249,6 +249,21 @@ assert.equal(onboardingCta({ sourceCount: 0, loadingPendingCount: 1 }), "view_ex
 assert.equal(onboardingCta({ sourceCount: 1, loadingPendingCount: 1 }), "view_extraction")
 assert.equal(onboardingCta({ sourceCount: 1, loadingPendingCount: 0 }), "view_trip")
 
+// Invitado / primer viaje: el último clic lleva al asistente, que es donde ya
+// ha aterrizado. Sin fuente ninguna sigue mandando pegar un artículo.
+assert.equal(
+  onboardingCta({ sourceCount: 1, loadingPendingCount: 0, assistantFirst: true }),
+  "open_assistant",
+)
+assert.equal(
+  onboardingCta({ sourceCount: 0, loadingPendingCount: 1, assistantFirst: true }),
+  "open_assistant",
+)
+assert.equal(
+  onboardingCta({ sourceCount: 0, loadingPendingCount: 0, assistantFirst: true }),
+  "add_source",
+)
+
 assert.equal(funnelOutcomeFrom("completed"), "completed")
 assert.equal(funnelOutcomeFrom("skipped"), "skipped")
 assert.equal(funnelOutcomeFrom("dismissed"), "skipped")

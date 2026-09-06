@@ -55,7 +55,8 @@ import { pinRootScrollerForCollapsedChrome } from "@/lib/mobile-browser-chrome"
 import { cn } from "@/lib/utils"
 import type { Source, UserDayItem } from "@/types/itinerary"
 import type { MoveParams } from "@/lib/itinerary-dnd"
-import { buildAssistantSuggestions } from "@/lib/assistant-suggestions"
+import { PLAN_TRIP_PROMPT, buildAssistantSuggestions } from "@/lib/assistant-suggestions"
+import { isAssistantFirstVisitor } from "@/lib/trip-entry-layout"
 import {
   buildAssistantDayItem,
   buildAssistantTransportStub,
@@ -116,15 +117,20 @@ function composerFollowupsFor(isStreaming: boolean, messages: ChatMessage[]): st
 const CHIP_CLASS =
   "rounded-full border border-border bg-background px-3 py-1.5 text-left text-xs text-primary transition-colors hover:border-transparent hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
 
+/** Chip pulsado cuyo envío está en espera (consentimiento o fuente en curso). */
+const CHIP_ARMED_CLASS = "border-primary/40 bg-primary/5 text-foreground"
+
 function SuggestionChips({
   prompts,
   layout,
   disabled,
+  armed,
   onPick,
 }: {
   prompts: readonly string[]
   layout: "stack" | "row"
   disabled: boolean
+  armed?: string | null
   onPick: (prompt: string) => void
 }) {
   if (prompts.length === 0) return null
@@ -143,7 +149,12 @@ function SuggestionChips({
           type="button"
           onClick={() => onPick(s)}
           disabled={disabled}
-          className={layout === "row" ? `shrink-0 ${CHIP_CLASS}` : CHIP_CLASS}
+          aria-busy={armed === s || undefined}
+          className={cn(
+            layout === "row" && "shrink-0",
+            CHIP_CLASS,
+            armed === s && CHIP_ARMED_CLASS,
+          )}
         >
           {s}
         </button>
@@ -508,15 +519,24 @@ export function AssistantPanelLayer({
   const [pendingDelete, setPendingDelete] = useState<AssistantConversationSummary | null>(null)
   /** `null` = aún no se sabe (primer render o consulta en vuelo): el gate no deja pulsar. */
   const [aiConsent, setAiConsent] = useState<boolean | null>(null)
+  /**
+   * Chip pulsado que aún no se puede enviar: falta el consentimiento de IA
+   * (el gate está justo debajo) o la primera fuente sigue extrayéndose. Se
+   * envía solo en cuanto deja de estar bloqueado.
+   */
+  const [armedPrompt, setArmedPrompt] = useState<string | null>(null)
   // Reset de vista solo al cambiar de viaje — no al abrir/cerrar el panel.
   const [viewTripId, setViewTripId] = useState(tripId)
   if (viewTripId !== tripId) {
     setViewTripId(tripId)
     setView("chat")
     setAssistantPendingId(null)
+    setArmedPrompt(null)
   }
 
   const {
+    trips,
+    isLoading: tripsLoading,
     getTrip,
     getTripSources,
     startSourceExtraction,
@@ -529,7 +549,7 @@ export function AssistantPanelLayer({
     addBasicToTrip,
     setTaskState,
   } = useTrips()
-  const { user } = useAuth()
+  const { user, isGuest } = useAuth()
   const userId = user?.id ?? null
 
   // El navegador responde al instante; si no sabe nada, se mira la constancia del
@@ -606,11 +626,55 @@ export function AssistantPanelLayer({
     deleteConversation,
   } = useAssistantChat(tripId, trip, sources)
 
+  const firstTimer = useMemo(
+    () =>
+      isAssistantFirstVisitor({
+        isGuest,
+        tripsLoading,
+        activeTripCount: trips.filter((t) => !t.archived).length,
+      }),
+    [isGuest, tripsLoading, trips],
+  )
   const suggestions = useMemo(
-    () => buildAssistantSuggestions(trip, sources),
-    [trip, sources],
+    () => buildAssistantSuggestions(trip, sources, { firstTimer }),
+    [trip, sources, firstTimer],
   )
   const composerFollowups = composerFollowupsFor(isStreaming, messages)
+
+  /**
+   * Primer impacto del CTA de un blog: el artículo se está extrayendo mientras
+   * el asistente ya está en pantalla. Planificar sin la fuente desperdicia el
+   * turno (el briefing viajaría con un viaje vacío), así que ese chip espera.
+   */
+  const sourceWarmup = Boolean(tripLoadingPending) && sources.length === 0
+  const promptBlocked = useCallback(
+    (prompt: string) =>
+      aiConsent !== true || (prompt === PLAN_TRIP_PROMPT && sourceWarmup),
+    [aiConsent, sourceWarmup],
+  )
+
+  const pickSuggestion = useCallback(
+    (prompt: string) => {
+      if (promptBlocked(prompt)) {
+        setArmedPrompt(prompt)
+        return
+      }
+      void send(prompt)
+    },
+    [promptBlocked, send],
+  )
+
+  useEffect(() => {
+    if (!armedPrompt) return
+    // Si escribe por su cuenta antes de que se desbloquee, el chip caduca.
+    if (messages.length > 0 || promptBlocked(armedPrompt)) {
+      if (messages.length > 0) setArmedPrompt(null)
+      return
+    }
+    setArmedPrompt(null)
+    void send(armedPrompt)
+  }, [armedPrompt, messages.length, promptBlocked, send])
+
   const staleActionIdKey = useMemo(() => {
     if (!trip) return ""
     const ids: string[] = []
@@ -1248,6 +1312,12 @@ export function AssistantPanelLayer({
                   </div>
                 ) : null}
 
+                {armedPrompt && sourceWarmup && !statusLabel ? (
+                  <div className="flex justify-start">
+                    <StatusPill label="Leyendo el artículo antes de responderte…" />
+                  </div>
+                ) : null}
+
                 {error ? (
                   <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                     {error}
@@ -1290,8 +1360,13 @@ export function AssistantPanelLayer({
               bottom: isSection && keyboardOpen ? keyboardInset : 0,
             }}
           >
-            {aiConsent === true &&
-            messages.length === 0 &&
+            {/*
+              Los chips de arranque se ven también sin consentimiento: el
+              invitado que aterriza aquí tiene que leer para qué sirve esto
+              antes del aviso legal, no un aviso legal a secas. Al pulsar uno
+              queda armado y se envía en cuanto acepta.
+            */}
+            {messages.length === 0 &&
             suggestions.length > 0 &&
             (hydrated || canShowSuggestionsEarly) ? (
               <div className="pointer-events-auto mb-2">
@@ -1299,7 +1374,8 @@ export function AssistantPanelLayer({
                   prompts={suggestions}
                   layout="stack"
                   disabled={!trip}
-                  onPick={(s) => void send(s)}
+                  armed={armedPrompt}
+                  onPick={pickSuggestion}
                 />
               </div>
             ) : aiConsent === true && composerFollowups.length > 0 ? (
