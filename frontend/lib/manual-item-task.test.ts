@@ -25,8 +25,7 @@ import {
     cancellable: null,
     needsReservation: false,
   })
-  assert.deepEqual(patch, { status: "pending", cost: 12 })
-  assert.notEqual(patch?.status, "notNeeded")
+  assert.deepEqual(patch, { status: "notNeeded", cost: 12 })
 }
 
 {

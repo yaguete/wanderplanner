@@ -732,12 +732,8 @@ export default function ItineraryPanel({
     desktopSolo && isRoute && (listMode === "calendar" || listMode === "map")
   const constrainCanvas = canvasWideToggle && !wideCanvas
 
-  const handleDayListAction = () => {
-    if (canRemoveSelectedDays) {
-      setPendingDayAction({ kind: "remove", dayIds: Array.from(selectedDayIds) })
-    } else {
-      addDay(tripId)
-    }
+  const handleRemoveSelectedDays = () => {
+    setPendingDayAction({ kind: "remove", dayIds: Array.from(selectedDayIds) })
   }
 
   const confirmPendingDayAction = () => {
@@ -1012,35 +1008,19 @@ export default function ItineraryPanel({
                   <Plus className="h-3.5 w-3.5 shrink-0" />
                   Añadir ítem
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDayListAction}
-                  className={cn(
-                    "inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium transition-colors",
-                    canRemoveSelectedDays
-                      ? "text-destructive hover:text-destructive/90"
-                      : "text-foreground hover:text-muted-foreground",
-                  )}
-                  aria-label={
-                    canRemoveSelectedDays
-                      ? selectedDayIds.size > 1
-                        ? "Eliminar días"
-                        : "Eliminar día"
-                      : "Añadir día"
-                  }
-                >
-                  {canRemoveSelectedDays ? (
-                    <>
-                      <X className="h-3.5 w-3.5 shrink-0" />
-                      {selectedDayIds.size > 1 ? "Eliminar días" : "Eliminar día"}
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-3.5 w-3.5 shrink-0" />
-                      Añadir día
-                    </>
-                  )}
-                </button>
+                {canRemoveSelectedDays ? (
+                  <button
+                    type="button"
+                    onClick={handleRemoveSelectedDays}
+                    className="inline-flex min-h-8 shrink-0 items-center gap-1 text-xs font-medium text-destructive transition-colors hover:text-destructive/90"
+                    aria-label={
+                      selectedDayIds.size > 1 ? "Eliminar días" : "Eliminar día"
+                    }
+                  >
+                    <X className="h-3.5 w-3.5 shrink-0" />
+                    {selectedDayIds.size > 1 ? "Eliminar días" : "Eliminar día"}
+                  </button>
+                ) : null}
               </div>
             ) : null}
             </div>
@@ -1131,6 +1111,18 @@ export default function ItineraryPanel({
                   />
                 ) : null,
               )}
+              </div>
+              <div className="panel-column mt-4 flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 px-2.5 text-xs"
+                  onClick={() => addDay(tripId)}
+                  aria-label="Añadir día"
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Añadir día
+                </Button>
               </div>
             </div>
           ) : listMode === "calendar" ? (

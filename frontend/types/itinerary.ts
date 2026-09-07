@@ -141,6 +141,7 @@ export interface ShareCard {
 
 /**
  * Estado de una tarea. `notNeeded` = "esto no hay que reservarlo" (triaje);
+ * el coste, si lo hay, sigue contando en el presupuesto (activity/food).
  * `booked` = reservado (o «hecho» en trámites); `paid` = pagado.
  * Los valores son excluyentes. Ausencia en el mapa = nunca tocada.
  */

@@ -1,6 +1,7 @@
 /**
  * Techo, veredicto, cobertura y cuenta del viaje. Puro: sin I/O, sin React, sin Intl.
- * Totales solo del bucket `main` (igual que las pestañas); triage/dismissed fuera.
+ * Totales del bucket `main` más activity/food «sin reserva» (`dismissed`):
+ * no reservar no implica no tener coste. Triage y el resto de dismissed fuera.
  * No reimplementa la agregación ni el plegado ida/vuelta: parte de `buildTripTasks`.
  */
 import type {
@@ -58,7 +59,7 @@ export type TripBudgetView = {
   caps: BudgetCaps
   counted: number
   split: { estimated: number; booked: number; paid: number }
-  /** Gestiones `main` con precio / total `main`. */
+  /** Gestiones contabilizadas con precio / total (main + activity/food sin reserva). */
   coverage: { priced: number; total: number }
   verdict: BudgetVerdict
   rates: {
@@ -69,7 +70,7 @@ export type TripBudgetView = {
   }
   /** Con precio, orden TASK_CATEGORY_ORDER; líneas desc por importe. */
   groups: BudgetGroup[]
-  /** `main` sin importe. */
+  /** Contabilizadas sin importe. */
   unpriced: UnpricedGroup[]
 }
 
@@ -279,6 +280,16 @@ function groupsFromLines(
   })
 }
 
+/**
+ * Activity/food marcados «sin reserva» siguen en el presupuesto: el coste
+ * (o su ausencia) es independiente de si hay que reservar.
+ */
+function countsTowardBudget(task: DerivedTripTask): boolean {
+  if (task.bucket === "main") return true
+  if (task.bucket !== "dismissed" || task.origin !== "dayItem") return false
+  return task.category === "activity" || task.category === "food"
+}
+
 function groupsFromUnpriced(tasks: DerivedTripTask[]): UnpricedGroup[] {
   const buckets = new Map<TaskGroupCategory, DerivedTripTask[]>()
   for (const task of tasks) {
@@ -296,11 +307,11 @@ function groupsFromUnpriced(tasks: DerivedTripTask[]): UnpricedGroup[] {
 
 export function buildTripBudgetView(trip: Trip): TripBudgetView {
   const tasks = buildTripTasks(trip)
-  const main = tasks.filter((t) => t.bucket === "main")
+  const countedTasks = tasks.filter(countsTowardBudget)
 
   const pricedLines: BudgetLine[] = []
   const unpricedTasks: DerivedTripTask[] = []
-  for (const task of main) {
+  for (const task of countedTasks) {
     const line = toPricedLine(task)
     if (line) pricedLines.push(line)
     else unpricedTasks.push(task)
@@ -343,7 +354,7 @@ export function buildTripBudgetView(trip: Trip): TripBudgetView {
     caps,
     counted,
     split,
-    coverage: { priced: pricedLines.length, total: main.length },
+    coverage: { priced: pricedLines.length, total: countedTasks.length },
     verdict,
     rates: { perDay, perTraveler, perTravelerDay, capPerDay },
     groups: groupsFromLines(pricedLines, caps.byCategory),

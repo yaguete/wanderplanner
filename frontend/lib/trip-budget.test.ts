@@ -55,6 +55,16 @@ function paid(cost: number): TripTaskState {
   }
 }
 
+function notNeeded(cost: number | null): TripTaskState {
+  return {
+    status: "notNeeded",
+    cost,
+    cancellable: null,
+    notes: null,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  }
+}
+
 function makeTrip(overrides: Partial<Trip> = {}): Trip {
   return {
     id: "trip-1",
@@ -328,6 +338,43 @@ assert.equal(round2(0.1 + 0.2), 0.3)
   assert.equal(view.counted, 0)
   assert.ok(!view.groups.some((g) => g.lines.some((l) => l.task.id === "skip")))
   assert.ok(!view.unpriced.some((g) => g.tasks.some((t) => t.id === "skip")))
+}
+
+{
+  // Activity «sin reserva» sin importe → hueco de presupuesto.
+  const view = buildTripBudgetView(makeTrip({ tasks: { [activityKey]: notNeeded(null) } }))
+  assert.equal(view.coverage.priced, 0)
+  assert.equal(view.coverage.total, 3)
+  assert.ok(view.unpriced.some((g) => g.tasks.some((t) => t.id === activityKey)))
+}
+
+{
+  // Activity «sin reserva» con importe → cuenta (estimado).
+  const view = buildTripBudgetView(makeTrip({ tasks: { [activityKey]: notNeeded(25) } }))
+  assert.equal(view.counted, 25)
+  assert.equal(view.split.estimated, 25)
+  assert.equal(view.coverage.priced, 1)
+  assert.equal(view.coverage.total, 3)
+  const act = view.groups.find((g) => g.category === "activity")
+  assert.ok(act)
+  assert.equal(act!.subtotal, 25)
+  assert.ok(!view.unpriced.some((g) => g.tasks.some((t) => t.id === activityKey)))
+}
+
+{
+  const base = makeTrip()
+  const foodItem = dayItem({ id: "food-1", type: "food", name: "The Lock Inn" })
+  const foodKey = taskKeyForItem(foodItem)
+  const view = buildTripBudgetView(
+    makeTrip({
+      days: [
+        base.days[0],
+        { ...base.days[1], items: [...base.days[1].items, foodItem] },
+      ],
+      tasks: { [foodKey]: notNeeded(null) },
+    }),
+  )
+  assert.ok(view.unpriced.some((g) => g.tasks.some((t) => t.id === foodKey)))
 }
 
 {

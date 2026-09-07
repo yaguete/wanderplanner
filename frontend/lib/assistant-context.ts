@@ -187,7 +187,7 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
   }
   lines.push("")
 
-  // Totales alineados con la vista de presupuesto (solo bucket `main`).
+  // Totales alineados con la vista de presupuesto.
   lines.push(formatBudgetBriefingMarkdown(buildTripBudgetView(trip)))
   lines.push("")
 

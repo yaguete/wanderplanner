@@ -5,10 +5,9 @@
  * con `taskKeyForItem` del ítem nuevo.
  *
  * Trampas:
- * - `notNeeded` + coste = dinero invisible (bucket dismissed). Si hay importe,
- *   nunca se escribe `notNeeded`. Editar un ítem ya marcado «No hace falta»
- *   **con un importe** lo resucita a `pending`: el coste manda, para que
- *   cuente en el presupuesto. Es lo querido.
+ * - `notNeeded` («sin reserva») y el coste son independientes: un restaurante
+ *   o una actividad sin reserva pueden llevar importe y cuentan en presupuesto.
+ *   Reservado/Pagado sí gana — ahí ya hay reserva.
  * - Ida/vuelta en avión espejadas: `foldMirroredFlightReturnCost` borra la
  *   clave entera `leg:return` (no solo el coste). El diálogo de vuelta no
  *   pinta el bloque de tarea ni escribe `taskPatch`; estado y cancelabilidad
@@ -66,15 +65,15 @@ export function omitReturnLegTask(params: {
 }
 
 /**
- * Estado persistible del borrador. Reservado/Pagado gana. Con coste, nunca
- * `notNeeded` («No hace falta» + 12 € → `pending`, para que cuente).
+ * Estado persistible del borrador. Reservado/Pagado gana. «Sin reserva» se
+ * conserva aunque haya importe (el presupuesto lo cuenta igual).
  */
 export function resolveManualDraftStatus(
   draft: ManualTaskDraft,
 ): TripTaskStatus | undefined {
   if (draft.status === "booked" || draft.status === "paid") return draft.status
-  if (draft.cost != null) return "pending"
   if (draft.needsReservation === false) return "notNeeded"
+  if (draft.cost != null) return "pending"
   if (draft.needsReservation === true) return "pending"
   if (draft.cancellable != null) return "pending"
   return undefined
