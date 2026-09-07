@@ -1178,18 +1178,20 @@ export default function ItineraryPanel({
                 ) : null,
               )}
               </div>
-              <div className="panel-column mt-4 flex justify-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-8 px-2.5 text-xs"
-                  onClick={() => addDay(tripId)}
-                  aria-label="Añadir día"
-                >
-                  <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Añadir día
-                </Button>
-              </div>
+              {focusDayNumber == null ? (
+                <div className="panel-column mt-4 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 px-2.5 text-xs"
+                    onClick={() => addDay(tripId)}
+                    aria-label="Añadir día"
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Añadir día
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : listMode === "calendar" ? (
             // Móvil: alto propio, porque el panel ya no acota (el documento
