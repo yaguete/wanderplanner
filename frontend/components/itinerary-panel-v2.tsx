@@ -254,10 +254,13 @@ export default function ItineraryPanel({
     isMobile ? activeOnMobile : true,
     !isMobile,
   )
-  const dateSub = useMemo(
-    () => (trip ? formatTripDates(trip.startDate, trip.endDate) : null),
-    [trip],
-  )
+  const dateSub = useMemo(() => {
+    if (!trip) return null
+    const range = formatTripDates(trip.startDate, trip.endDate)
+    if (!range) return null
+    const n = trip.days.length
+    return `${range} (${n} ${n === 1 ? "día" : "días"})`
+  }, [trip])
   const flightSearchTrip = useMemo(
     () => ({
       startDate: trip?.startDate ?? null,
@@ -868,8 +871,7 @@ export default function ItineraryPanel({
 
           <div className="mt-3 flex min-h-7 items-center gap-2">
             <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums">
-              {itemCount} {itemCount === 1 ? "ítem" : "ítems"} · {trip.days.length}{" "}
-              {trip.days.length === 1 ? "día" : "días"}
+              {itemCount} {itemCount === 1 ? "ítem" : "ítems"}
               {routeTaskTotals ? <TripTasksManagedFragment totals={routeTaskTotals} /> : null}
             </p>
             {planSurface === "plan" ? (
