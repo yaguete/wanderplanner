@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Cromo del mapa (dropdowns + preferencias) **sin** mapbox-gl.
+ * Cromo de Ruta (dropdowns + preferencias) **sin** mapbox-gl.
  * El canvas GL vive en `itinerary-map-view.tsx` y se carga con `next/dynamic`
  * al pasar a Mapa: si esto se importara desde ahí, Lista pagaría 1.7 MB de parseo.
  */
@@ -10,45 +10,57 @@ import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  ROUTE_ITEM_CATEGORIES,
+  ROUTE_ITEM_CATEGORY_LABELS,
+  allRouteItemCategoriesSelected,
+  parseRouteItemFilter,
+  routeItemFilterTriggerLabel,
+  toggleAllRouteItemCategories,
+  toggleRouteItemCategory,
+  type RouteItemCategory,
+} from "@/lib/route-item-filter"
 
-const MAP_MODE_KEY = "wp-map-mode"
 const PLACES_LINE_STYLE_KEY = "wp-map-places-line"
+const ROUTE_ITEM_FILTER_KEY = "wp-route-item-filter"
 
-export type MapViewMode = "transport" | "places"
 export type PlacesLineStyle = "straight" | "road"
 
-const MAP_MODE_LABELS: Record<MapViewMode, string> = {
-  places: "Recorrido",
-  transport: "Desplazamientos",
-}
+export type { RouteItemCategory }
 
 const PLACES_LINE_STYLE_LABELS: Record<PlacesLineStyle, string> = {
   straight: "Línea recta",
   road: "Ajustar a carretera",
 }
 
-/** Preferencia guardada; por defecto Recorrido. Seguro en SSR (sin localStorage). */
-export function readStoredMapMode(): MapViewMode {
-  if (typeof window === "undefined") return "places"
+/** Triggers de día / categoría / trazado: tinta de primer plano, no muted. */
+const ROUTE_TOOLBAR_TRIGGER_CLASS = cn(
+  "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-xs font-semibold transition-colors",
+  "text-foreground hover:text-foreground/70",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+)
+
+export function readStoredRouteItemFilter(): RouteItemCategory[] | null {
+  if (typeof window === "undefined") return null
   try {
-    const v = localStorage.getItem(MAP_MODE_KEY)
-    if (v === "transport") return "transport"
-    if (v === "places") return "places"
-    return "places"
+    const raw = localStorage.getItem(ROUTE_ITEM_FILTER_KEY)
+    if (raw == null) return null
+    return parseRouteItemFilter(JSON.parse(raw))
   } catch {
-    return "places"
+    return null
   }
 }
 
-export function persistMapMode(mode: MapViewMode): void {
+export function persistRouteItemFilter(selected: readonly RouteItemCategory[]): void {
   try {
-    localStorage.setItem(MAP_MODE_KEY, mode)
+    localStorage.setItem(ROUTE_ITEM_FILTER_KEY, JSON.stringify(selected))
   } catch {
     // ignore
   }
@@ -71,7 +83,7 @@ export function persistPlacesLineStyle(style: PlacesLineStyle): void {
   }
 }
 
-/** Trazado del recorrido: línea recta o carretera. Mismo cromo que Recorrido. */
+/** Trazado del recorrido: línea recta o carretera. */
 export function PlacesLineStyleDropdown({
   value,
   loading = false,
@@ -88,11 +100,7 @@ export function PlacesLineStyleDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={cn(
-            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
-            "text-muted-foreground hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
+          className={ROUTE_TOOLBAR_TRIGGER_CLASS}
           aria-label="Trazado del recorrido"
           title={title}
         >
@@ -119,44 +127,54 @@ export function PlacesLineStyleDropdown({
   )
 }
 
-/** Dropdown de modo del mapa (mismo cromo que Cancelabilidad). */
-export function MapModeDropdown({
+/** Multiselector de categorías de la Ruta (lista y mapa). */
+export function RouteItemFilterDropdown({
   value,
   onChange,
 }: {
-  value: MapViewMode
-  onChange: (next: MapViewMode) => void
+  value: ReadonlySet<RouteItemCategory>
+  onChange: (next: Set<RouteItemCategory>) => void
 }) {
+  const allSelected = allRouteItemCategoriesSelected(value)
+  const showAllState: boolean | "indeterminate" = allSelected
+    ? true
+    : value.size === 0
+      ? false
+      : "indeterminate"
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={cn(
-            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
-            "text-muted-foreground hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-          aria-label="Modo del mapa"
+          className={ROUTE_TOOLBAR_TRIGGER_CLASS}
+          aria-label="Filtrar por categoría"
         >
-          {MAP_MODE_LABELS[value]}
+          {routeItemFilterTriggerLabel(value)}
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[10.5rem]">
-        <DropdownMenuRadioGroup
-          value={value}
-          onValueChange={(v) => {
-            if (v === "places" || v === "transport") onChange(v)
-          }}
+      <DropdownMenuContent align="start" className="min-w-[12rem]">
+        <DropdownMenuCheckboxItem
+          checked={showAllState}
+          onCheckedChange={() => onChange(toggleAllRouteItemCategories(value))}
+          onSelect={(e) => e.preventDefault()}
+          className="cursor-pointer text-xs"
         >
-          <DropdownMenuRadioItem value="places" className="text-xs">
-            Recorrido
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="transport" className="text-xs">
-            Desplazamientos
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
+          Mostrar todo
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        {ROUTE_ITEM_CATEGORIES.map((category) => (
+          <DropdownMenuCheckboxItem
+            key={category}
+            checked={value.has(category)}
+            onCheckedChange={() => onChange(toggleRouteItemCategory(value, category))}
+            onSelect={(e) => e.preventDefault()}
+            className="cursor-pointer text-xs"
+          >
+            {ROUTE_ITEM_CATEGORY_LABELS[category]}
+          </DropdownMenuCheckboxItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -171,7 +189,7 @@ export type MapDayOption = {
 
 const MAP_DAY_ALL = "all"
 
-/** Dropdown de día de la ruta (lista y mapa; mismo cromo que Recorrido / Desplazamientos). */
+/** Dropdown de día de la ruta (lista y mapa). */
 export function MapDayDropdown({
   days,
   value,
@@ -205,11 +223,7 @@ export function MapDayDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={cn(
-            "inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium transition-colors",
-            "text-muted-foreground hover:text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
+          className={ROUTE_TOOLBAR_TRIGGER_CLASS}
           aria-label={ariaLabel}
         >
           {triggerLabel}

@@ -1,9 +1,9 @@
 "use client"
 
 /**
- * Mapa del itinerario: dos modos excluyentes.
- * - Desplazamientos: tramos de transporte + anclas de ida/vuelta (T4B.3 §9.12).
- * - Recorrido: lugares (stay/food/activity) en orden, geodésica por defecto.
+ * Mapa del itinerario. Las categorías visibles las decide el panel
+ * (alojamientos / actividades / lugares / restaurantes / desplazamientos):
+ * pines y línea de recorrido para las de lugar; tramos + anclas para transporte.
  * Ciclo de vida: el mapa se instancia una vez; fuentes/marcadores se actualizan.
  */
 import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react"
@@ -69,7 +69,6 @@ import type { RouteMode } from "@/types/itinerary"
 import { AdjustLocationDialog } from "@/components/adjust-location-dialog"
 import {
   type ItineraryMapPoint,
-  type MapViewMode,
   type PlacesLineStyle,
 } from "@/components/itinerary-map-controls"
 
@@ -175,7 +174,6 @@ function ensureMapLayers(map: mapboxgl.Map) {
       layout: {
         "line-cap": "round",
         "line-join": "round",
-        // Recorrido es el modo por defecto.
         visibility: "none",
       },
       paint: {
@@ -273,10 +271,10 @@ export function ItineraryMapView({
   transportDistances,
   destination,
   countryCodes = [],
-  mapMode,
+  showPlaces = true,
+  showTransport = true,
   focusDayNumber = null,
   focusDayLabel = null,
-  onMapModeChange,
   onPersistItemCoords,
   incompleteTransports = [],
   onFixTransport,
@@ -284,21 +282,22 @@ export function ItineraryMapView({
   onPlacesLineStyleChange,
   onPlacesLineLoadingChange,
 }: {
-  /** Lugares del recorrido: stay / food / activity (sin hubs). Viaje entero. */
+  /** Lugares del recorrido: stay / food / activity (sin hubs). Ya filtrados. */
   places: ItineraryMapPoint[]
-  /** Anclas de llegada/salida para el modo Desplazamientos (ya filtradas). */
+  /** Anclas de llegada/salida (ya filtradas). */
   hubs?: ItineraryMapPoint[]
   segments?: ItineraryMapSegment[]
   transportDistances: TransportDistances
   destination: string
   countryCodes?: string[]
-  /** Modo controlado desde el panel (dropdown junto a Lista · Calendario · Mapa). */
-  mapMode: MapViewMode
+  /** Pines + línea de recorrido. */
+  showPlaces?: boolean
+  /** Tramos de transporte + anclas de ida/vuelta. */
+  showTransport?: boolean
   /** Día 1-based, o null = ruta completa. */
   focusDayNumber?: DayScope
   /** Etiqueta corta para el overlay vacío, p. ej. "Día 5". */
   focusDayLabel?: string | null
-  onMapModeChange?: (next: MapViewMode) => void
   /** Guarda coords en el ítem (salida de «Ajustar ubicación»). No pisa `region`. */
   onPersistItemCoords?: (itemId: string, coords: LngLat) => void
   incompleteTransports?: IncompleteMapTransport[]
@@ -946,7 +945,7 @@ export function ItineraryMapView({
 
   useEffect(() => {
     closeHoverPopup()
-  }, [mapMode, focusDayNumber, closeHoverPopup])
+  }, [showPlaces, showTransport, focusDayNumber, closeHoverPopup])
 
   // ── Ciclo de vida del mapa: una sola instancia ─────────────────────────────
   useEffect(() => {
@@ -1077,12 +1076,12 @@ export function ItineraryMapView({
     }
   }, [mapTheme])
 
-  // Visibilidad por modo.
+  // Visibilidad de capas según el filtro de categorías.
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady) return
-    const transportVis = mapMode === "transport" ? "visible" : "none"
-    const placesVis = mapMode === "places" ? "visible" : "none"
+    const transportVis = showTransport ? "visible" : "none"
+    const placesVis = showPlaces ? "visible" : "none"
     if (map.getLayer("transport-segments-line")) {
       map.setLayoutProperty("transport-segments-line", "visibility", transportVis)
     }
@@ -1092,7 +1091,7 @@ export function ItineraryMapView({
     if (map.getLayer("places-route-long-line")) {
       map.setLayoutProperty("places-route-long-line", "visibility", placesVis)
     }
-  }, [mapMode, mapReady])
+  }, [showPlaces, showTransport, mapReady])
 
   // Fuente de desplazamientos.
   useEffect(() => {
@@ -1116,7 +1115,7 @@ export function ItineraryMapView({
     setSourceData(map, "places-route-long", base.longHop)
   }, [mapReady, placesRoute, placesRoadGeometry, mapTheme])
 
-  // Marcadores: diff por id; en Recorrido usa ready|refreshing (nunca vaciar en loading).
+  // Marcadores: diff por id; en el recorrido usa ready|refreshing (nunca vaciar en loading).
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady) return
@@ -1131,7 +1130,7 @@ export function ItineraryMapView({
     }
     const visible: Visible[] = []
 
-    if (mapMode === "transport") {
+    if (showTransport) {
       for (const h of hubs) {
         if (
           h.coords &&
@@ -1177,7 +1176,8 @@ export function ItineraryMapView({
           })
         }
       }
-    } else {
+    }
+    if (showPlaces) {
       for (const r of pinResolved) {
         const drawn = drawnStopNumberById.get(r.point.id)
         const order = itineraryOrderById.get(r.point.id)
@@ -1294,7 +1294,8 @@ export function ItineraryMapView({
     }
   }, [
     mapReady,
-    mapMode,
+    showPlaces,
+    showTransport,
     hubs,
     hubsKey,
     segments,
@@ -1312,24 +1313,24 @@ export function ItineraryMapView({
 
   // fitBounds: una vez por modo + conjunto de contenido (no en cada refresh de geocode).
   const placesResolvedIds = visibleResolved.map((r) => r.point.id).join(",")
-  const fitContentKey =
-    mapMode === "transport"
-      ? `t:${segmentsKey}|${hubsKey}`
-      : placesResolvedIds
-        ? `p:${placesResolvedIds}`
-        : null
+  const fitContentKey = [
+    showTransport ? `t:${segmentsKey}|${hubsKey}` : null,
+    showPlaces && placesResolvedIds ? `p:${placesResolvedIds}` : null,
+  ]
+    .filter(Boolean)
+    .join("+") || null
 
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !mapReady || mapError || !fitContentKey) return
 
-    const signature = `${mapMode}|${fitContentKey}`
+    const signature = `${showPlaces ? "p" : ""}${showTransport ? "t" : ""}|${fitContentKey}`
     if (fittedSignatureRef.current === signature) return
 
     const bounds = new mapboxgl.LngLatBounds()
     let hasBounds = false
 
-    if (mapMode === "transport") {
+    if (showTransport) {
       for (const h of hubs) {
         if (h.coords && Number.isFinite(h.coords.lng) && Number.isFinite(h.coords.lat)) {
           bounds.extend([h.coords.lng, h.coords.lat])
@@ -1341,7 +1342,8 @@ export function ItineraryMapView({
         bounds.extend([s.to.lng, s.to.lat])
         hasBounds = true
       }
-    } else {
+    }
+    if (showPlaces) {
       for (const r of visibleResolved) {
         const c = pinCoord(r)
         bounds.extend([c.lng, c.lat])
@@ -1360,12 +1362,12 @@ export function ItineraryMapView({
       maxZoom: focusDayNumber == null ? 12 : 15,
       duration,
     })
-  }, [mapReady, mapError, mapMode, fitContentKey, hubs, segments, visibleResolved, focusDayNumber])
+  }, [mapReady, mapError, showPlaces, showTransport, fitContentKey, hubs, segments, visibleResolved, focusDayNumber])
 
   const showMapMetrics = mapReady && !mapError
   const canAdjustPlacesToRoad =
     showMapMetrics &&
-    mapMode === "places" &&
+    showPlaces &&
     placesRoute.legs.some((l: PlacesRouteLeg) => l.kind === "road-candidate")
 
   useEffect(() => {
@@ -1406,16 +1408,13 @@ export function ItineraryMapView({
   }
 
   const roadable = segments.filter((s) => modeAllowsRoadDirections(s.mode))
-  const hasTransportContent = segments.length > 0 || hubs.length > 0
-  const hasPlacesContent = visiblePlaces.length > 0
-  const modeEmpty =
-    mapMode === "transport" ? !hasTransportContent : !hasPlacesContent
-  const otherModeHasContent =
-    mapMode === "transport" ? hasPlacesContent : hasTransportContent
+  const hasTransportContent = showTransport && (segments.length > 0 || hubs.length > 0)
+  const hasPlacesContent = showPlaces && visiblePlaces.length > 0
+  const modeEmpty = !hasTransportContent && !hasPlacesContent
 
   const failed = visibleFailed
   const placesRouteIncomplete =
-    mapMode === "places" &&
+    showPlaces &&
     (placesRoute.skipped.length > 0 || failed.length > 0)
 
   const placesTotalLabel = (() => {
@@ -1449,34 +1448,25 @@ export function ItineraryMapView({
 
   const dayScoped = focusDayNumber != null && focusDayLabel
   const emptyCopy = (() => {
-    if (mapMode === "transport" && visibleIncomplete.length > 0) {
+    if (!showPlaces && !showTransport) {
+      return "Ninguna categoría seleccionada."
+    }
+    if (showTransport && !hasPlacesContent && visibleIncomplete.length > 0) {
       return visibleIncomplete.length === 1
         ? "Fija origen y destino para ver el tramo en el mapa."
         : `Fija origen y destino de ${visibleIncomplete.length} desplazamientos para verlos en el mapa.`
     }
     if (dayScoped) {
       const day = focusDayLabel.toLowerCase()
-      return mapMode === "transport"
-        ? `El ${day} no tiene desplazamientos estructurados.`
-        : `El ${day} no tiene lugares en el mapa.`
+      return `El ${day} no tiene ítems visibles con este filtro.`
     }
-    return mapMode === "transport"
-      ? "Aún no has añadido desplazamientos estructurados al itinerario."
-      : "Aún no has añadido lugares al itinerario."
+    return "No hay ítems visibles con este filtro."
   })()
-  const emptyHint =
-    dayScoped && otherModeHasContent
-      ? mapMode === "transport"
-        ? "Este día sí tiene lugares."
-        : "Este día sí tiene desplazamientos."
-      : null
-  const switchMode: MapViewMode = mapMode === "transport" ? "places" : "transport"
-  const switchLabel = mapMode === "transport" ? "Ver recorrido" : "Ver desplazamientos"
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3" role="region" aria-label="Itinerario en el mapa">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground" aria-live="polite">
-        {showMapMetrics && mapMode === "transport" ? (
+        {showMapMetrics && showTransport ? (
           <>
             {(transportKmSummary || undrawnSummary) && (
               <p className="m-0 tabular-nums">
@@ -1515,7 +1505,7 @@ export function ItineraryMapView({
           </>
         ) : null}
 
-        {showMapMetrics && mapMode === "places" ? (
+        {showMapMetrics && showPlaces ? (
           <>
             {(() => {
               const parts: string[] = []
@@ -1547,7 +1537,7 @@ export function ItineraryMapView({
           </>
         ) : null}
 
-        {mapMode === "places" && failed.length > 0 && (
+        {showPlaces && failed.length > 0 && (
           <details
             className="rounded-md border border-warning-border bg-warning-surface px-2.5 py-1.5 text-warning-foreground"
             id={describeId}
@@ -1569,13 +1559,13 @@ export function ItineraryMapView({
           </details>
         )}
 
-        {mapMode === "places" && isGeocoding && !geocodeResult ? (
+        {showPlaces && isGeocoding && !geocodeResult ? (
           <span className="inline-flex items-center gap-1.5">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Localizando lugares…
           </span>
         ) : null}
-        {mapMode === "places" && geocode.status === "refreshing" ? (
+        {showPlaces && geocode.status === "refreshing" ? (
           <span className="inline-flex items-center gap-1.5">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Actualizando…
@@ -1592,8 +1582,7 @@ export function ItineraryMapView({
         ) : modeEmpty ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/80 px-6 text-center text-sm text-muted-foreground backdrop-blur-[1px]">
             <p className="m-0">{emptyCopy}</p>
-            {emptyHint ? <p className="m-0">{emptyHint}</p> : null}
-            {mapMode === "transport" && visibleIncomplete.length > 0 && onFixTransport ? (
+            {showTransport && visibleIncomplete.length > 0 && onFixTransport ? (
               <button
                 type="button"
                 className="rounded-md border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
@@ -1605,15 +1594,6 @@ export function ItineraryMapView({
                 {visibleIncomplete.length === 1
                   ? "Completar origen y destino"
                   : "Completar el primero"}
-              </button>
-            ) : null}
-            {emptyHint && onMapModeChange ? (
-              <button
-                type="button"
-                className="rounded-md border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
-                onClick={() => onMapModeChange(switchMode)}
-              >
-                {switchLabel}
               </button>
             ) : null}
           </div>

@@ -51,6 +51,7 @@ jobs:
       - run: npm run test:source-item-groups
       - run: npm run test:source-route-import
       - run: npm run test:map-day-scope
+      - run: npm run test:route-item-filter
       - run: npm run test:geocode-validate
       - run: npm run test:geocode-diagnostics
       - run: npm run test:place-suggest-rank

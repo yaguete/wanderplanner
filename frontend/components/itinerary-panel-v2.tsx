@@ -81,14 +81,13 @@ import {
 } from "@/components/itinerary-view-mode-tabs"
 import {
   MapDayDropdown,
-  MapModeDropdown,
-  persistMapMode,
   persistPlacesLineStyle,
+  persistRouteItemFilter,
   PlacesLineStyleDropdown,
-  readStoredMapMode,
   readStoredPlacesLineStyle,
+  readStoredRouteItemFilter,
+  RouteItemFilterDropdown,
   type ItineraryMapPoint,
-  type MapViewMode,
   type PlacesLineStyle,
 } from "@/components/itinerary-map-controls"
 import {
@@ -125,6 +124,13 @@ import {
   inDayScope,
   mappableCountsByDay,
 } from "@/lib/map-day-scope"
+import {
+  ALL_ROUTE_ITEM_CATEGORIES,
+  itemMatchesRouteFilter,
+  routeFilterShowsPlaces,
+  routeFilterShowsTransport,
+  type RouteItemCategory,
+} from "@/lib/route-item-filter"
 import {
   TripTasksManagedFragment,
   TripTasksPanel,
@@ -313,17 +319,19 @@ export default function ItineraryPanel({
   const [planSurface, setPlanSurface] = useState<"plan" | "budget">("plan")
   /** Lienzo de Calendario/Mapa a sangre. Solo aplica con `desktopSolo`. */
   const [wideCanvas, setWideCanvas] = useState(false)
-  // Recorrido por defecto; preferencia de localStorage tras hidratar.
-  const [mapMode, setMapMode] = useState<MapViewMode>("places")
+  // Todas las categorías por defecto; preferencia de localStorage tras hidratar.
+  const [routeItemFilter, setRouteItemFilter] = useState<RouteItemCategory[]>(
+    () => [...ALL_ROUTE_ITEM_CATEGORIES],
+  )
   const [focusDayId, setFocusDayId] = useState<string | null>(null)
   const [placesLineStyle, setPlacesLineStyle] = useState<PlacesLineStyle>("straight")
   const [placesLineLoading, setPlacesLineLoading] = useState(false)
   const pendingScrollDayIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const stored = readStoredMapMode()
+    const stored = readStoredRouteItemFilter()
     queueMicrotask(() => {
-      if (stored !== "places") setMapMode(stored)
+      if (stored !== null) setRouteItemFilter(stored)
     })
   }, [])
 
@@ -353,10 +361,15 @@ export default function ItineraryPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip?.id])
 
-  const handleMapModeChange = useCallback((next: MapViewMode) => {
-    setMapMode(next)
-    persistMapMode(next)
+  const handleRouteItemFilterChange = useCallback((next: Set<RouteItemCategory>) => {
+    const list = ALL_ROUTE_ITEM_CATEGORIES.filter((c) => next.has(c))
+    setRouteItemFilter(list)
+    persistRouteItemFilter(list)
   }, [])
+
+  const routeFilterSet = useMemo(() => new Set(routeItemFilter), [routeItemFilter])
+  const showMapPlaces = routeFilterShowsPlaces(routeFilterSet)
+  const showMapTransport = routeFilterShowsTransport(routeFilterSet)
 
   const handlePlacesLineStyleChange = useCallback((next: PlacesLineStyle) => {
     setPlacesLineStyle(next)
@@ -553,29 +566,33 @@ export default function ItineraryPanel({
 
   // Lugares del recorrido (stay/food/activity) en orden de introducción.
   const mapPlaces: ItineraryMapPoint[] = useMemo(() => {
-    if (!trip || listMode !== "map") return []
+    if (!trip || listMode !== "map" || !showMapPlaces) return []
     const byId = new Map<string, UserDayItem>()
     for (const d of trip.days) {
       for (const it of d.items) byId.set(it.id, it)
     }
-    return collectItineraryPlaces(trip.days).map((p) => {
+    return collectItineraryPlaces(trip.days).flatMap((p) => {
       const item = byId.get(p.spanAnchorId ?? p.id)
-      return {
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        dayNumber: p.dayNumber,
-        region: item ? resolveRegion(item) : p.region,
-        coords: p.coords ?? null,
-        spanRole: p.spanRole,
-        spanAnchorId: p.spanAnchorId,
-      }
+      if (!item) return []
+      if (!itemMatchesRouteFilter(item, trip.days, trip.tasks, routeFilterSet)) return []
+      return [
+        {
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          dayNumber: p.dayNumber,
+          region: resolveRegion(item),
+          coords: p.coords ?? null,
+          spanRole: p.spanRole,
+          spanAnchorId: p.spanAnchorId,
+        },
+      ]
     })
-  }, [trip, resolveRegion, listMode])
+  }, [trip, resolveRegion, listMode, showMapPlaces, routeFilterSet])
 
   // Anclas de llegada/salida cuando ida/vuelta no van por carretera.
   const mapHubs: ItineraryMapPoint[] = useMemo(() => {
-    if (!trip || listMode !== "map") return []
+    if (!trip || listMode !== "map" || !showMapTransport) return []
     return filterByDayScope(collectMapGatewayAnchors(trip.days), focusDayNumber).map((g) => ({
       id: `hub:${g.role}:${g.itemId}`,
       name: g.label,
@@ -584,45 +601,74 @@ export default function ItineraryPanel({
       coords: { lng: g.lng, lat: g.lat },
       hubRole: g.role,
     }))
-  }, [trip, listMode, focusDayNumber])
+  }, [trip, listMode, focusDayNumber, showMapTransport])
 
   const mapSegments = useMemo(
     () =>
-      trip && listMode === "map"
+      trip && listMode === "map" && showMapTransport
         ? filterByDayScope(collectMapSegments(trip.days), focusDayNumber)
         : [],
-    [trip, listMode, focusDayNumber],
+    [trip, listMode, focusDayNumber, showMapTransport],
   )
 
   const mapTransportDistances = useMemo(
     () =>
-      trip && listMode === "map"
+      trip && listMode === "map" && showMapTransport
         ? collectTransportDistances(daysForScope(trip.days, focusDayNumber))
         : EMPTY_TRANSPORT_DISTANCES,
-    [trip, listMode, focusDayNumber],
+    [trip, listMode, focusDayNumber, showMapTransport],
   )
 
   const mapIncompleteTransports = useMemo(
-    () => (trip && listMode === "map" ? incompleteMapTransports(trip.days) : []),
-    [trip, listMode],
+    () =>
+      trip && listMode === "map" && showMapTransport
+        ? incompleteMapTransports(trip.days)
+        : [],
+    [trip, listMode, showMapTransport],
   )
 
   const mapDayOptions = useMemo(() => {
     if (!trip) return []
     let counts: Map<number, number>
     if (listMode === "map") {
-      const placeCounts = mappableCountsByDay(
-        collectItineraryPlaces(trip.days).filter((p) => !p.spanRole),
-      )
-      const transportCounts = mappableCountsByDay([
-        ...collectMapSegments(trip.days),
-        ...collectMapGatewayAnchors(trip.days),
-      ])
-      counts = mapMode === "places" ? placeCounts : transportCounts
+      counts = new Map()
+      if (showMapPlaces) {
+        const byId = new Map<string, UserDayItem>()
+        for (const d of trip.days) {
+          for (const it of d.items) byId.set(it.id, it)
+        }
+        const placeCounts = mappableCountsByDay(
+          collectItineraryPlaces(trip.days).filter((p) => {
+            if (p.spanRole) return false
+            const item = byId.get(p.spanAnchorId ?? p.id)
+            return (
+              item != null &&
+              itemMatchesRouteFilter(item, trip.days, trip.tasks, routeFilterSet)
+            )
+          }),
+        )
+        for (const [day, n] of placeCounts) {
+          counts.set(day, (counts.get(day) ?? 0) + n)
+        }
+      }
+      if (showMapTransport) {
+        const transportCounts = mappableCountsByDay([
+          ...collectMapSegments(trip.days),
+          ...collectMapGatewayAnchors(trip.days),
+        ])
+        for (const [day, n] of transportCounts) {
+          counts.set(day, (counts.get(day) ?? 0) + n)
+        }
+      }
     } else {
       counts = new Map()
       trip.days.forEach((day, index) => {
-        counts.set(index + 1, day.items.length)
+        counts.set(
+          index + 1,
+          day.items.filter((it) =>
+            itemMatchesRouteFilter(it, trip.days, trip.tasks, routeFilterSet),
+          ).length,
+        )
       })
     }
     return trip.days.map((day, index) => ({
@@ -635,7 +681,7 @@ export default function ItineraryPanel({
       ),
       mappableCount: counts.get(index + 1) ?? 0,
     }))
-  }, [trip, mapMode, listMode])
+  }, [trip, listMode, showMapPlaces, showMapTransport, routeFilterSet])
 
   const spannedByDay = useMemo(
     () => (trip ? expandSpannedItems(trip.days) : []),
@@ -972,10 +1018,13 @@ export default function ItineraryPanel({
                 onChange={handleFocusDayChange}
               />
             ) : null}
-            {listMode === "map" && !collapseRouteToolbar ? (
-              <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
+            {listMode !== "calendar" && !collapseRouteToolbar ? (
+              <RouteItemFilterDropdown
+                value={routeFilterSet}
+                onChange={handleRouteItemFilterChange}
+              />
             ) : null}
-            {listMode === "map" && mapMode === "places" && !collapseRouteToolbar ? (
+            {listMode === "map" && showMapPlaces && !collapseRouteToolbar ? (
               <PlacesLineStyleDropdown
                 value={placesLineStyle}
                 loading={placesLineLoading}
@@ -1089,7 +1138,14 @@ export default function ItineraryPanel({
                     summarySignature={day.summarySignature ?? null}
                     countryCodes={trip.countries}
                     items={day.items}
-                    slots={spannedByDay[dayIndex] ?? EMPTY_SLOTS}
+                    slots={(spannedByDay[dayIndex] ?? EMPTY_SLOTS).filter((s) =>
+                      itemMatchesRouteFilter(
+                        s.item,
+                        trip.days,
+                        trip.tasks,
+                        routeFilterSet,
+                      ),
+                    )}
                     resolveRegion={resolveRegion}
                     isDaySelected={selectedDayIds.has(day.id)}
                     onDaySelectChange={setDaySelected}
@@ -1100,10 +1156,14 @@ export default function ItineraryPanel({
                     onSetTaskState={handleSetTaskState}
                     taskStates={trip.tasks}
                     showOutboundPlaceholder={
-                      dayIndex === 0 && !hasRouteLeg(trip.days, "outbound")
+                      dayIndex === 0 &&
+                      !hasRouteLeg(trip.days, "outbound") &&
+                      routeFilterSet.has("transport")
                     }
                     showReturnPlaceholder={
-                      dayIndex === trip.days.length - 1 && !hasRouteLeg(trip.days, "return")
+                      dayIndex === trip.days.length - 1 &&
+                      !hasRouteLeg(trip.days, "return") &&
+                      routeFilterSet.has("transport")
                     }
                     onOpenRouteLeg={openRouteLegDialog}
                     onEditTransport={handleEditTransport}
@@ -1160,8 +1220,11 @@ export default function ItineraryPanel({
                       onChange={handleFocusDayChange}
                     />
                   ) : null}
-                  <MapModeDropdown value={mapMode} onChange={handleMapModeChange} />
-                  {mapMode === "places" ? (
+                  <RouteItemFilterDropdown
+                    value={routeFilterSet}
+                    onChange={handleRouteItemFilterChange}
+                  />
+                  {showMapPlaces ? (
                     <PlacesLineStyleDropdown
                       value={placesLineStyle}
                       loading={placesLineLoading}
@@ -1181,12 +1244,12 @@ export default function ItineraryPanel({
                 hubs={mapHubs}
                 segments={mapSegments}
                 transportDistances={mapTransportDistances}
-                mapMode={mapMode}
+                showPlaces={showMapPlaces}
+                showTransport={showMapTransport}
                 focusDayNumber={focusDayNumber}
                 focusDayLabel={
                   focusDayNumber == null ? null : `Día ${focusDayNumber}`
                 }
-                onMapModeChange={handleMapModeChange}
                 countryCodes={mapCountries}
                 destination={mapDestHint ?? ""}
                 incompleteTransports={mapIncompleteTransports}
