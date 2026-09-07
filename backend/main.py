@@ -58,6 +58,7 @@ load_dotenv()
 from article_fetch import (  # noqa: E402
     CONTENT_VERSION,
     ArticleFetchResult,
+    ArticleUnavailable,
     content_hash,
     fetch_article,
     normalize_article_url,
@@ -72,6 +73,7 @@ from share_summary import router as share_summary_router  # noqa: E402
 from extraction_cache import (  # noqa: E402
     CacheEntry,
     get_cached_extraction,
+    payload_looks_poisoned,
     store_extraction,
     touch_validation,
 )
@@ -309,6 +311,9 @@ def _log_extraction(
     ocr_ms: int | None = None,
     ocr_error: str | None = None,
     ocr_flipped_structured: bool | None = None,
+    fetch_path: str | None = None,
+    status: int | None = None,
+    reason: str | None = None,
 ) -> None:
     fields: dict[str, Any] = {
         "event": "extraction",
@@ -345,6 +350,12 @@ def _log_extraction(
         fields["ocr_error"] = ocr_error
     if ocr_flipped_structured is not None:
         fields["ocr_flipped_structured"] = ocr_flipped_structured
+    if fetch_path is not None:
+        fields["fetch_path"] = fetch_path
+    if status is not None:
+        fields["status"] = status
+    if reason is not None:
+        fields["reason"] = reason
     log_kv(logger, **fields)
 
 
@@ -463,6 +474,7 @@ class Distilled:
     ocr_ms: int | None = None
     ocr_error: str | None = None
     ocr_flipped_structured: bool | None = None
+    fetch_path: str | None = None
 
 
 def _instagram_prompt() -> Path:
@@ -626,6 +638,7 @@ async def _distill_article(
             if isinstance(payload.get("source_structured_by_days"), bool)
             else structured,
             provider_charged=ig,
+            fetch_path=fetched.fetch_path,
             **_ocr_fields(ig_text),
         )
 
@@ -662,6 +675,7 @@ async def _distill_article(
             if isinstance(payload.get("source_structured_by_days"), bool)
             else structured,
             provider_charged=ig,
+            fetch_path=fetched.fetch_path,
             **_ocr_fields(ig_text),
         )
 
@@ -696,6 +710,7 @@ async def _distill_article(
         if isinstance(itinerary.get("source_structured_by_days"), bool)
         else None,
         provider_charged=ig,
+        fetch_path=fetched.fetch_path,
         **_ocr_fields(ig_text),
     )
 
@@ -724,6 +739,7 @@ async def _distill_sync(
             freshness="miss" if entry is None else entry.freshness,
             source_kind=distilled.source_kind,
             structured=distilled.structured,
+            fetch_path=distilled.fetch_path,
         )
         return distilled.payload
 
@@ -850,6 +866,8 @@ async def _validate_sync_for_refresh(
             error_type=type(e).__name__,
         )
         payload = dict(entry.payload)
+        if payload_looks_poisoned(payload):
+            raise
         _strip_thumb_urls(payload)
         _log_extraction(
             url=url,
@@ -1093,6 +1111,7 @@ async def _stream_itinerary(
             ocr_ms=distilled.ocr_ms,
             ocr_error=distilled.ocr_error,
             ocr_flipped_structured=distilled.ocr_flipped_structured,
+            fetch_path=distilled.fetch_path,
         )
         yield _sse("result", distilled.payload)
     except InstagramError as e:
@@ -1116,6 +1135,22 @@ async def _stream_itinerary(
             error_type="HTTPException",
         )
         yield _sse("error", {"detail": e.detail})
+    except ArticleUnavailable as e:
+        _log_extraction(
+            url=url,
+            outcome="error",
+            cache_hit=False,
+            fetch_ms=fetch_ms,
+            claude_ms=claude_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            error_type="ArticleUnavailable",
+            error_detail=",".join(e.tried) if e.tried else None,
+            fetch_path=e.fetch_path,
+            status=e.status,
+            reason=e.reason,
+        )
+        yield _sse("error", {"detail": EXTRACTION_GENERIC_FAILURE})
     except httpx.HTTPError as e:
         _log_extraction(
             url=url,
@@ -1283,6 +1318,7 @@ async def _stream_prewarm(
             freshness=entry.freshness if entry else "miss",
             source_kind=distilled.source_kind,
             structured=distilled.structured,
+            fetch_path=distilled.fetch_path,
         )
         yield _sse(
             "result",
@@ -1290,6 +1326,18 @@ async def _stream_prewarm(
         )
     except InstagramError as e:
         yield _sse("error", {"detail": _instagram_error_detail(e)})
+    except ArticleUnavailable as e:
+        _log_extraction(
+            url=url,
+            outcome="error",
+            cache_hit=False,
+            error_type="ArticleUnavailable",
+            error_detail=",".join(e.tried) if e.tried else None,
+            fetch_path=e.fetch_path,
+            status=e.status,
+            reason=e.reason,
+        )
+        yield _sse("error", {"detail": EXTRACTION_GENERIC_FAILURE})
     except httpx.HTTPError as e:
         yield _sse("error", {"detail": f"Error fetching article: {e}"})
     except json.JSONDecodeError:
@@ -1335,7 +1383,7 @@ async def partners_prewarm(request: PrewarmRequest, http_request: Request):
         raise HTTPException(status_code=403, detail="Captcha inválido o ausente")
 
     entry = await get_cached_extraction(url)
-    needs_distill = entry is None or entry.freshness == "expired"
+    needs_distill = entry is None or entry.freshness in ("expired", "miss")
     if needs_distill:
         if not allow_prewarm(client_ip):
             raise HTTPException(

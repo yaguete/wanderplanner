@@ -139,11 +139,40 @@ def test_apply_instant_marks_cached_extraction():
             "url": url,
             "canonical_url": "https://lacosmopolilla.com/ruta-islandia-en-10-dias",
             "validated_at": _fresh_iso(),
+            "og_title": "Ruta Islandia",
+            "destination": "Islandia",
+            "total_days": 10,
         }
     ]
     marked = apply_instant_from_cache(hits, rows)
     assert marked[0].instant is True
     assert marked[0].origin == "cache"
+    assert marked[0].title == "Ruta Islandia"
+
+
+def test_apply_instant_skips_poisoned_cache_row():
+    url = "https://lacosmopolilla.com/ruta-islandia-en-10-dias/"
+    hits = [
+        SuggestHit(
+            url=url,
+            title="Ruta Islandia",
+            host="lacosmopolilla.com",
+            origin="curated",
+            instant=False,
+        )
+    ]
+    rows = [
+        {
+            "url": url,
+            "validated_at": _fresh_iso(),
+            "og_title": None,
+            "destination": None,
+            "total_days": None,
+        }
+    ]
+    marked = apply_instant_from_cache(hits, rows)
+    assert marked[0].instant is False
+    assert marked[0].origin == "curated"
 
 
 class _Req:

@@ -202,6 +202,39 @@ def test_cache_row_skips_private_hosts_and_expired():
     assert hit.host == "lacosmopolilla.com"
 
 
+def test_cache_row_skips_poisoned_without_title():
+    edinburgh = {
+        "url": "https://losviajesdeclaudia.com/reino-unido/escocia/que-ver-en-edimburgo-que-hacer",
+        "destination": None,
+        "og_title": None,
+        "total_days": None,
+        "validated_at": _fresh_iso(1),
+    }
+    assert hit_from_cache_row(edinburgh) is None
+    scotland = {
+        "url": "https://losviajesdeclaudia.com/reino-unido/escocia/que-ver-en-escocia",
+        "destination": "No article provided",
+        "og_title": None,
+        "total_days": 0,
+        "validated_at": _fresh_iso(1),
+    }
+    assert hit_from_cache_row(scotland) is None
+
+
+def test_cache_row_keeps_real_destination_without_days():
+    row = {
+        "url": "https://losviajesdeclaudia.com/reino-unido/escocia/que-ver-en-edimburgo-que-hacer",
+        "destination": "Escocia, Reino Unido",
+        "og_title": None,
+        "total_days": 0,
+        "validated_at": _fresh_iso(1),
+    }
+    hit = hit_from_cache_row(row)
+    assert hit is not None
+    assert hit.instant is True
+    assert hit.destination == "Escocia, Reino Unido"
+
+
 def test_tavily_web_skips_social_hosts():
     assert (
         hit_from_tavily(

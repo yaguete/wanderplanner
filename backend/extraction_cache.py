@@ -21,6 +21,13 @@ import httpx
 
 from article_fetch import CONTENT_VERSION, normalize_article_url
 
+_DUMMY_DESTINATIONS = frozenset(
+    {
+        "no article provided",
+        "no article text to process",
+    }
+)
+
 TABLE = "article_extractions"
 DEFAULT_REVALIDATE_DAYS = 2
 DEFAULT_HARD_TTL_DAYS = 90
@@ -114,6 +121,68 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.astimezone(timezone.utc).isoformat()
 
 
+def _len_list(value: Any) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def count_extraction_items(itinerary: dict[str, Any] | None) -> int:
+    """Ítems de días + basics. Espejo de `_count_items` en main (sin importar main)."""
+    if not isinstance(itinerary, dict):
+        return 0
+    n = 0
+    for day in itinerary.get("days") or []:
+        if not isinstance(day, dict):
+            continue
+        for key in ("accommodations", "restaurants", "transport"):
+            n += _len_list(day.get(key))
+        activities = day.get("activities")
+        if isinstance(activities, list):
+            for act in activities:
+                n += 1
+                if isinstance(act, dict):
+                    n += _len_list(act.get("sub_activities"))
+    n += _len_list(itinerary.get("basics"))
+    return n
+
+
+def _real_destination(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or text.casefold() in _DUMMY_DESTINATIONS:
+        return None
+    return text
+
+
+def _extraction_identity(*, destination: Any, og_title: Any) -> bool:
+    heading = og_title.strip() if isinstance(og_title, str) else ""
+    if heading:
+        return True
+    return _real_destination(destination) is not None
+
+
+def payload_looks_poisoned(payload: dict[str, Any] | None) -> bool:
+    """Fila destilada sin artículo: 0 ítems y sin destino ni og_title reales."""
+    if not isinstance(payload, dict):
+        return True
+    if count_extraction_items(payload) > 0:
+        return False
+    return not _extraction_identity(
+        destination=payload.get("destination"),
+        og_title=payload.get("og_title"),
+    )
+
+
+def suggest_row_looks_poisoned(row: dict[str, Any] | None) -> bool:
+    """Misma identidad que el payload, sin recuento de ítems (suggest no los trae)."""
+    if not isinstance(row, dict):
+        return True
+    return not _extraction_identity(
+        destination=row.get("destination"),
+        og_title=row.get("og_title"),
+    )
+
+
 def classify_freshness(validated_at: datetime | None, *, now: datetime | None = None) -> Freshness:
     if validated_at is None:
         return "expired"
@@ -195,7 +264,13 @@ async def get_cached_extraction(url: str) -> CacheEntry | None:
         )
     if not rows or not isinstance(rows[0], dict):
         return None
-    return _row_to_entry(rows[0])
+    entry = _row_to_entry(rows[0])
+    if entry is None:
+        return None
+    if payload_looks_poisoned(entry.payload):
+        # Conservar la PK: el flujo la trata como miss y store usa cache_url=entry.url.
+        entry.freshness = "miss"
+    return entry
 
 
 async def store_extraction(

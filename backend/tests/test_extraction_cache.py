@@ -12,7 +12,9 @@ from extraction_cache import (
     classify_freshness,
     get_cached_extraction,
     hard_ttl_days,
+    payload_looks_poisoned,
     revalidate_days,
+    suggest_row_looks_poisoned,
 )
 
 
@@ -72,7 +74,12 @@ async def test_get_cached_extraction_falls_back_to_canonical(monkeypatch):
     row = {
         "url": "https://example.com/post",
         "canonical_url": canonical,
-        "payload": {"title": "cached", "days": [], "basics": []},
+        "payload": {
+            "title": "cached",
+            "destination": "Austria",
+            "days": [{"activities": [{"name": "castillo"}]}],
+            "basics": [],
+        },
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "validated_at": datetime.now(timezone.utc).isoformat(),
         "etag": None,
@@ -109,7 +116,12 @@ async def test_get_cached_extraction_canonical_when_incoming_already_clean(monke
     row = {
         "url": stored_pk,
         "canonical_url": canonical,
-        "payload": {"title": "Japón 21 días", "days": [], "basics": []},
+        "payload": {
+            "title": "Japón 21 días",
+            "destination": "Japón",
+            "days": [{"activities": [{"name": "Tokio"}]}],
+            "basics": [],
+        },
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "validated_at": datetime.now(timezone.utc).isoformat(),
         "etag": None,
@@ -141,3 +153,87 @@ async def test_get_cached_extraction_miss(monkeypatch):
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
     with patch("extraction_cache._fetch_rows", new=AsyncMock(return_value=[])):
         assert await get_cached_extraction("https://example.com/missing") is None
+
+
+def test_payload_looks_poisoned_empty_and_dummy_destination():
+    assert payload_looks_poisoned({"days": [], "basics": []}) is True
+    assert payload_looks_poisoned(
+        {"destination": "No article provided", "days": [], "basics": [], "total_days": 0}
+    ) is True
+    assert payload_looks_poisoned(
+        {
+            "destination": "Edimburgo",
+            "og_title": "Qué ver",
+            "days": [],
+            "basics": [],
+        }
+    ) is False
+    assert payload_looks_poisoned(
+        {
+            "destination": "",
+            "days": [{"activities": [{"name": "castillo"}]}],
+            "basics": [],
+        }
+    ) is False
+
+
+def test_suggest_row_looks_poisoned_without_title_and_days():
+    assert suggest_row_looks_poisoned(
+        {"destination": None, "og_title": None, "total_days": None}
+    ) is True
+    assert suggest_row_looks_poisoned(
+        {
+            "destination": "No article provided",
+            "og_title": None,
+            "total_days": 0,
+        }
+    ) is True
+    assert suggest_row_looks_poisoned(
+        {
+            "destination": "Japón",
+            "og_title": "Japón en 15 días",
+            "total_days": 15,
+        }
+    ) is False
+    assert suggest_row_looks_poisoned(
+        {
+            "destination": "Escocia, Reino Unido",
+            "og_title": None,
+            "total_days": 0,
+        }
+    ) is False
+    assert suggest_row_looks_poisoned(
+        {
+            "destination": "Omán",
+            "og_title": "",
+            "total_days": None,
+        }
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_get_cached_extraction_treats_poisoned_as_miss(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://sb.example")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-key")
+    row = {
+        "url": "https://losviajesdeclaudia.com/escocia/",
+        "canonical_url": "https://losviajesdeclaudia.com/escocia",
+        "payload": {
+            "destination": "No article provided",
+            "days": [],
+            "basics": [],
+            "total_days": 0,
+        },
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "validated_at": datetime.now(timezone.utc).isoformat(),
+        "etag": None,
+        "last_modified": None,
+        "article_modified_at": None,
+        "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "content_version": CONTENT_VERSION,
+    }
+    with patch("extraction_cache._fetch_rows", new=AsyncMock(return_value=[row])):
+        entry = await get_cached_extraction(row["url"])
+    assert entry is not None
+    assert entry.freshness == "miss"
+    assert entry.url == row["url"]

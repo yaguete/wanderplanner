@@ -35,7 +35,7 @@ from blog_suggest import (
     strip_html,
 )
 from extraction_cache import list_extraction_metas
-from inspirational_source import host_is_feedable
+from inspirational_source import host_is_feedable, is_inspirational_source_url
 from obs import log_kv
 from partners import is_public_http_url
 from source_suggest import (
@@ -45,6 +45,7 @@ from source_suggest import (
     sanitize_suggest_query,
     url_has_junk_path,
 )
+from waf_challenge import browser_headers, featured_media_url, is_bot_challenge
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["sources"])
@@ -52,6 +53,8 @@ router = APIRouter(tags=["sources"])
 POSTS_PER_HOST = 5
 WP_FETCH_PER_PAGE = 20
 MAX_BODY_BYTES = 512_000
+SITEMAP_TAIL_BYTES = 256_000
+SITEMAP_HARD_MAX_BYTES = 8_000_000
 FAILURE_CACHE_TTL_SEC = 120
 MAX_FEED_CACHE = 64
 MAX_SEARCH_CACHE = 64
@@ -67,6 +70,11 @@ FeedReason = Literal["not_blog", "unavailable", "empty"] | None
 
 _HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
 _IMG_SRC = re.compile(r"""<img[^>]+src=["']([^"']+)["']""", re.I)
+_SITEMAP_BLOCK = re.compile(rb"<sitemap\b[^>]*>.*?</sitemap>", re.I | re.DOTALL)
+_SITEMAP_URL_BLOCK = re.compile(rb"<url\b[^>]*>.*?</url>", re.I | re.DOTALL)
+_XML_LOC = re.compile(rb"<loc>\s*([^<]+)\s*</loc>", re.I)
+_XML_LASTMOD = re.compile(rb"<lastmod>\s*([^<]+)\s*</lastmod>", re.I)
+_XML_IMAGE_LOC = re.compile(rb"<image:loc>\s*([^<]+)\s*</image:loc>", re.I)
 _DAY: date | None = None
 _ip_counts: dict[str, int] = {}
 _search_day: date | None = None
@@ -173,35 +181,6 @@ def _category_ids(raw: Any) -> list[int]:
     return out
 
 
-def featured_media_url(post: dict[str, Any]) -> str | None:
-    jetpack = post.get("jetpack_featured_media_url")
-    if isinstance(jetpack, str) and jetpack.startswith("http"):
-        return jetpack
-    embedded = post.get("_embedded")
-    if not isinstance(embedded, dict):
-        return None
-    media = embedded.get("wp:featuredmedia")
-    if not isinstance(media, list) or not media:
-        return None
-    first = media[0]
-    if not isinstance(first, dict):
-        return None
-    details = first.get("media_details")
-    if isinstance(details, dict):
-        sizes = details.get("sizes")
-        if isinstance(sizes, dict):
-            for key in ("medium", "medium_large", "thumbnail", "full"):
-                size = sizes.get(key)
-                if isinstance(size, dict):
-                    src = size.get("source_url")
-                    if isinstance(src, str) and src.startswith("http"):
-                        return src
-    src = first.get("source_url")
-    if isinstance(src, str) and src.startswith("http"):
-        return src
-    return None
-
-
 def _rendered(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -268,6 +247,18 @@ def wp_latest_posts_url(host: str) -> str:
         "_fields": WP_FEED_FIELDS,
     }
     return f"https://{host}/wp-json/wp/v2/posts?{urlencode(params)}"
+
+
+def wp_latest_posts_rest_route_url(host: str) -> str:
+    params = {
+        "rest_route": "/wp/v2/posts",
+        "per_page": str(WP_FETCH_PER_PAGE),
+        "orderby": "date",
+        "order": "desc",
+        "_embed": "wp:featuredmedia",
+        "_fields": WP_FEED_FIELDS,
+    }
+    return f"https://{host}/?{urlencode(params)}"
 
 
 def _local_tag(tag: Any) -> str:
@@ -381,10 +372,18 @@ def mark_instant(items: list[FeedItem], rows: list[dict[str, Any]]) -> list[Feed
         for item in items
     ]
     marked = apply_instant_from_cache(hits, rows)
-    by_url = {hit.url: hit.instant for hit in marked}
-    return [
-        item.model_copy(update={"instant": by_url.get(item.url, False)}) for item in items
-    ]
+    by_url = {hit.url: hit for hit in marked}
+    out: list[FeedItem] = []
+    for item in items:
+        hit = by_url.get(item.url)
+        if hit is None:
+            out.append(item)
+            continue
+        updates: dict[str, Any] = {"instant": hit.instant}
+        if hit.instant and hit.title and hit.title != item.title:
+            updates["title"] = hit.title
+        out.append(item.model_copy(update=updates))
+    return out
 
 
 def _feed_cache_ttl(resp: FeedResponse) -> float:
@@ -392,13 +391,6 @@ def _feed_cache_ttl(resp: FeedResponse) -> float:
     if resp.items:
         return _response_ttl_sec()
     return float(FAILURE_CACHE_TTL_SEC)
-
-
-def is_bot_challenge(status: int, body: bytes) -> bool:
-    if status in {202, 403, 429}:
-        return True
-    head = (body or b"")[:2048].lower()
-    return b"sgcaptcha" in head or b"just a moment" in head
 
 
 def get_cached_feed(host: str) -> FeedResponse | None:
@@ -515,7 +507,7 @@ async def _http_get(url: str, accept: str) -> tuple[int, bytes] | None:
         async with httpx.AsyncClient(timeout=WP_TIMEOUT_S, follow_redirects=True) as client:
             response = await client.get(
                 url,
-                headers={"Accept": accept, "User-Agent": "wanderplanner-api"},
+                headers=browser_headers(accept),
             )
     except httpx.HTTPError:
         return None
@@ -550,14 +542,19 @@ def _alternate_feed_hrefs(html: bytes, base: str) -> list[str]:
     return out
 
 
-async def fetch_wp_latest(host: str) -> list[dict[str, Any]] | None:
-    fetched = await _http_get(wp_latest_posts_url(host), "application/json")
+WpPostsResult = list[dict[str, Any]] | Literal["challenge"] | None
+
+
+def _decode_wp_posts(
+    fetched: tuple[int, bytes] | None, host: str
+) -> WpPostsResult:
+    """Lista de posts, 'challenge' si hay reto, None si el host no tiene REST."""
     if fetched is None:
         return None
     status, body = fetched
     if is_bot_challenge(status, body):
         log_kv(logger, event="reference_feed", err="challenge", host=host, status=status)
-        return None
+        return "challenge"
     if status != 200:
         return None
     try:
@@ -567,6 +564,19 @@ async def fetch_wp_latest(host: str) -> list[dict[str, Any]] | None:
     if not isinstance(data, list):
         return None
     return [row for row in data if isinstance(row, dict)]
+
+
+async def fetch_wp_latest(host: str) -> list[dict[str, Any]] | None:
+    posts = _decode_wp_posts(
+        await _http_get(wp_latest_posts_url(host), "application/json"), host
+    )
+    if posts == "challenge":
+        retry = _decode_wp_posts(
+            await _http_get(wp_latest_posts_rest_route_url(host), "application/json"),
+            host,
+        )
+        return None if retry == "challenge" else retry
+    return posts
 
 
 async def fetch_rss_items(host: str) -> list[FeedItem]:
@@ -607,15 +617,213 @@ async def fetch_rss_items(host: str) -> list[FeedItem]:
     return []
 
 
+def _xml_text(match: re.Match[bytes] | None) -> str:
+    if match is None:
+        return ""
+    return match.group(1).decode("utf-8", "replace").strip()
+
+
+def title_from_slug(slug: str) -> str:
+    words = [w for w in slug.replace("_", "-").split("-") if w]
+    if not words:
+        return slug
+    text = " ".join(words)
+    return text[:1].upper() + text[1:]
+
+
+def parse_sitemap_index(body: bytes) -> list[tuple[str, str | None]]:
+    """[(loc, lastmod), ...] de un sitemapindex Yoast."""
+    out: list[tuple[str, str | None]] = []
+    for block in _SITEMAP_BLOCK.findall(body or b""):
+        loc = _xml_text(_XML_LOC.search(block))
+        if not loc:
+            continue
+        lastmod = _xml_text(_XML_LASTMOD.search(block)) or None
+        out.append((loc, lastmod))
+    return out
+
+
+def pick_post_sitemap(
+    entries: list[tuple[str, str | None]],
+) -> tuple[str, str | None] | None:
+    posts = [
+        (loc, lastmod)
+        for loc, lastmod in entries
+        if "post-sitemap" in loc.lower() or "wp-sitemap-posts-post" in loc.lower()
+    ]
+    if not posts:
+        return None
+    posts.sort(key=lambda row: row[1] or "", reverse=True)
+    return posts[0]
+
+
+def parse_sitemap_url_entries(body: bytes) -> list[dict[str, str | None]]:
+    """Bloques <url> de un post-sitemap (también de una cola a media etiqueta)."""
+    out: list[dict[str, str | None]] = []
+    for block in _SITEMAP_URL_BLOCK.findall(body or b""):
+        loc = _xml_text(_XML_LOC.search(block))
+        if not loc:
+            continue
+        lastmod = _xml_text(_XML_LASTMOD.search(block)) or None
+        image = _xml_text(_XML_IMAGE_LOC.search(block)) or None
+        out.append({"loc": loc, "lastmod": lastmod, "image": image})
+    return out
+
+
+def sitemap_tail_matches_index(
+    index_lastmod: str | None, entries: list[dict[str, str | None]]
+) -> bool:
+    """Si el lastmod máximo de la cola no cuadra con el índice, el fichero no es ascendente."""
+    if not index_lastmod or not entries:
+        return bool(entries)
+    index_key = index_lastmod.strip()[:10]
+    if len(index_key) < 10:
+        return True
+    newest = ""
+    for row in entries:
+        raw = (row.get("lastmod") or "").strip()
+        if raw > newest:
+            newest = raw
+    if not newest:
+        return False
+    return newest[:10] == index_key
+
+
+def map_sitemap_entries_to_items(
+    entries: list[dict[str, str | None]],
+    host: str,
+    limit: int = POSTS_PER_HOST,
+) -> list[FeedItem]:
+    ranked: list[tuple[str, FeedItem]] = []
+    seen: set[str] = set()
+    display_host = host.removeprefix("www.")
+    for row in entries:
+        loc = rewrite_feed_amp_url(str(row.get("loc") or "").strip())
+        if not loc or url_has_junk_path(loc):
+            continue
+        if not is_inspirational_source_url(loc):
+            continue
+        slug = slug_from_url(loc)
+        if not slug or is_denied_guide_slug(slug):
+            continue
+        key = loc.rstrip("/")
+        if key in seen:
+            continue
+        seen.add(key)
+        image = row.get("image")
+        image_url = image if isinstance(image, str) and image.startswith("http") else None
+        lastmod = row.get("lastmod")
+        published = None
+        if isinstance(lastmod, str) and lastmod.strip():
+            published = parse_wp_gmt(lastmod) or parse_rss_date(lastmod)
+        ranked.append(
+            (
+                lastmod or "",
+                FeedItem(
+                    url=loc,
+                    title=title_from_slug(slug),
+                    published_at=published,
+                    image_url=image_url,
+                    instant=False,
+                    host=display_host,
+                ),
+            )
+        )
+    ranked.sort(key=lambda row: row[0], reverse=True)
+    return [item for _, item in ranked[: max(0, limit)]]
+
+
+async def _stream_sitemap_bytes(url: str, *, keep_tail: bool) -> bytes | None:
+    ok = await asyncio.to_thread(is_public_http_url, url)
+    if not ok:
+        return None
+    headers = browser_headers("application/xml, text/xml, */*")
+    try:
+        async with httpx.AsyncClient(
+            timeout=WP_TIMEOUT_S, follow_redirects=True
+        ) as client:
+            async with client.stream("GET", url, headers=headers) as response:
+                if response.status_code != 200:
+                    return None
+                buf = bytearray()
+                total = 0
+                async for chunk in response.aiter_bytes():
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if keep_tail:
+                        buf.extend(chunk)
+                        overflow = len(buf) - SITEMAP_TAIL_BYTES
+                        if overflow > 0:
+                            del buf[:overflow]
+                    else:
+                        room = SITEMAP_HARD_MAX_BYTES - len(buf)
+                        if room <= 0:
+                            break
+                        buf.extend(chunk[:room])
+                        if len(buf) >= SITEMAP_HARD_MAX_BYTES:
+                            break
+                    if total >= SITEMAP_HARD_MAX_BYTES:
+                        break
+                body = bytes(buf)
+                if is_bot_challenge(response.status_code, body[:8192]):
+                    return None
+                return body
+    except httpx.HTTPError:
+        return None
+
+
+async def _http_get_sitemap_tail(url: str) -> bytes | None:
+    return await _stream_sitemap_bytes(url, keep_tail=True)
+
+
+async def _http_get_sitemap_full(url: str) -> bytes | None:
+    return await _stream_sitemap_bytes(url, keep_tail=False)
+
+
+async def fetch_sitemap_items(host: str) -> list[FeedItem]:
+    index_urls = (
+        f"https://{host}/sitemap_index.xml",
+        f"https://{host}/wp-sitemap.xml",
+    )
+    accept = "application/xml, text/xml, application/xhtml+xml, */*"
+    for index_url in index_urls:
+        fetched = await _http_get(index_url, accept)
+        if fetched is None:
+            continue
+        status, body = fetched
+        if status != 200 or is_bot_challenge(status, body):
+            continue
+        child = pick_post_sitemap(parse_sitemap_index(body))
+        if child is None:
+            continue
+        loc, index_lastmod = child
+        tail = await _http_get_sitemap_tail(loc)
+        if tail is None:
+            continue
+        entries = parse_sitemap_url_entries(tail)
+        if not sitemap_tail_matches_index(index_lastmod, entries):
+            full = await _http_get_sitemap_full(loc)
+            if full is not None:
+                entries = parse_sitemap_url_entries(full)
+        items = map_sitemap_entries_to_items(entries, host, POSTS_PER_HOST)
+        if items:
+            return items
+    return []
+
+
 async def load_feed_items(host: str) -> tuple[list[FeedItem], str]:
-    """Devuelve (items, origin) con origin wp|rss|none."""
+    """Devuelve (items, origin) con origin wp|rss|sitemap|none."""
     landing = get_blog_landing_by_host(host)
     exclude = landing.exclude_category_ids if landing and landing.enabled else ()
     posts = await fetch_wp_latest(host)
     if posts is not None:
         return select_wp_feed_items(posts, host, exclude), "wp"
     items = await fetch_rss_items(host)
-    return items, ("rss" if items else "none")
+    if items:
+        return items, "rss"
+    items = await fetch_sitemap_items(host)
+    return items, ("sitemap" if items else "none")
 
 
 def parse_search_hosts(raw: list[str] | None) -> list[str]:
@@ -644,6 +852,18 @@ def wp_search_posts_url(host: str, query: str, *, title_only: bool) -> str:
     if title_only:
         params["search_columns"] = "post_title"
     return f"https://{host}/wp-json/wp/v2/posts?{urlencode(params)}"
+
+
+def wp_search_posts_rest_route_url(host: str, query: str, *, title_only: bool) -> str:
+    params: dict[str, str] = {
+        "rest_route": "/wp/v2/posts",
+        "search": query,
+        "per_page": str(WP_FETCH_PER_PAGE),
+        "_fields": WP_SEARCH_FIELDS,
+    }
+    if title_only:
+        params["search_columns"] = "post_title"
+    return f"https://{host}/?{urlencode(params)}"
 
 
 def select_search_items(
@@ -693,19 +913,23 @@ def merge_ranked_feed_items(
 async def fetch_wp_search_posts(
     host: str, query: str, *, title_only: bool
 ) -> list[dict[str, Any]] | None:
-    fetched = await _http_get(wp_search_posts_url(host, query, title_only=title_only), "application/json")
-    if fetched is None:
-        return None
-    status, body = fetched
-    if status != 200:
-        return None
-    try:
-        data = json.loads(body)
-    except ValueError:
-        return None
-    if not isinstance(data, list):
-        return None
-    return [row for row in data if isinstance(row, dict)]
+    posts = _decode_wp_posts(
+        await _http_get(
+            wp_search_posts_url(host, query, title_only=title_only),
+            "application/json",
+        ),
+        host,
+    )
+    if posts == "challenge":
+        retry = _decode_wp_posts(
+            await _http_get(
+                wp_search_posts_rest_route_url(host, query, title_only=title_only),
+                "application/json",
+            ),
+            host,
+        )
+        return None if retry == "challenge" else retry
+    return posts
 
 
 async def search_one_host(host: str, query: str) -> list[tuple[int, FeedItem]]:

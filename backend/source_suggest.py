@@ -25,7 +25,11 @@ from pydantic import BaseModel, Field
 
 from article_fetch import normalize_article_url
 from auth import peek_user
-from extraction_cache import classify_freshness, list_extraction_metas
+from extraction_cache import (
+    classify_freshness,
+    list_extraction_metas,
+    suggest_row_looks_poisoned,
+)
 from inspirational_source import is_inspirational_source_url
 from landing_source_domains import LANDING_SOURCE_DOMAINS
 from obs import log_kv
@@ -292,6 +296,8 @@ def hit_from_cache_row(row: dict[str, Any], query: str | None = None) -> Suggest
             stamp = None
     freshness = classify_freshness(stamp)
     if freshness not in {"fresh", "stale"}:
+        return None
+    if suggest_row_looks_poisoned(row):
         return None
     destination = row.get("destination")
     title = row.get("og_title")

@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from article_fetch import CONTENT_VERSION, ArticleFetchResult, content_hash
+from article_fetch import (
+    CONTENT_VERSION,
+    ArticleFetchResult,
+    ArticleUnavailable,
+    content_hash,
+)
 from extraction_cache import CacheEntry, classify_freshness
 import main as main_mod
 
@@ -18,6 +23,18 @@ def _payload() -> dict:
         "area": "Austria",
         "author": "cosmo",
         "days": [],
+        "basics": [],
+        "article_html": "<p>old</p>",
+        "og_image": None,
+    }
+
+
+def _good_payload() -> dict:
+    return {
+        "title": "Japón",
+        "destination": "Japón",
+        "og_title": "Ruta por Japón",
+        "days": [{"activities": [{"name": "Tokio"}]}],
         "basics": [],
         "article_html": "<p>old</p>",
         "og_image": None,
@@ -133,24 +150,51 @@ async def test_stale_hit_redistills_when_hash_changes():
 
 @pytest.mark.asyncio
 async def test_stale_fetch_error_keeps_cache():
-    entry = _entry(age_days=3)
+    entry = _entry(age_days=3, payload=_good_payload())
     with patch.object(
         main_mod, "fetch_article", new=AsyncMock(side_effect=RuntimeError("404"))
     ):
         with patch.object(main_mod, "call_claude") as claude:
             with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                with patch.object(main_mod, "touch_validation", new=AsyncMock()) as touch:
+                    body = await _collect_sse(
+                        main_mod._stream_itinerary(
+                            entry.url, entry=entry, user=None, refresh=False
+                        )
+                    )
+    assert "event: result" in body
+    assert "Japón" in body
+    claude.assert_not_called()
+    store.assert_not_awaited()
+    touch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stale_fetch_error_keeps_zero_item_with_destination():
+    payload = {
+        "title": "Edimburgo",
+        "destination": "Escocia, Reino Unido",
+        "og_title": None,
+        "days": [],
+        "basics": [],
+        "article_html": "<p>old</p>",
+        "og_image": None,
+    }
+    entry = _entry(age_days=3, payload=payload)
+    with patch.object(
+        main_mod, "fetch_article", new=AsyncMock(side_effect=RuntimeError("down"))
+    ):
+        with patch.object(main_mod, "call_claude") as claude:
+            with patch.object(main_mod, "touch_validation", new=AsyncMock()) as touch:
                 body = await _collect_sse(
                     main_mod._stream_itinerary(
                         entry.url, entry=entry, user=None, refresh=False
                     )
                 )
-    assert "Austria" in body
+    assert "event: result" in body
+    assert "Edimburgo" in body
     claude.assert_not_called()
-    store.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_idle_ten_days_gets_on_first_request():
+    touch.assert_not_awaited()
     entry = _entry(age_days=10)
     assert entry.freshness == "stale"
     fetched = ArticleFetchResult(
@@ -362,3 +406,115 @@ async def test_single_flight_dedupes_concurrent_distill():
     assert results[1]["title"] == "ok"
     assert calls["n"] == 1
     assert claude.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_miss_article_unavailable_skips_claude_and_store():
+    with patch.object(
+        main_mod,
+        "fetch_article",
+        new=AsyncMock(side_effect=ArticleUnavailable("blocked")),
+    ):
+        with patch.object(main_mod, "call_claude") as claude:
+            with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                body = await _collect_sse(
+                    main_mod._stream_itinerary(
+                        "https://losviajesdeclaudia.com/escocia/",
+                        entry=None,
+                        user=None,
+                        refresh=False,
+                    )
+                )
+    assert "event: error" in body
+    assert "event: result" not in body
+    claude.assert_not_called()
+    store.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_unavailable_keeps_good_payload_without_touch():
+    entry = _entry(age_days=1, payload=_good_payload())
+    with patch.object(
+        main_mod,
+        "fetch_article",
+        new=AsyncMock(side_effect=ArticleUnavailable("blocked")),
+    ):
+        with patch.object(main_mod, "call_claude") as claude:
+            with patch.object(main_mod, "touch_validation", new=AsyncMock()) as touch:
+                with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                    body = await _collect_sse(
+                        main_mod._stream_itinerary(
+                            entry.url, entry=entry, user=None, refresh=True
+                        )
+                    )
+    assert "event: result" in body
+    assert "Japón" in body
+    claude.assert_not_called()
+    touch.assert_not_awaited()
+    store.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_unavailable_empty_payload_is_error():
+    entry = _entry(age_days=1)
+    assert entry.payload["days"] == []
+    with patch.object(
+        main_mod,
+        "fetch_article",
+        new=AsyncMock(side_effect=ArticleUnavailable("blocked")),
+    ):
+        with patch.object(main_mod, "call_claude") as claude:
+            with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                body = await _collect_sse(
+                    main_mod._stream_itinerary(
+                        entry.url, entry=entry, user=None, refresh=True
+                    )
+                )
+    assert "event: error" in body
+    assert "event: result" not in body
+    claude.assert_not_called()
+    store.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_revalidate_article_unavailable_does_not_store():
+    entry = _entry(age_days=20, payload=_good_payload())
+    with patch.object(
+        main_mod,
+        "fetch_article",
+        new=AsyncMock(side_effect=ArticleUnavailable("blocked")),
+    ):
+        with patch.object(main_mod, "call_claude") as claude:
+            with patch.object(main_mod, "store_extraction", new=AsyncMock()) as store:
+                with patch.object(main_mod, "touch_validation", new=AsyncMock()) as touch:
+                    await main_mod.revalidate_in_background(entry.url, entry)
+    claude.assert_not_called()
+    store.assert_not_awaited()
+    touch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_article_unavailable_logs_status_and_reason():
+    err = ArticleUnavailable(
+        "blocked",
+        status=403,
+        reason="challenge",
+        tried=("html", "wp-rest"),
+        fetch_path="wp-rest",
+    )
+    with patch.object(main_mod, "fetch_article", new=AsyncMock(side_effect=err)):
+        with patch.object(main_mod, "_log_extraction") as log:
+            body = await _collect_sse(
+                main_mod._stream_itinerary(
+                    "https://losviajesdeclaudia.com/escocia/",
+                    entry=None,
+                    user=None,
+                    refresh=False,
+                )
+            )
+    assert "event: error" in body
+    kwargs = log.call_args.kwargs
+    assert kwargs["error_type"] == "ArticleUnavailable"
+    assert kwargs["status"] == 403
+    assert kwargs["reason"] == "challenge"
+    assert kwargs["fetch_path"] == "wp-rest"

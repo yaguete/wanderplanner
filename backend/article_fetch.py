@@ -7,17 +7,29 @@ También expone señales de frescura para la caché stale-while-revalidate:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
+
+from partners import is_public_http_url
+from waf_challenge import (
+    BROWSER_USER_AGENT,
+    browser_headers,
+    featured_media_url,
+    is_bot_challenge,
+)
+
+logger = logging.getLogger(__name__)
 
 # Subir a mano al cambiar selectores / junk-stripping. Evita tormentas de redestilación.
 CONTENT_VERSION = 1
@@ -56,7 +68,13 @@ _CONTENT_SELECTORS = [
     "div.single-content",
 ]
 
-_MIN_CONTENT_LEN = 500
+MIN_CONTENT_LEN = 500
+_MIN_CONTENT_LEN = MIN_CONTENT_LEN
+
+FetchPath = Literal["html", "wp-rest", "rest-route"]
+
+_WP_REST_FIELDS = "title,content,modified_gmt,link"
+_WP_REST_EMBED = "wp:featuredmedia"
 
 # Mantener en espejo con frontend/lib/partner-button.ts (TRACKING_PARAMS).
 _TRACKING_PARAMS = {
@@ -77,10 +95,27 @@ _TRACKING_PARAMS = {
     "igshid",
 }
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
+# Alias público: el feed y los tests importan el mismo UA.
+_USER_AGENT = BROWSER_USER_AGENT
+
+
+class ArticleUnavailable(httpx.HTTPError):
+    """El HTML y el fallback WP REST no dieron texto usable. No destilar ni cachear."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        reason: str = "empty",
+        tried: tuple[str, ...] | list[str] = (),
+        fetch_path: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.reason = reason
+        self.tried = tuple(tried)
+        self.fetch_path = fetch_path
 
 
 @dataclass
@@ -97,6 +132,7 @@ class ArticleFetchResult:
     article_modified_at: datetime | None = None
     content_hash: str | None = None
     content_version: int = CONTENT_VERSION
+    fetch_path: FetchPath = "html"
 
 
 def _clean_og_title(raw: str | None) -> str | None:
@@ -405,6 +441,177 @@ def parse_article_html(html: str, page_url: str) -> ArticleFetchResult:
     )
 
 
+def html_result_usable(result: ArticleFetchResult) -> bool:
+    """Texto largo, o corto con titular: un post breve real siempre trae <title>."""
+    if len((result.plain_text or "").strip()) >= _MIN_CONTENT_LEN:
+        return True
+    return bool((result.og_title or "").strip())
+
+
+def slug_from_article_url(url: str) -> str | None:
+    try:
+        path = urlparse(url).path or ""
+    except Exception:
+        return None
+    segs = [s for s in path.strip("/").split("/") if s]
+    if not segs:
+        return None
+    slug = segs[-1]
+    if not slug or len(slug) > 200:
+        return None
+    return slug
+
+
+def _slugs_to_try(original_url: str, final_url: str) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in (final_url, original_url):
+        slug = slug_from_article_url(raw)
+        if slug and slug not in seen:
+            seen.add(slug)
+            out.append(slug)
+    return out
+
+
+def _wp_json_posts_url(host: str, slug: str) -> str:
+    params = {
+        "slug": slug,
+        "_fields": _WP_REST_FIELDS,
+        "_embed": _WP_REST_EMBED,
+    }
+    return f"https://{host}/wp-json/wp/v2/posts?{urlencode(params)}"
+
+
+def _wp_rest_route_posts_url(host: str, slug: str) -> str:
+    params = {
+        "rest_route": "/wp/v2/posts",
+        "slug": slug,
+        "_fields": _WP_REST_FIELDS,
+        "_embed": _WP_REST_EMBED,
+    }
+    return f"https://{host}/?{urlencode(params)}"
+
+
+def _host_from_url(url: str) -> str | None:
+    try:
+        host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+    except Exception:
+        return None
+    return host or None
+
+
+def _rendered_wp_field(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        rendered = value.get("rendered")
+        if isinstance(rendered, str):
+            return rendered
+    return ""
+
+
+def _result_from_wp_post(
+    post: dict[str, Any],
+    page_url: str,
+    *,
+    fetch_path: FetchPath,
+) -> ArticleFetchResult | None:
+    html = _rendered_wp_field(post.get("content"))
+    if not html.strip():
+        return None
+    parsed = parse_article_html(html, page_url)
+    raw_title = _rendered_wp_field(post.get("title"))
+    if raw_title:
+        title = _clean_og_title(
+            BeautifulSoup(raw_title, "lxml").get_text(" ", strip=True)
+        )
+        if title:
+            parsed.og_title = title
+    image = featured_media_url(post)
+    if image:
+        parsed.og_image = image
+    modified = _parse_datetime(str(post.get("modified_gmt") or "") or None)
+    if modified is not None:
+        parsed.article_modified_at = modified
+    parsed.fetch_path = fetch_path
+    if not html_result_usable(parsed):
+        return None
+    return parsed
+
+
+def _is_wp_rest_no_route(response: httpx.Response) -> bool:
+    if response.status_code not in {404, 410}:
+        return False
+    try:
+        data = response.json()
+    except ValueError:
+        return True
+    return isinstance(data, dict) and data.get("code") == "rest_no_route"
+
+
+async def _get_public(url: str, accept: str) -> httpx.Response | None:
+    ok = await asyncio.to_thread(is_public_http_url, url)
+    if not ok:
+        return None
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+            return await client.get(url, headers=browser_headers(accept))
+    except httpx.HTTPError:
+        return None
+
+
+async def _fetch_via_wordpress_rest(
+    original_url: str,
+    final_url: str,
+    tried: list[str],
+) -> ArticleFetchResult | None:
+    """GET /wp-json/wp/v2/posts?slug=… y, si hay reto, ?rest_route=."""
+    page_url = final_url or original_url
+    host = _host_from_url(page_url) or _host_from_url(original_url)
+    if not host:
+        return None
+    slugs = _slugs_to_try(original_url, page_url)
+    if not slugs:
+        return None
+
+    paths: list[tuple[FetchPath, Any]] = [
+        ("wp-rest", _wp_json_posts_url),
+        ("rest-route", _wp_rest_route_posts_url),
+    ]
+    for fetch_path, builder in paths:
+        for slug in slugs:
+            rest_url = builder(host, slug)
+            response = await _get_public(rest_url, "application/json")
+            if response is None:
+                continue
+            tried.append(fetch_path)
+            if is_bot_challenge(response.status_code, response.content):
+                logger.info(
+                    "article_wp_rest challenge path=%s status=%s host=%s",
+                    fetch_path,
+                    response.status_code,
+                    host,
+                )
+                break
+            if _is_wp_rest_no_route(response):
+                break
+            if response.status_code != 200:
+                continue
+            try:
+                data = response.json()
+            except ValueError:
+                continue
+            if not isinstance(data, list) or not data:
+                continue
+            post = data[0]
+            if not isinstance(post, dict):
+                continue
+            parsed = _result_from_wp_post(post, page_url, fetch_path=fetch_path)
+            if parsed is not None:
+                return parsed
+    return None
+
+
 async def fetch_article(
     url: str,
     *,
@@ -413,10 +620,10 @@ async def fetch_article(
 ) -> ArticleFetchResult:
     """
     Descarga el artículo. Si el servidor responde 304, `not_modified=True` y el resto vacío.
-    Compatible con el uso legacy: `plain_text, cleaned_html, og_image = await fetch_article(url)`
-    ya no funciona (dataclass); los callers deben usar `.plain_text` etc.
+    HTML usable → lo de siempre. Si hay reto, 202/403/429 o texto vacío, WP REST por slug.
+    404/410 no entran al fallback. Si tampoco hay texto, `ArticleUnavailable`.
     """
-    headers = {"User-Agent": _USER_AGENT}
+    headers = browser_headers("text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:
@@ -427,6 +634,8 @@ async def fetch_article(
 
     response_etag = response.headers.get("etag")
     response_last_modified = response.headers.get("last-modified")
+    final_url = str(response.url) if response.url else url
+    tried: list[str] = ["html"]
 
     if response.status_code == 304:
         return ArticleFetchResult(
@@ -434,10 +643,41 @@ async def fetch_article(
             etag=response_etag or etag,
             last_modified=response_last_modified or last_modified,
             content_version=CONTENT_VERSION,
+            fetch_path="html",
         )
 
-    response.raise_for_status()
-    result = parse_article_html(response.text, url)
-    result.etag = response_etag
-    result.last_modified = response_last_modified
-    return result
+    challenged = is_bot_challenge(response.status_code, response.content)
+    html_usable = False
+    parsed: ArticleFetchResult | None = None
+    if response.status_code == 200 and not challenged:
+        # URL original: delta cero en content_hash del camino feliz (hrefs relativos).
+        parsed = parse_article_html(response.text, url)
+        parsed.etag = response_etag
+        parsed.last_modified = response_last_modified
+        parsed.fetch_path = "html"
+        html_usable = html_result_usable(parsed)
+
+    if html_usable and parsed is not None:
+        return parsed
+
+    skip_rest = response.status_code in {404, 410} and not challenged
+    if not skip_rest:
+        rest = await _fetch_via_wordpress_rest(url, final_url, tried)
+        if rest is not None:
+            rest.etag = rest.etag or response_etag
+            rest.last_modified = rest.last_modified or response_last_modified
+            return rest
+
+    if challenged:
+        reason = "challenge"
+    elif response.status_code != 200:
+        reason = "http-error"
+    else:
+        reason = "empty"
+    raise ArticleUnavailable(
+        f"article unavailable: {url}",
+        status=response.status_code,
+        reason=reason,
+        tried=tried,
+        fetch_path=tried[-1] if tried else "html",
+    )

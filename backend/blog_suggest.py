@@ -20,7 +20,11 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from article_fetch import normalize_article_url
 from blog_landings import get_blog_landing
-from extraction_cache import classify_freshness, list_extraction_metas
+from extraction_cache import (
+    classify_freshness,
+    list_extraction_metas,
+    suggest_row_looks_poisoned,
+)
 from obs import log_kv
 from source_suggest import (
     MAX_LIMIT,
@@ -269,14 +273,22 @@ def apply_instant_from_cache(
                 stamp = None
         if classify_freshness(stamp) not in {"fresh", "stale"}:
             continue
+        if suggest_row_looks_poisoned(row):
+            continue
         for key in keys:
             if key:
                 by_key[key] = row
     out: list[SuggestHit] = []
     for hit in hits:
         key = normalize_article_url(hit.url)
-        if key and key in by_key:
-            out.append(hit.model_copy(update={"origin": "cache", "instant": True}))
+        row = by_key.get(key) if key else None
+        if row is not None:
+            og = row.get("og_title")
+            heading = og.strip() if isinstance(og, str) else ""
+            updates: dict[str, Any] = {"origin": "cache", "instant": True}
+            if heading:
+                updates["title"] = heading
+            out.append(hit.model_copy(update=updates))
         else:
             out.append(hit)
     return out
