@@ -359,7 +359,9 @@ export type RouteLeg = "outbound" | "return"
  * `carUse: "rental"` (solo con `mode: "car"` y sin `leg`): no es un
  * trayecto A→B. `from` es la ciudad de recogida; `to` es una copia si
  * se entrega en la misma ciudad, o la ciudad de entrega si no.
- * Comparar por valor (`sameRoutePlace`), no por `===`.
+ * `pickupAddress` / `dropoffAddress` son la oficina (opcional);
+ * no sustituyen las ciudades. `dropoffAddress` solo si las ciudades
+ * difieren. Comparar por valor (`sameRoutePlace`), no por `===`.
  */
 export interface TransportRoute {
   from: RoutePlace
@@ -367,6 +369,8 @@ export interface TransportRoute {
   mode?: RouteMode | null
   leg?: RouteLeg
   carUse?: RouteCarUse
+  pickupAddress?: RoutePlace
+  dropoffAddress?: RoutePlace
 }
 
 export interface UserDayItem {
@@ -382,8 +386,9 @@ export interface UserDayItem {
   /**
    * Coordenadas resueltas (p. ej. al elegir un candidato Mapbox en ítems manuales).
    * Objeto `{ lng, lat }` — no tupla — para el jsonb y el contrato de `LngLat`.
-   * En tramos A→B: apunta a `route.to.coords`. En un alquiler: la ciudad de
-   * recogida (`route.from`). El mapa no dibuja el alquiler en esta entrega.
+   * En tramos A→B: apunta a `route.to.coords`. En un alquiler: la oficina
+   * de recogida si hay `pickupAddress`, si no la ciudad (`route.from`).
+   * El mapa no dibuja el alquiler en esta entrega.
    */
   coords?: { lng: number; lat: number } | null
   affiliateUrl?: string | null

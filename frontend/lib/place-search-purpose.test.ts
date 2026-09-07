@@ -17,6 +17,7 @@ import {
   suggestionAllowedForPurpose,
   typesForPurpose,
   type PlaceSearchAnchor,
+  anchorFromRoutePlace,
 } from "./place-search-purpose"
 
 const madrid: PlaceSearchAnchor = {
@@ -192,5 +193,16 @@ assert.equal(
 
 assert.equal(emptyScopeMessage("Madrid"), "Sin resultados en la zona de Madrid")
 assert.equal(emptyScopeMessage(null), "Sin resultados en esta zona.")
+
+{
+  const anchor = anchorFromRoutePlace(
+    { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 } },
+    "rental-pickup",
+  )
+  assert.equal(anchor.featureType, "place")
+  assert.equal(anchor.label, "Edimburgo")
+  assert.equal(anchor.countryCode, null)
+  assert.ok(anchor.id.startsWith("rental-pickup:Edimburgo:"))
+}
 
 console.log("place-search-purpose: ok")

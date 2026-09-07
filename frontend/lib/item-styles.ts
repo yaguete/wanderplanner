@@ -32,18 +32,21 @@ import type {
 } from "@/types/itinerary"
 
 /**
- * Cabeza de caballo (lucide-lab `horse-head`, ISC). Lucide 0.454 no trae
- * caballo/camello/burro; las etiquetas del lab incluyen donkey.
+ * Platillo volante (lucide-lab `ufo`, ISC). Lucide 0.454 no lo exporta.
  */
-const HorseHead = createLucideIcon("horse-head", [
-  ["path", { d: "M11.5 12H11" }],
+const Ufo = createLucideIcon("ufo", [
+  ["path", { d: "M18 8c0 1-3 2-6 2S6 9 6 8a6 6 0 0 1 12 0" }],
+  ["path", { d: "M7 13h.01" }],
+  ["path", { d: "M12 14h.01" }],
+  ["path", { d: "M17 13h.01" }],
   [
     "path",
     {
-      d: "M5 15a4 4 0 0 0 4 4h7.8l.3.3a3 3 0 0 0 4-4.46L12 7c0-3-1-5-1-5S8 3 8 7c-4 1-6 3-6 3",
+      d: "M6 8.1c-2.4 1-4 2.6-4 4.4 0 3 4.5 5.5 10 5.5s10-2.5 10-5.5c0-1.8-1.6-3.4-4-4.4",
     },
   ],
-  ["path", { d: "M6.14 17.8S4 19 2 22" }],
+  ["path", { d: "m7 22 2-4" }],
+  ["path", { d: "m17 22-2-4" }],
 ])
 
 /**
@@ -168,7 +171,7 @@ export const TRANSPORT_MODE_ICONS: Record<TransportModeVisualKey, LucideIcon> = 
   ferry: Ship,
   car: Car,
   taxi: CarTaxiFront,
-  other: HorseHead,
+  other: Ufo,
   undecided: CircleHelp,
 }
 
@@ -188,7 +191,6 @@ export const TRANSPORT_MODE_OPTIONS: {
   value: TransportModeVisualKey
   label: string
 }[] = [
-  { value: "undecided", label: "Aún no lo sé" },
   { value: "car", label: "Coche" },
   { value: "taxi", label: "Taxi" },
   { value: "flight", label: "Avión" },
@@ -196,6 +198,7 @@ export const TRANSPORT_MODE_OPTIONS: {
   { value: "bus", label: "Autobús" },
   { value: "ferry", label: "Ferry" },
   { value: "other", label: "Otro" },
+  { value: "undecided", label: "Aún no lo sé" },
 ]
 
 /** Inferencia legacy por texto (fuentes cacheadas sin hint). */

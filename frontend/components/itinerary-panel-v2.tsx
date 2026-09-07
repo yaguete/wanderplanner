@@ -40,7 +40,11 @@ import { SegmentedControl } from "@/components/segmented-control"
 import { useCollapsingHeader } from "@/hooks/use-collapsing-header"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { formatDayHeadingLine, getDayUserDescription } from "@/lib/day-heading"
+import {
+  formatDayFilterOption,
+  formatDayHeadingLine,
+  getDayUserDescription,
+} from "@/lib/day-heading"
 import { mapCountryCodes, mapDestinationHint } from "@/lib/map-destination"
 import { dateISOForDayIndex, formatDayDate, formatTripDates } from "@/lib/trip-dates"
 import { useTrips } from "@/lib/trip-context"
@@ -674,7 +678,7 @@ export default function ItineraryPanel({
     return trip.days.map((day, index) => ({
       id: day.id,
       dayNumber: index + 1,
-      heading: formatDayHeadingLine(
+      heading: formatDayFilterOption(
         index,
         day.label,
         formatDayDate(dateISOForDayIndex(trip.startDate, index)),

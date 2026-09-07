@@ -18,6 +18,12 @@ export function getDayUserDescription(stored: string): string {
   return t
 }
 
+function capitalizeFirstEs(value: string): string {
+  const t = value.trim()
+  if (!t) return t
+  return t.charAt(0).toLocaleUpperCase("es") + t.slice(1)
+}
+
 /**
  * Título legible:
  * - "Día 1 · lun 14 sept · Llegada" (con fecha y descripción)
@@ -39,6 +45,25 @@ export function formatDayHeadingLine(
   if (date) return `Día ${n} · ${date}`
   if (!d) return `Día ${n}`
   return `Día ${n} · ${d}`
+}
+
+/**
+ * Opción del filtro de día de la Ruta: fecha (weekday con mayúscula) y
+ * descripción, sin «Día n». «Lun 28 dic · Vuelo a Edimburgo».
+ * Sin fecha, la descripción tal cual; si no hay nada, «Día n».
+ */
+export function formatDayFilterOption(
+  dayIndex0: number,
+  description: string,
+  dateLabel?: string | null,
+): string {
+  const d = getDayUserDescription(description).trim()
+  const rawDate = dateLabel?.trim() || null
+  const date = rawDate ? capitalizeFirstEs(rawDate) : null
+  if (date && d) return `${date} · ${d}`
+  if (date) return date
+  if (d) return d
+  return `Día ${dayIndex0 + 1}`
 }
 
 /**

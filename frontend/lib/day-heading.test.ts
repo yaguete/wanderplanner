@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import {
   dayHasSourceItem,
   firstDayIdWithoutSourceItem,
+  formatDayFilterOption,
   formatDayPickerHint,
   formatDayPickerLabel,
   getDayUserDescription,
@@ -9,6 +10,19 @@ import {
 
 assert.equal(getDayUserDescription("Día 1 — Llegada"), "Llegada")
 assert.equal(getDayUserDescription("Llegada"), "Llegada")
+
+assert.equal(
+  formatDayFilterOption(0, "Vuelo a Edimburgo", "lun 28 dic"),
+  "Lun 28 dic · Vuelo a Edimburgo",
+)
+assert.equal(
+  formatDayFilterOption(1, "Edimburgo medieval y navideño", "mar 29 dic"),
+  "Mar 29 dic · Edimburgo medieval y navideño",
+)
+assert.equal(formatDayFilterOption(2, "", "mier 30 dic"), "Mier 30 dic")
+assert.equal(formatDayFilterOption(0, "Llegada", null), "Llegada")
+assert.equal(formatDayFilterOption(3, "  ", null), "Día 4")
+assert.equal(formatDayFilterOption(0, "Día 1 — Llegada", "lun 14 sept"), "Lun 14 sept · Llegada")
 
 assert.equal(formatDayPickerLabel(0, "29 ago"), "Día 1 (29 ago)")
 assert.equal(formatDayPickerLabel(2, null), "Día 3")

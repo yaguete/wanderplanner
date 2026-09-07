@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ManualFlightSearch } from "@/components/manual-flight-search"
 import { ManualItemTaskFields } from "@/components/manual-item-task-fields"
 import { PartnerSearchLink } from "@/components/partner-search-link"
+import { PlaceSuggestInput, type SelectedPlace } from "@/components/place-suggest-input"
 import {
   CarUsePicker,
   emptyEndpoint,
@@ -32,14 +33,29 @@ import {
   type ManualTaskDraft,
 } from "@/lib/manual-item-task"
 import { parseSpanDays } from "@/lib/item-span"
+import { suggestPlacesSession, type PlaceSuggestion } from "@/lib/mapbox"
 import {
   createPlaceSearchBudget,
   isPlaceSearchEnabled,
   PLACE_SEARCH_DISABLED_MESSAGE,
+  canSpendSuggest,
+  canStartSession,
+  recordSession,
+  recordSuggest,
   stripPersistMeta,
   toPersistableRoutePlace,
   type PlaceSearchBudget,
 } from "@/lib/place-search-guardrails"
+import {
+  anchorFromRoutePlace,
+  bboxForAnchor,
+  nameSuggestDedupeKey,
+  newPlaceSearchSession,
+  recordSessionSuggest,
+  sessionNeedsRotation,
+  type PlaceSearchScope,
+  type PlaceSearchSession,
+} from "@/lib/place-search-purpose"
 import { seedTransportForm, type UpsertTransportRoutePayload } from "@/lib/transport-routes"
 import { parseCostInput } from "@/lib/task-labels"
 import {
@@ -55,6 +71,7 @@ import {
 import type {
   RouteCarUse,
   RouteMode,
+  RoutePlace,
   TransportRoute,
   TripTaskState,
   UserDay,
@@ -74,6 +91,23 @@ type BranchDraft = {
   pickup?: EndpointState
   dropoff?: EndpointState
   sameCityDropoff?: boolean
+  pickupAddressQuery?: string
+  pickupAddressSelected?: SelectedPlace | null
+  dropoffAddressQuery?: string
+  dropoffAddressSelected?: SelectedPlace | null
+}
+
+function selectedFromRoutePlace(place: RoutePlace | null | undefined): SelectedPlace | null {
+  if (!place) return null
+  return { label: place.label, coords: place.coords }
+}
+
+function routePlaceFromSelected(place: SelectedPlace): RoutePlace {
+  return {
+    label: place.address?.trim() || place.label.trim(),
+    coords: { lng: place.coords.lng, lat: place.coords.lat },
+    kind: "address",
+  }
 }
 
 export function InternalTransportForm({
@@ -110,6 +144,8 @@ export function InternalTransportForm({
   const returnDayIdField = useId()
   const transferDayIdField = useId()
   const companyId = useId()
+  const pickupAddressId = useId()
+  const dropoffAddressId = useId()
   const noteId = useId()
   const addDaysHint = "Puedes añadir más días desde la configuración del viaje."
   const routeFormRef = useRef<TransportRouteFormHandle>(null)
@@ -164,6 +200,27 @@ export function InternalTransportForm({
     emptyEndpoint({ place: existingDropoff, pendingText: null }),
   )
   const [company, setCompany] = useState(() => (existingRental ? seed.vendor : ""))
+  const [pickupAddressQuery, setPickupAddressQuery] = useState(
+    () => (existingRental ? seed.pickupAddress?.label ?? "" : ""),
+  )
+  const [pickupAddressSelected, setPickupAddressSelected] = useState<SelectedPlace | null>(
+    () => (existingRental ? selectedFromRoutePlace(seed.pickupAddress) : null),
+  )
+  const [dropoffAddressQuery, setDropoffAddressQuery] = useState(
+    () => (existingRental ? seed.dropoffAddress?.label ?? "" : ""),
+  )
+  const [dropoffAddressSelected, setDropoffAddressSelected] = useState<SelectedPlace | null>(
+    () => (existingRental ? selectedFromRoutePlace(seed.dropoffAddress) : null),
+  )
+  const [pickupNameSuggestions, setPickupNameSuggestions] = useState<PlaceSuggestion[] | null>(null)
+  const [dropoffNameSuggestions, setDropoffNameSuggestions] = useState<PlaceSuggestion[] | null>(
+    null,
+  )
+  const addressSessionRef = useRef<PlaceSearchSession | null>(null)
+  const pickupSuggestKeyRef = useRef<string | null>(null)
+  const dropoffSuggestKeyRef = useRef<string | null>(null)
+  const pickupSuggestGenRef = useRef(0)
+  const dropoffSuggestGenRef = useRef(0)
   const [detail, setDetail] = useState(seed.detail)
   const [taskDraft, setTaskDraft] = useState<ManualTaskDraft>(() =>
     draftFromTaskState(existingTask),
@@ -234,6 +291,10 @@ export function InternalTransportForm({
       pickup,
       dropoff,
       sameCityDropoff,
+      pickupAddressQuery,
+      pickupAddressSelected,
+      dropoffAddressQuery,
+      dropoffAddressSelected,
     }
   }
 
@@ -249,6 +310,14 @@ export function InternalTransportForm({
       if (saved.pickup) setPickup(saved.pickup)
       if (saved.dropoff) setDropoff(saved.dropoff)
       if (saved.sameCityDropoff != null) setSameCityDropoff(saved.sameCityDropoff)
+      if (saved.pickupAddressQuery != null) setPickupAddressQuery(saved.pickupAddressQuery)
+      if (saved.pickupAddressSelected !== undefined) {
+        setPickupAddressSelected(saved.pickupAddressSelected)
+      }
+      if (saved.dropoffAddressQuery != null) setDropoffAddressQuery(saved.dropoffAddressQuery)
+      if (saved.dropoffAddressSelected !== undefined) {
+        setDropoffAddressSelected(saved.dropoffAddressSelected)
+      }
       return
     }
     const keepCostAndNote =
@@ -316,6 +385,109 @@ export function InternalTransportForm({
     return stripPersistMeta(toPersistableRoutePlace(endpoint.selected, endpoint.selected))
   }
 
+  const clearPickupAddress = () => {
+    setPickupAddressQuery("")
+    setPickupAddressSelected(null)
+    setPickupNameSuggestions(null)
+    pickupSuggestKeyRef.current = null
+    pickupSuggestGenRef.current += 1
+  }
+
+  const clearDropoffAddress = () => {
+    setDropoffAddressQuery("")
+    setDropoffAddressSelected(null)
+    setDropoffNameSuggestions(null)
+    dropoffSuggestKeyRef.current = null
+    dropoffSuggestGenRef.current += 1
+  }
+
+  const suggestCompanyInCity = (
+    city: RoutePlace | null | undefined,
+    target: "pickup" | "dropoff",
+    companyName: string,
+    opts?: { skipIfFilled?: boolean },
+  ) => {
+    const n = companyName.trim()
+    if (!n || !city) return
+    const skipIfFilled = opts?.skipIfFilled ?? true
+    if (
+      skipIfFilled &&
+      target === "pickup" &&
+      (pickupAddressQuery.trim() || pickupAddressSelected)
+    ) {
+      return
+    }
+    if (
+      skipIfFilled &&
+      target === "dropoff" &&
+      (dropoffAddressQuery.trim() || dropoffAddressSelected)
+    ) {
+      return
+    }
+    const scope: PlaceSearchScope = "anchored"
+    const anchor = anchorFromRoutePlace(city, `rental-${target}`)
+    const key = nameSuggestDedupeKey({
+      name: n,
+      anchorId: anchor.id,
+      purpose: "poi",
+      scope,
+    })
+    const keyRef = target === "pickup" ? pickupSuggestKeyRef : dropoffSuggestKeyRef
+    const genRef = target === "pickup" ? pickupSuggestGenRef : dropoffSuggestGenRef
+    if (keyRef.current === key) return
+    const budget = budgetRef.current
+    if (!canSpendSuggest(budget)) return
+    let session = addressSessionRef.current
+    if (sessionNeedsRotation(session) && !canStartSession(budget)) return
+    keyRef.current = key
+    const gen = ++genRef.current
+    if (sessionNeedsRotation(session)) {
+      session = newPlaceSearchSession()
+      addressSessionRef.current = session
+      budgetRef.current = recordSession(budgetRef.current)
+    }
+    budgetRef.current = recordSuggest(budgetRef.current)
+    addressSessionRef.current = recordSessionSuggest(session!)
+    void suggestPlacesSession(n, addressSessionRef.current.token, {
+      purpose: "poi",
+      proximity: [anchor.coords.lng, anchor.coords.lat],
+      bbox: bboxForAnchor(anchor),
+      anchored: true,
+      anywhere: false,
+    }).then((result) => {
+      if (gen !== genRef.current) return
+      if (!result.ok || result.items.length === 0) return
+      if (target === "pickup") setPickupNameSuggestions(result.items)
+      else setDropoffNameSuggestions(result.items)
+    })
+  }
+
+  const handleCompanyBlur = () => {
+    suggestCompanyInCity(pickup.selected, "pickup", company)
+    if (!sameCityDropoff) {
+      suggestCompanyInCity(dropoff.selected, "dropoff", company)
+    }
+  }
+
+  const handleSelectPickupAddress = (place: SelectedPlace) => {
+    const isPoi = place.featureType === "poi"
+    const postal = place.address?.trim() || (isPoi ? "" : place.label)
+    setPickupAddressQuery(postal || place.label)
+    setPickupAddressSelected({ ...place, label: postal || place.label })
+    if (isPoi && place.name?.trim() && !company.trim()) {
+      setCompany(place.name.trim())
+    }
+    setPickupNameSuggestions(null)
+  }
+
+  const handleSelectDropoffAddress = (place: SelectedPlace) => {
+    const isPoi = place.featureType === "poi"
+    const postal = place.address?.trim() || (isPoi ? "" : place.label)
+    setDropoffAddressQuery(postal || place.label)
+    setDropoffAddressSelected({ ...place, label: postal || place.label })
+    setDropoffNameSuggestions(null)
+  }
+
   const currentTaskPatch = (persistEmpty: boolean) =>
     taskPatchFromManualDraft(
       { ...taskDraft, cost: costRef.current },
@@ -349,7 +521,15 @@ export function InternalTransportForm({
         dayId,
         returnDayId,
         itemId: existingItem?.id,
-        route: rentalRouteFromPickup(city, dropoffCity),
+        route: rentalRouteFromPickup(city, dropoffCity, {
+          pickupAddress: pickupAddressSelected
+            ? routePlaceFromSelected(pickupAddressSelected)
+            : null,
+          dropoffAddress:
+            !sameCityDropoff && dropoffAddressSelected
+              ? routePlaceFromSelected(dropoffAddressSelected)
+              : null,
+        }),
         vendor: company.trim() || null,
         detail: detail.trim() || null,
         taskPatch: currentTaskPatch(Boolean(existingTask)),
@@ -426,6 +606,11 @@ export function InternalTransportForm({
             budgetRef={budgetRef}
             onBudgetNotice={setSearchNotice}
             enabled={rentalActive}
+            onCityCleared={clearPickupAddress}
+            onCitySelected={(place) => {
+              clearPickupAddress()
+              suggestCompanyInCity(place, "pickup", company, { skipIfFilled: false })
+            }}
           />
           <DayPickerSelect
             id={pickupDayIdField}
@@ -472,6 +657,7 @@ export function InternalTransportForm({
                       const checked = value === true
                       setSameCityDropoff(checked)
                       if (checked) {
+                        clearDropoffAddress()
                         setDropoff((s) => ({
                           ...s,
                           listOpen: false,
@@ -479,6 +665,8 @@ export function InternalTransportForm({
                           loading: false,
                           error: null,
                         }))
+                      } else {
+                        suggestCompanyInCity(dropoff.selected, "dropoff", company)
                       }
                     }}
                     className="mt-0.5"
@@ -496,6 +684,11 @@ export function InternalTransportForm({
                     budgetRef={budgetRef}
                     onBudgetNotice={setSearchNotice}
                     enabled={rentalActive && rentalDetailsOpen && !sameCityDropoff}
+                    onCityCleared={clearDropoffAddress}
+                    onCitySelected={(place) => {
+                      clearDropoffAddress()
+                      suggestCompanyInCity(place, "dropoff", company, { skipIfFilled: false })
+                    }}
                   />
                 ) : null}
               </div>
@@ -527,10 +720,86 @@ export function InternalTransportForm({
                 <Input
                   id={companyId}
                   value={company}
-                  onChange={(e) => setCompany(e.target.value)}
+                  onChange={(e) => {
+                    pickupSuggestGenRef.current += 1
+                    dropoffSuggestGenRef.current += 1
+                    setCompany(e.target.value)
+                    setPickupNameSuggestions(null)
+                    setDropoffNameSuggestions(null)
+                  }}
+                  onBlur={handleCompanyBlur}
                   placeholder="p. ej. Hertz, Sixt…"
                 />
               </div>
+              <PlaceSuggestInput
+                id={pickupAddressId}
+                label="Dirección de recogida (opcional)"
+                value={pickupAddressQuery}
+                onValueChange={(next) => {
+                  pickupSuggestGenRef.current += 1
+                  setPickupAddressQuery(next)
+                  setPickupAddressSelected(null)
+                  setPickupNameSuggestions(null)
+                }}
+                selected={pickupAddressSelected}
+                onSelect={handleSelectPickupAddress}
+                placeholder="p. ej. aeropuerto, oficina…"
+                proximity={
+                  pickup.selected
+                    ? [pickup.selected.coords.lng, pickup.selected.coords.lat]
+                    : null
+                }
+                countryCodes={[]}
+                purpose="address"
+                anchor={
+                  pickup.selected
+                    ? anchorFromRoutePlace(pickup.selected, "rental-pickup")
+                    : null
+                }
+                scope="anchored"
+                budgetRef={budgetRef}
+                sessionRef={addressSessionRef}
+                onBudgetNotice={setSearchNotice}
+                externalSuggestions={pickupNameSuggestions}
+                onExternalSuggestionsConsumed={() => setPickupNameSuggestions(null)}
+                enabled={rentalActive && Boolean(pickup.selected)}
+              />
+              {!sameCityDropoff ? (
+                <PlaceSuggestInput
+                  id={dropoffAddressId}
+                  label="Dirección de entrega (opcional)"
+                  value={dropoffAddressQuery}
+                  onValueChange={(next) => {
+                    dropoffSuggestGenRef.current += 1
+                    setDropoffAddressQuery(next)
+                    setDropoffAddressSelected(null)
+                    setDropoffNameSuggestions(null)
+                  }}
+                  selected={dropoffAddressSelected}
+                  onSelect={handleSelectDropoffAddress}
+                  placeholder="p. ej. aeropuerto, oficina…"
+                  proximity={
+                    dropoff.selected
+                      ? [dropoff.selected.coords.lng, dropoff.selected.coords.lat]
+                      : null
+                  }
+                  countryCodes={[]}
+                  purpose="address"
+                  anchor={
+                    dropoff.selected
+                      ? anchorFromRoutePlace(dropoff.selected, "rental-dropoff")
+                      : null
+                  }
+                  scope="anchored"
+                  budgetRef={budgetRef}
+                  sessionRef={addressSessionRef}
+                  onBudgetNotice={setSearchNotice}
+                  externalSuggestions={dropoffNameSuggestions}
+                  onExternalSuggestionsConsumed={() => setDropoffNameSuggestions(null)}
+                  autoOpenExternal={false}
+                  enabled={rentalActive && Boolean(dropoff.selected)}
+                />
+              ) : null}
             </>
           ) : null}
         </>

@@ -68,18 +68,31 @@ function copyRoutePlace(place: RoutePlace): RoutePlace {
 /**
  * `from` = recogida. `to` = copia si no hay entrega distinta; si no, la
  * ciudad de entrega. Sigue sin ser un trayecto: comparar por valor.
+ * Las oficinas no pisan las ciudades; sin entrega distinta no hay
+ * `dropoffAddress`.
  */
 export function rentalRouteFromPickup(
   pickup: RoutePlace,
   dropoff?: RoutePlace | null,
+  extras?: {
+    pickupAddress?: RoutePlace | null
+    dropoffAddress?: RoutePlace | null
+  },
 ): TransportRoute {
   const same = dropoff == null || sameRoutePlace(pickup, dropoff)
-  return {
+  const route: TransportRoute = {
     from: pickup,
     to: copyRoutePlace(same || !dropoff ? pickup : dropoff),
     mode: "car",
     carUse: "rental",
   }
+  if (extras?.pickupAddress) {
+    route.pickupAddress = copyRoutePlace(extras.pickupAddress)
+  }
+  if (!same && extras?.dropoffAddress) {
+    route.dropoffAddress = copyRoutePlace(extras.dropoffAddress)
+  }
+  return route
 }
 
 export function rentalPickupPlace(

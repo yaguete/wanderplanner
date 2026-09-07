@@ -89,6 +89,7 @@ export function PlaceSuggestInput({
   enabled = true,
   onResolvedAnchor,
   showFixedHint = false,
+  autoOpenExternal = true,
 }: {
   id: string
   label: string
@@ -115,6 +116,8 @@ export function PlaceSuggestInput({
   enabled?: boolean
   onResolvedAnchor?: (anchor: PlaceSearchAnchor) => void
   showFixedHint?: boolean
+  /** Si hay `externalSuggestions` y el campo está vacío, abrir el listado. */
+  autoOpenExternal?: boolean
 }) {
   const listId = useId()
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
@@ -177,11 +180,11 @@ export function PlaceSuggestInput({
   useEffect(() => {
     if (externalSuggestions && externalSuggestions.length > 0 && !value.trim()) {
       setSuggestions(externalSuggestions)
-      setListOpen(true)
+      setListOpen(autoOpenExternal)
       setStatus("idle")
       setHighlight(0)
     }
-  }, [externalSuggestions, value])
+  }, [externalSuggestions, value, autoOpenExternal])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)

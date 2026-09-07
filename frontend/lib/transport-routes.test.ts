@@ -292,6 +292,42 @@ describe("transport-routes seeds y build", () => {
     const oneWay = rentalRouteFromPickup(city, glasgow)
     assert.equal(rentalDropoffPlace(oneWay)?.label, "Glasgow")
     assert.notEqual(oneWay.from, oneWay.to)
+    const office = {
+      label: "Waverley Bridge, EH1 1BB",
+      coords: { lng: -3.188, lat: 55.952 },
+      kind: "address" as const,
+    }
+    const withOffice = rentalRouteFromPickup(city, glasgow, {
+      pickupAddress: office,
+      dropoffAddress: {
+        label: "Queen Street",
+        coords: { lng: -4.251, lat: 55.862 },
+        kind: "address",
+      },
+    })
+    assert.equal(withOffice.pickupAddress?.label, office.label)
+    assert.equal(withOffice.dropoffAddress?.label, "Queen Street")
+    assert.notEqual(withOffice.pickupAddress, office)
+    const sameCityOffice = rentalRouteFromPickup(city, null, {
+      pickupAddress: office,
+      dropoffAddress: {
+        label: "no debe persistir",
+        coords: { lng: 0, lat: 0 },
+        kind: "address",
+      },
+    })
+    assert.equal(sameCityOffice.pickupAddress?.label, office.label)
+    assert.equal(sameCityOffice.dropoffAddress, undefined)
+    const builtOffice = buildTransportRouteItem({
+      route: withOffice,
+      vendor: "Hertz",
+      span: { anchorIndex: 1, coverage: 4, numDays: 7 },
+    })
+    assert.equal(builtOffice.route?.pickupAddress?.label, office.label)
+    assert.equal(builtOffice.coords?.lng, office.coords.lng)
+    const seeded = seedTransportForm(builtOffice)
+    assert.equal(seeded.pickupAddress?.label, office.label)
+    assert.equal(seeded.dropoffAddress?.label, "Queen Street")
   })
 
   it("alquiler: recogida no es el último día; devolución al menos el siguiente", () => {
@@ -543,14 +579,14 @@ describe("iconos por medio", () => {
     }
   })
 
-  it("selector de medio: orden Aún no lo sé · Coche · Taxi · Avión · Tren · Autobús · Ferry · Otro", () => {
+  it("selector de medio: orden Coche · Taxi · Avión · Tren · Autobús · Ferry · Otro · Aún no lo sé", () => {
     assert.deepEqual(
       TRANSPORT_MODE_OPTIONS.map((o) => o.value),
-      ["undecided", "car", "taxi", "flight", "train", "bus", "ferry", "other"],
+      ["car", "taxi", "flight", "train", "bus", "ferry", "other", "undecided"],
     )
     assert.deepEqual(
       TRANSPORT_MODE_OPTIONS.map((o) => o.label),
-      ["Aún no lo sé", "Coche", "Taxi", "Avión", "Tren", "Autobús", "Ferry", "Otro"],
+      ["Coche", "Taxi", "Avión", "Tren", "Autobús", "Ferry", "Otro", "Aún no lo sé"],
     )
     for (const opt of TRANSPORT_MODE_OPTIONS) {
       assert.ok(TRANSPORT_MODE_ICONS[opt.value])

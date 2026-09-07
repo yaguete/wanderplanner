@@ -32,6 +32,8 @@ export type TransportFormSeed = {
   vendor: string
   detail: string
   carUse: "owned" | "rental" | null
+  pickupAddress: RoutePlace | null
+  dropoffAddress: RoutePlace | null
 }
 
 export type UpsertTransportRoutePayload = {
@@ -150,6 +152,8 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
       vendor: item.vendor ?? "",
       detail: item.detail ?? "",
       carUse,
+      pickupAddress: item.route.pickupAddress ?? null,
+      dropoffAddress: item.route.dropoffAddress ?? null,
     }
   }
 
@@ -164,6 +168,8 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
       vendor: item?.vendor ?? "",
       detail: item?.detail ?? "",
       carUse: null,
+      pickupAddress: null,
+      dropoffAddress: null,
     }
   }
 
@@ -178,6 +184,8 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
       vendor: item?.vendor ?? "",
       detail: item?.detail ?? "",
       carUse: null,
+      pickupAddress: null,
+      dropoffAddress: null,
     }
   }
 
@@ -190,6 +198,8 @@ export function seedTransportForm(item?: UserDayItem | null): TransportFormSeed 
     vendor: item?.vendor ?? "",
     detail: item?.detail ?? "",
     carUse: null,
+    pickupAddress: null,
+    dropoffAddress: null,
   }
 }
 
@@ -225,7 +235,10 @@ export function buildTransportRouteItem(params: {
 
   const rental = isCarRentalRoute(route)
   const cleanRoute: TransportRoute = rental
-    ? rentalRouteFromPickup(route.from, route.to)
+    ? rentalRouteFromPickup(route.from, route.to, {
+        pickupAddress: route.pickupAddress,
+        dropoffAddress: route.dropoffAddress,
+      })
     : {
         from: route.from,
         to: route.to,
@@ -239,7 +252,9 @@ export function buildTransportRouteItem(params: {
     ? rentalDisplayName(cleanVendor)
     : formatLegName(route.from.label, route.to.label)
   const region = rental ? rentalRegionLabel(cleanRoute) : route.to.label
-  const coords = rental ? route.from.coords : route.to.coords
+  const coords = rental
+    ? (cleanRoute.pickupAddress?.coords ?? route.from.coords)
+    : route.to.coords
 
   let item: UserDayItem
   if (existing) {

@@ -205,6 +205,21 @@ export function normalizePlaceQuery(raw: string): string {
     .trim()
 }
 
+/** Ancla de 25 km (`place`) a partir de una ciudad ya persistida. */
+export function anchorFromRoutePlace(
+  place: { label: string; coords: LngLat },
+  idPrefix: string,
+): PlaceSearchAnchor {
+  return {
+    id: `${idPrefix}:${place.label}:${place.coords.lng.toFixed(4)},${place.coords.lat.toFixed(4)}`,
+    label: place.label,
+    featureType: "place",
+    coords: place.coords,
+    countryCode: null,
+    bbox: null,
+  }
+}
+
 export function nameSuggestDedupeKey(params: {
   name: string
   anchorId: string
