@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
@@ -205,6 +205,44 @@ function TripActions({
   )
 }
 
+function TripsHomeFrame({
+  heading,
+  toolbar,
+  scrollKey,
+  children,
+}: {
+  heading: ReactNode
+  toolbar?: ReactNode
+  scrollKey?: string
+  children: ReactNode
+}) {
+  return (
+    <>
+      {/*
+       * Un solo bloque sticky (móvil) / fuera del scroller (desktop). Encadenar
+       * `top` entre el título y la barra de Fuentes no se sostiene: la altura
+       * del título cambia (directorio vs feed).
+       */}
+      <div className="sticky top-[var(--wp-header-height)] z-20 bg-canvas md:static">
+        <div className="mx-auto max-w-5xl px-4 pt-8 sm:px-8 sm:pt-10">
+          <div
+            className={cn(
+              "pb-6 sm:pb-8",
+              scrollKey === "directory" && "pb-3 sm:pb-4",
+            )}
+          >
+            {heading}
+            {toolbar ? <div className="mt-6 sm:mt-8">{toolbar}</div> : null}
+          </div>
+        </div>
+      </div>
+      <div key={scrollKey} className="flex-1 md:min-h-0 md:overflow-auto">
+        {children}
+      </div>
+    </>
+  )
+}
+
 function TripsHomePage() {
   const { trips, isLoading, createTrip, updateTrip, deleteTrip, archiveTrip, unarchiveTrip, leaveTrip, reloadTrips } =
     useTrips()
@@ -307,94 +345,113 @@ function TripsHomePage() {
     }
   }
 
+  const heading = (
+    <TripsHomeHeading
+      section={homeSection}
+      directory={homeSection === "sources" && sourcesDirectory}
+      onSectionChange={setHomeSection}
+      onLeaveDirectory={
+        homeSection === "sources" && sourcesDirectory
+          ? () => setSourcesDirectory(false)
+          : undefined
+      }
+    />
+  )
+
+  const inviteList =
+    invites.length > 0 ? (
+      <ul className="mb-6 space-y-2">
+        {invites.map((inv) => (
+          <li
+            key={inv.inviteId}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
+          >
+            <p className="text-sm">
+              <span className="font-medium">{inv.inviterName}</span>
+              {" te invita a editar "}
+              <span className="font-medium">{inv.tripName}</span>
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={async () => {
+                  const supabase = createClient()
+                  const { data, error } = await supabase.rpc("accept_trip_invite_by_id", {
+                    p_invite_id: inv.inviteId,
+                  })
+                  if (error) {
+                    toast.error("No se pudo aceptar la invitación")
+                    return
+                  }
+                  const status = acceptStatusFromPayload(data)
+                  if (isFailedAcceptStatus(status)) {
+                    toast.error(
+                      status === "expired"
+                        ? "Esta invitación ha caducado"
+                        : "No encontramos esa invitación",
+                    )
+                    await reloadInvites()
+                    return
+                  }
+                  const tripId = tripIdFromAcceptPayload(data) || inv.tripId
+                  await reloadInvites()
+                  await reloadTrips()
+                  beginOpenTrip({ id: tripId, name: inv.tripName })
+                  router.push(`/trips/${tripId}`)
+                }}
+              >
+                Aceptar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  const supabase = createClient()
+                  const { error } = await supabase.rpc("decline_trip_invite", {
+                    p_invite_id: inv.inviteId,
+                  })
+                  if (error) {
+                    toast.error("No se pudo rechazar la invitación")
+                    return
+                  }
+                  await reloadInvites()
+                }}
+              >
+                Rechazar
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    ) : null
+
+  const homeScroll = (content: ReactNode, toolbar?: ReactNode, scrollKey?: string) => (
+    <TripsHomeFrame heading={heading} toolbar={toolbar} scrollKey={scrollKey}>
+      <div className="mx-auto max-w-5xl px-4 pb-8 sm:px-8 sm:pb-10">
+        {inviteList}
+        {content}
+      </div>
+    </TripsHomeFrame>
+  )
+
   return (
     // Móvil: scrollea el documento (ver `trips-shell`). La cabecera se pega
     // bajo el AppHeader (`sticky`); el resto va en flujo. Desktop: la cabecera
     // queda fuera del scroller (`md:overflow-auto`).
     <div className="flex flex-1 flex-col md:min-h-0">
-      <div className="sticky top-[var(--wp-header-height)] z-20 bg-canvas md:static">
-        <div className="mx-auto max-w-5xl px-4 pt-8 sm:px-8 sm:pt-10">
-          <div className="pb-6 sm:pb-8">
-            <TripsHomeHeading
-              section={homeSection}
-              directory={homeSection === "sources" && sourcesDirectory}
-              onSectionChange={setHomeSection}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 md:min-h-0 md:overflow-auto">
-        <div className="mx-auto max-w-5xl px-4 pb-8 sm:px-8 sm:pb-10">
-        {invites.length > 0 ? (
-          <ul className="mb-6 space-y-2">
-            {invites.map((inv) => (
-              <li
-                key={inv.inviteId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
-              >
-                <p className="text-sm">
-                  <span className="font-medium">{inv.inviterName}</span>
-                  {" te invita a editar "}
-                  <span className="font-medium">{inv.tripName}</span>
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={async () => {
-                      const supabase = createClient()
-                      const { data, error } = await supabase.rpc("accept_trip_invite_by_id", {
-                        p_invite_id: inv.inviteId,
-                      })
-                      if (error) {
-                        toast.error("No se pudo aceptar la invitación")
-                        return
-                      }
-                      const status = acceptStatusFromPayload(data)
-                      if (isFailedAcceptStatus(status)) {
-                        toast.error(
-                          status === "expired"
-                            ? "Esta invitación ha caducado"
-                            : "No encontramos esa invitación",
-                        )
-                        await reloadInvites()
-                        return
-                      }
-                      const tripId = tripIdFromAcceptPayload(data) || inv.tripId
-                      await reloadInvites()
-                      await reloadTrips()
-                      beginOpenTrip({ id: tripId, name: inv.tripName })
-                      router.push(`/trips/${tripId}`)
-                    }}
-                  >
-                    Aceptar
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      const supabase = createClient()
-                      const { error } = await supabase.rpc("decline_trip_invite", {
-                        p_invite_id: inv.inviteId,
-                      })
-                      if (error) {
-                        toast.error("No se pudo rechazar la invitación")
-                        return
-                      }
-                      await reloadInvites()
-                    }}
-                  >
-                    Rechazar
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {homeSection === "trips" ? (
+      {homeSection === "sources" ? (
+        <ReferenceFeedPanel
+          directory={sourcesDirectory}
+          onDirectoryChange={setSourcesDirectory}
+        >
+          {({ toolbar, body }) =>
+            homeScroll(body, toolbar, sourcesDirectory ? "directory" : "feed")
+          }
+        </ReferenceFeedPanel>
+      ) : (
+        homeScroll(
         <>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div
@@ -705,14 +762,9 @@ function TripsHomePage() {
             ) : null}
           </div>
         )}
-        </>
-        ) : (
-          <ReferenceFeedPanel
-            directory={sourcesDirectory}
-            onDirectoryChange={setSourcesDirectory}
-          />
-        )}
-        </div>
+        </>,
+        )
+      )}
 
       {tripToInvite ? (
         <InviteTripDialog
@@ -826,7 +878,6 @@ function TripsHomePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
     </div>
   )
 }
