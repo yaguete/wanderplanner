@@ -395,6 +395,9 @@ export function InternalTransportForm({
           pickupDayValid && returnDayValid
             ? rentalCoverageDays(pickupIndex, returnIndex)
             : 1,
+        pickup: pickup.selected,
+        dropoff: sameCityDropoff ? pickup.selected : dropoff.selected,
+        currency,
       })
     : { kind: "none" as const }
 
@@ -504,12 +507,20 @@ export function InternalTransportForm({
                   affiliate="partner"
                 />
               ) : rentalDiscovery.kind === "own" ? (
-                <PartnerSearchLink
-                  href={rentalDiscovery.carRental?.discovercars ?? null}
-                  label="Buscar en DiscoverCars"
-                  surface="manual_item"
-                  affiliate="own"
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <PartnerSearchLink
+                    href={rentalDiscovery.carRental?.discovercars ?? null}
+                    label="Buscar en DiscoverCars"
+                    surface="manual_item"
+                    affiliate="own"
+                  />
+                  <PartnerSearchLink
+                    href={rentalDiscovery.carRental?.skyscanner ?? null}
+                    label="Buscar en Skyscanner"
+                    surface="manual_item"
+                    affiliate="own"
+                  />
+                </div>
               ) : null}
               <div className="space-y-2">
                 <Label htmlFor={companyId}>Nombre de la compañía de alquiler (opcional)</Label>

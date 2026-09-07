@@ -148,15 +148,17 @@ export function ReserveSearchDialog({
               <p className="text-sm text-muted-foreground">{discovery.hint}</p>
             )
           ) : discovery.kind === "own" && ownCarRental ? (
-            <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <PartnerSearchLink
                 href={ownCarRental.discovercars}
                 label="Buscar en DiscoverCars"
                 surface="task_row"
               />
-              {discovery.hint ? (
-                <p className="text-xs text-muted-foreground">{discovery.hint}</p>
-              ) : null}
+              <PartnerSearchLink
+                href={ownCarRental.skyscanner}
+                label="Buscar en Skyscanner"
+                surface="task_row"
+              />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

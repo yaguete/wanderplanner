@@ -158,7 +158,9 @@ export default function PrivacidadPage() {
           ha propuesto el asistente, también puedes salir a Airbnb o a HomeExchange con
           destino y fechas en la dirección; si buscas una actividad que has añadido tú o te
           ha propuesto el asistente, sales a Civitatis o a GetYourGuide a través de Stay22
-          con destino y fechas en la dirección. Stay22 es un intermediario: ve destino y
+          con destino y fechas en la dirección; si buscas un alquiler de coche que has
+          añadido tú o te ha propuesto el asistente, sales a DiscoverCars o a Skyscanner,
+          y en Skyscanner van destino y fechas en la dirección. Stay22 es un intermediario: ve destino y
           fechas para redirigirte,
           como cuenta el{" "}
           <Link href="/legal/aviso-legal#enlaces-comerciales" className="font-medium text-foreground underline underline-offset-4">

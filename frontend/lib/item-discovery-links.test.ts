@@ -287,7 +287,10 @@ assert.equal(
     links.carRental?.discovercars,
     "https://www.discovercars.com/es?a_aid=lacosmopolilla",
   )
-  assert.equal(links.hint, "Elige la ciudad y las fechas en DiscoverCars.")
+  assert.ok(links.carRental?.skyscanner)
+  const wrap = new URL(links.carRental.skyscanner)
+  assert.equal(wrap.hostname, "skyscanner.pxf.io")
+  assert.equal(links.hint, undefined)
 }
 
 {
@@ -336,11 +339,17 @@ assert.equal(
     startDate: checkin,
     pickupIndex: 1,
     spanDays: 4,
+    pickup: {
+      label: "Edimburgo",
+      coords: { lng: -3.19, lat: 55.95 },
+      kind: "city",
+    },
   })
   assert.equal(own.kind, "own")
   if (own.kind !== "own") throw new Error("expected own")
   assert.equal(own.carRental?.discovercars, "https://www.discovercars.com/es?a_aid=lacosmopolilla")
-  assert.equal(own.hint, "Elige la ciudad y las fechas en DiscoverCars.")
+  assert.ok(own.carRental?.skyscanner)
+  assert.equal(own.hint, undefined)
 }
 
 console.log("item-discovery-links.test.ts: ok")

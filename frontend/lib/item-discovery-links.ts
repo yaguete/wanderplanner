@@ -20,16 +20,21 @@ import {
   type ActivityDiscoveryHrefs,
 } from "@/lib/activity-search"
 import { classifyOutboundTarget, type OutboundAffiliate } from "@/lib/funnel-analytics"
-import { carRentalFormSearchHref } from "@/lib/car-rental-search"
+import {
+  buildSkyscannerCarHireHref,
+  carRentalFormSearchHref,
+} from "@/lib/car-rental-search"
+import { dateISOForDayIndex } from "@/lib/trip-dates"
 import { isCarRentalItem, type TransportKindProbe } from "@/lib/transport-kind"
 import {
   stayDiscoveryHrefs,
   type StayDiscoveryHrefs,
 } from "@/lib/stay-discovery"
-import type { ItemType, TransportRoute } from "@/types/itinerary"
+import type { ItemType, RoutePlace, TransportRoute } from "@/types/itinerary"
 
 export type CarRentalDiscoveryHrefs = {
   discovercars: string
+  skyscanner: string | null
 }
 
 export type ItemDiscoveryLinks =
@@ -158,6 +163,11 @@ export function itemDiscoveryLinks(input: ItemDiscoveryLinksInput): ItemDiscover
   }
 
   if (input.type === "transport" && isCarRentalItem({ type: "transport", route: input.route })) {
+    const pickupISO = dateISOForDayIndex(input.startDate, input.dayIndex)
+    const returnIndex = input.dayIndex + Math.max(input.spanDays, 1) - 1
+    const returnISO = dateISOForDayIndex(input.startDate, returnIndex)
+    const pickup = routePickupPlace(input.route)
+    const dropoff = routeDropoffPlace(input.route) ?? pickup
     return {
       kind: "own",
       carRental: {
@@ -165,11 +175,17 @@ export function itemDiscoveryLinks(input: ItemDiscoveryLinksInput): ItemDiscover
           city: input.destination,
           startDate: input.startDate,
           pickupIndex: input.dayIndex,
-          returnIndex: input.dayIndex + Math.max(input.spanDays, 1) - 1,
+          returnIndex,
           affiliateUrl: null,
         }),
+        skyscanner: buildSkyscannerCarHireHref({
+          pickup,
+          dropoff,
+          pickupISO,
+          returnISO,
+          currency: input.currency,
+        }),
       },
-      hint: "Elige la ciudad y las fechas en DiscoverCars.",
     }
   }
 
@@ -188,9 +204,14 @@ export function rentalFormDiscoveryLinks(input: {
   startDate: string | null
   pickupIndex: number
   spanDays: number
+  pickup?: RoutePlace | null
+  dropoff?: RoutePlace | null
+  currency?: string | null
 }): ItemDiscoveryLinks {
   const pickup = Math.max(0, input.pickupIndex)
   const span = Math.max(input.spanDays, 1)
+  const pickupPlace = input.pickup ?? null
+  const dropoffPlace = input.dropoff ?? pickupPlace
   return itemDiscoveryLinks({
     type: "transport",
     affiliateUrl: input.affiliateUrl,
@@ -202,8 +223,30 @@ export function rentalFormDiscoveryLinks(input: {
     dayIndexes: Array.from({ length: span }, (_, i) => pickup + i),
     dayIndex: pickup,
     spanDays: span,
-    route: { mode: "car", carUse: "rental" },
+    currency: input.currency,
+    route: pickupPlace
+      ? {
+          mode: "car",
+          carUse: "rental",
+          from: pickupPlace,
+          to: dropoffPlace ?? pickupPlace,
+        }
+      : { mode: "car", carUse: "rental" },
   })
+}
+
+function routePickupPlace(
+  route: ItemDiscoveryLinksInput["route"],
+): RoutePlace | null {
+  if (!route || !("from" in route) || !route.from) return null
+  return route.from
+}
+
+function routeDropoffPlace(
+  route: ItemDiscoveryLinksInput["route"],
+): RoutePlace | null {
+  if (!route || !("to" in route) || !route.to) return null
+  return route.to
 }
 
 /**

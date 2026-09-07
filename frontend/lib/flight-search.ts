@@ -47,10 +47,11 @@ type FlightSearchProvider = {
 /** Enganche de afiliación PROPIO: solo vuelos, nunca fuentes. Vacío = sin comisión / sin badge. */
 export const FLIGHT_SEARCH_AFFILIATE_ID = ""
 
-/** Hop de Impact hacia Skyscanner. Cada «Buscar vuelos» pasa por aquí. */
+/** Hop de Impact hacia Skyscanner. Vuelos y alquiler pasan por aquí. */
 export const FLIGHT_SEARCH_TRACKING_URL = "https://skyscanner.pxf.io/gOnd70"
 
-function wrapAffiliate(destination: string): string {
+/** Wrap `pxf.io/gOnd70?u=` hacia una URL de referrals de Skyscanner. */
+export function wrapSkyscannerTrackingUrl(destination: string): string {
   const url = new URL(FLIGHT_SEARCH_TRACKING_URL)
   url.searchParams.set("u", destination)
   return url.toString()
@@ -76,7 +77,7 @@ function skyscannerPage(q: FlightQuery): string {
 const skyscannerProvider: FlightSearchProvider = {
   id: "skyscanner",
   build(q) {
-    return wrapAffiliate(skyscannerPage(q))
+    return wrapSkyscannerTrackingUrl(skyscannerPage(q))
   },
 }
 
