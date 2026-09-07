@@ -343,7 +343,7 @@ export interface RoutePlace {
 }
 
 /** Medio elegido para el tramo; null/ausente = «aún no lo sé». */
-export type RouteMode = "car" | "train" | "bus" | "flight" | "ferry" | "other"
+export type RouteMode = "car" | "taxi" | "train" | "bus" | "flight" | "ferry" | "other"
 
 /** Cómo se usa el coche: trayecto propio vs alquiler de varios días. */
 export type RouteCarUse = "owned" | "rental"

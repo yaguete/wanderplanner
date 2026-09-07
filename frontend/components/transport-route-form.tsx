@@ -132,32 +132,29 @@ export function TransportModePicker({
   onChange: (next: RouteMode | "undecided") => void
 }) {
   return (
-    <div className="space-y-2">
-      <Label>Medio de transporte</Label>
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
-        {TRANSPORT_MODE_OPTIONS.map((opt) => {
-          const selected = value === opt.value
-          const Icon = TRANSPORT_MODE_ICONS[opt.value]
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(opt.value)}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
-                selected
-                  ? "border-primary bg-primary/5 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {opt.label}
-            </button>
-          )
-        })}
-      </div>
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Medio de transporte">
+      {TRANSPORT_MODE_OPTIONS.map((opt) => {
+        const selected = value === opt.value
+        const Icon = TRANSPORT_MODE_ICONS[opt.value]
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+              selected
+                ? "border-primary bg-primary/5 text-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {opt.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -171,12 +168,12 @@ export function CarUsePicker({
 }) {
   return (
     <div className="space-y-2">
-      <Label>Es tu coche o alquilas</Label>
-      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Es tu coche o alquilas">
+      <Label>Selecciona una opción</Label>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Selecciona una opción">
         {(
           [
-            { value: "owned" as const, label: "Viajo en mi propio coche" },
-            { value: "rental" as const, label: "Alquilo coche" },
+            { value: "owned" as const, label: "Introducir desplazamiento" },
+            { value: "rental" as const, label: "Introducir alquiler" },
           ] as const
         ).map((opt) => {
           const selected = value === opt.value
@@ -614,7 +611,9 @@ export const TransportRouteForm = forwardRef<
             id={`${id}-vendor`}
             value={vendor}
             onChange={(e) => setVendor(e.target.value)}
-            placeholder="p. ej. Renfe, Vueling…"
+            placeholder={
+              mode === "taxi" ? "p. ej. taxi, uber, bolt, lyft…" : "p. ej. Renfe, Vueling…"
+            }
           />
         </div>
       ) : null}

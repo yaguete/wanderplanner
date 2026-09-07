@@ -46,6 +46,24 @@ const HorseHead = createLucideIcon("horse-head", [
   ["path", { d: "M6.14 17.8S4 19 2 22" }],
 ])
 
+/**
+ * Taxi (lucide `car-taxi-front`, ISC). Lucide 0.454 no exporta el icono.
+ */
+const CarTaxiFront = createLucideIcon("car-taxi-front", [
+  ["path", { d: "M10 2h4" }],
+  [
+    "path",
+    {
+      d: "m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8",
+    },
+  ],
+  ["path", { d: "M7 14h.01" }],
+  ["path", { d: "M17 14h.01" }],
+  ["rect", { width: "18", height: "8", x: "3", y: "10", rx: "2" }],
+  ["path", { d: "M5 18v2" }],
+  ["path", { d: "M19 18v2" }],
+])
+
 /** Chip con borde neutro; el color de tipo va en el texto (y en iconos de Mi viaje). */
 export const ITEM_COLORS: Record<ItemType, { bg: string; border: string; text: string }> = {
   transport: {
@@ -149,6 +167,7 @@ export const TRANSPORT_MODE_ICONS: Record<TransportModeVisualKey, LucideIcon> = 
   bus: Bus,
   ferry: Ship,
   car: Car,
+  taxi: CarTaxiFront,
   other: HorseHead,
   undecided: CircleHelp,
 }
@@ -159,6 +178,7 @@ export const TRANSPORT_MODE_A11Y: Record<TransportModeVisualKey, string> = {
   bus: "Autobús",
   ferry: "Ferry",
   car: "Coche",
+  taxi: "Taxi",
   other: "Otro",
   undecided: "Medio por decidir",
 }
@@ -170,6 +190,7 @@ export const TRANSPORT_MODE_OPTIONS: {
 }[] = [
   { value: "undecided", label: "Aún no lo sé" },
   { value: "car", label: "Coche" },
+  { value: "taxi", label: "Taxi" },
   { value: "flight", label: "Avión" },
   { value: "train", label: "Tren" },
   { value: "bus", label: "Autobús" },
@@ -180,6 +201,7 @@ export const TRANSPORT_MODE_OPTIONS: {
 /** Inferencia legacy por texto (fuentes cacheadas sin hint). */
 export function inferTransportModeFromText(label: string): TransportModeVisualKey {
   const t = label.toLowerCase()
+  if (/(taxi|uber|bolt|lyft|\bcab\b)/i.test(t)) return "taxi"
   if (/(vuelo|av[ií]on|flight|air|aeropuerto)/i.test(t)) return "flight"
   if (/(tren|train|rail)/i.test(t)) return "train"
   if (/(bus|autob[uú]s|coach|minivan|shuttle)/i.test(t)) return "bus"

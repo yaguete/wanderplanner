@@ -86,7 +86,6 @@ export function InternalTransportForm({
   currency,
   numTravelers = null,
   allowRental = true,
-  onAddDay,
   onValidityChange,
   onSubmit,
   showDiscovery,
@@ -100,7 +99,6 @@ export function InternalTransportForm({
   currency: string
   numTravelers?: number | null
   allowRental?: boolean
-  onAddDay?: () => void
   onValidityChange?: (canSubmit: boolean) => void
   onSubmit: (data: UpsertTransportRoutePayload) => InternalTransportSubmitResult | void
   showDiscovery?: boolean
@@ -113,6 +111,7 @@ export function InternalTransportForm({
   const transferDayIdField = useId()
   const companyId = useId()
   const noteId = useId()
+  const addDaysHint = "Puedes añadir más días desde la configuración del viaje."
   const routeFormRef = useRef<TransportRouteFormHandle>(null)
   const budgetRef = useRef<PlaceSearchBudget>(createPlaceSearchBudget())
   const draftsRef = useRef<Partial<Record<BranchKey, BranchDraft>>>({})
@@ -434,6 +433,7 @@ export function InternalTransportForm({
             onValueChange={handlePickupDayChange}
             selectNewlyAddedDays={false}
             disableDay={(_, index) => index > rentalMaxPickupIndex(days.length)}
+            hint={addDaysHint}
           />
           {days.length < 2 ? (
             <p className="text-sm text-destructive">
@@ -533,7 +533,7 @@ export function InternalTransportForm({
           startDate={startDate}
           value={dayId}
           onValueChange={setDayId}
-          onAddDay={onAddDay}
+          hint={addDaysHint}
         />
       ) : null}
 

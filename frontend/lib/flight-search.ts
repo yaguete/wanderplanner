@@ -85,6 +85,7 @@ export const FLIGHT_SEARCH_PROVIDER: FlightSearchProvider = skyscannerProvider
 const BLOCKING_RETURN_MODES: ReadonlySet<RouteMode> = new Set([
   "train",
   "car",
+  "taxi",
   "bus",
   "ferry",
   "other",

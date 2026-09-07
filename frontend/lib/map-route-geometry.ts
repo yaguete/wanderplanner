@@ -126,14 +126,14 @@ export function segmentStyleForMode(
   return modeLineStyle(mode, theme)
 }
 
-/** ¿Directions por carretera tiene sentido? Solo coche (bus opcional lazy). */
+/** ¿Directions por carretera tiene sentido? Coche, taxi y autobús. */
 export function modeAllowsRoadDirections(mode: RouteMode | null | undefined): boolean {
-  return mode === "car" || mode === "bus"
+  return mode === "car" || mode === "taxi" || mode === "bus"
 }
 
 /**
  * Ida/vuelta en avión/tren/ferry (u otro / sin decidir) no se trazan.
- * Coche/autobús sí, pero solo si el trayecto es «local» (no intercontinental).
+ * Coche/taxi/autobús sí, pero solo si el trayecto es «local» (no intercontinental).
  */
 export function legIncludedInMapItinerary(mode: RouteMode | null | undefined): boolean {
   return modeAllowsRoadDirections(mode)
@@ -329,6 +329,7 @@ const MODE_COUNT_LABELS: Record<string, [string, string]> = {
   bus: ["bus", "buses"],
   ferry: ["ferry", "ferrys"],
   car: ["trayecto en coche", "trayectos en coche"],
+  taxi: ["taxi", "taxis"],
   other: ["otro", "otros"],
   undecided: ["sin medio", "sin medio"],
 }
@@ -339,6 +340,7 @@ const MODE_KM_LABELS: Record<string, string> = {
   bus: "en bus",
   ferry: "en ferry",
   car: "en coche",
+  taxi: "en taxi",
   other: "en otros",
   undecided: "sin medio",
 }
@@ -725,6 +727,7 @@ export function summarizeTransportKm(
     "bus",
     "ferry",
     "car",
+    "taxi",
     "other",
     "undecided",
   ]

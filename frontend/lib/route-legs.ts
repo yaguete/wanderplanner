@@ -20,6 +20,7 @@ import { isRouteCarUse } from "@/lib/transport-kind"
 
 export const ROUTE_MODES: readonly RouteMode[] = [
   "car",
+  "taxi",
   "train",
   "bus",
   "flight",
@@ -58,6 +59,8 @@ export function routeModeLabel(mode: RouteMode | null | undefined): string {
   switch (mode) {
     case "car":
       return "Coche"
+    case "taxi":
+      return "Taxi"
     case "train":
       return "Tren"
     case "bus":

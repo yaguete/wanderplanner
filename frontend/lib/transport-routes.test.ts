@@ -112,7 +112,7 @@ describe("transport-hubs", () => {
   })
 
   it("coche/ferry/otro no consultan Search Box", () => {
-    for (const mode of ["car", "ferry", "other", "undecided"] as const) {
+    for (const mode of ["car", "taxi", "ferry", "other", "undecided"] as const) {
       const d = decideHubSearch({
         mode,
         selected: place("A"),
@@ -324,6 +324,10 @@ describe("transport-routes seeds y build", () => {
     const flight = transportReservePolicy({ mode: "flight" })
     assert.equal(flight.formUsesDoneChip, false)
     assert.equal(flight.usesDoneChip, false)
+    const taxi = transportReservePolicy({ mode: "taxi" })
+    assert.equal(taxi.bookable, true)
+    assert.equal(taxi.formUsesDoneChip, false)
+    assert.equal(taxi.usesDoneChip, false)
   })
 
   it("escritura: rental+leg o modo incompatible se rechaza sin degradar", () => {
@@ -539,18 +543,24 @@ describe("iconos por medio", () => {
     }
   })
 
-  it("selector de medio: orden Aún no lo sé · Coche · Avión · Tren · Autobús · Ferry · Otro", () => {
+  it("selector de medio: orden Aún no lo sé · Coche · Taxi · Avión · Tren · Autobús · Ferry · Otro", () => {
     assert.deepEqual(
       TRANSPORT_MODE_OPTIONS.map((o) => o.value),
-      ["undecided", "car", "flight", "train", "bus", "ferry", "other"],
+      ["undecided", "car", "taxi", "flight", "train", "bus", "ferry", "other"],
     )
     assert.deepEqual(
       TRANSPORT_MODE_OPTIONS.map((o) => o.label),
-      ["Aún no lo sé", "Coche", "Avión", "Tren", "Autobús", "Ferry", "Otro"],
+      ["Aún no lo sé", "Coche", "Taxi", "Avión", "Tren", "Autobús", "Ferry", "Otro"],
     )
     for (const opt of TRANSPORT_MODE_OPTIONS) {
       assert.ok(TRANSPORT_MODE_ICONS[opt.value])
     }
+  })
+
+  it("infiere taxi desde uber/bolt aunque mencione el aeropuerto", () => {
+    assert.equal(resolveTransportModeVisual({ name: "Uber al aeropuerto" }), "taxi")
+    assert.equal(resolveTransportModeVisual({ name: "Taxi al centro" }), "taxi")
+    assert.equal(resolveTransportModeVisual({ name: "Bolt al hotel" }), "taxi")
   })
 
   it("route.mode manda sobre hint/texto", () => {
@@ -741,10 +751,11 @@ describe("mapa geometría", () => {
     }
   })
 
-  it("Directions solo coche/bus", () => {
+  it("Directions solo coche/taxi/bus", () => {
     assert.equal(modeAllowsRoadDirections("flight"), false)
     assert.equal(modeAllowsRoadDirections("train"), false)
     assert.equal(modeAllowsRoadDirections("car"), true)
+    assert.equal(modeAllowsRoadDirections("taxi"), true)
     assert.equal(modeAllowsRoadDirections("bus"), true)
   })
 })

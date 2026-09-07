@@ -101,6 +101,21 @@ assert.equal(
     task({
       origin: "dayItem",
       sourceKind: "transport",
+      title: "Aeropuerto → centro",
+      route: {
+        from: { label: "Aeropuerto", coords: { lng: -3.56, lat: 37.19 }, kind: "airport" },
+        to: { label: "Granada", coords: { lng: -3, lat: 37 }, kind: "city" },
+        mode: "taxi",
+      },
+    }),
+  ),
+  "Pedir un taxi a Granada",
+)
+assert.equal(
+  taskActionTitle(
+    task({
+      origin: "dayItem",
+      sourceKind: "transport",
       title: "Hertz",
       route: {
         from: { label: "Edimburgo", coords: { lng: -3.19, lat: 55.95 }, kind: "city" },

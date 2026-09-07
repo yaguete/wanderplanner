@@ -113,8 +113,8 @@ function assertSkyscannerHref(
   }
 }
 
-// Tren / coche / bus / ferry / sin modo → null.
-for (const mode of ["train", "car", "bus", "ferry", null] as const) {
+// Tren / coche / taxi / bus / ferry / sin modo → null.
+for (const mode of ["train", "car", "taxi", "bus", "ferry", null] as const) {
   assert.equal(
     flightSearchHrefForItem({
       route: route({ from: BCN, to: BUD, mode, leg: "outbound" }),

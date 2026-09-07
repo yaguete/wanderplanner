@@ -32,6 +32,7 @@ export function DayPickerSelect({
   onAddDay,
   disabled = false,
   occupiedHint = null,
+  hint = null,
   disableDay,
   selectNewlyAddedDays = true,
 }: {
@@ -45,6 +46,8 @@ export function DayPickerSelect({
   onAddDay?: () => void
   disabled?: boolean
   occupiedHint?: string | null
+  /** Pie tipo caption, p. ej. cómo ampliar el viaje. */
+  hint?: string | null
   disableDay?: (day: UserDay, index: number) => boolean
   /** Si crece `days.length`, selecciona el último día. Default true. */
   selectNewlyAddedDays?: boolean
@@ -116,6 +119,9 @@ export function DayPickerSelect({
       )}
       {occupiedHint ? (
         <p className="text-sm text-muted-foreground">{occupiedHint}</p>
+      ) : null}
+      {hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
       ) : null}
       {onAddDay ? (
         <Button

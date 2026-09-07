@@ -220,7 +220,11 @@ export function transportReservePolicy(
   }
   const mode = route?.mode ?? null
   const bookable =
-    mode === "flight" || mode === "train" || mode === "bus" || mode === "ferry"
+    mode === "flight" ||
+    mode === "train" ||
+    mode === "bus" ||
+    mode === "ferry" ||
+    mode === "taxi"
   return {
     bookable,
     usesDoneChip: !bookable,

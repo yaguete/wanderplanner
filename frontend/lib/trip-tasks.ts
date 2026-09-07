@@ -213,11 +213,17 @@ export function categoryFromBasic(_category: BasicCategory): TripTaskCategory {
 }
 
 /**
- * Medios que sí se reservan/compran (billete). El resto (coche, other, sin medio)
+ * Medios que sí se reservan/compran (billete o taxi). El resto (coche, other, sin medio)
  * va a triaje y, en main, usa el chip «Hecho» en vez de Reservado/Pagado.
  */
 export function isBookableTransportMode(mode: RouteMode | null | undefined): boolean {
-  return mode === "flight" || mode === "train" || mode === "bus" || mode === "ferry"
+  return (
+    mode === "flight" ||
+    mode === "train" ||
+    mode === "bus" ||
+    mode === "ferry" ||
+    mode === "taxi"
+  )
 }
 
 /** `cancellable` solo aplica en alojamiento, alquiler y transporte con billete. */

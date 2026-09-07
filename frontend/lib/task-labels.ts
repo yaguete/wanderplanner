@@ -110,6 +110,8 @@ function legActionTitle(mode: RouteMode | null | undefined, dest: string): strin
       return `Reservar el ferry a ${dest}`
     case "car":
       return `Preparar el trayecto en coche a ${dest}`
+    case "taxi":
+      return `Pedir un taxi a ${dest}`
     case "other":
       return `Organizar el trayecto a ${dest}`
     default:

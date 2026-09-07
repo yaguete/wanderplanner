@@ -1379,7 +1379,6 @@ export default function ItineraryPanel({
           startDate={trip.startDate}
           numTravelers={trip.numTravelers}
           currency={trip.currency}
-          onAddDay={() => addDay(tripId)}
           initialDayId={transportDialog.dayId}
           existingItem={transportDialog.existingItem}
           existingTask={

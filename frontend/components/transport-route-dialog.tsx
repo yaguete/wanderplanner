@@ -29,7 +29,6 @@ export type TransportRouteDialogProps = {
   existingTask?: TripTaskState | null
   initialDayId?: string | null
   existingItem?: UserDayItem | null
-  onAddDay?: () => void
   onSubmit: (
     data: UpsertTransportRoutePayload,
   ) => { ok: true } | { ok: false; error?: string } | void
@@ -45,7 +44,6 @@ export function TransportRouteDialog({
   existingTask = null,
   initialDayId = null,
   existingItem = null,
-  onAddDay,
   onSubmit,
 }: TransportRouteDialogProps) {
   const formId = useId()
@@ -90,7 +88,6 @@ export function TransportRouteDialog({
             currency={currency}
             numTravelers={numTravelers}
             allowRental
-            onAddDay={onAddDay}
             onValidityChange={setCanSubmit}
             onSubmit={handleSubmit}
           />

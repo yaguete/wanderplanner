@@ -111,6 +111,7 @@ const MODE_LINE: Record<
   bus: { light: "#ea580c", dark: "#fb923c", dashArray: [1.5, 1.5], width: 2 },
   ferry: { light: "#2563eb", dark: "#60a5fa", dashArray: [3, 2], width: 2.5 },
   car: { light: "#475569", dark: "#94a3b8", dashArray: null, width: 2.5 },
+  taxi: { light: "#ca8a04", dark: "#facc15", dashArray: null, width: 2.5 },
   other: { light: "#a16207", dark: "#fbbf24", dashArray: [2, 3], width: 2 },
   undecided: { light: "#94a3b8", dark: "#cbd5e1", dashArray: [1, 2], width: 2 },
 }

@@ -821,7 +821,6 @@ export function AddManualItemDialog({
               currency={currency}
               numTravelers={numTravelers}
               allowRental
-              onAddDay={onAddDay}
               onValidityChange={setTransportCanSubmit}
               onSubmit={handleTransportSubmit}
             />

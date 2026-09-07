@@ -260,7 +260,7 @@ TOOLS: list[dict[str, Any]] = [
                     "to": {"type": "string", "description": "Destino (texto)"},
                     "mode": {
                         "type": "string",
-                        "enum": ["car", "train", "bus", "flight", "ferry", "other"],
+                        "enum": ["car", "taxi", "train", "bus", "flight", "ferry", "other"],
                     },
                     "why": {"type": "string"},
                 },
