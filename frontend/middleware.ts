@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import {
+  MCP_DEDICATED_HOST,
   hostnameFromHeaders,
   mcpHostGate,
   mcpHostRedirectUrl,
@@ -12,12 +13,17 @@ export async function middleware(request: NextRequest) {
   // proxy de Vercel esa URL puede llevar el host del deployment y la puerta
   // no se cerraría nunca (mcp.wanderplanner.ai/trips serviría la app).
   const hostname = hostnameFromHeaders(request.headers)
-  if (
-    mcpHostGate({ hostname, pathname: request.nextUrl.pathname }) === "redirect"
-  ) {
+  const decision = mcpHostGate({ hostname, pathname: request.nextUrl.pathname })
+  if (decision === "redirect") {
     return NextResponse.redirect(
       mcpHostRedirectUrl(request.nextUrl.pathname, request.nextUrl.search),
       308,
+    )
+  }
+  if (decision === "gone") {
+    return new NextResponse(
+      `El servidor MCP de WanderPlanner está en https://${MCP_DEDICATED_HOST}\n`,
+      { status: 410, headers: { "Content-Type": "text/plain; charset=utf-8" } },
     )
   }
   return updateSession(request)

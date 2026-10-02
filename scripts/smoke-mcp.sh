@@ -2,7 +2,7 @@
 # Smoke test del servidor MCP de WanderPlanner (complemento de ChatGPT).
 # Uso: ./scripts/smoke-mcp.sh <MCP_ENDPOINT_URL>
 # Ejemplo: ./scripts/smoke-mcp.sh https://mcp.wanderplanner.ai
-#          ./scripts/smoke-mcp.sh https://wanderplanner.ai/mcp   # path legado
+#          ./scripts/smoke-mcp.sh https://<preview>.vercel.app/mcp
 #
 # $1 es el endpoint al que se POST-ea, no el origen del producto. Apuntarlo a
 # https://wanderplanner.ai (la landing) tiene que FALLAR: POST / no es MCP.
@@ -25,6 +25,8 @@
 #      OPENAI_APPS_CHALLENGE; 200 con el token durante el envío al directorio).
 #   7) Si el host es mcp.wanderplanner.ai: cierre de host (GET /trips → 308 al
 #      dominio principal) y robots.txt Disallow: / sin Allow: /.
+#   8) Si el host es mcp.wanderplanner.ai: el path retirado
+#      https://wanderplanner.ai/mcp y su well-known responden 410.
 #
 # Token caducado o revocado NO se prueban aquí: fabricarlos en bash es un lío y
 # ya están cubiertos en frontend/lib/mcp/trip-access.test.ts.
@@ -41,7 +43,6 @@ MCP_DEDICATED_HOST="mcp.wanderplanner.ai"
 usage() {
   echo "Uso: $0 <MCP_ENDPOINT_URL>" >&2
   echo "Ejemplo: $0 https://mcp.wanderplanner.ai" >&2
-  echo "         $0 https://wanderplanner.ai/mcp" >&2
   exit 2
 }
 
@@ -277,6 +278,32 @@ if [[ "$HOST_ONLY" == "$MCP_DEDICATED_HOST" ]]; then
     ok "/robots.txt → Disallow: / (sin Allow: /)"
   else
     bad "/robots.txt sin Disallow: / · $(head -c 200 "$ROBOTS_BODY")"
+  fi
+
+  # ── 8) Path retirado en el dominio del producto ────────────────────────────
+  LEGACY_CODE="$(
+    curl -sS -o /dev/null -w "%{http_code}" --max-time "$TIMEOUT_S" \
+      -X POST "$SITE_ORIGIN/mcp" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -d "$INIT_BODY" \
+    || true
+  )"
+  if [[ "$LEGACY_CODE" == "410" ]]; then
+    ok "POST $SITE_ORIGIN/mcp → 410 (retirado)"
+  else
+    bad "POST $SITE_ORIGIN/mcp esperaba 410, obtuvo '${LEGACY_CODE:-error de red}'"
+  fi
+
+  LEGACY_PRM_CODE="$(
+    curl -sS -o /dev/null -w "%{http_code}" --max-time "$TIMEOUT_S" \
+      "$SITE_ORIGIN/.well-known/oauth-protected-resource" \
+    || true
+  )"
+  if [[ "$LEGACY_PRM_CODE" == "410" ]]; then
+    ok "GET $SITE_ORIGIN/.well-known/oauth-protected-resource → 410"
+  else
+    bad "GET $SITE_ORIGIN/.well-known/oauth-protected-resource esperaba 410, obtuvo '${LEGACY_PRM_CODE:-error de red}'"
   fi
 fi
 

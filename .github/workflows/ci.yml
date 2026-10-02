@@ -115,6 +115,7 @@ jobs:
       - run: npm run test:mcp-verify-token
       - run: npm run test:mcp-same-origin
       - run: npm run test:mcp-enabled
+      - run: npm run test:mcp-listen
       - run: npm run test:mcp-host
       - run: npm run test:mcp-list-trips
       - run: npm run test:mcp-trip-access

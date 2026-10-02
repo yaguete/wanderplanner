@@ -21,10 +21,9 @@ Smoke test tras un deploy:
 El primero cubre la API de Fly (auth 401 + CORS); el segundo, el servidor MCP en
 Vercel (401 con `WWW-Authenticate`, metadatos OAuth, `MCP_ENABLED` y cierre de
 host). `$1` es el **endpoint** MCP, no el origen del producto: apuntarlo a
-`https://wanderplanner.ai` (la landing) falla a propósito. Mientras conviva el
-path legado, un POST 401 a `https://wanderplanner.ai/mcp` basta para ver que
-sigue vivo; el smoke completo de esa URL solo cuadra *antes* de flipar
-`MCP_RESOURCE_URL`.
+`https://wanderplanner.ai` (la landing) falla a propósito. El path legado
+`https://wanderplanner.ai/mcp` está retirado (410, igual que el well-known de
+OAuth en ese dominio); el smoke del subdominio lo comprueba.
 
 ---
 
@@ -179,7 +178,7 @@ Opcional: `NEXT_PUBLIC_VENDOR_LOGO_PROVIDER` (default `clearbit`).
 | --- | --- | --- |
 | `MCP_ENABLED` | off (cualquier valor salvo `true`) | Kill switch. Solo la cadena `true` (sin importar mayúsculas) enciende el handler (`POST/GET /mcp`, y `/` en `mcp.wanderplanner.ai` por rewrite). Unset / `false` → **503** sin JWKS ni PostgREST. El well-known y `/oauth/consent` se quedan vivos. **El rollback del MCP es `MCP_ENABLED=false` + redeploy, no el Instant Rollback de Vercel** (Hobby solo vuelve al deployment anterior y se llevaría la web entera) |
 | `MCP_AFFILIATE_LINKS_ENABLED` | off (cualquier valor salvo `true`) | Si no es `true`, `affiliateUrl` sale a `null` en `get_trip`, `search_sources` y `review_trip`. Default **off**: no encenderla en Vercel. El widget nunca pinta ese campo |
-| `MCP_RESOURCE_URL` | `https://mcp.wanderplanner.ai` | Identificador RFC 9728 del recurso (sin path, sin barra final). El `WWW-Authenticate` usa el **origen**; el documento well-known anuncia esta URL completa. El default del código sigue siendo `${SITE_URL}/mcp` para no reescribir la identidad si la env no está. Un cambio **exige redeploy**. `SITE_URL` no cambia. |
+| `MCP_RESOURCE_URL` | `https://mcp.wanderplanner.ai` | Identificador RFC 9728 del recurso (sin path, sin barra final). El `WWW-Authenticate` usa el **origen**; el documento well-known anuncia esta URL completa. El default del código es el mismo valor (`https://mcp.wanderplanner.ai`); `https://wanderplanner.ai/mcp` está retirado. Un cambio **exige redeploy**. `SITE_URL` no cambia. |
 | `MCP_JWT_HS256_SECRET` | (vacío → JWKS) | **Solo para local.** En producción **déjala sin poner**: el proyecto firma con **ES256** y el verificador va por JWKS `{NEXT_PUBLIC_SUPABASE_URL}/auth/v1/.well-known/jwks.json`. El issuer se deriva de `NEXT_PUBLIC_SUPABASE_URL` (`…/auth/v1`); no copies el project-ref a mano.<br><br>⚠️ **No se llama `SUPABASE_JWT_SECRET` a propósito.** La integración Supabase↔Vercel **ya inyecta esa variable sola** en el proyecto (junto con `POSTGRES_*`, `SUPABASE_SERVICE_ROLE_KEY`, etc.). Si el verificador la leyera, tomaría la ruta HS256 contra tokens ES256 y **rechazaría todos los tokens** con un 401 que parece un fallo de la lógica de `client_id`. Comprobado el 29 ago 2026: el JWKS del proyecto tiene una sola clave, `alg=ES256` |
 
 Las funciones Node van a **Dublín** (`dub1`) vía [`frontend/vercel.json`](frontend/vercel.json) (`regions`). Alinea el round-trip con Supabase `eu-west-1`. El middleware Edge sigue global.
@@ -335,21 +334,13 @@ Checklist mínima (Fase 2 / T2.5 del plan de producción):
    deploy se llevó por delante `MCP_ENABLED` (un cambio de env exige redeploy).
    Cierre de host: `GET https://mcp.wanderplanner.ai/trips` → 308 a
    `https://wanderplanner.ai/trips`; `robots.txt` del subdominio → `Disallow: /`.
-   Path legado mientras conviva: `POST https://wanderplanner.ai/mcp` → 401 (no
-   404). Landing: `GET https://wanderplanner.ai/` no es el MCP.
+   Path retirado: `POST https://wanderplanner.ai/mcp` y
+   `GET https://wanderplanner.ai/.well-known/oauth-protected-resource` → 410.
+   Landing: `GET https://wanderplanner.ai/` no es el MCP.
 
-Tras un deploy que solo trae el cierre de host (antes de flipar
-`MCP_RESOURCE_URL`), el well-known del subdominio sigue anunciando
-`https://wanderplanner.ai/mcp`. Eso es correcto. El flip es un paso aparte:
-
-1. Código en producción con la env **aún** en la URL vieja (o unset).
-2. El alias `mcp.wanderplanner.ai` ya está: comprobar 401 en `/`, 308 en
-   `/trips`, `Disallow: /` en robots, well-known de raíz 200, path legado 401.
-3. Poner `MCP_RESOURCE_URL=https://mcp.wanderplanner.ai` en Production y
-   **redeploy**. Smoke del subdominio en verde; well-known de **ambos** hosts
-   con `"resource":"https://mcp.wanderplanner.ai"`. Reconectar la demo de
-   ChatGPT a la URL nueva. Retirar `https://wanderplanner.ai/mcp` es una tarea
-   posterior.
+Un conector que aún apunte a `https://wanderplanner.ai/mcp` recibe 410: hay que
+reconectarlo a `https://mcp.wanderplanner.ai`. Localhost y los previews de
+Vercel siguen sirviendo `/mcp` para probarlo.
 
 No hace falta tocar Redirect URLs ni Site URL de Supabase: el consentimiento
 sigue en `wanderplanner.ai/oauth/consent` y el MCP no redirige el navegador.

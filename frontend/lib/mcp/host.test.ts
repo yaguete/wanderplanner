@@ -98,10 +98,32 @@ function gate(hostname: string, pathname: string) {
 {
   assert.equal(gate(SITE, "/"), "pass")
   assert.equal(gate(SITE, "/trips"), "pass")
-  assert.equal(gate(SITE, "/mcp"), "pass")
   assert.equal(gate(SITE, "/login"), "pass")
+  assert.equal(gate(SITE, "/oauth/consent"), "pass", "el consentimiento OAuth vive aquí")
+  assert.equal(
+    gate(SITE, "/.well-known/openai-apps-challenge"),
+    "pass",
+    "la verificación de dominio es de wanderplanner.ai",
+  )
+  assert.equal(gate(SITE, "/mcp-extra"), "pass")
   assert.equal(gate("wp-git-abc.vercel.app", "/trips"), "pass")
   assert.equal(gate("localhost:3000", "/"), "pass")
+}
+
+// --- mcpHostGate: /mcp retirado del dominio del producto ---
+{
+  assert.equal(gate(SITE, "/mcp"), "gone")
+  assert.equal(gate(`www.${SITE}`, "/mcp"), "gone")
+  assert.equal(gate(`${SITE}:443`, "/mcp"), "gone")
+  assert.equal(gate(SITE, "/mcp/"), "gone")
+  assert.equal(gate(SITE, "/.well-known/oauth-protected-resource"), "gone")
+  assert.equal(gate(SITE, "/.well-known/oauth-protected-resource/mcp"), "gone")
+  assert.equal(gate("localhost:3000", "/mcp"), "pass", "en local se sigue probando")
+  assert.equal(gate("wp-git-abc.vercel.app", "/mcp"), "pass", "y en los previews")
+  assert.equal(
+    gate("wp-git-abc.vercel.app", "/.well-known/oauth-protected-resource"),
+    "pass",
+  )
 }
 
 // --- mcpHostGate: host dedicado ---

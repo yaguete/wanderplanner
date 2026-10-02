@@ -1,6 +1,6 @@
-import { SITE_URL } from "@/lib/site"
+import { MCP_DEDICATED_HOST } from "./host"
 
-export const DEFAULT_MCP_RESOURCE_URL = `${SITE_URL}/mcp`
+export const DEFAULT_MCP_RESOURCE_URL = `https://${MCP_DEDICATED_HOST}`
 export const AUTHENTICATED_AUD = "authenticated"
 
 /** Solo la cadena `true` (sin importar mayúsculas) enciende el MCP. Unset = apagado. */

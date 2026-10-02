@@ -103,6 +103,7 @@
     "test:mcp-verify-token": "tsx lib/mcp/verify-access-token.test.ts",
     "test:mcp-same-origin": "tsx lib/mcp/same-origin.test.ts",
     "test:mcp-enabled": "tsx lib/mcp/enabled.test.ts",
+    "test:mcp-listen": "tsx lib/mcp/listen.test.ts",
     "test:mcp-host": "tsx lib/mcp/host.test.ts",
     "test:mcp-list-trips": "tsx lib/mcp/list-trips.test.ts",
     "test:mcp-trip-access": "tsx lib/mcp/trip-access.test.ts",

@@ -7,16 +7,21 @@
  * se compila en el config es este fichero → `../site`, y `site.ts` es una
  * constante suelta: mantenla así.
  *
- * El host NO se deriva de `MCP_RESOURCE_URL`. El default de esa env es
- * `${SITE_URL}/mcp`; usarlo aquí cerraría el producto o no cerraría el alias.
+ * El host NO se deriva de `MCP_RESOURCE_URL`: es una env y puede apuntar a
+ * cualquier cosa; con un valor raro cerraría el producto o no cerraría el alias.
  */
 import { SITE_URL } from "../site"
 
 export const MCP_DEDICATED_HOST = "mcp.wanderplanner.ai"
 
+const PRODUCT_HOSTNAME = new URL(SITE_URL).hostname
+const PRODUCT_HOSTS = new Set([PRODUCT_HOSTNAME, `www.${PRODUCT_HOSTNAME}`])
+const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource"
+
 const MAIN_ROBOTS_DISALLOW = ["/trips", "/account", "/oauth", "/mcp"] as const
 
-export type McpHostDecision = "pass" | "redirect"
+/** `gone`: el MCP se retiró del dominio del producto; vive solo en el host dedicado. */
+export type McpHostDecision = "pass" | "redirect" | "gone"
 
 export type RobotsForHost = {
   rules: {
@@ -56,12 +61,34 @@ export function isMcpHostAllowedPath(pathname: string): boolean {
   return false
 }
 
+export function isProductHost(hostname: string): boolean {
+  return PRODUCT_HOSTS.has(hostnameOf(hostname))
+}
+
+/**
+ * `/mcp` y los metadatos RFC 9728 que lo anunciaban. Solo se retiran en el
+ * dominio del producto: localhost y los previews de Vercel siguen sirviendo
+ * `/mcp` para poder probarlo.
+ */
+export function isRetiredMcpPath(pathname: string): boolean {
+  if (pathname === "/mcp" || pathname.startsWith("/mcp/")) return true
+  return (
+    pathname === PROTECTED_RESOURCE_PATH ||
+    pathname.startsWith(`${PROTECTED_RESOURCE_PATH}/`)
+  )
+}
+
 export function mcpHostGate(input: {
   hostname: string
   pathname: string
 }): McpHostDecision {
-  if (!isMcpDedicatedHost(input.hostname)) return "pass"
-  return isMcpHostAllowedPath(input.pathname) ? "pass" : "redirect"
+  if (isMcpDedicatedHost(input.hostname)) {
+    return isMcpHostAllowedPath(input.pathname) ? "pass" : "redirect"
+  }
+  if (isProductHost(input.hostname) && isRetiredMcpPath(input.pathname)) {
+    return "gone"
+  }
+  return "pass"
 }
 
 export function mcpHostRedirectUrl(pathname: string, search = ""): string {
