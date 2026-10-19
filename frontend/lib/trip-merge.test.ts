@@ -189,6 +189,24 @@ function names(result: TripMergeResult): string[] {
   assert.equal(r.trip.days.length, 3)
 }
 
+// Fechas provisionales: la edición local las confirma aunque el remoto toque otra cosa.
+{
+  const base = trip({
+    id: "t",
+    startDate: "2026-10-19",
+    endDate: "2026-10-19",
+    datesProvisional: true,
+    version: 1,
+  })
+  const local = { ...base, startDate: "2027-07-15", datesProvisional: false }
+  const remote = { ...base, version: 2, name: "Sudáfrica" }
+  const r = mergeTrips(base, local, remote)
+  assert.equal(r.trip.startDate, "2027-07-15")
+  assert.equal(r.trip.datesProvisional, false)
+  assert.equal(r.trip.name, "Sudáfrica")
+  assert.equal(r.notes.length, 0)
+}
+
 {
   const base = trip({
     id: "t",

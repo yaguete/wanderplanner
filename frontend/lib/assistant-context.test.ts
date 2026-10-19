@@ -34,6 +34,19 @@ function baseTrip(overrides: Partial<Trip> = {}): Trip {
   const md = buildTripBriefing(baseTrip(), [])
   assert.match(md, /- origen: \(no configurado\)/)
   assert.doesNotMatch(md, /- viajeros:/)
+  assert.match(md, /- fechas: 2026-09-01 → 2026-09-05\n/)
+}
+
+{
+  const md = buildTripBriefing(
+    baseTrip({ startDate: "2026-10-19", endDate: "2026-11-07", datesProvisional: true }),
+    [],
+  )
+  assert.match(
+    md,
+    /- fechas: sin elegir \(provisionales 2026-10-19 → 2026-11-07: las puso la app/,
+  )
+  assert.match(md, /horizonte meteo: sin fechas/)
 }
 
 {

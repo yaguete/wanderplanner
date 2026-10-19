@@ -195,6 +195,11 @@ export interface Trip {
    */
   startDate: string | null
   endDate: string | null
+  /**
+   * Las fechas las puso la app (inicio = mañana al adoptar la guía o con `/start?days=N`),
+   * no el usuario. El asistente las trata como «sin fechas». Se apaga al cambiar el inicio.
+   */
+  datesProvisional?: boolean
   /** Siempre alineado con `days.length` tras mutaciones / carga normalizada. */
   numDays: number | null
   /**

@@ -27,8 +27,11 @@ function item(
   }
 }
 
-function tripOf(days: UserDay[], extra: Partial<Trip> = {}): Pick<Trip, "days" | "startDate"> {
-  return { days, startDate: extra.startDate ?? null }
+function tripOf(
+  days: UserDay[],
+  extra: Partial<Trip> = {},
+): Pick<Trip, "days" | "startDate" | "datesProvisional"> {
+  return { days, startDate: extra.startDate ?? null, datesProvisional: extra.datesProvisional }
 }
 
 const TODAY = new Date("2026-08-17T12:00:00")
@@ -243,6 +246,27 @@ const TODAY = new Date("2026-08-17T12:00:00")
   assert.match(md, /## Señales del plan/)
   assert.match(md, /horizonte meteo: forecast/)
   assert.match(md, /día 1: 0 ítems/)
+}
+
+// Inicio = mañana puesto por la app: ni previsión ni chip de lluvia.
+{
+  const s = collectPlanSignals(
+    tripOf(
+      [
+        {
+          id: "d1",
+          label: "",
+          items: [item("a", "A"), item("b", "B"), item("c", "C")],
+        },
+      ],
+      { startDate: "2026-08-18", datesProvisional: true },
+    ),
+    { today: TODAY },
+  )
+  assert.equal(s.weatherHorizon, "none")
+  assert.equal(s.daysUntilStart, null)
+  assert.ok(!buildContextualAuditChips(s).includes(CHIP_WEATHER_REORDER))
+  assert.match(formatPlanSignalsMarkdown(s), /horizonte meteo: sin fechas/)
 }
 
 {

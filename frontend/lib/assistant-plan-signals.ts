@@ -99,11 +99,14 @@ export function planHasAuditSubstance(trip: Pick<Trip, "days">): boolean {
 }
 
 export function collectPlanSignals(
-  trip: Pick<Trip, "days" | "startDate">,
+  trip: Pick<Trip, "days" | "startDate" | "datesProvisional">,
   options: CollectPlanSignalsOptions = {},
 ): PlanSignals {
   const today = options.today ?? new Date()
-  const { horizon, daysUntilStart } = weatherHorizonFor(trip.startDate, today)
+  const { horizon, daysUntilStart } = weatherHorizonFor(
+    trip.datesProvisional ? null : trip.startDate,
+    today,
+  )
 
   const emptyDays: PlanDayRef[] = []
   const thinDays: PlanDayRef[] = []

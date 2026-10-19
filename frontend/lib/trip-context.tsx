@@ -827,6 +827,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
               ...t,
               name: data.name,
               startDate: data.startDate,
+              datesProvisional: Boolean(t.datesProvisional && data.startDate === t.startDate),
               expectations: data.expectations?.trim() ? data.expectations.trim() : null,
               origin,
               numTravelers,
@@ -1051,7 +1052,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             ...named.days,
             ...makeEmptyDays(Math.max(0, total - named.days.length)),
           ]
-          return syncTripSchedule({ ...named, startDate: tomorrowISO() }, days)
+          return syncTripSchedule(
+            { ...named, startDate: tomorrowISO(), datesProvisional: true },
+            days,
+          )
         }),
       )
 

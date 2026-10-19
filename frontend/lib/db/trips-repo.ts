@@ -166,6 +166,7 @@ export type TripRow = {
   countries: string[] | null
   start_date: string | null
   end_date: string | null
+  dates_provisional?: boolean | null
   num_days: number | null
   expectations: string | null
   cover: string
@@ -200,8 +201,8 @@ type SourceRow = {
 }
 
 const TRIP_COLUMNS_BASE =
-  "id, user_id, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
-const TRIP_COLUMNS_WITH_VERSION = "id, user_id, version, name, countries, start_date, end_date, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
+  "id, user_id, name, countries, start_date, end_date, dates_provisional, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
+const TRIP_COLUMNS_WITH_VERSION = "id, user_id, version, name, countries, start_date, end_date, dates_provisional, num_days, expectations, cover, cover_url, archived, referrer, source_ids, days, basics, tasks, extra_tasks, dismissed_country_tasks, num_travelers, currency, origin"
 
 /**
  * Fallback solo en dev: el front local a veces apunta al proyecto gestionado
@@ -334,6 +335,7 @@ export function rowToTrip(row: TripRow): Trip {
     countries: row.countries ?? [],
     startDate,
     endDate,
+    datesProvisional: Boolean(startDate && row.dates_provisional),
     numDays,
     expectations: row.expectations,
     cover: row.cover,
@@ -366,6 +368,7 @@ export function tripToRow(trip: Trip, userId: string): TripRow {
     countries: trip.countries ?? [],
     start_date: trip.startDate || null,
     end_date: trip.endDate || null,
+    dates_provisional: Boolean(trip.startDate && trip.datesProvisional),
     num_days: trip.numDays ?? null,
     expectations: trip.expectations?.trim() ? trip.expectations.trim() : null,
     cover: trip.cover || "✈️",
@@ -610,6 +613,7 @@ export async function reuseOrInsertDraftTrip(
     patch.num_days = forcedDays
     patch.start_date = startDate
     patch.end_date = endDateFromStartAndNumDays(startDate, forcedDays)
+    patch.dates_provisional = true
     patch.days = Array.from({ length: forcedDays }, () => ({
       id: crypto.randomUUID(),
       label: "",
@@ -654,6 +658,7 @@ export async function insertDraftTrip(
     num_days: dayCount,
     start_date: startDate,
     end_date: endDate,
+    dates_provisional: startDate != null,
     days,
     basics: [],
     tasks: {},

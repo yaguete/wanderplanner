@@ -722,6 +722,16 @@ assert.equal(isBookableTransportMode(null), false)
   assert.equal(loaded.currency, "EUR")
   assert.equal(loaded.origin, null)
   assert.equal(loaded.budget, null)
+  assert.equal(loaded.datesProvisional, false)
+  assert.equal(rowToTrip({ ...legacy, dates_provisional: true }).datesProvisional, false)
+
+  const provisional = makeTrip({ startDate: "2026-10-19", datesProvisional: true })
+  assert.equal(tripToRow(provisional, "user-1").dates_provisional, true)
+  assert.equal(rowToTrip(tripToRow(provisional, "user-1")).datesProvisional, true)
+  assert.equal(
+    tripToRow({ ...provisional, startDate: null }, "user-1").dates_provisional,
+    false,
+  )
 
   const trip = makeTrip({
     tasks: {

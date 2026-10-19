@@ -107,7 +107,13 @@ export function buildTripBriefing(trip: Trip, sources: Source[]): string {
   } else {
     lines.push("- origen: (no configurado)")
   }
-  lines.push(`- fechas: ${trip.startDate ?? "?"} → ${trip.endDate ?? "?"}`)
+  if (trip.startDate && trip.datesProvisional) {
+    lines.push(
+      `- fechas: sin elegir (provisionales ${trip.startDate} → ${trip.endDate ?? "?"}: las puso la app al crear el viaje, no el usuario)`,
+    )
+  } else {
+    lines.push(`- fechas: ${trip.startDate ?? "?"} → ${trip.endDate ?? "?"}`)
+  }
   lines.push(`- días del itinerario (numDays): ${trip.numDays ?? "?"}`)
   if (trip.numTravelers != null && trip.numTravelers > 0) {
     lines.push(`- viajeros: ${trip.numTravelers}`)

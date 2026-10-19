@@ -211,6 +211,13 @@ export function mergeTrips(base: Trip | null, local: Trip, remote: Trip): TripMe
 
   const name = pickScalar(base.name, local.name, remote.name, "name", notes)
   const startDate = pickScalar(base.startDate, local.startDate, remote.startDate, "dates", notes)
+  const datesProvisional = pickScalar(
+    Boolean(base.datesProvisional),
+    Boolean(local.datesProvisional),
+    Boolean(remote.datesProvisional),
+    "dates",
+    [],
+  )
   const expectations = pickScalar(
     base.expectations,
     local.expectations,
@@ -265,6 +272,7 @@ export function mergeTrips(base: Trip | null, local: Trip, remote: Trip): TripMe
     ...remote,
     name,
     startDate,
+    datesProvisional: Boolean(startDate && datesProvisional),
     numDays,
     endDate,
     expectations,
