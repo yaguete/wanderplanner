@@ -34,4 +34,4 @@ El update script solo refresca dependencias (`npm ci` + `pip install`). Docker, 
 - `pip install` va con `--user` (Ubuntu 24.04 marca el entorno como externally-managed); los binarios quedan en `~/.local/bin`. Añade `~/.local/bin` al `PATH` para invocar `uvicorn` / `pytest` directamente, o usa `python3 -m uvicorn` / `python3 -m pytest`.
 - **Crear cuenta + crear viaje** (el hello-world del producto) funciona solo con Frontend + Supabase local; el backend no interviene en ese flujo. La persistencia va directa del navegador a Supabase (RLS) vía `trip-context` / `trips-repo`.
 - Las features de IA y de imágenes/mapa (`/itinerary`, `/assistant/chat`, `/thumb`, `/cover`, `/sources/suggest`, Mapbox) necesitan claves externas de pago (`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `TAVILY_API_KEY`, `GOOGLE_PLACES_API_KEY`, `UNSPLASH_ACCESS_KEY`, `NEXT_PUBLIC_MAPBOX_TOKEN`) que **no** están en este entorno. Sin ellas el resto de la app arranca; solo se degradan esas rutas concretas.
-- Node local es v22; CI usa Node 20. Python 3.12 en ambos.
+- Node local y CI van en la 22. Python 3.12 en ambos.
